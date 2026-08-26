@@ -14,12 +14,13 @@ evidence and agent work preserved on Walrus.
 >
 > | Layer | State |
 > | --- | --- |
-> | Sui Move package (7 modules) | ✅ `sui move test`: **65/65** |
-> | TS protocol · Gonka adapter · evidence · Walrus libs | ✅ vitest: **190/190** |
+> | Sui Move package (8 modules incl. Object Display) | ✅ `sui move test`: **66/66** |
+> | TS protocol · Gonka adapter · evidence · Walrus libs | ✅ vitest: **215/215** (full suite) |
 > | TS↔Move commitment parity gate | ✅ 6 cross-pinned blake2b256/BCS vectors |
 > | Next.js observer + fact-check UI (23 routes) | ✅ builds, typechecks, lints |
-> | Engine, storage, CLI, workers | 🚧 in progress |
-> | Localnet E2E · Testnet deploy · live Gonka smoke | ⏳ pending |
+> | Engine, storage, CLI, workers | ✅ merged — full lifecycle over the SuiGateway seam |
+> | Wallet + zkLogin onboarding · Localnet E2E | 🚧 in progress |
+> | Testnet canary · Railway deploy · live Gonka smoke | ⏳ planned (T8a/T8/T8b) |
 >
 > Full specification: [PRD.md](./PRD.md) · Build plan: [docs/superpowers/plans/2026-08-26-openverdict-build.md](./docs/superpowers/plans/2026-08-26-openverdict-build.md)
 
