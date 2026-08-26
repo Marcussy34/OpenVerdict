@@ -1,13 +1,16 @@
-# Optional: production-style Postgres. Dev/tests default to embedded pglite.
+# Optional: production-style Postgres for LOCAL DEVELOPMENT ONLY.
+# Dev/tests default to embedded pglite; this compose file is never used in production.
+# Override credentials via environment (POSTGRES_USER/POSTGRES_PASSWORD/POSTGRES_DB)
+# before exposing this service beyond localhost.
 services:
   postgres:
     image: postgres:17-alpine
     environment:
-      POSTGRES_USER: openverdict
-      POSTGRES_PASSWORD: openverdict
-      POSTGRES_DB: openverdict
+      POSTGRES_USER: ${POSTGRES_USER:-openverdict}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-openverdict-dev-only}
+      POSTGRES_DB: ${POSTGRES_DB:-openverdict}
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - openverdict_pgdata:/var/lib/postgresql/data
 
