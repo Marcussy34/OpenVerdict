@@ -29,7 +29,7 @@ operational proof and public deployments in flight.
 ## What is NOT true yet
 
 - Nothing is deployed to any public network (testnet canary = plan T8a, required).
-- No live GonkaRouter inference has run (blocked on `GONKA_ROUTER_API_KEY`; fake adapter drives all juries today).
+- Live GonkaRouter inference VERIFIED 2026-08-27: account catalog = deepseek-ai/DeepSeek-V4-Flash-0731, MiniMaxAI/MiniMax-M2.7, moonshotai/Kimi-K2.6 (3 families); real completion returned id `devshard-…` (the OpenAI-compatible endpoint id shape — preserved verbatim as the Gonka Request ID). Full live jury round runs at the testnet canary.
 - No public URL (Railway deploy = plan T8).
 - zkLogin-backed agent registration (one-social-account-one-seat) is designed (plan T7b), not implemented.
 - Unaudited; hackathon-grade trust model (single run-attestor + evidence-freezer capabilities, documented).

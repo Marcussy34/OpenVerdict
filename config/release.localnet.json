@@ -16,9 +16,9 @@
     "mode": "fake",
     "baseUrl": "https://api.gonkarouter.io/v1",
     "models": [
-      "deepseek-v4-flash-0731",
-      "kimi-k2-6",
-      "minimax-m2-7"
+      "deepseek-ai/DeepSeek-V4-Flash-0731",
+      "MiniMaxAI/MiniMax-M2.7",
+      "moonshotai/Kimi-K2.6"
     ]
   },
   "committee": {
