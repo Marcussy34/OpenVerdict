@@ -84,6 +84,18 @@ Requirements are labelled by release level:
 
 When this PRD conflicts with a published Move package/object schema, current GonkaRouter or Walrus behavior, or a pinned dependency, deployed state and source code win. Record the correction in this document before changing product behavior.
 
+### 1.1 Implementation addendum (recorded 2026-08-27; source code is authoritative)
+
+Corrections and additions discovered during implementation, per the rule above:
+
+1. **`select_committee` visibility (§28.4):** listed here among public functions, but the Sui Move compiler rejects `public fun` with `&Random`. Implemented as a private `entry fun` completing draw + `Committee` + `RoundTally` + five owned `JurySeat` transfers in one call (PTB restriction: only TransferObjects/MergeCoins may follow a Random call). See `move/openverdict/sources/jury.move`.
+2. **GonkaRouter live limits (§20.3, §31.1):** the live API hard-caps output at 4096 tokens (default 3072; larger requests silently clamped; reasoning tokens count). The adapter uses `max_tokens: 4096` and a 120000 ms timeout — this PRD's `max_tokens: 1024` and `GONKA_REQUEST_TIMEOUT_MS=8000` are superseded. Verified models: DeepSeek-V4-Flash, Kimi-K2.6, MiniMax-M2.7 families (≥3 families satisfied).
+3. **Claim-state u8 encoding (§28.2):** concrete codes fixed as CREATED=0 … CANCELLED=12 (see `lib/protocol/constants.ts`, mirrored in `claim.move`); byte-locked to TypeScript by six blake2b256/BCS parity vectors asserted in both test suites.
+4. **Module list (§28.1):** an eighth module `display_meta` was added implementing Sui Object Display metadata for `ResolutionCertificate`, `AgentProfile`, and demo `Position` (V1 `sui::display` API — the pinned 1.52.2 framework does not vendor V2 `display_registry`).
+5. **zkLogin scope (§14.4, §13):** upgraded from "optional onboarding" to two implemented uses — (a) end-user onboarding via Enoki-managed zkLogin registered as a wallet-standard wallet, optionally with sponsored gas; (b) planned zkLogin-backed agent registration where `human_backing_hash = blake2b256(zkLogin address)` yields one-social-account-one-seat under the existing seat-uniqueness rule. Both remain labelled authentication / Sybil-cost-raising — never proof of personhood, exactly as §14.4 requires.
+6. **Sponsored transactions (§24.6):** implemented with the current SDK v2 flow (`onlyTransactionKind` bytes → `Transaction.fromKind` → `setSender`/`setGasOwner`/`setGasPayment` → dual signatures).
+7. **SDK generation (§27.4):** implemented on `@mysten/sui` v2 (`SuiGrpcClient`, ESM-only) and dapp-kit v2 (`@mysten/dapp-kit-core`/`-react`) — this document's package names predate the v2 split.
+
 ## 2. Executive summary
 
 OpenVerdict is a decentralized intelligence verification engine for claims that require evidence and judgment rather than a deterministic data feed. A claim receives a proposed outcome and becomes final if nobody challenges it during a defined window. A successful challenge selects a reputation-weighted and diversity-constrained committee of AI oracle agents, each controlled by a distinct approved owner and associated with a distinct human-backing record. Every agent reviews the same frozen evidence bundle, reasons through GonkaRouter, commits a hidden vote on Sui, and later reveals its answer and argument. If the first round lacks sufficient agreement, agents inspect one another's published evidence and reasoning, add new admissible evidence, and vote again. The protocol can finalize, expand the committee, or remain unresolved instead of manufacturing certainty.
