@@ -1,0 +1,28 @@
+# deps / builds
+node_modules/
+.next/
+out/
+dist/
+*.tsbuildinfo
+next-env.d.ts
+
+# env & secrets
+.env
+.env.*
+!.env.example
+
+# scraped doc cache
+.firecrawl/
+
+# local runtime state
+.pglite/
+walrus-local/
+.localnet/
+logs/
+*.log
+
+# move build artifacts
+move/openverdict/build/
+
+# os / editor
+.DS_Store
