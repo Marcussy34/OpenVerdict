@@ -33,6 +33,17 @@
 
 **Spec:** `PRD.md` (repo root, v3.1) — the plan argues from it; executors read both. `README.md` is the narrative summary.
 
+## Status Ledger (updated 2026-08-27)
+
+| Task | State |
+| --- | --- |
+| T0 scaffold · T1 Move (66/66) · T2 protocol+gonka · T3 evidence+walrus · T4 parity · T5 engine/storage/CLI/workers · T6 frontend | ✅ merged to main, gates green (215/215 TS) |
+| Display metadata (decision D3) | ✅ merged (`display_meta` module, V1 API) |
+| Wallet + zkLogin onboarding (Enoki) | 🚧 Codex worker running |
+| T7 localnet E2E + sponsored-txn util | 🚧 Codex worker running |
+| T7b zkLogin-backed agent registration | queued (after onboarding + T7) |
+| T8 docs/env · T8a testnet canary (required) · Railway deploy · T8b live Gonka smoke (user key) · T9 submission package | planned, ordered |
+
 ## Global Constraints
 
 - ESM everywhere: root `package.json` has `"type": "module"`; tsconfig `module`/`moduleResolution` = `"NodeNext"` for node code (Next app uses `"Bundler"` via its own tsconfig include).
