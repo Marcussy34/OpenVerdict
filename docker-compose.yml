@@ -1,0 +1,15 @@
+# Optional: production-style Postgres. Dev/tests default to embedded pglite.
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: openverdict
+      POSTGRES_PASSWORD: openverdict
+      POSTGRES_DB: openverdict
+    ports:
+      - "5432:5432"
+    volumes:
+      - openverdict_pgdata:/var/lib/postgresql/data
+
+volumes:
+  openverdict_pgdata:

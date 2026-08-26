@@ -1,0 +1,31 @@
+{
+  "network": "localnet",
+  "suiRpcUrl": "http://127.0.0.1:9000",
+  "suiFaucetUrl": "http://127.0.0.1:9123/v2/gas",
+  "packageId": "",
+  "registryObjectId": "",
+  "demoPoolObjectId": "",
+  "clockObjectId": "0x6",
+  "randomObjectId": "0x8",
+  "coinType": "0x2::sui::SUI",
+  "walrus": {
+    "mode": "local",
+    "localDir": ".localnet/walrus-local"
+  },
+  "gonka": {
+    "mode": "fake",
+    "baseUrl": "https://api.gonkarouter.io/v1",
+    "models": [
+      "deepseek-v4-flash-0731",
+      "kimi-k2-6",
+      "minimax-m2-7"
+    ]
+  },
+  "committee": {
+    "size": 5,
+    "threshold": 4,
+    "maxSeatsPerModel": 2,
+    "minDistinctModels": 3
+  },
+  "explorerTxTemplate": ""
+}
