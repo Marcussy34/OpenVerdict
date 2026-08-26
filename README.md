@@ -148,36 +148,33 @@ disputes, and other bounded questions.
 
 ## 🏗️ Architecture
 
-```text
-+----------------------+       commands       +----------------------------+
-| OpenVerdict CLI      |--------------------->| Verification engine        |
-| required control     |<-- status / JSON ----| workers + protocol rules   |
-+----------------------+                      +--+---------+----------+----+
-                                                  |         |          |
-                                          inference   evidence       tx/read
-                                                  |         |          |
-                                                  v         v          v
-                                          +-------------+ +--------+ +--------+
-                                          | GonkaRouter | | Safe   | | Sui    |
-                                          | models      | | fetch  | | Move   |
-                                          +-------------+ +---+----+ +---+----+
-                                                              |          |
-                                                              v          v
-                                                     +--------+----------+
-                                                     | Walrus + indexer  |
-                                                     | and public events |
-                                                     +---------+---------+
-                                                               |
-                                                       read-only observe
-                                                               v
-                                                     +---------+---------+
-                                                     | Optional dashboard|
-                                                     +-------------------+
-```
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/diagrams/architecture-dark.png">
+  <img alt="OpenVerdict system architecture" src="docs/diagrams/architecture.png">
+</picture>
 
 The engine is headless-first: the complete lifecycle runs through the CLI with
 the dashboard offline, and a restarted dashboard reconstructs the same public
 timeline from Sui objects, Walrus artifacts, and the resolution event stream.
+
+### Claim lifecycle
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/diagrams/claim-lifecycle-dark.png">
+  <img alt="Claim lifecycle state machine" src="docs/diagrams/claim-lifecycle.png">
+</picture>
+
+### One jury round
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/diagrams/jury-round-dark.png">
+  <img alt="Commit-reveal jury round" src="docs/diagrams/jury-round.png">
+</picture>
+
+Diagram sources are editable Excalidraw files in
+[`docs/diagrams/`](./docs/diagrams) (black-and-white; Excalidraw's own dark
+theme inverts them natively, and the paired `*-dark.png` exports serve GitHub's
+dark mode).
 
 ## 🧱 Technology stack (implemented, versions verified 2026-08-26)
 
