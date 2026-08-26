@@ -29,3 +29,6 @@ move/openverdict/build/
 
 # serena MCP artifacts
 .serena/
+
+# playwright scratch
+.playwright-cli/
