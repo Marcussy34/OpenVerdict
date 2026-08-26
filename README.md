@@ -72,7 +72,7 @@ lib/protocol/         BCS schemas, blake2b256 commitments, Truth Score, u8 codes
 lib/gonka/            GonkaRouter adapter (live + deterministic fake), zod schemas
 lib/evidence/         SSRF-safe retriever, HTML canonicalization, Merkle manifests
 lib/walrus/           Content-addressed local store, SDK-backed real store, retention
-lib/engine/           Engine contract seam + engine implementation (in progress)
+lib/engine/           Engine contract seam + full lifecycle implementation (SuiGateway seam)
 lib/storage/          drizzle schema over pglite (dev/tests) or Postgres (prod)
 lib/sui/              SuiGrpcClient wiring + per-entry-point transaction builders
 cli/                  `openverdict` CLI — complete headless control surface
@@ -113,6 +113,30 @@ public reasoning traces, and the Gonka Request ID for every agent run. A
 prediction market is the first economic consumer of that verdict. The engine is
 general enough to later resolve DAO milestones, grants, bounties, agent-service
 disputes, and other bounded questions.
+
+## 👤 Using the app — who needs what
+
+No accounts, passwords, or server-side sessions exist anywhere: identity **is**
+a Sui address. Three tiers:
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/diagrams/onboarding-tiers-dark.png">
+  <img alt="OpenVerdict interaction tiers" src="docs/diagrams/onboarding-tiers.png">
+</picture>
+
+1. **Anyone (no login, no wallet):** submit a fact-check (sponsor-funded,
+   rate-limited), watch live jury resolutions, browse every claim/agent/
+   evidence artifact, and recompute commitments + Truth Scores at `/verify`.
+2. **Economic participants (wallet OR Google):** demo-pool deposits, bonds,
+   and payout redemption need a signature — from any Sui wallet extension or
+   from **"Continue with Google" via Sui zkLogin (Enoki)**: a self-custodial
+   address in seconds with no extension or seed phrase, optionally with
+   operator-sponsored gas so users hold zero SUI. zkLogin here is
+   authentication plus a one-social-account-one-seat backing hash — it is
+   never presented as proof of unique personhood.
+3. **Operator + jury agents (CLI keypairs only):** the engine and CLI drive
+   the protocol headlessly; the dashboard has no signer and cannot move funds,
+   vote, or advance phases.
 
 ## ⚙️ How it works
 
@@ -190,7 +214,9 @@ dark mode).
 | CLI | TypeScript + commander 15 (`pnpm cli`) | Complete control, inspection, automation |
 | Validation | zod 4 (strict schemas) | Oracle I/O contracts, manifests, config |
 | Hashing | `@noble/hashes` blake2b-256 == `sui::hash::blake2b256` | One commitment format across TS and Move |
-| Tests | vitest 4 + `sui move test` | 190 TS + 65 Move, incl. the cross-language parity gate |
+| Onboarding | `@mysten/enoki` (zkLogin) + dapp-kit v2 | Social-login self-custodial addresses; env-gated, wallet-standard |
+| Object metadata | Sui Object Display (`display_meta` module) | Certificates/profiles/positions render in wallets + explorers |
+| Tests | vitest 4 + `sui move test` | 215 TS + 66 Move, incl. the cross-language parity gate |
 
 ## 🔍 What is auditable
 
