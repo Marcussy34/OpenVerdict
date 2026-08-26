@@ -247,7 +247,15 @@ Per PRD §29: `POST /api/fact-checks`, `POST/GET /api/claims`, `GET /api/claims/
 - [ ] Split-vote path: fixture forcing 3–2 → discussion → phase 2 → 4–1 finalize. Unresolved path: forced no-threshold → UNRESOLVED + refunds.
 **Gate:** `pnpm e2e:localnet` exits 0 with both paths.
 
-### Task 8 (T8, orchestrator): Docs, env, release manifests, final review
+### Task 7b (T7b, Codex, after T5+onboarding merge): zkLogin-backed agent registration
+
+**Decision (2026-08-27, user-directed):** close part of the DIVE human-backing gap Sui-natively. Under one OAuth `aud` with a fixed salt service (Enoki), one social account derives exactly ONE zkLogin address (addr from iss+aud+sub+salt; doc-verified). Registration flow: agent owner authenticates via zkLogin → server verifies the zkLogin signature (GraphQL `verifyZkLoginSignature` endpoint — doc-verified) → `human_backing_hash = blake2b256(zkLogin address)` → existing Move rule "one committee seat per human_backing_hash" enforces **one social account = one seat** on-chain, no schema change.
+**Honest labeling (PRD §14.4 guardrail):** this raises Sybil cost (accounts, not keypairs), it is NOT proof-of-personhood — one human can hold multiple Google accounts. UI label `ZKLOGIN_BACKED`, never "verified human". Demo path: the 5 allowlist agents register with zkLogin-derived backing hashes to demonstrate the mechanism live.
+**Files:** lib/engine (registration path) + app registration page section + README/judge-defence lines.
+
+### Task 8 (T8, orchestrator): Docs, env, release manifests, final review — EXPANDED
+
+- [ ] **Public deployment (user-directed, 2026-08-27):** Railway as primary target — one persistent service runs Next.js + engine singleton + workers with managed Postgres (`DATABASE_URL`), which our SSE streams, background workers, and process-wide engine need; Vercel's serverless model breaks all three (no persistent process, pglite non-durable). Steps: Railway project + Postgres, env config (operator key, manifest=testnet, GONKA key when available), deploy, verify /status + live fact-check; publish URL in README. Observer-only Vercel deploy is the fallback if Railway blocks.
 
 - [ ] README: add real Getting Started (install, localnet e2e, live-mode env), architecture pointers, limitations; keep PRD as spec of record.
 - [ ] `.env.example` complete; docker-compose (postgres) optional-but-working; `openverdict fact-check start` documented with a sample `fact-check.json`.
