@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Judge, ShieldSearch, DocumentText, Profile2User, ShieldTick, Activity } from "iconsax-react";
 import { useState } from "react";
+import { WalletConnectButton } from "@/components/wallet/connect-button";
 
 const NAV_ITEMS = [
   { href: "/fact-check", label: "Fact-Check", icon: ShieldSearch },
@@ -53,7 +54,7 @@ export function SiteHeader() {
         </div>
 
         {/* Desktop Navigation */}
-        <nav className="hidden md:flex items-center gap-1 lg:gap-2">
+        <nav className="hidden lg:flex items-center gap-1 lg:gap-2">
           {NAV_ITEMS.map((item) => {
             const Icon = item.icon;
             const isActive = pathname === item.href || (item.href !== "/" && pathname.startsWith(item.href));
@@ -76,18 +77,20 @@ export function SiteHeader() {
 
         {/* Right CTA & Mobile Hamburger */}
         <div className="flex items-center gap-2">
-          <Link href="/fact-check" className="hidden sm:inline-block">
+          <Link href="/fact-check" className="hidden xl:inline-block">
             <Button size="sm" className="min-h-[40px] px-4 font-semibold shadow-xs">
               <ShieldSearch size="16" variant="Bold" className="mr-1.5" />
               Start Fact-Check
             </Button>
           </Link>
 
+          <WalletConnectButton />
+
           {/* Mobile menu button */}
           <Button
             variant="outline"
             size="sm"
-            className="md:hidden min-h-[44px] min-w-[44px] p-2"
+            className="lg:hidden min-h-[44px] min-w-[44px] p-2"
             onClick={() => setMobileMenuOpen((prev) => !prev)}
             aria-expanded={mobileMenuOpen}
             aria-label="Toggle navigation menu"
@@ -104,7 +107,7 @@ export function SiteHeader() {
 
       {/* Mobile dropdown menu */}
       {mobileMenuOpen && (
-        <div className="md:hidden border-b border-border bg-background px-4 pt-2 pb-4 space-y-1">
+        <div className="lg:hidden border-b border-border bg-background px-4 pt-2 pb-4 space-y-1">
           <div className="pb-2">
             <Badge
               variant="outline"

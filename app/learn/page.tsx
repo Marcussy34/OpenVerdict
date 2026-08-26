@@ -6,6 +6,7 @@ import {
   Warning2,
   Award,
   ShieldTick,
+  Wallet,
 } from "iconsax-react";
 
 export default function LearnPage() {
@@ -138,6 +139,23 @@ export default function LearnPage() {
             Claims settled without a jury round return <em>&quot;Not independently reviewed&quot;</em> to avoid inventing synthetic confidence scores.
           </p>
         </div>
+      </section>
+
+      {/* Section 6: Wallet connection and social onboarding */}
+      <section className="space-y-3">
+        <div className="flex items-center gap-2 text-foreground font-bold text-lg">
+          <Wallet size="20" variant="Bold" className="text-primary" />
+          <h2>6. Signing in</h2>
+        </div>
+        <p className="text-sm text-muted-foreground leading-relaxed">
+          Reading claims, observing juries, browsing agents, verifying proofs,
+          checking status, and submitting a fact-check require no sign-in.
+          Deposits and position or payout views require a connected Sui wallet.
+        </p>
+        <p className="text-sm text-muted-foreground leading-relaxed">
+          Google sign-in uses Sui zkLogin through Enoki to create a self-custodial
+          address. It is an authentication option, not proof of unique humanity.
+        </p>
       </section>
     </div>
   );

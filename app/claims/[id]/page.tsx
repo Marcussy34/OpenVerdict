@@ -9,6 +9,7 @@ import { TruthScore } from "@/components/claim/truth-score";
 import { ClaimTimeline } from "@/components/claim/timeline";
 import { AgentCard } from "@/components/agents/agent-card";
 import { TimeDisplay } from "@/components/time-display";
+import { PositionPanel } from "@/components/pool/position-panel";
 import type { ClaimInspection, FactCheckReport } from "@/lib/engine/contract";
 import {
   DocumentText,
@@ -280,6 +281,9 @@ export default function ClaimDetailPage({ params }: ClaimDetailPageProps) {
           />
         </div>
       </div>
+
+      {/* Wallet-gated economic actions; claim reading remains anonymous. */}
+      <PositionPanel />
 
       {/* 3. Deadlines & On-Chain Parameters */}
       {claim.deadlines && (
