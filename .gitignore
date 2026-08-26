@@ -26,3 +26,6 @@ move/openverdict/build/
 
 # os / editor
 .DS_Store
+
+# serena MCP artifacts
+.serena/
