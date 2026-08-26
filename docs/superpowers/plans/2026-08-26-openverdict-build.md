@@ -260,7 +260,22 @@ Per PRD §29: `POST /api/fact-checks`, `POST/GET /api/claims`, `GET /api/claims/
 - [ ] README: add real Getting Started (install, localnet e2e, live-mode env), architecture pointers, limitations; keep PRD as spec of record.
 - [ ] `.env.example` complete; docker-compose (postgres) optional-but-working; `openverdict fact-check start` documented with a sample `fact-check.json`.
 - [ ] Full verification sweep (superpowers:verification-before-completion): typecheck, lint, vitest, move tests, build, e2e:localnet — all green, outputs captured.
-- [ ] Optional (needs user key/funds): live GonkaRouter smoke (`GONKA_ROUTER_API_KEY`), Testnet deploy via faucet — attempt, report, never block on it.
+
+### Task 8a (T8a, REQUIRED — promoted from optional 2026-08-27): Testnet deploy + public canary
+
+Faucet SUI is free — no user input needed. Publish the package to Sui Testnet, create registry + caps, register the 5 demo agents, write real ids into config/release.testnet.json, run ONE full direct-review canary lifecycle (fake adapter unless the Gonka key is present), verify certificate + Display rendering on a public explorer, and put the explorer links in the README. This is the DIVE-parity "live on a public network" bar. Ordering: after T7 passes, before Railway.
+
+### Task 8b: Live GonkaRouter smoke — REQUIRED FOR SUBMISSION, user-key-gated
+
+Not optional (reclassified 2026-08-27): the Gonka track requires real Request IDs in the demo. Blocked ONLY on `GONKA_ROUTER_API_KEY` (user provides; new accounts get free credit at gonkarouter.io/dashboard). When present: run one jury round in live mode on testnet, capture 5 real `msg_…` ids across ≥3 model families, keep the audit bundle.
+
+### Task 9 (T9, new 2026-08-27): Demo & submission package
+
+- [ ] Prepared demo claim per PRD §36.1/§36.3: one completed lifecycle preserved on Testnet with all digests/objects/blob ids recorded in a `docs/demo/` runbook.
+- [ ] `/fact-check` live URL (Railway, from T8) + README demo instructions + downloadable JSON audit bundle link.
+- [ ] Video script doc following the PRD §36.6 110-second timing (recording itself = user task).
+- [ ] Optional stretch: optimistic propose→challenge E2E path (already contract-tested in Move; an E2E demo of it is polish, not a gate).
+- [ ] Mainnet canary: explicitly USER-GATED (real SUI + native USDC funding decision per PRD §33.9); Testnet is the demo network until the user funds mainnet.
 
 ## Self-Review (spec coverage)
 
