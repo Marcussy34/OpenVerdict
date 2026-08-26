@@ -1,7 +1,23 @@
 import { NextResponse } from "next/server";
 import { getServerEngine, EngineNotWiredError } from "@/lib/engine/server";
 import type { ClaimCreateRequest } from "@/lib/engine/contract";
-import type { ClaimState } from "@/lib/protocol/constants";
+import type { ClaimMode, ClaimState } from "@/lib/protocol/constants";
+import { requireOperatorToken } from "../_lib/guard";
+
+const DEADLINE_KEYS = [
+  "evidenceCutoffMs",
+  "proposalDeadlineMs",
+  "challengeDeadlineMs",
+  "firstCommitDeadlineMs",
+  "firstRevealDeadlineMs",
+  "discussionDeadlineMs",
+  "secondCommitDeadlineMs",
+  "secondRevealDeadlineMs",
+] as const;
+
+const MAX_STATEMENT_LENGTH = 2_000;
+const MAX_CRITERIA_LENGTH = 4_000;
+const BUDGET_PATTERN = /^\d{1,18}$/;
 
 /** GET /api/claims: list all claims with optional state filter. */
 export async function GET(req: Request) {
@@ -30,9 +46,16 @@ export async function GET(req: Request) {
   }
 }
 
-/** POST /api/claims: create a new on-chain claim. */
+/**
+ * POST /api/claims: create a new on-chain claim.
+ * Operator-only: the engine signs with the operator key, so this route
+ * requires the OPENVERDICT_OPERATOR_TOKEN bearer token.
+ */
 export async function POST(req: Request) {
   try {
+    const denied = requireOperatorToken(req);
+    if (denied) return denied;
+
     let body: unknown;
     try {
       body = await req.json();
@@ -52,34 +75,74 @@ export async function POST(req: Request) {
 
     const payload = body as Record<string, unknown>;
 
-    // Basic structural validation
-    if (typeof payload.statement !== "string" || !payload.statement.trim()) {
+    const statement =
+      typeof payload.statement === "string" ? payload.statement.trim() : "";
+    if (!statement || statement.length > MAX_STATEMENT_LENGTH) {
       return NextResponse.json(
-        { error: "validation_error", message: "statement is required and must be non-empty" },
+        { error: "validation_error", message: "statement is required (non-empty, bounded)" },
         { status: 400 },
       );
     }
-    if (typeof payload.resolutionCriteria !== "string" || !payload.resolutionCriteria.trim()) {
+    const resolutionCriteria =
+      typeof payload.resolutionCriteria === "string"
+        ? payload.resolutionCriteria.trim()
+        : "";
+    if (!resolutionCriteria || resolutionCriteria.length > MAX_CRITERIA_LENGTH) {
       return NextResponse.json(
-        { error: "validation_error", message: "resolutionCriteria is required and must be non-empty" },
+        { error: "validation_error", message: "resolutionCriteria is required (non-empty, bounded)" },
         { status: 400 },
       );
     }
-    if (typeof payload.mode !== "number" || (payload.mode !== 1 && payload.mode !== 2)) {
+    if (payload.mode !== 1 && payload.mode !== 2) {
       return NextResponse.json(
         { error: "validation_error", message: "mode must be 1 (DIRECT_REVIEW) or 2 (OPTIMISTIC_SETTLEMENT)" },
         { status: 400 },
       );
     }
-    if (!payload.deadlines || typeof payload.deadlines !== "object") {
+    const rawDeadlines =
+      payload.deadlines && typeof payload.deadlines === "object"
+        ? (payload.deadlines as Record<string, unknown>)
+        : undefined;
+    if (!rawDeadlines) {
       return NextResponse.json(
         { error: "validation_error", message: "deadlines object is required" },
         { status: 400 },
       );
     }
+    // Explicit field picking — never pass client objects through untyped.
+    const deadlines = {} as ClaimCreateRequest["deadlines"];
+    for (const key of DEADLINE_KEYS) {
+      const value = rawDeadlines[key];
+      if (typeof value !== "number" || !Number.isSafeInteger(value) || value <= 0) {
+        return NextResponse.json(
+          { error: "validation_error", message: `deadlines.${key} must be a positive integer` },
+          { status: 400 },
+        );
+      }
+      deadlines[key] = value;
+    }
+    const committeeBudget =
+      typeof payload.committeeBudget === "string" ? payload.committeeBudget : "";
+    const evidenceBudget =
+      typeof payload.evidenceBudget === "string" ? payload.evidenceBudget : "";
+    if (!BUDGET_PATTERN.test(committeeBudget) || !BUDGET_PATTERN.test(evidenceBudget)) {
+      return NextResponse.json(
+        { error: "validation_error", message: "budgets must be bounded decimal strings" },
+        { status: 400 },
+      );
+    }
+
+    const request: ClaimCreateRequest = {
+      statement,
+      resolutionCriteria,
+      mode: payload.mode as ClaimMode,
+      deadlines,
+      committeeBudget,
+      evidenceBudget,
+    };
 
     const engine = await getServerEngine();
-    const result = await engine.claimCreate(payload as unknown as ClaimCreateRequest);
+    const result = await engine.claimCreate(request);
 
     return NextResponse.json(result, { status: 201 });
   } catch (error) {

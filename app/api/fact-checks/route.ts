@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getServerEngine, EngineNotWiredError } from "@/lib/engine/server";
 import type { FactCheckRequest } from "@/lib/engine/contract";
+import { rateLimitPublic, requirePublicWritesEnabled } from "../_lib/guard";
 
 /** Max byte caps and validation limits for public fact-check submission. */
 const MAX_CLAIM_LENGTH = 1000;
@@ -12,6 +13,11 @@ const MAX_URLS_COUNT = 5;
 /** POST /api/fact-checks: starts a direct-review fact check through the engine. */
 export async function POST(req: Request) {
   try {
+    const disabled = requirePublicWritesEnabled();
+    if (disabled) return disabled;
+    const limited = rateLimitPublic(req);
+    if (limited) return limited;
+
     let body: unknown;
     try {
       body = await req.json();
@@ -96,11 +102,21 @@ export async function POST(req: Request) {
           );
         }
         const trimmedUrl = u.trim();
-        if (!trimmedUrl.startsWith("https://") && !trimmedUrl.startsWith("http://")) {
+        // https-only up front — matches the evidence retriever's hard boundary.
+        let parsed: URL;
+        try {
+          parsed = new URL(trimmedUrl);
+        } catch {
+          return NextResponse.json(
+            { error: "validation_error", message: "invalid url submitted" },
+            { status: 400 },
+          );
+        }
+        if (parsed.protocol !== "https:" || trimmedUrl.length > 2048) {
           return NextResponse.json(
             {
               error: "validation_error",
-              message: `invalid url '${trimmedUrl}': must start with http:// or https://`,
+              message: "urls must be https:// and at most 2048 characters",
             },
             { status: 400 },
           );

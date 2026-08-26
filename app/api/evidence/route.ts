@@ -1,9 +1,15 @@
 import { NextResponse } from "next/server";
 import { getServerEngine, EngineNotWiredError } from "@/lib/engine/server";
+import { rateLimitPublic, requirePublicWritesEnabled } from "../_lib/guard";
 
 /** POST /api/evidence: submit evidence artifact or source URL to a claim. */
 export async function POST(req: Request) {
   try {
+    const disabled = requirePublicWritesEnabled();
+    if (disabled) return disabled;
+    const limited = rateLimitPublic(req);
+    if (limited) return limited;
+
     let body: unknown;
     try {
       body = await req.json();
