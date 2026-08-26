@@ -57,7 +57,7 @@ const MAX_TRACKED_KEYS = 10_000;
 
 type Window = { windowStart: number; count: number };
 const perKeyHits = new Map<string, Window>();
-let globalHits: Window = { windowStart: 0, count: 0 };
+const globalHits: Window = { windowStart: 0, count: 0 };
 
 function bump(window: Window, now: number): number {
   if (now - window.windowStart > WINDOW_MS) {
