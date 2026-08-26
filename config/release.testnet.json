@@ -1,6 +1,7 @@
 {
   "network": "testnet",
   "suiRpcUrl": "https://fullnode.testnet.sui.io:443",
+  "suiRpcFallbackUrl": "https://sui-testnet-rpc.publicnode.com",
   "suiFaucetUrl": "https://faucet.testnet.sui.io/v2/gas",
   "packageId": "",
   "registryObjectId": "",
