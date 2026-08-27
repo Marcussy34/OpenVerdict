@@ -26,7 +26,22 @@ export class SuiTransactionExecutionError extends Error {
   }
 }
 
-/** Sign, execute, wait for indexing, and normalize the Sui v2 result union. */
+// Validator rejection for a transaction built against an outdated owned-object
+// version (usually a gas coin another process just spent from). The message
+// names the exact object, so recovery can refetch it authoritatively.
+const STALE_OBJECT_PATTERN =
+  /Object ID (0x[0-9a-f]+) Version \S+ Digest \S+ is not available for consumption/i;
+
+function staleObjectId(error: unknown): string | undefined {
+  const message = error instanceof Error ? error.message : String(error);
+  return STALE_OBJECT_PATTERN.exec(message)?.[1];
+}
+
+/** Sign, execute, wait for indexing, and normalize the Sui v2 result union.
+ * Multi-process stacks share sender gas coins (workers + web all sign as the
+ * operator), so a build can race another process's spend and pin a stale gas
+ * version. On that specific rejection, refetch the named coin's current
+ * version from the fullnode, pin it as gas payment, and retry (bounded). */
 export async function executeAndWait(
   client: OpenVerdictSuiClient,
   signer: Signer,
@@ -36,7 +51,25 @@ export async function executeAndWait(
   if (client.network === "localnet") {
     transaction.setGasBudgetIfNotSet(2_000_000_000);
   }
-  const submitted = await signer.signAndExecuteTransaction({ transaction, client });
+  let submitted: Awaited<ReturnType<Signer["signAndExecuteTransaction"]>>;
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      submitted = await signer.signAndExecuteTransaction({ transaction, client });
+      break;
+    } catch (error) {
+      const objectId = attempt < 4 ? staleObjectId(error) : undefined;
+      if (!objectId) throw error;
+      const fresh = await client.core.getObject({ objectId, include: {} });
+      transaction.setGasPayment([
+        {
+          objectId,
+          version: fresh.object.version,
+          digest: fresh.object.digest,
+        },
+      ]);
+      await new Promise((resolve) => setTimeout(resolve, 250 * attempt));
+    }
+  }
   assertSuccessful(submitted);
 
   const settled = await client.core.waitForTransaction({
