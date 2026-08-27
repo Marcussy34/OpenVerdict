@@ -17,6 +17,13 @@ import {
 } from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
   Popover,
   PopoverContent,
   PopoverTrigger,
@@ -39,6 +46,7 @@ export function WalletConnectButton() {
   const dAppKit = useDAppKit();
   const connection = useWalletConnection();
   const [connectRequest, setConnectRequest] = useState(0);
+  const [signInOpen, setSignInOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [copyState, setCopyState] = useState<"idle" | "copied" | "error">(
     "idle",
@@ -99,19 +107,19 @@ export function WalletConnectButton() {
   }
 
   if (!connection.account) {
-    // Google-only onboarding: launch the Enoki zkLogin flow directly instead
-    // of the generic wallet modal (which lists every installed extension).
-    // Identify the wallet by Enoki's metadata feature, NEVER by display name —
-    // any extension can register a wallet-standard wallet named "Google".
-    // The modal remains only as a fallback when Enoki keys are not configured.
+    // Google-only onboarding behind a compact modal. Identify the wallet by
+    // Enoki's metadata feature, NEVER by display name — any extension can
+    // register a wallet-standard wallet named "Google". The generic dapp-kit
+    // modal remains only as a fallback when Enoki keys are not configured.
+    const googleWallet = dAppKit.stores.$wallets
+      .get()
+      .find((wallet) => isEnokiWallet(wallet) && isGoogleWallet(wallet));
     const connectWithGoogle = async () => {
-      const googleWallet = dAppKit.stores.$wallets
-        .get()
-        .find((wallet) => isEnokiWallet(wallet) && isGoogleWallet(wallet));
       if (!googleWallet) {
         setConnectRequest((request) => request + 1);
         return;
       }
+      setSignInOpen(false);
       try {
         await dAppKit.connectWallet({ wallet: googleWallet });
       } catch {
@@ -124,11 +132,38 @@ export function WalletConnectButton() {
           variant="outline"
           size="sm"
           className="min-h-[44px] px-3 font-semibold"
-          onClick={() => void connectWithGoogle()}
+          onClick={() => setSignInOpen(true)}
         >
           <Wallet size="16" variant="Bold" aria-hidden="true" />
           Sign in
         </Button>
+        <Dialog open={signInOpen} onOpenChange={setSignInOpen}>
+          <DialogContent className="max-w-xs gap-4 p-6">
+            <DialogHeader className="space-y-1.5">
+              <DialogTitle className="text-base">Sign in</DialogTitle>
+              <DialogDescription className="text-xs">
+                One click creates a self-custodial Sui address via zkLogin — no
+                extension, no seed phrase.
+              </DialogDescription>
+            </DialogHeader>
+            <Button
+              variant="outline"
+              className="min-h-[48px] w-full justify-center gap-2.5 font-semibold"
+              onClick={() => void connectWithGoogle()}
+            >
+              {googleWallet?.icon ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={googleWallet.icon}
+                  alt=""
+                  className="h-4.5 w-4.5"
+                  aria-hidden="true"
+                />
+              ) : null}
+              Sign in with Google
+            </Button>
+          </DialogContent>
+        </Dialog>
         {connectRequest > 0 && (
           <ConnectModal key={connectRequest} open />
         )}
