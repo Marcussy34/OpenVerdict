@@ -87,7 +87,10 @@ async function discoverAgents(
   for (let index = 0; index < AGENT_COUNT; index += 1) {
     const owner = signers.getAgentAt(index).address;
     let cursor: string | null = null;
-    let cap: { objectId: string; json?: Record<string, unknown> } | null = null;
+    // Prior attempts registered several profiles per owner. Collect EVERY cap
+    // and pick the lowest objectId so runs (and the registry prune tool) agree
+    // deterministically on which profile per owner stays live.
+    const caps: Array<{ objectId: string; json?: Record<string, unknown> }> = [];
     do {
       const page = (await client.core.listOwnedObjects({
         owner,
@@ -100,13 +103,11 @@ async function discoverAgents(
         cursor: string | null;
         hasNextPage: boolean;
       };
-      if (page.objects[0]) {
-        cap = page.objects[0];
-        break;
-      }
+      caps.push(...page.objects);
       cursor = page.cursor;
       if (!page.hasNextPage) break;
     } while (cursor !== null);
+    const cap = caps.sort((a, b) => a.objectId.localeCompare(b.objectId))[0] ?? null;
     if (!cap) return null;
     const profileId =
       (cap.json?.agent_profile_id as string | undefined) ??
