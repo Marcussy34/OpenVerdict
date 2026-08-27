@@ -1,6 +1,6 @@
 import { getServerEngine } from "../lib/engine/server";
 import { CLAIM_STATE } from "../lib/protocol";
-import { isWorkerEntrypoint, runWorker } from "./runtime";
+import { forEachClaim, isWorkerEntrypoint, runWorker } from "./runtime";
 
 export async function evidenceWorkerTick(): Promise<void> {
   const engine = await getServerEngine();
@@ -12,7 +12,7 @@ export async function evidenceWorkerTick(): Promise<void> {
     Number.isFinite(configuredFreezeLeadMs) && configuredFreezeLeadMs >= 0
       ? configuredFreezeLeadMs
       : 2_000;
-  for (const claim of claims) {
+  await forEachClaim("evidence-worker", claims, async (claim) => {
     if (
       claim.state === CLAIM_STATE.COMMIT_1 &&
       !claim.evidenceRoots.some((root) => root.phase === 1)
@@ -26,7 +26,7 @@ export async function evidenceWorkerTick(): Promise<void> {
     ) {
       await engine.evidenceFreeze(claim.claimId, 2);
     }
-  }
+  });
 }
 
 if (isWorkerEntrypoint(import.meta.url)) {

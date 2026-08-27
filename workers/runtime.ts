@@ -81,6 +81,27 @@ export async function runWorker(options: WorkerRuntimeOptions): Promise<void> {
   }
 }
 
+/** Process claims independently: one claim's failure (a Move abort on a
+ * permanently stuck claim, a transient RPC error) must not starve the claims
+ * after it in the list — head-of-line blocking here froze whole pipelines. */
+export async function forEachClaim<T extends { claimId: string }>(
+  name: string,
+  claims: readonly T[],
+  handle: (claim: T) => Promise<void>,
+): Promise<void> {
+  for (const claim of claims) {
+    try {
+      await handle(claim);
+    } catch (error) {
+      process.stderr.write(
+        `${name}: claim ${claim.claimId.slice(0, 10)}…: ${
+          error instanceof Error ? error.message : String(error)
+        }\n`,
+      );
+    }
+  }
+}
+
 export function isWorkerEntrypoint(importMetaUrl: string): boolean {
   const path = process.argv[1];
   return path !== undefined && new URL(importMetaUrl).pathname === path;
