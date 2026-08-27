@@ -44,3 +44,13 @@ pnpm e2e:localnet  # full localnet lifecycle (spawns `sui start`)
 See the Repository layout section in `README.md`. Ownership seams the build
 used (protocol/gonka/evidence/walrus/sui/storage/events/engine/cli/workers/
 app) still make good boundaries for parallel work.
+
+<!-- BEGIN:nextjs-agent-rules -->
+
+# This is NOT the Next.js you know
+
+This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
+
+This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
+
+<!-- END:nextjs-agent-rules -->
