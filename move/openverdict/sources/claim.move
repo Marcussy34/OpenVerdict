@@ -67,6 +67,12 @@ module openverdict::claim {
         evidence_budget_amount: u64,
     }
 
+    /// Keeps challenge audit pointers together within the validator's 32-field struct limit.
+    public struct ChallengeReason has store, drop {
+        hash: vector<u8>,
+        blob_id: vector<u8>,
+    }
+
     /// Shared claim object. All deposited value remains in these vaults until withdrawal.
     public struct Claim<phantom T> has key {
         id: UID,
@@ -92,8 +98,7 @@ module openverdict::claim {
         second_reveal_deadline_ms: u64,
         proposer: Option<address>,
         challenger: Option<address>,
-        challenge_reason_hash: vector<u8>,
-        challenge_reason_blob_id: vector<u8>,
+        challenge_reason: ChallengeReason,
         proposal: u8,
         result: u8,
         state: u8,
@@ -289,13 +294,12 @@ module openverdict::claim {
         assert!(amount > 0 && amount == balance::value(&claim.proposer_bond), E_BOND_MISMATCH);
         balance::join(&mut claim.challenger_bond, coin::into_balance(challenger_bond));
         claim.challenger = option::some(ctx.sender());
-        claim.challenge_reason_hash = reason_hash;
-        claim.challenge_reason_blob_id = reason_blob_id;
+        claim.challenge_reason = ChallengeReason { hash: reason_hash, blob_id: reason_blob_id };
         claim.state = STATE_CHALLENGED;
         event::emit(OutcomeChallenged {
             claim_id: object::id(claim),
             challenger: ctx.sender(),
-            reason_hash: claim.challenge_reason_hash,
+            reason_hash: claim.challenge_reason.hash,
             amount,
         });
     }
@@ -427,8 +431,7 @@ module openverdict::claim {
             second_reveal_deadline_ms: params.second_reveal_deadline_ms,
             proposer: option::none(),
             challenger: option::none(),
-            challenge_reason_hash: vector[],
-            challenge_reason_blob_id: vector[],
+            challenge_reason: ChallengeReason { hash: vector[], blob_id: vector[] },
             proposal: OUTCOME_NONE,
             result: OUTCOME_NONE,
             state: STATE_CREATED,
@@ -702,8 +705,7 @@ module openverdict::claim {
             second_reveal_deadline_ms: _,
             proposer: _,
             challenger: _,
-            challenge_reason_hash: _,
-            challenge_reason_blob_id: _,
+            challenge_reason: _,
             proposal: _,
             result: _,
             state: _,
