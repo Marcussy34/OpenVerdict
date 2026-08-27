@@ -37,12 +37,18 @@
 
 | Task | State |
 | --- | --- |
-| T0 scaffold · T1 Move (66/66) · T2 protocol+gonka · T3 evidence+walrus · T4 parity · T5 engine/storage/CLI/workers · T6 frontend | ✅ merged to main, gates green (215/215 TS) |
+| T0 scaffold · T1 Move (66/66) · T2 protocol+gonka · T3 evidence+walrus · T4 parity · T5 engine/storage/CLI/workers · T6 frontend | ✅ merged to main, gates green (234/234 TS) |
 | Display metadata (decision D3) | ✅ merged (`display_meta` module, V1 API) |
-| Wallet + zkLogin onboarding (Enoki) | 🚧 Codex worker running |
-| T7 localnet E2E + sponsored-txn util | 🚧 Codex worker running |
-| T7b zkLogin-backed agent registration | queued (after onboarding + T7) |
-| T8 docs/env · T8a testnet canary (required) · Railway deploy · T8b live Gonka smoke (user key) · T9 submission package | planned, ordered |
+| Wallet + zkLogin onboarding (Enoki) | ✅ merged (registerEnokiWallets, dapp-kit v2, MetaMask-noise guard) |
+| T7 localnet E2E + sponsored-txn util | ✅ `pnpm e2e:localnet` exit 0 (twice) + cockpit demo harness |
+| T7b zkLogin-backed agent registration | ✅ merged e717721 (SDK signature verify, backing hash, guarded POST) |
+| Visual redesign (user-directed: light + Sui blue) | ✅ merged 3b74a9d (all 14 routes, iconsax React-19 fix, observer seat-state fix) |
+| T8 docs/env | ✅ STATUS/README/runbook truth-ups current |
+| T8a testnet canary (required) | 🚧 package PUBLISHED; canary 11 proved live inference (5/5 devshard ids, 3/5 SCHEMA_VALID); registry pruned 32→7; canary 12 running with 50-min windows |
+| Railway deploy | ⛔ 4 builds stuck "scheduling on Metal builder" — needs dashboard builder flip (user) |
+| T8b live Gonka smoke | ✅ live API verified (catalog + real completions + request ids) |
+| T9 submission package | queued (video script ready; records after canary green) |
+| Engine: parallel jury seat inference | future work (serial live runs need wide commit windows) |
 
 ## Global Constraints
 

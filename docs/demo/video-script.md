@@ -16,6 +16,7 @@ voice. Record with the observer on one side and the CLI on the other.
 
 Recording checklist:
 - [ ] Live demo URL loaded and warm (first request compiles routes)
-- [ ] One prepared completed claim as backup (never present replay as live — label it)
+- [ ] One prepared completed claim as backup (never present replay as live — label it);
+      `pnpm tsx scripts/cockpit-demo.ts` produces a finalized + a sealed claim locally in ~3 min
 - [ ] Explorer tabs pre-opened: claim object, certificate, payout tx
 - [ ] `GONKA_ROUTER_API_KEY` set so Request IDs are real (submission requirement)
