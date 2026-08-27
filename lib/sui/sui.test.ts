@@ -1,9 +1,11 @@
 import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Transaction } from "@mysten/sui/transactions";
 import { Ed25519Keypair } from "@mysten/sui/keypairs/ed25519";
+import { SuiGrpcClient } from "@mysten/sui/grpc";
+import { SuiJsonRpcClient } from "@mysten/sui/jsonRpc";
 import {
   SignerRegistry,
   buildAcceptJurySeatTransaction,
@@ -24,10 +26,16 @@ import {
   buildSettleDemoPoolTransaction,
   buildStartDirectReviewTransaction,
   buildWithdrawPayoutTransaction,
+  createFallbackClient,
+  createSuiClients,
   loadReleaseManifest,
   parseReleaseManifest,
   type ReleaseManifest,
 } from "./index";
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 const manifest: ReleaseManifest = {
   network: "localnet",
@@ -83,6 +91,49 @@ describe("release manifest", () => {
         gonka: { ...manifest.gonka, models: ["only-one-model"] },
       }),
     ).toThrow(/minDistinctModels/);
+  });
+});
+
+describe("Sui client transport", () => {
+  it("uses JSON-RPC for localnet", () => {
+    expect(createSuiClients(manifest)).toBeInstanceOf(SuiJsonRpcClient);
+  });
+
+  it.each(["testnet", "mainnet"] as const)("keeps %s on gRPC", (network) => {
+    expect(
+      createSuiClients({
+        ...manifest,
+        network,
+        suiRpcUrl: `https://fullnode.${network}.sui.io`,
+        walrus: { mode: network },
+      }),
+    ).toBeInstanceOf(SuiGrpcClient);
+  });
+
+  it("uses the manifest JSON-RPC fallback URL", async () => {
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          jsonrpc: "2.0",
+          id: 1,
+          result: { info: { version: "1.52.2" } },
+        }),
+        {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const fallbackUrl = "https://fallback.testnet.example";
+    const client = createFallbackClient({
+      network: "testnet",
+      suiRpcUrl: "https://grpc.testnet.example",
+      suiRpcFallbackUrl: fallbackUrl,
+    });
+
+    await expect(client.getRpcApiVersion()).resolves.toBe("1.52.2");
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(fallbackUrl);
   });
 });
 

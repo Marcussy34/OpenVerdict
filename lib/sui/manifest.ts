@@ -14,6 +14,7 @@ export const releaseManifestSchema = z
   .object({
     network: z.enum(["localnet", "testnet", "mainnet"]),
     suiRpcUrl: z.string().url(),
+    suiRpcFallbackUrl: z.string().url().optional(),
     suiFaucetUrl: z.string().url().optional(),
     packageId: optionalObjectId,
     registryObjectId: optionalObjectId,

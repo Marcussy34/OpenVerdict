@@ -1,6 +1,6 @@
-import type { SuiGrpcClient } from "@mysten/sui/grpc";
 import type { ResolutionEventVisibility } from "../engine/contract";
 import type { Repository } from "../storage";
+import type { OpenVerdictSuiClient } from "./client";
 
 const OPENVERDICT_MODULES = [
   "agent_registry",
@@ -26,7 +26,7 @@ const EVENT_KIND: Record<string, string> = {
 };
 
 export interface SuiEventReaderOptions {
-  client: SuiGrpcClient;
+  client: OpenVerdictSuiClient;
   packageId: string;
   repository: Repository;
   pollIntervalMs?: number;
@@ -34,7 +34,7 @@ export interface SuiEventReaderOptions {
 
 /** Poll package Move events and append normalized, cursor-bearing records. */
 export class SuiEventReader {
-  readonly #client: SuiGrpcClient;
+  readonly #client: OpenVerdictSuiClient;
   readonly #packageId: string;
   readonly #repository: Repository;
   readonly #pollIntervalMs: number;
@@ -50,7 +50,7 @@ export class SuiEventReader {
     let appended = 0;
     for (const moduleName of OPENVERDICT_MODULES) {
       const cursor = await this.#repository.latestSuiCursor(moduleName);
-      const page = await this.#client.listEvents({
+      const page = await this.#client.core.listEvents({
         filter: { emitModule: `${this.#packageId}::${moduleName}` },
         after: cursor ?? null,
         order: "ascending",

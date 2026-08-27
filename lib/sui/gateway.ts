@@ -1,4 +1,3 @@
-import type { SuiGrpcClient } from "@mysten/sui/grpc";
 import type { TxResult } from "../engine/contract";
 import {
   buildAcceptJurySeatTransaction,
@@ -45,18 +44,19 @@ import type {
   SuiGateway,
   SuiGatewayHealth,
 } from "./gateway-types";
+import type { OpenVerdictSuiClient } from "./client";
 import type { ReleaseManifest } from "./manifest";
 import { SignerRegistry, SignerRegistryError } from "./signers";
 
 export interface SuiGatewayConfig {
-  client: SuiGrpcClient;
+  client: OpenVerdictSuiClient;
   manifest: ReleaseManifest;
   signers: SignerRegistry;
 }
 
 /** Real Sui implementation of the narrow lifecycle seam used by the engine. */
 export class RealSuiGateway implements SuiGateway {
-  readonly #client: SuiGrpcClient;
+  readonly #client: OpenVerdictSuiClient;
   readonly #manifest: ReleaseManifest;
   readonly #signers: SignerRegistry;
 
@@ -306,8 +306,8 @@ export class RealSuiGateway implements SuiGateway {
 
   async health(): Promise<SuiGatewayHealth> {
     try {
-      await this.#client.getChainIdentifier();
-      const registry = await this.#client.getObject({
+      await this.#client.core.getChainIdentifier();
+      const registry = await this.#client.core.getObject({
         objectId: this.#manifest.registryObjectId,
         include: { json: true },
       });
@@ -345,7 +345,7 @@ export class RealSuiGateway implements SuiGateway {
         signer = this.#signers.getAgentByProfileId(agentProfileId);
       } catch (error) {
         if (!(error instanceof SignerRegistryError)) throw error;
-        const seat = await this.#client.getObject({
+        const seat = await this.#client.core.getObject({
           objectId: jurySeatId,
           include: { json: true },
         });
@@ -375,7 +375,7 @@ export class RealSuiGateway implements SuiGateway {
     const roundTallyId =
       optionalId(event?.json?.first_round_tally_id) ??
       requiredObjectId(result, "roundTally");
-    const committeeObject = await this.#client.getObject({
+    const committeeObject = await this.#client.core.getObject({
       objectId: committeeId,
       include: { json: true },
     });
@@ -411,7 +411,7 @@ export class RealSuiGateway implements SuiGateway {
         objects: Array<{ objectId: string }>;
         cursor: string | null;
         hasNextPage: boolean;
-      } = await this.#client.listOwnedObjects({
+      } = await this.#client.core.listOwnedObjects({
         owner,
         type,
         cursor,
@@ -436,7 +436,7 @@ export class RealSuiGateway implements SuiGateway {
         }>;
         cursor: string | null;
         hasNextPage: boolean;
-      } = await this.#client.listOwnedObjects({
+      } = await this.#client.core.listOwnedObjects({
         owner,
         type,
         cursor,

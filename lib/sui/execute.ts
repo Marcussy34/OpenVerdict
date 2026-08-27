@@ -1,7 +1,7 @@
 import type { Signer } from "@mysten/sui/cryptography";
-import type { SuiGrpcClient } from "@mysten/sui/grpc";
 import type { Transaction } from "@mysten/sui/transactions";
 import type { TxResult } from "../engine/contract";
+import type { OpenVerdictSuiClient } from "./client";
 
 export interface ExecutedMoveEvent {
   packageId: string;
@@ -28,16 +28,20 @@ export class SuiTransactionExecutionError extends Error {
 
 /** Sign, execute, wait for indexing, and normalize the Sui v2 result union. */
 export async function executeAndWait(
-  client: SuiGrpcClient,
+  client: OpenVerdictSuiClient,
   signer: Signer,
   transaction: Transaction,
 ): Promise<ExecutedTxResult> {
+  // CLI 1.52 cannot decode SDK 2.26's simulation-only ValidDuring expiration.
+  if (client.network === "localnet") {
+    transaction.setGasBudgetIfNotSet(2_000_000_000);
+  }
   const submitted = await signer.signAndExecuteTransaction({ transaction, client });
   assertSuccessful(submitted);
 
-  const settled = await client.waitForTransaction({
+  const settled = await client.core.waitForTransaction({
     result: submitted,
-    include: { effects: true, events: true, objectTypes: true, protoJson: true },
+    include: { effects: true, events: true, objectTypes: true },
   });
   assertSuccessful(settled);
 
@@ -46,10 +50,8 @@ export async function executeAndWait(
     value.effects?.changedObjects ?? [],
     value.objectTypes ?? {},
   );
-  const checkpoint = checkpointFromProto(settled.protoJson);
   return {
     digest: value.digest,
-    ...(checkpoint === undefined ? {} : { checkpoint }),
     ...(Object.keys(objectIds).length === 0 ? {} : { objectIds }),
     moveEvents: (value.events ?? []).map((event) => ({
       packageId: event.packageId,
@@ -59,14 +61,6 @@ export async function executeAndWait(
       json: event.json,
     })),
   };
-}
-
-function checkpointFromProto(value: unknown): number | undefined {
-  if (typeof value !== "object" || value === null || !("checkpoint" in value)) {
-    return undefined;
-  }
-  const checkpoint = Number((value as { checkpoint?: unknown }).checkpoint);
-  return Number.isSafeInteger(checkpoint) && checkpoint >= 0 ? checkpoint : undefined;
 }
 
 function assertSuccessful<Include extends object>(

@@ -1,4 +1,3 @@
-import type { SuiGrpcClient } from "@mysten/sui/grpc";
 import type { GonkaRouterAdapter } from "../gonka";
 import type {
   RetrievalPolicy,
@@ -7,7 +6,7 @@ import type {
 } from "../evidence";
 import type { AgentManifest } from "../protocol";
 import type { DbHandle } from "../storage";
-import type { SignerRegistry, SuiGateway } from "../sui";
+import type { OpenVerdictSuiClient, SignerRegistry, SuiGateway } from "../sui";
 import type { WalrusStore } from "../walrus";
 
 export interface EngineAgentConfig {
@@ -25,7 +24,7 @@ export interface EngineConfig {
   walrus: WalrusStore;
   gonka: GonkaRouterAdapter;
   /** Required for real-chain operation; tests can inject suiGateway instead. */
-  suiClient?: SuiGrpcClient;
+  suiClient?: OpenVerdictSuiClient;
   /** Required for real-chain operation; tests can inject suiGateway instead. */
   signers?: SignerRegistry;
   suiGateway?: SuiGateway;
