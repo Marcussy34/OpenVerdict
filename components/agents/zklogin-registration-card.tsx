@@ -8,17 +8,12 @@ import {
   ShieldTick,
   TickCircle,
   Warning2,
-} from "iconsax-react";
+} from "@/components/icons";
 import { WalletConnectButton } from "@/components/wallet/connect-button";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Panel, FieldLabel } from "@/components/viz/panel";
+import { HashChip } from "@/components/viz/hash-chip";
+import { MetaTag } from "@/components/viz/page-header";
 import { Input } from "@/components/ui/input";
 import type { ZkBackedRegistrationResult } from "@/lib/engine/contract";
 import {
@@ -133,24 +128,23 @@ function ZkLoginRegistrationForm({
   const busy = phase !== "idle";
 
   return (
-    <Card>
-      <CardHeader className="border-b">
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
-            <ShieldTick size="19" variant="Bold" aria-hidden="true" />
-          </div>
-          <CardTitle>Back an agent with your Google account</CardTitle>
-          <Badge variant="outline" className="font-mono text-[11px]">
-            ZKLOGIN_BACKED
-          </Badge>
-        </div>
-        <CardDescription>
+    <Panel
+      label="Register a juror agent"
+      icon={ShieldTick}
+      tone="sealed"
+      action={<MetaTag tone="sealed">ZKLOGIN_BACKED</MetaTag>}
+    >
+      <div className="mb-4 space-y-1">
+        <h2 className="text-base font-semibold text-ocean">
+          Back an agent with your Google account
+        </h2>
+        <p className="text-xs leading-relaxed text-muted-foreground">
           One Google account, one seat — authentication, not proof of personhood.
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
+        </p>
+      </div>
+      <div>
         {!account ? (
-          <div className="flex flex-col items-start gap-4 rounded-lg border border-dashed border-border bg-muted/30 p-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-col items-start gap-4 rounded-xl border border-dashed border-border bg-surface p-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex max-w-2xl items-start gap-3">
               <Profile2User
                 size="20"
@@ -159,7 +153,7 @@ function ZkLoginRegistrationForm({
                 aria-hidden="true"
               />
               <div className="space-y-1">
-                <p className="text-sm font-semibold text-foreground">
+                <p className="text-sm font-semibold text-ocean">
                   Connect with Google to continue
                 </p>
                 <p className="text-sm leading-relaxed text-muted-foreground">
@@ -172,27 +166,29 @@ function ZkLoginRegistrationForm({
           </div>
         ) : result ? (
           <div
-            className="space-y-4 rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-4"
+            className="space-y-4 rounded-xl border border-yes/30 bg-yes/6 p-4"
             role="status"
           >
-            <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-300">
+            <div className="flex items-center gap-2 text-yes">
               <TickCircle size="19" variant="Bold" aria-hidden="true" />
               <p className="font-semibold">Agent registered</p>
-              <Badge variant="outline" className="font-mono text-[11px]">
-                {result.backingKind}
-              </Badge>
+              <MetaTag tone="yes">{result.backingKind}</MetaTag>
             </div>
             <dl className="grid gap-3 text-xs sm:grid-cols-2">
               <div className="space-y-1">
-                <dt className="text-muted-foreground">Agent profile</dt>
-                <dd className="break-all font-mono text-foreground">
-                  {result.agentProfileId}
+                <dt>
+                  <FieldLabel>Agent profile</FieldLabel>
+                </dt>
+                <dd>
+                  <HashChip value={result.agentProfileId} tone="chain" full />
                 </dd>
               </div>
               <div className="space-y-1">
-                <dt className="text-muted-foreground">Transaction digest</dt>
-                <dd className="break-all font-mono text-foreground">
-                  {result.digest}
+                <dt>
+                  <FieldLabel>Transaction digest</FieldLabel>
+                </dt>
+                <dd>
+                  <HashChip value={result.digest} tone="chain" full />
                 </dd>
               </div>
             </dl>
@@ -212,7 +208,7 @@ function ZkLoginRegistrationForm({
           <form className="space-y-5" onSubmit={submitRegistration} noValidate>
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-1.5">
-                <label htmlFor="zk-agent-model" className="text-sm font-medium text-foreground">
+                <label htmlFor="zk-agent-model" className="text-sm font-medium text-ocean">
                   Model ID
                 </label>
                 <Input
@@ -233,7 +229,7 @@ function ZkLoginRegistrationForm({
                 </p>
               </div>
               <div className="space-y-1.5">
-                <label htmlFor="zk-agent-role" className="text-sm font-medium text-foreground">
+                <label htmlFor="zk-agent-role" className="text-sm font-medium text-ocean">
                   Jury role
                 </label>
                 <select
@@ -242,7 +238,7 @@ function ZkLoginRegistrationForm({
                   onChange={(event) => {
                     if (isAgentRole(event.target.value)) setRole(event.target.value);
                   }}
-                  className="h-11 w-full rounded-lg border border-input bg-background px-3 text-sm text-foreground outline-none transition-colors focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+                  className="h-11 w-full rounded-lg border border-input bg-card px-3 text-sm text-ocean outline-none transition-colors focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
                 >
                   {ZKLOGIN_AGENT_ROLES.map((option) => (
                     <option key={option} value={option}>
@@ -258,7 +254,7 @@ function ZkLoginRegistrationForm({
 
             {error && (
               <div
-                className="flex flex-col items-start gap-3 rounded-lg border border-destructive/30 bg-destructive/5 p-4"
+                className="flex flex-col items-start gap-3 rounded-xl border border-destructive/30 bg-destructive/5 p-4"
                 role="alert"
               >
                 <div className="flex items-center gap-2 text-destructive">
@@ -314,8 +310,8 @@ function ZkLoginRegistrationForm({
             </div>
           </form>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </Panel>
   );
 }
 

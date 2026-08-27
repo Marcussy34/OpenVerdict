@@ -2,7 +2,11 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
+import { PageHeader, ExperimentalTag } from "@/components/viz/page-header";
+import { Panel, FieldLabel } from "@/components/viz/panel";
+import { HashChip } from "@/components/viz/hash-chip";
+import { StatusPill, type DotTone } from "@/components/viz/live-dot";
+import { StatTile } from "@/components/viz/stat-tile";
 import type { EngineStatus } from "@/lib/engine/contract";
 import {
   Activity,
@@ -13,7 +17,18 @@ import {
   Refresh,
   ShieldTick,
   InfoCircle,
-} from "iconsax-react";
+  Data,
+} from "@/components/icons";
+
+/** A single key/value line inside a subsystem panel. */
+function Row({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="flex flex-col gap-1 border-b border-border/70 py-2 last:border-0 sm:flex-row sm:items-center sm:justify-between">
+      <FieldLabel>{label}</FieldLabel>
+      <div className="min-w-0 font-mono text-xs text-ocean">{children}</div>
+    </div>
+  );
+}
 
 export default function StatusPage() {
   const [status, setStatus] = useState<EngineStatus | null>(null);
@@ -24,15 +39,12 @@ export default function StatusPage() {
     try {
       setLoading(true);
       setEngineOffline(false);
-      const res = await fetch("/api/status");
+      const res = await fetch("/api/status", { cache: "no-store" });
       if (res.status === 503) {
         setEngineOffline(true);
         return;
       }
-      if (res.ok) {
-        const data = await res.json();
-        setStatus(data);
-      }
+      if (res.ok) setStatus(await res.json());
     } catch {
       setEngineOffline(true);
     } finally {
@@ -44,7 +56,7 @@ export default function StatusPage() {
     let ignore = false;
     async function init() {
       try {
-        const res = await fetch("/api/status");
+        const res = await fetch("/api/status", { cache: "no-store" });
         if (ignore) return;
         if (res.status === 503) {
           setEngineOffline(true);
@@ -66,230 +78,197 @@ export default function StatusPage() {
     };
   }, []);
 
+  const allHealthy = Boolean(status?.suiHealthy && status?.dbHealthy && !status?.paused);
+  const overallTone: DotTone = engineOffline ? "warn" : allHealthy ? "live" : "warn";
+  const overallLabel = engineOffline
+    ? "Standalone"
+    : allHealthy
+      ? "All systems nominal"
+      : "Degraded";
+
   return (
-    <div className="max-w-5xl mx-auto py-8 sm:py-12 px-4 sm:px-6 lg:px-8 space-y-8">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border/80 pb-6">
-        <div className="space-y-1">
-          <div className="flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-              <Activity size="18" variant="Bold" />
-            </div>
-            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground">
-              System &amp; Protocol Status
-            </h1>
-            <Badge
+    <div className="mx-auto max-w-5xl space-y-6 px-4 py-10 sm:px-6 lg:px-8 lg:py-12">
+      <PageHeader
+        eyebrow="Operations"
+        title="System & protocol status"
+        description="Health and connectivity for the Sui Move deployment, GonkaRouter inference, Walrus storage and the indexing pipeline."
+        icon={Activity}
+        badges={<ExperimentalTag />}
+        actions={
+          <>
+            <StatusPill tone={overallTone} label={overallLabel} pulse={allHealthy} />
+            <Button
               variant="outline"
-              className="border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300 text-[11px] font-semibold"
+              size="sm"
+              onClick={() => loadStatus()}
+              className="min-h-[40px] font-semibold"
             >
-              Experimental
-            </Badge>
-          </div>
-          <p className="text-xs sm:text-sm text-muted-foreground">
-            Health and connectivity metrics for Sui Move contracts, GonkaRouter inference, Walrus storage, and indexing pipelines.
-          </p>
-        </div>
+              <Refresh size="14" variant="Bold" />
+              Refresh
+            </Button>
+          </>
+        }
+      />
 
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => loadStatus()}
-          className="min-h-[40px] text-xs font-semibold"
-        >
-          <Refresh size="14" variant="Bold" className="mr-1.5" />
-          Refresh Status
-        </Button>
-      </div>
-
-      {/* Main Status Display */}
       {loading ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           {[1, 2, 3, 4].map((i) => (
-            <div key={i} className="h-44 rounded-xl border border-border/60 bg-muted/40 animate-pulse" />
+            <div
+              key={i}
+              className="ov-edge h-52 animate-pulse rounded-2xl border border-border bg-card"
+            />
           ))}
         </div>
       ) : engineOffline ? (
         <div className="space-y-6">
-          <div className="rounded-2xl border border-amber-500/30 bg-amber-500/5 p-6 space-y-3">
-            <div className="flex items-center gap-2 text-amber-700 dark:text-amber-300 font-semibold text-sm">
-              <Warning2 size="18" variant="Bold" />
-              <span>Engine Status: Standalone / Unwired (503)</span>
+          <div className="flex items-start gap-3 rounded-2xl border border-unsure/30 bg-unsure/6 p-5">
+            <Warning2 size="20" variant="Bold" className="mt-0.5 shrink-0 text-unsure" />
+            <div className="space-y-1">
+              <h2 className="text-sm font-semibold text-ocean">
+                Engine status: standalone / unwired (503)
+              </h2>
+              <p className="text-xs leading-relaxed text-muted-foreground">
+                The Next.js observer is running in disconnected mode. The headless verification
+                engine is initializing — the values below describe the configured deployment
+                shape, not live health.
+              </p>
             </div>
-            <p className="text-xs text-muted-foreground leading-relaxed">
-              The Next.js frontend is operating in disconnected observer mode. The headless verification engine is currently initializing.
-            </p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Sui Network Card (Stub) */}
-            <div className="rounded-xl border border-border/80 bg-card p-5 space-y-3 text-xs">
-              <div className="flex items-center justify-between">
-                <span className="font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-                  <Link21 size="16" variant="Bold" className="text-primary" />
-                  Sui Blockchain Network
-                </span>
-                <Badge variant="outline" className="text-xs text-amber-700 bg-amber-500/10 border-amber-500/30">
-                  Awaiting Connection
-                </Badge>
-              </div>
-              <div className="space-y-1.5 font-mono text-muted-foreground">
-                <div>Network: sui:testnet / sui:localnet</div>
-                <div>Protocol: Move 2024 Edition</div>
-                <div>Modules: claim, jury, settlement, evidence</div>
-              </div>
-            </div>
-
-            {/* GonkaRouter Card (Stub) */}
-            <div className="rounded-xl border border-border/80 bg-card p-5 space-y-3 text-xs">
-              <div className="flex items-center justify-between">
-                <span className="font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-                  <Cpu size="16" variant="Bold" className="text-primary" />
-                  GonkaRouter Inference Engine
-                </span>
-                <Badge variant="outline" className="text-xs text-amber-700 bg-amber-500/10 border-amber-500/30">
-                  Adapter Ready
-                </Badge>
-              </div>
-              <div className="space-y-1.5 font-mono text-muted-foreground">
-                <div>Catalog Models: DeepSeek-V4, Kimi-K2.6, MiniMax-M2.7</div>
-                <div>Diversity: ≥3 model families required per jury</div>
-                <div>Max Output Tokens: 4096 tokens</div>
-              </div>
-            </div>
-
-            {/* Walrus Decentralized Storage Card (Stub) */}
-            <div className="rounded-xl border border-border/80 bg-card p-5 space-y-3 text-xs">
-              <div className="flex items-center justify-between">
-                <span className="font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-                  <DocumentText size="16" variant="Bold" className="text-primary" />
-                  Walrus Decentralized Storage
-                </span>
-                <Badge variant="outline" className="text-xs text-emerald-700 bg-emerald-500/10 border-emerald-500/30">
-                  Configured
-                </Badge>
-              </div>
-              <div className="space-y-1.5 font-mono text-muted-foreground">
-                <div>Mode: Local FS / Walrus Testnet</div>
-                <div>Evidence Bundles: Merkle Root Hashed</div>
-                <div>Retention: Indefinite / Bounded Epochs</div>
-              </div>
-            </div>
-
-            {/* Protocol State (Stub) */}
-            <div className="rounded-xl border border-border/80 bg-card p-5 space-y-3 text-xs">
-              <div className="flex items-center justify-between">
-                <span className="font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-                  <ShieldTick size="16" variant="Bold" className="text-primary" />
-                  Protocol Security &amp; Safety
-                </span>
-                <Badge variant="outline" className="text-xs text-emerald-700 bg-emerald-500/10 border-emerald-500/30">
-                  Operational
-                </Badge>
-              </div>
-              <div className="space-y-1.5 font-mono text-muted-foreground">
-                <div>Paused Flag: false</div>
-                <div>SSRF Protection: Active</div>
-                <div>Pre-Reveal Redaction: Enforced</div>
-              </div>
-            </div>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <Panel label="Sui blockchain network" icon={Link21} tone="chain">
+              <Row label="Network">sui:testnet / sui:localnet</Row>
+              <Row label="Protocol">Move 2024 edition</Row>
+              <Row label="Modules">claim · jury · settlement · evidence</Row>
+            </Panel>
+            <Panel label="GonkaRouter inference" icon={Cpu} tone="primary">
+              <Row label="Catalog models">DeepSeek-V4 · Kimi-K2.6 · MiniMax-M2.7</Row>
+              <Row label="Diversity">≥3 model families required per jury</Row>
+              <Row label="Max output tokens">4096</Row>
+            </Panel>
+            <Panel label="Walrus decentralized storage" icon={DocumentText} tone="sealed">
+              <Row label="Mode">Local FS / Walrus testnet</Row>
+              <Row label="Evidence bundles">Merkle root hashed</Row>
+              <Row label="Retention">Indefinite / bounded epochs</Row>
+            </Panel>
+            <Panel label="Protocol security & safety" icon={ShieldTick} tone="yes">
+              <Row label="Paused flag">false</Row>
+              <Row label="SSRF protection">Active</Row>
+              <Row label="Pre-reveal redaction">Enforced</Row>
+            </Panel>
           </div>
         </div>
       ) : status ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* Sui Network Card */}
-          <div className="rounded-xl border border-border/80 bg-card p-5 space-y-3 text-xs">
-            <div className="flex items-center justify-between">
-              <span className="font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-                <Link21 size="16" variant="Bold" className="text-primary" />
-                Sui Blockchain Network
-              </span>
-              <Badge
-                variant="outline"
-                className={`text-xs ${
-                  status.suiHealthy
-                    ? "text-emerald-700 bg-emerald-500/10 border-emerald-500/30"
-                    : "text-red-700 bg-red-500/10 border-red-500/30"
-                }`}
-              >
-                {status.suiHealthy ? "Connected" : "Disconnected"}
-              </Badge>
-            </div>
-            <div className="space-y-1.5 font-mono text-muted-foreground">
-              <div>Network: {status.network}</div>
-              <div>Package ID: {status.packageId}</div>
-              <div>Registry ID: {status.registryObjectId}</div>
-              {status.latestCheckpoint && <div>Checkpoint: #{status.latestCheckpoint}</div>}
-            </div>
+        <>
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            <StatTile
+              label="Network"
+              value={status.network}
+              icon={Link21}
+              tone="chain"
+              animate={false}
+            />
+            <StatTile
+              label="Inference mode"
+              value={status.gonkaMode}
+              icon={Cpu}
+              tone="primary"
+              animate={false}
+            />
+            <StatTile
+              label="Storage mode"
+              value={status.walrusMode}
+              icon={DocumentText}
+              tone="sealed"
+              animate={false}
+            />
+            <StatTile
+              label="App version"
+              value={status.appVersion}
+              icon={Data}
+              tone="default"
+              animate={false}
+            />
           </div>
 
-          {/* GonkaRouter Card */}
-          <div className="rounded-xl border border-border/80 bg-card p-5 space-y-3 text-xs">
-            <div className="flex items-center justify-between">
-              <span className="font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-                <Cpu size="16" variant="Bold" className="text-primary" />
-                GonkaRouter Inference Engine
-              </span>
-              <Badge variant="outline" className="text-xs text-emerald-700 bg-emerald-500/10 border-emerald-500/30">
-                Mode: {status.gonkaMode}
-              </Badge>
-            </div>
-            <div className="space-y-1.5 font-mono text-muted-foreground">
-              <div>Catalog Models: DeepSeek-V4, Kimi-K2.6, MiniMax-M2.7</div>
-              <div>Jury Parallelism: 5 Concurrent Agents</div>
-              <div>Adapter: Temperature 0 / Strict JSON</div>
-            </div>
-          </div>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <Panel
+              label="Sui blockchain network"
+              icon={Link21}
+              tone="chain"
+              action={
+                <StatusPill
+                  tone={status.suiHealthy ? "live" : "down"}
+                  label={status.suiHealthy ? "Connected" : "Disconnected"}
+                  pulse={status.suiHealthy}
+                />
+              }
+            >
+              <Row label="Network">{status.network}</Row>
+              <Row label="Package id">
+                <HashChip value={status.packageId} tone="chain" head={10} tail={8} />
+              </Row>
+              <Row label="Registry object">
+                <HashChip value={status.registryObjectId} tone="chain" head={10} tail={8} />
+              </Row>
+              {status.latestCheckpoint !== undefined && (
+                <Row label="Latest checkpoint">#{status.latestCheckpoint}</Row>
+              )}
+            </Panel>
 
-          {/* Walrus Decentralized Storage Card */}
-          <div className="rounded-xl border border-border/80 bg-card p-5 space-y-3 text-xs">
-            <div className="flex items-center justify-between">
-              <span className="font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-                <DocumentText size="16" variant="Bold" className="text-primary" />
-                Walrus Decentralized Storage
-              </span>
-              <Badge variant="outline" className="text-xs text-emerald-700 bg-emerald-500/10 border-emerald-500/30">
-                Mode: {status.walrusMode}
-              </Badge>
-            </div>
-            <div className="space-y-1.5 font-mono text-muted-foreground">
-              <div>Evidence Artifacts: Merkle Root Hashed</div>
-              <div>Run Audits: Immutable Walrus Blobs</div>
-            </div>
-          </div>
+            <Panel
+              label="GonkaRouter inference engine"
+              icon={Cpu}
+              tone="primary"
+              action={<StatusPill tone="chain" label={`Mode ${status.gonkaMode}`} pulse={false} />}
+            >
+              <Row label="Catalog models">DeepSeek-V4 · Kimi-K2.6 · MiniMax-M2.7</Row>
+              <Row label="Jury parallelism">5 concurrent agents</Row>
+              <Row label="Adapter">Temperature 0 · strict JSON schema</Row>
+              <Row label="Fail mode">Closed — malformed output never becomes a vote</Row>
+            </Panel>
 
-          {/* Database & Protocol Card */}
-          <div className="rounded-xl border border-border/80 bg-card p-5 space-y-3 text-xs">
-            <div className="flex items-center justify-between">
-              <span className="font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-                <ShieldTick size="16" variant="Bold" className="text-primary" />
-                Database &amp; Protocol Safety
-              </span>
-              <Badge
-                variant="outline"
-                className={`text-xs ${
-                  !status.paused && status.dbHealthy
-                    ? "text-emerald-700 bg-emerald-500/10 border-emerald-500/30"
-                    : "text-amber-700 bg-amber-500/10 border-amber-500/30"
-                }`}
-              >
-                {status.paused ? "Paused" : "Operational"}
-              </Badge>
-            </div>
-            <div className="space-y-1.5 font-mono text-muted-foreground">
-              <div>App Version: {status.appVersion}</div>
-              <div>Database Health: {status.dbHealthy ? "Healthy" : "Degraded"}</div>
-              <div>Paused: {status.paused ? "true" : "false"}</div>
-            </div>
+            <Panel
+              label="Walrus decentralized storage"
+              icon={DocumentText}
+              tone="sealed"
+              action={
+                <StatusPill tone="sealed" label={`Mode ${status.walrusMode}`} pulse={false} />
+              }
+            >
+              <Row label="Evidence artifacts">Merkle root hashed</Row>
+              <Row label="Run audits">Immutable Walrus blobs</Row>
+              <Row label="Canonicalization">HTML → sanitized text before hashing</Row>
+            </Panel>
+
+            <Panel
+              label="Database & protocol safety"
+              icon={ShieldTick}
+              tone={!status.paused && status.dbHealthy ? "yes" : "warn"}
+              action={
+                <StatusPill
+                  tone={!status.paused && status.dbHealthy ? "live" : "warn"}
+                  label={status.paused ? "Paused" : "Operational"}
+                  pulse={!status.paused && status.dbHealthy}
+                />
+              }
+            >
+              <Row label="App version">{status.appVersion}</Row>
+              <Row label="Database health">{status.dbHealthy ? "Healthy" : "Degraded"}</Row>
+              <Row label="Paused">{status.paused ? "true" : "false"}</Row>
+              <Row label="Observer signer">None — read-only projection</Row>
+            </Panel>
           </div>
-        </div>
+        </>
       ) : null}
 
-      {/* Info footer */}
-      <div className="rounded-xl border border-border/60 bg-muted/30 p-4 text-xs text-muted-foreground flex items-center gap-2">
-        <InfoCircle size="16" variant="Bold" className="text-primary shrink-0" />
-        <span>
-          Status is polled dynamically from the orchestrator engine. Observer health is independent of Move smart contract execution.
-        </span>
+      <div className="flex items-start gap-2.5 rounded-2xl border border-border bg-surface p-4">
+        <InfoCircle size="16" variant="Bold" className="mt-0.5 shrink-0 text-primary" />
+        <p className="text-xs leading-relaxed text-muted-foreground">
+          Status is polled from the orchestrator engine on demand. Observer health is
+          independent of Move smart-contract execution: if this page is down, the protocol and
+          headless engine keep running.
+        </p>
       </div>
     </div>
   );

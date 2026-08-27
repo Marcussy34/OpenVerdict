@@ -1,13 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { HashChip } from "@/components/viz/hash-chip";
+import { ModelBadge, modelFamily } from "@/components/viz/model-badge";
+import { MetaTag } from "@/components/viz/page-header";
+import { cn } from "@/lib/utils";
 import type { AgentDirectoryEntry, AgentCard as AgentCardType } from "@/lib/engine/contract";
 import {
-  Cpu,
-  Profile2User,
   ShieldTick,
   ShieldCross,
   Activity,
@@ -15,7 +15,8 @@ import {
   TickCircle,
   CloseCircle,
   Warning2,
-} from "iconsax-react";
+  ArrowRight,
+} from "@/components/icons";
 
 interface AgentCardComponentProps {
   agent?: AgentDirectoryEntry;
@@ -23,152 +24,151 @@ interface AgentCardComponentProps {
   showVoteDetails?: boolean;
 }
 
+/** The four reputation dimensions the registry maintains, in display order. */
+const REPUTATION_DIMENSIONS = [
+  { key: "liveness_bps", label: "Liveness" },
+  { key: "valid_output_bps", label: "Valid output" },
+  { key: "valid_reveal_bps", label: "Valid reveal" },
+  { key: "consensus_reliability_bps", label: "Consensus" },
+] as const;
+
 export function AgentCard({ agent, reportCard, showVoteDetails = false }: AgentCardComponentProps) {
   const profileId = reportCard?.agentProfileId ?? agent?.agentProfileId ?? "unknown";
   const modelId = reportCard?.modelId ?? agent?.modelId ?? "unknown";
-  const role = reportCard?.role ?? agent?.role ?? "Juror Agent";
-  const owner = reportCard?.owner ?? agent?.owner ?? "0x0000";
-  const manifestHash = agent?.manifestHash ?? "0x0000";
+  const role = reportCard?.role ?? agent?.role ?? "Juror agent";
+  const owner = reportCard?.owner ?? agent?.owner;
+  const manifestHash = agent?.manifestHash;
   const isActive = agent?.active ?? true;
+  const family = modelFamily(modelId);
 
-  // Outcome colors & badges for post-reveal view
-  let outcomeColor = "text-muted-foreground border-border bg-muted";
-  let OutcomeIcon = Activity;
-
-  if (reportCard?.outcome === "YES") {
-    outcomeColor = "text-emerald-700 dark:text-emerald-300 border-emerald-500/40 bg-emerald-500/10 font-bold";
-    OutcomeIcon = ShieldTick;
-  } else if (reportCard?.outcome === "NO") {
-    outcomeColor = "text-red-700 dark:text-red-300 border-red-500/40 bg-red-500/10 font-bold";
-    OutcomeIcon = ShieldCross;
-  } else if (reportCard?.outcome === "UNSURE") {
-    outcomeColor = "text-amber-700 dark:text-amber-300 border-amber-500/40 bg-amber-500/10 font-bold";
-    OutcomeIcon = Warning2;
-  }
+  const outcomeStyle =
+    reportCard?.outcome === "YES"
+      ? { chip: "border-yes/30 bg-yes/8 text-yes", Icon: ShieldTick }
+      : reportCard?.outcome === "NO"
+        ? { chip: "border-no/30 bg-no/8 text-no", Icon: ShieldCross }
+        : reportCard?.outcome === "UNSURE"
+          ? { chip: "border-unsure/30 bg-unsure/8 text-unsure", Icon: Warning2 }
+          : { chip: "border-border bg-surface text-muted-foreground", Icon: Activity };
+  const OutcomeIcon = outcomeStyle.Icon;
 
   return (
-    <Card className="flex flex-col justify-between border-border/80 hover:border-primary/50 transition-all duration-200 shadow-xs bg-card">
-      <CardHeader className="space-y-3 pb-3">
-        {/* Top badges: Model family + Active badge */}
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-1.5">
-            <Cpu size="16" variant="Bold" className="text-primary shrink-0" />
-            <span className="text-xs font-mono font-bold text-foreground truncate max-w-[180px]">
-              {modelId}
-            </span>
-          </div>
+    <article className="ov-edge ov-lift relative flex h-full flex-col overflow-hidden rounded-2xl border border-border bg-card">
+      {/* Model-family identity rail — committee diversity made visible. */}
+      <span aria-hidden className={cn("absolute inset-x-0 top-0 h-0.5", family.dot)} />
 
-          <Badge
-            variant="outline"
-            className={`text-[10px] py-0 px-2 font-medium flex items-center gap-1 ${
-              isActive
-                ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
-                : "border-zinc-500/30 bg-zinc-500/10 text-zinc-500"
-            }`}
-          >
-            {isActive ? (
-              <>
-                <TickCircle size="10" variant="Bold" />
-                Active
-              </>
-            ) : (
-              <>
-                <CloseCircle size="10" variant="Bold" />
-                Deprecated
-              </>
-            )}
-          </Badge>
+      <div className="flex items-start justify-between gap-2 border-b border-border px-4 py-3.5">
+        <div className="min-w-0 space-y-1.5">
+          <ModelBadge modelId={modelId} />
+          <h3 className="truncate text-sm font-semibold text-ocean">{role.replace(/_/g, " ")}</h3>
         </div>
+        <MetaTag tone={isActive ? "yes" : "default"}>
+          {isActive ? (
+            <>
+              <TickCircle size="10" variant="Bold" />
+              Active
+            </>
+          ) : (
+            <>
+              <CloseCircle size="10" variant="Bold" />
+              Retired
+            </>
+          )}
+        </MetaTag>
+      </div>
 
-        {/* Role & Profile ID */}
-        <div className="space-y-1">
-          <h4 className="text-sm font-semibold text-foreground flex items-center gap-1.5">
-            <Profile2User size="15" variant="Bold" className="text-muted-foreground" />
-            <span>{role}</span>
-          </h4>
-          <div className="flex items-center gap-2 text-[11px] font-mono text-muted-foreground">
-            <span>Agent: {profileId.slice(0, 10)}...</span>
-            <span>•</span>
-            <span>Owner: {owner.slice(0, 8)}...</span>
-          </div>
-        </div>
-      </CardHeader>
-
-      <CardContent className="space-y-3 text-xs text-muted-foreground pb-4">
-        {/* Post-reveal jury vote info if present */}
+      <div className="flex flex-1 flex-col gap-3 px-4 py-4">
+        {/* Post-reveal vote, when this card is rendered from a settled report. */}
         {showVoteDetails && reportCard && (
-          <div className="bg-muted/50 p-3 rounded-lg border border-border/60 space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-medium text-foreground">Revealed Vote:</span>
-              <Badge variant="outline" className={`px-2 py-0.5 text-xs flex items-center gap-1 ${outcomeColor}`}>
+          <div className="space-y-2 rounded-xl border border-border bg-surface p-3">
+            <div className="flex items-center justify-between gap-2">
+              <span className="font-mono text-[10px] font-semibold tracking-[0.12em] text-muted-foreground uppercase">
+                Revealed vote
+              </span>
+              <span
+                className={cn(
+                  "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 font-mono text-[11px] font-bold",
+                  outcomeStyle.chip,
+                )}
+              >
                 <OutcomeIcon size="12" variant="Bold" />
-                <span>
-                  {reportCard.outcome} ({Math.round(reportCard.confidenceBps / 100)}% conf)
-                </span>
-              </Badge>
+                {reportCard.outcome} · {Math.round(reportCard.confidenceBps / 100)}%
+              </span>
             </div>
 
             {reportCard.reasoning && (
-              <div className="space-y-1">
-                <span className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">
-                  Public Reasoning:
-                </span>
-                <p className="text-xs text-foreground/90 italic leading-relaxed line-clamp-3 bg-background/80 p-2 rounded border border-border/40">
-                  &quot;{reportCard.reasoning}&quot;
-                </p>
-              </div>
+              <p className="line-clamp-3 rounded-lg border border-border bg-card p-2 text-[11px] leading-relaxed text-foreground/80 italic">
+                “{reportCard.reasoning}”
+              </p>
             )}
 
-            {reportCard.evidenceIds && reportCard.evidenceIds.length > 0 && (
-              <div className="flex items-center gap-1 text-[11px] text-muted-foreground pt-1">
-                <DocumentText size="12" variant="Bold" />
-                <span>Cited Evidence: {reportCard.evidenceIds.join(", ")}</span>
+            {reportCard.evidenceIds?.length > 0 && (
+              <div className="flex flex-wrap items-center gap-1">
+                <DocumentText size="12" variant="Bold" className="text-muted-foreground" />
+                {reportCard.evidenceIds.map((eid) => (
+                  <HashChip key={eid} value={eid} tone="muted" />
+                ))}
               </div>
             )}
           </div>
         )}
 
-        {/* Reputation scores (when from directory) */}
-        {agent?.reputation && (
-          <div className="space-y-1.5 pt-1">
-            <span className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider block">
-              Reputation Scores (Bps):
+        {/* Reputation dimensions as compact meters — hidden until the registry
+            has actually scored a run, so cards never show four empty bars. */}
+        {agent && Object.keys(agent.reputation ?? {}).length === 0 && !showVoteDetails && (
+          <div className="rounded-xl border border-dashed border-border bg-surface px-3 py-2.5">
+            <p className="text-[11px] leading-snug text-muted-foreground">
+              No scored jury runs yet — reputation dimensions appear once this agent completes
+              a reveal on this deployment.
+            </p>
+          </div>
+        )}
+
+        {agent?.reputation && Object.keys(agent.reputation).length > 0 && (
+          <div className="space-y-2">
+            <span className="font-mono text-[10px] font-semibold tracking-[0.12em] text-muted-foreground uppercase">
+              Reputation (bps)
             </span>
-            <div className="grid grid-cols-2 gap-1.5 text-[11px] font-mono">
-              <div className="flex justify-between bg-muted/40 px-2 py-1 rounded">
-                <span className="text-muted-foreground">Liveness:</span>
-                <span className="font-semibold text-foreground">{agent.reputation.liveness_bps ?? "10000"}</span>
-              </div>
-              <div className="flex justify-between bg-muted/40 px-2 py-1 rounded">
-                <span className="text-muted-foreground">Valid Out:</span>
-                <span className="font-semibold text-foreground">{agent.reputation.valid_output_bps ?? "10000"}</span>
-              </div>
-              <div className="flex justify-between bg-muted/40 px-2 py-1 rounded">
-                <span className="text-muted-foreground">Valid Rev:</span>
-                <span className="font-semibold text-foreground">{agent.reputation.valid_reveal_bps ?? "10000"}</span>
-              </div>
-              <div className="flex justify-between bg-muted/40 px-2 py-1 rounded">
-                <span className="text-muted-foreground">Consensus:</span>
-                <span className="font-semibold text-foreground">{agent.reputation.consensus_reliability_bps ?? "10000"}</span>
-              </div>
+            <div className="space-y-1.5">
+              {REPUTATION_DIMENSIONS.map((dim) => {
+                const bps = agent.reputation?.[dim.key];
+                const pct = typeof bps === "number" ? Math.min(100, bps / 100) : null;
+                return (
+                  <div key={dim.key} className="space-y-1">
+                    <div className="flex items-center justify-between font-mono text-[10px]">
+                      <span className="text-muted-foreground">{dim.label}</span>
+                      <span className="font-semibold text-ocean tabular-nums">
+                        {typeof bps === "number" ? bps : "—"}
+                      </span>
+                    </div>
+                    <div className="h-1 w-full overflow-hidden rounded-full bg-surface-2">
+                      <div
+                        className={cn("h-full rounded-full", family.dot)}
+                        style={{ width: `${pct ?? 0}%` }}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}
 
-        {/* Manifest hash */}
-        <div className="flex items-center justify-between text-[11px] font-mono pt-1 text-muted-foreground border-t border-border/40">
-          <span>Manifest:</span>
-          <span className="truncate max-w-[140px]">{manifestHash}</span>
+        {/* Identifiers — copyable, never truncated away. */}
+        <div className="mt-auto flex flex-wrap gap-1 border-t border-border pt-3">
+          <HashChip value={profileId} label="agent" tone="muted" />
+          {owner && <HashChip value={owner} label="owner" tone="muted" />}
+          {manifestHash && <HashChip value={manifestHash} label="manifest" tone="muted" />}
         </div>
+      </div>
 
-        <div className="pt-2">
-          <Link href={`/agents/${profileId}`} className="w-full block">
-            <Button variant="outline" size="sm" className="w-full text-xs font-semibold min-h-[38px]">
-              View Agent Profile
-            </Button>
+      <div className="border-t border-border px-4 py-3">
+        <Button asChild variant="outline" size="sm" className="min-h-[38px] w-full font-semibold">
+          <Link href={`/agents/${profileId}`}>
+            View agent profile
+            <ArrowRight size="14" variant="Bold" />
           </Link>
-        </div>
-      </CardContent>
-    </Card>
+        </Button>
+      </div>
+    </article>
   );
 }

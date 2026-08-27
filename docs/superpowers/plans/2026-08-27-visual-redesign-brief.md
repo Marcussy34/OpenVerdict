@@ -21,21 +21,25 @@ certificate. The frontend is a strict READ-ONLY observer of that machinery
 plus a submit flow and zkLogin/wallet onboarding. Hackathon tracks: Gonka
 "AI for Society" fact-checker + Sui "AI × Sui".
 
-## Aesthetic direction (recommended, you may refine)
+## Aesthetic direction (USER-DIRECTED 2026-08-27: LIGHT + SUI BLUE)
 
-- "Verification control room": dark-first, near-black surfaces, high-contrast
-  typographic hierarchy, one restrained accent (e.g. signal-green for
-  verified/YES, amber for pending, red for NO/challenge), monospace for
-  hashes/ids/scores. Subtle grid/scanline texture is welcome; no gradients
-  soup, no glassmorphism clichés.
+- LIGHT theme, professional and clean — think OpenAI's product surfaces:
+  white/near-white backgrounds, generous whitespace, crisp neutral-gray
+  typography hierarchy, restrained borders and soft shadows. No dark mode
+  as the default; light IS the demo theme.
+- Accent: Sui brand blue. Use Sui "Sea" #4DA2FF for interactive/brand
+  moments, deep "Ocean" #011829 navy for strong headings/ink, pale "Aqua"
+  #C0E6FF for tinted surfaces/highlights. Blue signals the Sui integration
+  everywhere chrome needs color.
+- Semantic verdict colors stay: green YES/verified, amber pending/UNSURE,
+  red NO/challenge. Monospace for hashes/ids/scores.
 - Motion with purpose: phase transitions, sealed→revealed flips, live event
   stream entries sliding in, count-up truth score, pulsing "live" indicators.
-  Respect `prefers-reduced-motion`.
+  Respect `prefers-reduced-motion`. No gradient soup, no glassmorphism.
 - Data-first components: verdict gauge/dial for Truth Score, jury lane cards
   with model-family identity, commit-reveal seat states as visual seals,
   lifecycle timeline as a real stepper, evidence cards with hash chips.
-- Light mode may remain supported but dark is the demo default. Keep the
-  whole app consistent — no half-migrated pages.
+- Keep the whole app consistent — no half-migrated pages.
 
 ## Hard constraints
 

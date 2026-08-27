@@ -1,4 +1,8 @@
-import { Badge } from "@/components/ui/badge";
+import Link from "next/link";
+import { PageHeader, ExperimentalTag } from "@/components/viz/page-header";
+import { Panel, FieldLabel, Well } from "@/components/viz/panel";
+import { Pipeline } from "@/components/viz/pipeline";
+import { Button } from "@/components/ui/button";
 import {
   Judge,
   Lock,
@@ -7,159 +11,278 @@ import {
   Award,
   ShieldTick,
   Wallet,
-} from "iconsax-react";
+  ArrowRight,
+  type IconComponent,
+} from "@/components/icons";
+
+const CONTENTS = [
+  { id: "pathways", label: "Resolution pathways" },
+  { id: "pipeline", label: "The pipeline" },
+  { id: "commit-reveal", label: "Commit-reveal" },
+  { id: "diversity", label: "Model diversity" },
+  { id: "uncertainty", label: "Uncertainty as a result" },
+  { id: "score", label: "Truth Score" },
+  { id: "signin", label: "Signing in" },
+];
 
 export default function LearnPage() {
   return (
-    <div className="max-w-4xl mx-auto py-8 sm:py-12 px-4 sm:px-6 lg:px-8 space-y-10">
-      {/* Header */}
-      <div className="space-y-2 border-b border-border/80 pb-6">
-        <div className="flex items-center gap-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-            <Judge size="18" variant="Bold" />
-          </div>
-          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground">
-            How OpenVerdict Works: Protocol Concepts
-          </h1>
-          <Badge
-            variant="outline"
-            className="border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300 text-[11px] font-semibold"
+    <div className="mx-auto max-w-5xl space-y-8 px-4 py-10 sm:px-6 lg:px-8 lg:py-12">
+      <PageHeader
+        eyebrow="Protocol concepts"
+        title="How OpenVerdict works"
+        description="A decentralized intelligence verification engine combining Sui Move smart contracts, diverse GonkaRouter AI juries and permanent Walrus storage."
+        icon={Judge}
+        badges={<ExperimentalTag />}
+      />
+
+      {/* Contents rail */}
+      <nav aria-label="On this page" className="flex flex-wrap gap-1.5">
+        {CONTENTS.map((item) => (
+          <a
+            key={item.id}
+            href={`#${item.id}`}
+            className="rounded-full border border-border bg-card px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:border-sea/40 hover:text-primary"
           >
-            Experimental
-          </Badge>
+            {item.label}
+          </a>
+        ))}
+      </nav>
+
+      {/* 1. Pathways */}
+      <section id="pathways" className="scroll-mt-24 space-y-4">
+        <SectionHeading
+          index="01"
+          icon={ShieldTick}
+          title="Optimistic resolution & escalation pathways"
+          body="OpenVerdict supports two resolution pathways, designed for economic efficiency and trust minimization."
+        />
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Panel label="Direct review" icon={ShieldTick} tone="primary">
+            <p className="text-xs leading-relaxed text-muted-foreground">
+              Built for public fact-checking and developer oracle queries. It skips the
+              optimistic proposal window and immediately freezes evidence, selects five AI
+              jurors, and convenes the commit-reveal round.
+            </p>
+          </Panel>
+          <Panel label="Optimistic settlement" icon={Judge} tone="chain">
+            <p className="text-xs leading-relaxed text-muted-foreground">
+              A proposer posts a bonded outcome. If nobody challenges before the deadline the
+              claim finalizes with no inference cost. If challenged with counter-evidence it
+              escalates to an autonomous AI jury.
+            </p>
+          </Panel>
         </div>
-        <p className="text-sm text-muted-foreground leading-relaxed">
-          A decentralized intelligence verification engine and oracle combining Sui Move smart contracts, diverse GonkaRouter AI juries, and permanent Walrus storage.
-        </p>
+      </section>
+
+      {/* 2. Pipeline */}
+      <section id="pipeline" className="scroll-mt-24 space-y-4">
+        <SectionHeading
+          index="02"
+          icon={Cpu}
+          title="The five-phase pipeline"
+          body="Every claim that reaches a jury walks the same deterministic path, and each phase leaves an artefact anyone can re-derive."
+        />
+        <Pipeline />
+      </section>
+
+      {/* 3. Commit-reveal */}
+      <section id="commit-reveal" className="scroll-mt-24 space-y-4">
+        <SectionHeading
+          index="03"
+          icon={Lock}
+          title="Cryptographic commit-reveal eliminates model collusion"
+          body="In naive multi-agent systems, language models can be biased by seeing intermediate votes or reasoning from other models — producing systemic groupthink and front-running."
+        />
+        <Panel label="Two-stage protocol enforced on Sui" icon={Lock} tone="sealed">
+          <ol className="space-y-3">
+            {[
+              {
+                step: "1",
+                title: "Commitment preimage",
+                code: "VotePreimageV1 { claim_id, agent_id, jury_seat_id, phase, outcome, confidence_bps, evidence_root, output_hash, run_hash, salt }",
+              },
+              {
+                step: "2",
+                title: "On-chain sealed hash",
+                code: "commitment = Blake2b256(BCS(VotePreimageV1))",
+              },
+              {
+                step: "3",
+                title: "Reveal verification",
+                code: "Move asserts Blake2b256(preimage) == stored_commitment",
+              },
+            ].map((row) => (
+              <li key={row.step} className="flex gap-3">
+                <span className="grid size-7 shrink-0 place-items-center rounded-lg bg-sealed/10 font-mono text-[11px] font-bold text-sealed">
+                  {row.step}
+                </span>
+                <div className="min-w-0 flex-1 space-y-1">
+                  <FieldLabel>{row.title}</FieldLabel>
+                  <Well className="ov-scroll overflow-x-auto">
+                    <code className="font-mono text-[11px] whitespace-pre text-ocean">
+                      {row.code}
+                    </code>
+                  </Well>
+                </div>
+              </li>
+            ))}
+          </ol>
+          <p className="mt-4 border-t border-border pt-3 text-[11px] leading-relaxed text-muted-foreground">
+            Jurors cannot see or change their vote after committing. Unopened commitments are
+            penalised through reputation and bond slashing once the deadline expires. Salts
+            never leave the engine, and a malformed model output can never become a vote — the
+            adapter fails closed.
+          </p>
+        </Panel>
+      </section>
+
+      {/* 4. Diversity */}
+      <section id="diversity" className="scroll-mt-24 space-y-4">
+        <SectionHeading
+          index="04"
+          icon={Cpu}
+          title="Model diversity & architecture invariants"
+          body="Large language models exhibit non-deterministic reasoning, hallucinations and shared training biases. Four invariants keep the jury resilient."
+        />
+        <div className="grid gap-3 sm:grid-cols-2">
+          {[
+            {
+              title: "Strict 3-family rule",
+              body: "Every 5-agent committee drawn by Sui native randomness must contain at least 3 distinct model families (DeepSeek-V4, Kimi-K2.6, MiniMax-M2.7).",
+            },
+            {
+              title: "Human-backing separation",
+              body: "No single human owner or entity may operate more than one seat in any committee.",
+            },
+            {
+              title: "Zero-temperature determinism",
+              body: "Inference calls run at temperature 0 with strict schema enforcement, eliminating prompt variance between reruns.",
+            },
+            {
+              title: "SSRF-safe evidence ingestion",
+              body: "Crawlers block private subnets, loopbacks and metadata IPs, and canonicalise HTML into plain text before hashing.",
+            },
+          ].map((item) => (
+            <div
+              key={item.title}
+              className="ov-edge space-y-1.5 rounded-2xl border border-border bg-card p-4"
+            >
+              <h3 className="text-sm font-semibold text-ocean">{item.title}</h3>
+              <p className="text-xs leading-relaxed text-muted-foreground">{item.body}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* 5. Uncertainty */}
+      <section id="uncertainty" className="scroll-mt-24 space-y-4">
+        <SectionHeading
+          index="05"
+          icon={Warning2}
+          title="Uncertainty as a first-class result"
+          body="Unlike binary oracles that force an artificial YES or NO onto ambiguous claims, OpenVerdict treats UNSURE as a valid, honest outcome."
+        />
+        <Panel label="What UNSURE does" icon={Warning2} tone="warn">
+          <p className="text-xs leading-relaxed text-muted-foreground">
+            When evidence conflicts, cannot be verified, or is simply insufficient, a juror votes
+            UNSURE and is assigned a neutral 5,000 bps probability. If four of five jurors agree
+            on UNSURE — or if no 4-of-5 supermajority is reached after two rounds — the claim
+            finalizes as{" "}
+            <strong className="font-semibold text-ocean">UNRESOLVED</strong>, releasing policy
+            refunds and protecting prediction-market participants from arbitrary settlement.
+          </p>
+        </Panel>
+      </section>
+
+      {/* 6. Truth score */}
+      <section id="score" className="scroll-mt-24 space-y-4">
+        <SectionHeading
+          index="06"
+          icon={Award}
+          title="Deterministic Truth Score formulation"
+          body="Rather than producing a subjective rating, the Truth Score is pure on-chain half-up integer arithmetic over revealed confidence basis points in the final valid round."
+        />
+        <Panel label="Formula" icon={Award} tone="yes">
+          <Well className="space-y-1 font-mono text-xs">
+            <div className="font-bold text-ocean">
+              truthScoreBps = (Σ agentProbabilityBps + ⌊N / 2⌋) / N
+            </div>
+            <div className="text-muted-foreground">• YES → probability = confidenceBps</div>
+            <div className="text-muted-foreground">
+              • NO → probability = 10,000 − confidenceBps
+            </div>
+            <div className="text-muted-foreground">• UNSURE → probability = 5,000 bps</div>
+          </Well>
+          <p className="mt-3 text-[11px] leading-relaxed text-muted-foreground">
+            Claims settled optimistically without a jury round return{" "}
+            <em>&ldquo;Not independently reviewed&rdquo;</em> instead of an invented confidence
+            score. You can rerun the whole calculation yourself in the browser.
+          </p>
+          <Button asChild variant="outline" size="sm" className="mt-3 min-h-[38px] font-semibold">
+            <Link href="/verify">
+              Open the independent verifier
+              <ArrowRight size="14" variant="Bold" />
+            </Link>
+          </Button>
+        </Panel>
+      </section>
+
+      {/* 7. Sign-in */}
+      <section id="signin" className="scroll-mt-24 space-y-4">
+        <SectionHeading
+          index="07"
+          icon={Wallet}
+          title="Signing in"
+          body="Reading claims, observing juries, browsing agents, verifying proofs, checking status and submitting a fact-check all require no sign-in."
+        />
+        <Panel label="Wallets & zkLogin" icon={Wallet} tone="chain">
+          <div className="space-y-3 text-xs leading-relaxed text-muted-foreground">
+            <p>
+              Deposits and position or payout views require a connected Sui wallet. Everything
+              else on this site stays anonymous.
+            </p>
+            <p>
+              Google sign-in uses Sui zkLogin through Enoki to create a self-custodial address.
+              It is an authentication option — never proof of unique humanity.
+            </p>
+            <p>
+              A juror agent receives the{" "}
+              <strong className="font-semibold text-ocean">ZKLOGIN_BACKED</strong> label only
+              after its Google zkLogin address signs the canonical backing message. With a fixed
+              Enoki salt policy, one Google account maps to one backing hash and therefore one
+              committee seat. This raises Sybil cost; it is not proof of personhood.
+            </p>
+          </div>
+        </Panel>
+      </section>
+    </div>
+  );
+}
+
+function SectionHeading({
+  index,
+  icon: Icon,
+  title,
+  body,
+}: {
+  index: string;
+  icon: IconComponent;
+  title: string;
+  body: string;
+}) {
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center gap-2.5">
+        <span className="grid size-8 shrink-0 place-items-center rounded-xl bg-sea/12 text-primary ring-1 ring-sea/20">
+          <Icon size="17" variant="Bold" />
+        </span>
+        <span className="font-mono text-[10px] font-semibold tracking-[0.18em] text-muted-foreground tabular-nums">
+          {index}
+        </span>
+        <h2 className="text-lg font-semibold tracking-tight text-ocean sm:text-xl">{title}</h2>
       </div>
-
-      {/* Section 1: Optimistic Resolution & Disputation */}
-      <section className="space-y-3">
-        <div className="flex items-center gap-2 text-foreground font-bold text-lg">
-          <ShieldTick size="20" variant="Bold" className="text-primary" />
-          <h2>1. Optimistic Resolution &amp; Escalation Pathways</h2>
-        </div>
-        <p className="text-sm text-muted-foreground leading-relaxed">
-          OpenVerdict supports two resolution pathways designed for economic efficiency and trust minimization:
-        </p>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs pt-1">
-          <div className="rounded-xl border border-border/80 bg-card p-4 space-y-2">
-            <span className="font-bold text-foreground block text-sm">Direct Review</span>
-            <p className="text-muted-foreground leading-relaxed">
-              Designed for public fact-checking and developer oracle queries. Skips the optimistic proposal window and directly freezes evidence, selects 5 AI jurors, and convenes the commit-reveal jury round immediately.
-            </p>
-          </div>
-          <div className="rounded-xl border border-border/80 bg-card p-4 space-y-2">
-            <span className="font-bold text-foreground block text-sm">Optimistic Settlement</span>
-            <p className="text-muted-foreground leading-relaxed">
-              A proposer posts a bonded proposed outcome. If no counter-claimant challenges the proposal before the challenge deadline, the claim finalizes without incurring inference costs. If challenged with counter-evidence, the claim escalates to an autonomous AI jury.
-            </p>
-          </div>
-        </div>
-      </section>
-
-      {/* Section 2: Cryptographic Commit-Reveal Protocol */}
-      <section className="space-y-3">
-        <div className="flex items-center gap-2 text-foreground font-bold text-lg">
-          <Lock size="20" variant="Bold" className="text-primary" />
-          <h2>2. Cryptographic Commit-Reveal: Eliminating Model Collusion</h2>
-        </div>
-        <p className="text-sm text-muted-foreground leading-relaxed">
-          In naive multi-agent systems, language models can be biased by viewing intermediate votes or reasoning traces from other models, leading to systemic groupthink and frontrunning.
-        </p>
-        <p className="text-sm text-muted-foreground leading-relaxed">
-          OpenVerdict prevents collusion using a two-stage cryptographic commit-reveal protocol enforced directly on Sui:
-        </p>
-        <div className="rounded-xl bg-muted/40 p-4 border border-border/60 text-xs font-mono space-y-1.5 text-foreground/90">
-          <div>1. Commitment Preimage: VotePreimageV1 &#123; claim_id, agent_id, outcome, confidence, evidence_root, run_hash, salt &#125;</div>
-          <div>2. On-chain Sealed Hash: Commitment = Blake2b256(BCS(VotePreimageV1))</div>
-          <div>3. Reveal Verification: Move verifies that Blake2b256(Preimage) == Stored Commitment</div>
-        </div>
-        <p className="text-xs text-muted-foreground leading-relaxed">
-          Jurors cannot view or modify their votes after commitment. Unopened commitments are penalized by reputation and bond slashing after deadline expiry.
-        </p>
-      </section>
-
-      {/* Section 3: AI Limitations & Diversity */}
-      <section className="space-y-3">
-        <div className="flex items-center gap-2 text-foreground font-bold text-lg">
-          <Cpu size="20" variant="Bold" className="text-primary" />
-          <h2>3. Model Diversity &amp; Architecture Invariants</h2>
-        </div>
-        <p className="text-sm text-muted-foreground leading-relaxed">
-          Large language models exhibit non-deterministic reasoning, hallucinations, and shared training biases. To ensure resilient oracle consensus:
-        </p>
-        <ul className="list-disc pl-5 space-y-1.5 text-xs text-muted-foreground leading-relaxed">
-          <li>
-            <strong className="text-foreground">Strict 3-Model Rule:</strong> Every 5-agent committee selected via Sui native randomness must contain at least 3 distinct model families (e.g. DeepSeek-V4, Kimi-K2.6, MiniMax-M2.7).
-          </li>
-          <li>
-            <strong className="text-foreground">Human-Backing Separation:</strong> No single human owner or entity may operate more than 1 seat in any committee.
-          </li>
-          <li>
-            <strong className="text-foreground">Zero-Temperature Determinism:</strong> Inference calls use temperature 0 with strict schema enforcement to eliminate prompt variance.
-          </li>
-          <li>
-            <strong className="text-foreground">SSRF-Safe Evidence Ingestion:</strong> Crawlers block private subnets, loopbacks, and metadata IPs, canonicalizing HTML into pure text before hashing.
-          </li>
-        </ul>
-      </section>
-
-      {/* Section 4: Uncertainty-as-a-Result */}
-      <section className="space-y-3">
-        <div className="flex items-center gap-2 text-foreground font-bold text-lg">
-          <Warning2 size="20" variant="Bold" className="text-primary" />
-          <h2>4. Uncertainty-as-a-Result: Treating UNSURE as First-Class</h2>
-        </div>
-        <p className="text-sm text-muted-foreground leading-relaxed">
-          Unlike traditional binary oracles that force an artificial YES or NO decision on ambiguous claims, OpenVerdict treats <strong>UNSURE</strong> as a valid, honest outcome.
-        </p>
-        <p className="text-sm text-muted-foreground leading-relaxed">
-          When evidence is conflicting, unverified, or ambiguous, models vote UNSURE (assigned a neutral 5,000 bps probability). If 4 of 5 jurors agree on UNSURE, or if no 4-of-5 supermajority is reached after two rounds, the claim finalizes as <strong className="text-foreground">UNRESOLVED</strong>, releasing policy refunds and protecting prediction market participants from arbitrary settlement.
-        </p>
-      </section>
-
-      {/* Section 5: Truth Score Formulation */}
-      <section className="space-y-3">
-        <div className="flex items-center gap-2 text-foreground font-bold text-lg">
-          <Award size="20" variant="Bold" className="text-primary" />
-          <h2>5. Deterministic Truth Score Formulation</h2>
-        </div>
-        <p className="text-sm text-muted-foreground leading-relaxed">
-          Rather than producing a subjective rating, the Truth Score is computed purely through on-chain deterministic half-up integer arithmetic over revealed confidence basis points in the final valid round:
-        </p>
-        <div className="rounded-xl border border-border/80 bg-card p-4 space-y-2 text-xs">
-          <div className="font-mono text-foreground font-bold">
-            TruthScoreBps = (Σ AgentProbabilityBps + ⌊N / 2⌋) / N
-          </div>
-          <p className="text-muted-foreground leading-relaxed">
-            Where YES = Confidence Bps, NO = 10,000 - Confidence Bps, and UNSURE = 5,000 Bps.
-          </p>
-          <p className="text-muted-foreground text-[11px]">
-            Claims settled without a jury round return <em>&quot;Not independently reviewed&quot;</em> to avoid inventing synthetic confidence scores.
-          </p>
-        </div>
-      </section>
-
-      {/* Section 6: Wallet connection and social onboarding */}
-      <section className="space-y-3">
-        <div className="flex items-center gap-2 text-foreground font-bold text-lg">
-          <Wallet size="20" variant="Bold" className="text-primary" />
-          <h2>6. Signing in</h2>
-        </div>
-        <p className="text-sm text-muted-foreground leading-relaxed">
-          Reading claims, observing juries, browsing agents, verifying proofs,
-          checking status, and submitting a fact-check require no sign-in.
-          Deposits and position or payout views require a connected Sui wallet.
-        </p>
-        <p className="text-sm text-muted-foreground leading-relaxed">
-          Google sign-in uses Sui zkLogin through Enoki to create a self-custodial
-          address. It is an authentication option, not proof of unique humanity.
-        </p>
-        <p className="text-sm text-muted-foreground leading-relaxed">
-          A juror agent receives the <strong className="text-foreground">ZKLOGIN_BACKED</strong> label only after its Google zkLogin address signs the canonical backing message. With a fixed Enoki salt policy, one Google account maps to one backing hash and therefore one committee seat; this raises Sybil cost but is not proof of personhood.
-        </p>
-      </section>
+      <p className="max-w-3xl text-sm leading-relaxed text-muted-foreground">{body}</p>
     </div>
   );
 }

@@ -1,129 +1,158 @@
 "use client";
 
-import { DocumentText, Cpu, Lock, Unlock, Activity, ShieldTick } from "iconsax-react";
+import { motion, useReducedMotion } from "motion/react";
+import { cn } from "@/lib/utils";
+import { DocumentText, Cpu, Lock, Unlock, Activity, ShieldTick } from "@/components/icons";
 
 interface PhaseRailProps {
+  /** Either an engine phase label ("COMMIT_1") or an on-chain claim state number. */
   currentPhase: number | string;
   className?: string;
 }
 
 const PHASES = [
-  { id: 1, key: "EVIDENCE", name: "1. Evidence Freeze", icon: DocumentText, desc: "Walrus source capture" },
-  { id: 2, key: "INDEPENDENT", name: "2. Independent Run", icon: Cpu, desc: "GonkaRouter 5x jury" },
-  { id: 3, key: "COMMIT", name: "3. Sealed Commit", icon: Lock, desc: "Blake2b-256 on Sui" },
-  { id: 4, key: "REVEAL", name: "4. Cryptographic Reveal", icon: Unlock, desc: "Preimage opening" },
-  { id: 5, key: "DEBATE", name: "5. Discussion (if split)", icon: Activity, desc: "Round 2 consensus" },
-  { id: 6, key: "SETTLE", name: "6. Finalize & Settle", icon: ShieldTick, desc: "Certificate & payout" },
-];
+  {
+    id: 1,
+    name: "Evidence freeze",
+    desc: "Walrus source capture",
+    icon: DocumentText,
+  },
+  { id: 2, name: "Independent run", desc: "GonkaRouter 5× jury", icon: Cpu },
+  { id: 3, name: "Sealed commit", desc: "Blake2b-256 on Sui", icon: Lock },
+  { id: 4, name: "Cryptographic reveal", desc: "Preimage opening", icon: Unlock },
+  { id: 5, name: "Discussion (if split)", desc: "Round 2 consensus", icon: Activity },
+  { id: 6, name: "Finalize & settle", desc: "Certificate & payout", icon: ShieldTick },
+] as const;
 
-export function PhaseRail({ currentPhase, className = "" }: PhaseRailProps) {
-  // Normalize currentPhase to a phase index 1..6
-  let activeIndex = 1;
+/** Map an engine phase label or claim state to one of the six rail positions. */
+export function phaseIndexOf(currentPhase: number | string): number {
   if (typeof currentPhase === "number") {
-    if (currentPhase <= 3) activeIndex = 1;
-    else if (currentPhase === 4) activeIndex = 3;
-    else if (currentPhase === 5) activeIndex = 4;
-    else if (currentPhase === 6) activeIndex = 5;
-    else if (currentPhase >= 7 && currentPhase <= 8) activeIndex = 5;
-    else if (currentPhase >= 9) activeIndex = 6;
-  } else if (typeof currentPhase === "string") {
-    const upper = currentPhase.toUpperCase();
-    if (upper.includes("EVIDENCE")) activeIndex = 1;
-    else if (upper.includes("INFERENCE") || upper.includes("JURY")) activeIndex = 2;
-    else if (upper.includes("COMMIT")) activeIndex = 3;
-    else if (upper.includes("REVEAL")) activeIndex = 4;
-    else if (upper.includes("DISCUSSION") || upper.includes("DEBATE")) activeIndex = 5;
-    else if (upper.includes("FINAL") || upper.includes("SETTLE")) activeIndex = 6;
+    if (currentPhase <= 3) return 1;
+    if (currentPhase === 4) return 3;
+    if (currentPhase === 5) return 4;
+    if (currentPhase === 6 || currentPhase === 7 || currentPhase === 8) return 5;
+    if (currentPhase >= 9) return 6;
+    return 1;
   }
 
-  const activePhaseObj = PHASES[activeIndex - 1] ?? PHASES[0];
-  const safePhaseObj = activePhaseObj || {
-    id: 1,
-    key: "EVIDENCE",
-    name: "1. Evidence Freeze",
-    icon: DocumentText,
-    desc: "Walrus source capture",
-  };
+  const upper = currentPhase.toUpperCase();
+  if (upper.includes("FINAL") || upper.includes("SETTLE")) return 6;
+  if (upper.includes("DISCUSSION") || upper.includes("DEBATE")) return 5;
+  if (upper.includes("REVEAL")) return 4;
+  if (upper.includes("COMMIT")) return 3;
+  if (upper.includes("INFERENCE") || upper.includes("JURY") || upper.includes("RUN")) return 2;
+  return 1;
+}
+
+/**
+ * The six-phase resolution rail as a connected stepper: a track whose filled
+ * portion tracks progress, an active node that breathes, and completed nodes in
+ * verdict green. This is the observer's "where are we" instrument.
+ */
+export function PhaseRail({ currentPhase, className = "" }: PhaseRailProps) {
+  const reduce = useReducedMotion();
+  const activeIndex = phaseIndexOf(currentPhase);
+  const active = PHASES[activeIndex - 1] ?? PHASES[0];
+  const fill = ((activeIndex - 1) / (PHASES.length - 1)) * 100;
 
   return (
-    <div
-      className={`rounded-xl border border-border/80 bg-card p-4 shadow-xs space-y-3 ${className}`}
+    <section
+      className={cn(
+        "ov-edge relative overflow-hidden rounded-2xl border border-border bg-card",
+        className,
+      )}
       role="region"
-      aria-label="Resolution Phase Progress"
+      aria-label="Resolution phase progress"
     >
-      {/* Live announcement region for screen readers */}
+      <div
+        aria-hidden
+        className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-sea via-sea/25 to-transparent"
+      />
+
+      <header className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-3 sm:px-5">
+        <h2 className="font-mono text-[11px] font-semibold tracking-[0.14em] text-muted-foreground uppercase">
+          Phase progression
+        </h2>
+        <span className="rounded-full border border-sea/30 bg-sea/10 px-2.5 py-0.5 font-mono text-[10px] font-semibold tracking-[0.08em] text-primary uppercase">
+          Phase {activeIndex} of {PHASES.length} · {active.name}
+        </span>
+      </header>
+
       <div className="sr-only" aria-live="polite">
-        Current resolution phase is {safePhaseObj.name}: {safePhaseObj.desc}
+        Current resolution phase is {active.name}: {active.desc}
       </div>
 
-      <div className="flex items-center justify-between">
-        <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-          Phase Progression
-        </span>
-        <span className="text-xs font-mono font-medium text-primary bg-primary/10 px-2 py-0.5 rounded border border-primary/20">
-          Phase {activeIndex} of {PHASES.length}: {safePhaseObj.name}
-        </span>
-      </div>
+      <div className="relative px-4 py-5 sm:px-5">
+        {/* Connector track, drawn only where the six nodes sit in one row. */}
+        <div
+          aria-hidden
+          className="absolute top-[52px] right-[calc(8.33%+1.25rem)] left-[calc(8.33%+1.25rem)] hidden h-0.5 rounded-full bg-border lg:block"
+        />
+        <motion.div
+          aria-hidden
+          className="absolute top-[52px] left-[calc(8.33%+1.25rem)] hidden h-0.5 origin-left rounded-full bg-gradient-to-r from-yes to-sea lg:block"
+          style={{ maxWidth: "calc(83.34% - 2.5rem)" }}
+          initial={reduce ? false : { width: 0 }}
+          animate={{ width: `calc((83.34% - 2.5rem) * ${fill / 100})` }}
+          transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
+        />
 
-      {/* Responsive Horizontal Phase Rail */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 pt-1">
-        {PHASES.map((phase) => {
-          const Icon = phase.icon;
-          const isDone = phase.id < activeIndex;
-          const isCurrent = phase.id === activeIndex;
+        <ol className="relative grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
+          {PHASES.map((phase) => {
+            const Icon = phase.icon;
+            const done = phase.id < activeIndex;
+            const current = phase.id === activeIndex;
 
-          return (
-            <div
-              key={phase.id}
-              className={`flex flex-col justify-between p-3 rounded-lg border text-left transition-all ${
-                isCurrent
-                  ? "border-primary bg-primary/10 shadow-xs ring-1 ring-primary/40"
-                  : isDone
-                    ? "border-emerald-500/40 bg-emerald-500/5 text-muted-foreground"
-                    : "border-border/60 bg-muted/40 opacity-70"
-              }`}
-            >
-              <div className="flex items-center justify-between mb-2">
-                <div
-                  className={`flex h-7 w-7 items-center justify-center rounded-md ${
-                    isCurrent
-                      ? "bg-primary text-primary-foreground font-bold animate-pulse"
-                      : isDone
-                        ? "bg-emerald-500/20 text-emerald-600 dark:text-emerald-400"
-                        : "bg-muted text-muted-foreground"
-                  }`}
-                >
-                  <Icon size="15" variant="Bold" />
-                </div>
+            return (
+              <li key={phase.id} className="flex flex-col items-center text-center">
                 <span
-                  className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded ${
-                    isDone
-                      ? "text-emerald-700 dark:text-emerald-300 bg-emerald-500/10"
-                      : isCurrent
-                        ? "text-primary bg-primary/15"
-                        : "text-muted-foreground bg-muted"
-                  }`}
+                  className={cn(
+                    "relative grid size-11 place-items-center rounded-full border-2 bg-card transition-colors",
+                    done
+                      ? "border-yes/50 bg-yes/10 text-yes"
+                      : current
+                        ? "border-sea bg-sea/12 text-primary"
+                        : "border-border text-muted-foreground",
+                  )}
                 >
-                  {isDone ? "Done" : isCurrent ? "Active" : "Wait"}
+                  {current && (
+                    <span
+                      aria-hidden
+                      className="ov-ping absolute inset-0 rounded-full bg-sea/40"
+                    />
+                  )}
+                  <Icon size="18" variant="Bold" className="relative" />
                 </span>
-              </div>
 
-              <div>
-                <h4
-                  className={`text-xs font-semibold leading-tight ${
-                    isCurrent ? "text-foreground font-bold" : "text-foreground/90"
-                  }`}
+                <span
+                  className={cn(
+                    "mt-2 rounded px-1.5 py-px font-mono text-[9px] font-bold tracking-[0.1em] uppercase",
+                    done
+                      ? "bg-yes/10 text-yes"
+                      : current
+                        ? "bg-sea/12 text-primary"
+                        : "bg-surface text-muted-foreground",
+                  )}
                 >
-                  {phase.name}
-                </h4>
-                <p className="text-[11px] text-muted-foreground mt-0.5 line-clamp-1">
+                  {done ? "Done" : current ? "Active" : "Wait"}
+                </span>
+
+                <h3
+                  className={cn(
+                    "mt-1.5 text-xs leading-tight font-semibold",
+                    current ? "text-ocean" : "text-foreground/80",
+                  )}
+                >
+                  {phase.id}. {phase.name}
+                </h3>
+                <p className="mt-0.5 text-[10px] leading-tight text-muted-foreground">
                   {phase.desc}
                 </p>
-              </div>
-            </div>
-          );
-        })}
+              </li>
+            );
+          })}
+        </ol>
       </div>
-    </div>
+    </section>
   );
 }

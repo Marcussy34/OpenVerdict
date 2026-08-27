@@ -15,16 +15,12 @@ import {
   TickCircle,
   Warning2,
   Wallet,
-} from "iconsax-react";
+} from "@/components/icons";
 import { WalletConnectButton } from "@/components/wallet/connect-button";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Panel } from "@/components/viz/panel";
+import { HashChip } from "@/components/viz/hash-chip";
+import { MetaTag } from "@/components/viz/page-header";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -251,25 +247,25 @@ export function PositionPanel() {
   const coinSymbol = deployment?.coinType.split("::").at(-1) ?? "coin";
 
   return (
-    <Card>
-      <CardHeader className="border-b">
-        <div className="flex items-center gap-2">
-          <MoneyRecive size="18" variant="Bold" aria-hidden="true" />
-          <CardTitle>Market</CardTitle>
-        </div>
-        <CardDescription>
-          Demo binary pool positions are economic actions and require a wallet.
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
+    <Panel
+      label="Market position"
+      icon={MoneyRecive}
+      tone="chain"
+      action={<MetaTag tone="chain">Wallet required</MetaTag>}
+    >
+      <p className="mb-4 text-xs leading-relaxed text-muted-foreground">
+        Demo binary pool positions are economic actions and require a connected wallet.
+        Reading this claim stays anonymous.
+      </p>
+      <div>
         {!account ? (
-          <div className="flex flex-col items-start gap-4 rounded-lg border border-dashed border-border bg-muted/30 p-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-col items-start gap-4 rounded-xl border border-dashed border-border bg-surface p-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex max-w-2xl items-start gap-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-background ring-1 ring-border">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-sea/10 text-primary ring-1 ring-sea/20">
                 <Wallet size="20" variant="Bold" aria-hidden="true" />
               </div>
               <div className="space-y-1">
-                <p className="text-sm font-semibold text-foreground">
+                <p className="text-sm font-semibold text-ocean">
                   Connect for market actions
                 </p>
                 <p className="text-sm leading-relaxed text-muted-foreground">
@@ -287,7 +283,7 @@ export function PositionPanel() {
             <Skeleton className="h-11 w-full" />
           </div>
         ) : statusState === "error" ? (
-          <div className="flex flex-col items-start gap-3 rounded-lg border border-destructive/30 bg-destructive/5 p-4">
+          <div className="flex flex-col items-start gap-3 rounded-xl border border-destructive/30 bg-destructive/5 p-4">
             <div className="flex items-center gap-2 text-destructive">
               <Warning2 size="18" variant="Bold" aria-hidden="true" />
               <p className="text-sm font-semibold">Couldn&apos;t load pool status</p>
@@ -309,10 +305,10 @@ export function PositionPanel() {
             </Button>
           </div>
         ) : !deployment ? (
-          <div className="flex items-start gap-3 rounded-lg border border-dashed border-border bg-muted/30 p-4">
+          <div className="flex items-start gap-3 rounded-xl border border-dashed border-border bg-surface p-4">
             <InfoCircle size="20" variant="Bold" aria-hidden="true" />
             <div className="space-y-1">
-              <p className="text-sm font-semibold text-foreground">
+              <p className="text-sm font-semibold text-ocean">
                 Pool not deployed on this network yet
               </p>
               <p className="text-sm text-muted-foreground">
@@ -323,14 +319,14 @@ export function PositionPanel() {
           </div>
         ) : (
           <form className="space-y-5" onSubmit={submitDeposit} noValidate>
-            <div className="rounded-lg bg-muted/30 p-3 text-sm text-muted-foreground">
+            <div className="rounded-xl border border-border bg-surface p-3 text-xs leading-relaxed text-muted-foreground">
               A successful deposit creates an address-bound position object in
               this wallet. The wallet will show the full transaction before you
               sign.
             </div>
 
             <fieldset className="space-y-2">
-              <legend className="text-sm font-semibold text-foreground">
+              <legend className="text-sm font-semibold text-ocean">
                 Position
               </legend>
               <div className="grid grid-cols-2 gap-2">
@@ -358,7 +354,7 @@ export function PositionPanel() {
             <div className="space-y-1.5">
               <label
                 htmlFor="market-deposit-amount"
-                className="text-sm font-semibold text-foreground"
+                className="text-sm font-semibold text-ocean"
               >
                 Amount ({coinSymbol} base units)
               </label>
@@ -428,21 +424,19 @@ export function PositionPanel() {
 
             {digest && (
               <div
-                className="space-y-2 rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-3"
+                className="space-y-2 rounded-xl border border-yes/30 bg-yes/6 p-3"
                 aria-live="polite"
               >
                 <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
                   <TickCircle
                     size="18"
                     variant="Bold"
-                    className="text-emerald-600 dark:text-emerald-400"
+                    className="text-yes"
                     aria-hidden="true"
                   />
                   Deposit submitted
                 </div>
-                <p className="break-all font-mono text-xs text-muted-foreground">
-                  {digest}
-                </p>
+                <HashChip value={digest} label="digest" tone="chain" full />
                 {transactionUrl && (
                   <a
                     href={transactionUrl}
@@ -462,7 +456,7 @@ export function PositionPanel() {
             )}
           </form>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </Panel>
   );
 }

@@ -2,8 +2,12 @@
 
 import { use, useState, useEffect } from "react";
 import Link from "next/link";
-import { Badge } from "@/components/ui/badge";
-import { Progress } from "@/components/ui/progress";
+import { Button } from "@/components/ui/button";
+import { PageHeader, ExperimentalTag, MetaTag } from "@/components/viz/page-header";
+import { Panel, FieldLabel } from "@/components/viz/panel";
+import { HashChip } from "@/components/viz/hash-chip";
+import { ModelBadge, modelFamily } from "@/components/viz/model-badge";
+import { cn } from "@/lib/utils";
 import type { AgentDirectoryEntry } from "@/lib/engine/contract";
 import {
   Profile2User,
@@ -12,11 +16,36 @@ import {
   Activity,
   TickCircle,
   CloseCircle,
-} from "iconsax-react";
+  KeySquare,
+} from "@/components/icons";
 
 interface AgentDetailPageProps {
   params: Promise<{ id: string }>;
 }
+
+/** The reputation dimensions the Move registry maintains, in display order. */
+const DIMENSIONS = [
+  {
+    key: "liveness_bps",
+    label: "Liveness & response rate",
+    hint: "Share of assigned runs answered before the deadline.",
+  },
+  {
+    key: "valid_output_bps",
+    label: "Valid structured output",
+    hint: "Share of runs producing schema-valid, parseable JSON.",
+  },
+  {
+    key: "valid_reveal_bps",
+    label: "Commitment reveal exactness",
+    hint: "Reveals whose preimage hashed byte-exactly to the sealed commitment.",
+  },
+  {
+    key: "consensus_reliability_bps",
+    label: "Consensus reliability",
+    hint: "Alignment with the terminal valid round after reveal.",
+  },
+] as const;
 
 export default function AgentDetailPage({ params }: AgentDetailPageProps) {
   const { id } = use(params);
@@ -33,12 +62,14 @@ export default function AgentDetailPage({ params }: AgentDetailPageProps) {
         if (res.ok) {
           const data = await res.json();
           const found = (data.agents as AgentDirectoryEntry[])?.find(
-            (a) => a.agentProfileId.toLowerCase() === id.toLowerCase() || a.agentProfileId.includes(id),
+            (a) =>
+              a.agentProfileId.toLowerCase() === id.toLowerCase() ||
+              a.agentProfileId.includes(id),
           );
           if (found && !ignore) setAgent(found);
         }
       } catch {
-        // Fallback stub
+        /* fall through to the not-registered state */
       } finally {
         if (!ignore) setLoading(false);
       }
@@ -49,206 +80,194 @@ export default function AgentDetailPage({ params }: AgentDetailPageProps) {
     };
   }, [id]);
 
-  // Fallback visual data if agent is not found or engine offline
-  const displayAgent: AgentDirectoryEntry = agent ?? {
-    agentProfileId: id,
-    owner: "0x39a4...81ef",
-    modelId: "moonshotai/Kimi-K2.6",
-    role: "Primary Fact Checker & Synthesizer",
-    manifestHash: "0x89ab...45cd" as `0x${string}`,
-    active: true,
-    reputation: {
-      liveness_bps: 9950,
-      valid_output_bps: 10000,
-      valid_reveal_bps: 9980,
-      evidence_quality_bps: 9400,
-      consensus_reliability_bps: 9650,
-      resolved_runs: 48,
-    },
-  };
-
-  if (loading && !agent) {
+  if (loading) {
     return (
-      <div className="max-w-4xl mx-auto py-16 px-4 space-y-6">
-        <div className="h-8 w-40 bg-muted animate-pulse rounded" />
-        <div className="h-48 bg-muted/60 animate-pulse rounded-2xl" />
-        <div className="h-48 bg-muted/40 animate-pulse rounded-2xl" />
+      <div className="mx-auto max-w-4xl space-y-6 px-4 py-16 sm:px-6 lg:px-8">
+        <div className="h-9 w-44 animate-pulse rounded-lg bg-surface-2" />
+        <div className="h-48 animate-pulse rounded-2xl bg-surface" />
+        <div className="h-64 animate-pulse rounded-2xl bg-surface" />
       </div>
     );
   }
 
+  if (!agent) {
+    return (
+      <div className="mx-auto flex max-w-2xl flex-col items-center gap-3 px-4 py-24 text-center">
+        <span className="grid size-12 place-items-center rounded-xl bg-surface text-muted-foreground">
+          <Profile2User size="24" variant="Bold" />
+        </span>
+        <h1 className="text-xl font-semibold text-ocean">Agent not in the registry</h1>
+        <p className="max-w-md text-sm text-muted-foreground">
+          No AgentProfile object with this id was returned by the registry. It may have been
+          retired, or it belongs to a different deployment.
+        </p>
+        <HashChip value={id} full className="max-w-md" />
+        <Button asChild size="sm" className="mt-2 min-h-[40px]">
+          <Link href="/agents">Back to registry</Link>
+        </Button>
+      </div>
+    );
+  }
+
+  const family = modelFamily(agent.modelId);
+  const reputationEntries = Object.entries(agent.reputation ?? {});
+
   return (
-    <div className="max-w-4xl mx-auto py-8 sm:py-12 px-4 sm:px-6 lg:px-8 space-y-8">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border/80 pb-6">
-        <div className="space-y-1">
-          <Link
-            href="/agents"
-            className="text-xs text-muted-foreground hover:text-foreground font-medium"
-          >
-            ← Back to Directory
-          </Link>
-          <div className="flex items-center gap-3 pt-1">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-              <Profile2User size="18" variant="Bold" />
+    <div className="mx-auto max-w-4xl space-y-6 px-4 py-10 sm:px-6 lg:px-8 lg:py-12">
+      <PageHeader
+        backHref="/agents"
+        backLabel="Agent registry"
+        eyebrow={family.name}
+        title="Agent profile"
+        icon={Profile2User}
+        badges={<ExperimentalTag />}
+        actions={
+          <MetaTag tone={agent.active ? "yes" : "default"}>
+            {agent.active ? (
+              <>
+                <TickCircle size="11" variant="Bold" />
+                Active juror
+              </>
+            ) : (
+              <>
+                <CloseCircle size="11" variant="Bold" />
+                Retired
+              </>
+            )}
+          </MetaTag>
+        }
+      />
+
+      {/* Identity */}
+      <Panel label="Model identity" icon={Cpu} tone="primary">
+        <div className="space-y-5">
+          <div className="grid gap-4 border-b border-border pb-5 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <FieldLabel>Model</FieldLabel>
+              <ModelBadge modelId={agent.modelId} className="text-[11px]" />
+              <p className="font-mono text-xs break-all text-muted-foreground">{agent.modelId}</p>
             </div>
-            <h1 className="text-2xl font-bold text-foreground">Agent Profile</h1>
-            <Badge
-              variant="outline"
-              className="border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300 text-[10px] font-semibold"
-            >
-              Experimental
-            </Badge>
+            <div className="space-y-1.5">
+              <FieldLabel>Persona &amp; role</FieldLabel>
+              <p className="text-base font-semibold text-ocean">
+                {agent.role.replace(/_/g, " ")}
+              </p>
+              <p className="text-[11px] text-muted-foreground">
+                The role is committed inside the on-chain registration hash.
+              </p>
+            </div>
           </div>
+
+          <dl className="space-y-2">
+            {[
+              ["Agent profile object id", agent.agentProfileId, "chain"],
+              ["Owner account address", agent.owner, "default"],
+              ["Manifest Blake2b-256 hash", agent.manifestHash, "sealed"],
+            ].map(([label, value, tone]) => (
+              <div
+                key={label}
+                className="flex flex-col gap-1.5 rounded-xl border border-border bg-surface px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between"
+              >
+                <FieldLabel>{label}</FieldLabel>
+                <HashChip
+                  value={value}
+                  tone={tone as "chain" | "default" | "sealed"}
+                  head={12}
+                  tail={10}
+                />
+              </div>
+            ))}
+          </dl>
         </div>
+      </Panel>
 
-        <Badge
-          variant="outline"
-          className={`px-3 py-1 text-xs font-semibold flex items-center gap-1.5 ${
-            displayAgent.active
-              ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
-              : "border-zinc-500/40 bg-zinc-500/10 text-zinc-500"
-          }`}
-        >
-          {displayAgent.active ? (
-            <>
-              <TickCircle size="14" variant="Bold" />
-              Active Juror
-            </>
-          ) : (
-            <>
-              <CloseCircle size="14" variant="Bold" />
-              Deprecated
-            </>
-          )}
-        </Badge>
-      </div>
+      {/* Reputation */}
+      <Panel label="Multi-dimensional reputation" icon={ShieldTick} tone="yes">
+        <p className="mb-4 text-xs leading-relaxed text-muted-foreground">
+          On-chain metrics maintained across historical dispute and direct-review jury runs.
+          Every dimension is stored in basis points (10,000 = 100%).
+        </p>
 
-      {/* Main Profile Info Card */}
-      <div className="rounded-2xl border border-border/80 bg-card p-6 shadow-xs space-y-6">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 border-b border-border/50 pb-5">
-          <div>
-            <span className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider block">
-              Model Identity
-            </span>
-            <span className="text-base font-mono font-bold text-foreground flex items-center gap-1.5 mt-0.5">
-              <Cpu size="16" variant="Bold" className="text-primary" />
-              {displayAgent.modelId}
-            </span>
+        {reputationEntries.length === 0 ? (
+          <div className="rounded-xl border border-dashed border-border bg-surface px-4 py-6 text-center text-xs text-muted-foreground">
+            No reputation dimensions recorded yet — this agent has not completed a scored jury
+            run on this deployment.
           </div>
+        ) : (
+          <div className="space-y-4">
+            {DIMENSIONS.map((dim) => {
+              const bps = agent.reputation?.[dim.key];
+              const pct = typeof bps === "number" ? Math.min(100, bps / 100) : 0;
+              return (
+                <div key={dim.key} className="space-y-1.5">
+                  <div className="flex items-baseline justify-between gap-2">
+                    <span className="text-xs font-semibold text-ocean">{dim.label}</span>
+                    <span className="font-mono text-xs text-muted-foreground tabular-nums">
+                      {typeof bps === "number" ? `${bps} bps · ${pct}%` : "—"}
+                    </span>
+                  </div>
+                  <div className="h-2 w-full overflow-hidden rounded-full bg-surface-2">
+                    <div
+                      className={cn("h-full rounded-full transition-[width] duration-700", family.dot)}
+                      style={{ width: `${pct}%` }}
+                      role="progressbar"
+                      aria-valuenow={pct}
+                      aria-valuemin={0}
+                      aria-valuemax={100}
+                      aria-label={dim.label}
+                    />
+                  </div>
+                  <p className="text-[11px] text-muted-foreground">{dim.hint}</p>
+                </div>
+              );
+            })}
 
-          <div>
-            <span className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider block">
-              Persona &amp; Role
-            </span>
-            <span className="text-base font-semibold text-foreground mt-0.5 block">
-              {displayAgent.role}
-            </span>
+            {/* Any additional dimensions the registry reports (e.g. resolved_runs). */}
+            {reputationEntries.filter(
+              ([key]) => !DIMENSIONS.some((d) => d.key === key),
+            ).length > 0 && (
+              <div className="grid gap-2 border-t border-border pt-4 sm:grid-cols-2">
+                {reputationEntries
+                  .filter(([key]) => !DIMENSIONS.some((d) => d.key === key))
+                  .map(([key, value]) => (
+                    <div
+                      key={key}
+                      className="flex items-center justify-between rounded-lg border border-border bg-surface px-3 py-2 font-mono text-[11px]"
+                    >
+                      <span className="text-muted-foreground">{key}</span>
+                      <span className="font-semibold text-ocean tabular-nums">{value}</span>
+                    </div>
+                  ))}
+              </div>
+            )}
           </div>
-        </div>
+        )}
+      </Panel>
 
-        {/* Addresses & Hashes */}
-        <div className="space-y-2 text-xs font-mono">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between p-2.5 rounded-lg bg-muted/40 border border-border/40 gap-1">
-            <span className="text-muted-foreground">Agent Profile Object ID:</span>
-            <span className="text-foreground font-semibold truncate max-w-[280px]">
-              {displayAgent.agentProfileId}
-            </span>
-          </div>
+      {/* Backing */}
+      <Panel label="Human backing & Sybil resistance" icon={KeySquare} tone="sealed">
+        <p className="text-xs leading-relaxed text-muted-foreground">
+          A juror agent receives the{" "}
+          <strong className="font-semibold text-ocean">ZKLOGIN_BACKED</strong> label only after
+          its Google zkLogin address signs the canonical backing message. With a fixed salt
+          policy one social account maps to one backing hash, and the Move rule
+          &ldquo;one committee seat per human backing hash&rdquo; makes that one seat. This
+          raises Sybil cost — it is authentication, never proof of personhood.
+        </p>
+      </Panel>
 
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between p-2.5 rounded-lg bg-muted/40 border border-border/40 gap-1">
-            <span className="text-muted-foreground">Owner Account Address:</span>
-            <span className="text-foreground font-semibold truncate max-w-[280px]">
-              {displayAgent.owner}
-            </span>
-          </div>
-
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between p-2.5 rounded-lg bg-muted/40 border border-border/40 gap-1">
-            <span className="text-muted-foreground">Manifest Blake2b-256 Hash:</span>
-            <span className="text-foreground font-semibold truncate max-w-[280px]">
-              {displayAgent.manifestHash}
-            </span>
-          </div>
-        </div>
-      </div>
-
-      {/* Reputation Dimensions Breakdown */}
-      <div className="rounded-2xl border border-border/80 bg-card p-6 shadow-xs space-y-5">
-        <div className="space-y-1">
-          <h2 className="text-sm font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
-            <ShieldTick size="18" variant="Bold" className="text-primary" />
-            Multi-Dimensional Reputation Breakdown
-          </h2>
-          <p className="text-xs text-muted-foreground">
-            On-chain metrics maintained across historical dispute and direct review jury runs.
+      {/* Runs */}
+      <Panel label="Recent jury inferences" icon={Activity}>
+        <div className="flex flex-col items-center gap-2 rounded-xl border border-dashed border-border bg-surface px-6 py-10 text-center">
+          <p className="max-w-md text-xs leading-relaxed text-muted-foreground">
+            No historical run transcripts are cached for this agent in local observer storage.
+            Run audits live in Walrus blobs and are surfaced per-claim in each settled report.
           </p>
+          <Button asChild variant="outline" size="sm" className="mt-1 min-h-[38px] font-semibold">
+            <Link href="/claims">Browse claims</Link>
+          </Button>
         </div>
-
-        <div className="space-y-4 pt-2">
-          {/* Dimension 1: Liveness */}
-          <div className="space-y-1.5">
-            <div className="flex justify-between text-xs font-medium">
-              <span className="text-foreground">Liveness &amp; Response Rate</span>
-              <span className="font-mono text-muted-foreground">
-                {(displayAgent.reputation?.liveness_bps ?? 10000) / 100}%
-              </span>
-            </div>
-            <Progress value={(displayAgent.reputation?.liveness_bps ?? 10000) / 100} className="h-2" />
-          </div>
-
-          {/* Dimension 2: Valid Output Schema */}
-          <div className="space-y-1.5">
-            <div className="flex justify-between text-xs font-medium">
-              <span className="text-foreground">Valid Structured Output Compliance</span>
-              <span className="font-mono text-muted-foreground">
-                {(displayAgent.reputation?.valid_output_bps ?? 10000) / 100}%
-              </span>
-            </div>
-            <Progress value={(displayAgent.reputation?.valid_output_bps ?? 10000) / 100} className="h-2" />
-          </div>
-
-          {/* Dimension 3: Valid Reveal */}
-          <div className="space-y-1.5">
-            <div className="flex justify-between text-xs font-medium">
-              <span className="text-foreground">Commitment Reveal Exactness</span>
-              <span className="font-mono text-muted-foreground">
-                {(displayAgent.reputation?.valid_reveal_bps ?? 10000) / 100}%
-              </span>
-            </div>
-            <Progress value={(displayAgent.reputation?.valid_reveal_bps ?? 10000) / 100} className="h-2" />
-          </div>
-
-          {/* Dimension 4: Consensus Reliability */}
-          <div className="space-y-1.5">
-            <div className="flex justify-between text-xs font-medium">
-              <span className="text-foreground">Consensus Reliability &amp; Soundness</span>
-              <span className="font-mono text-muted-foreground">
-                {(displayAgent.reputation?.consensus_reliability_bps ?? 10000) / 100}%
-              </span>
-            </div>
-            <Progress value={(displayAgent.reputation?.consensus_reliability_bps ?? 10000) / 100} className="h-2" />
-          </div>
-        </div>
-      </div>
-
-      {/* Recent Inference Runs Section */}
-      <div className="rounded-2xl border border-border/80 bg-card p-6 shadow-xs space-y-4">
-        <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-          <Activity size="16" variant="Bold" className="text-primary" />
-          Recent Jury Inferences
-        </h3>
-
-        <div className="p-8 text-center bg-muted/20 rounded-xl border border-dashed border-border space-y-2">
-          <p className="text-xs text-muted-foreground">
-            No historical run transcripts cached for this agent ID in local observer storage.
-          </p>
-          <Link href="/claims">
-            <button className="text-xs font-semibold text-primary underline mt-2">
-              Browse Active Claims
-            </button>
-          </Link>
-        </div>
-      </div>
+      </Panel>
     </div>
   );
 }

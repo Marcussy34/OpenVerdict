@@ -1,7 +1,7 @@
 "use client";
 
-import { Badge } from "@/components/ui/badge";
 import { CLAIM_STATE, type ClaimState } from "@/lib/protocol/constants";
+import { cn } from "@/lib/utils";
 import {
   Clock,
   DocumentText,
@@ -14,7 +14,7 @@ import {
   ShieldTick,
   CloseCircle,
   Judge,
-} from "iconsax-react";
+} from "@/components/icons";
 
 interface StateBadgeProps {
   state: ClaimState | number | string;
@@ -22,126 +22,110 @@ interface StateBadgeProps {
   size?: "sm" | "md" | "lg";
 }
 
+type Tone = "neutral" | "chain" | "sealed" | "warn" | "yes" | "no" | "primary";
+
 interface StateConfig {
   label: string;
+  /** Short form for tight spots (cards, table rows). */
+  short: string;
   icon: typeof Clock;
-  badgeClass: string;
+  tone: Tone;
 }
+
+const TONE_CLASS: Record<Tone, string> = {
+  neutral: "border-border bg-surface text-muted-foreground",
+  chain: "border-chain/30 bg-chain/8 text-chain",
+  sealed: "border-sealed/30 bg-sealed/8 text-sealed",
+  warn: "border-unsure/30 bg-unsure/8 text-unsure",
+  yes: "border-yes/30 bg-yes/8 text-yes",
+  no: "border-no/30 bg-no/8 text-no",
+  primary: "border-sea/35 bg-sea/10 text-primary",
+};
 
 export function getStateConfig(state: ClaimState | number | string): StateConfig {
   const numericState = typeof state === "number" ? state : Number(state);
 
   switch (numericState) {
     case CLAIM_STATE.CREATED:
-      return {
-        label: "Created",
-        icon: Clock,
-        badgeClass: "border-slate-500/30 bg-slate-500/10 text-slate-700 dark:text-slate-300",
-      };
+      return { label: "Created", short: "Created", icon: Clock, tone: "neutral" };
     case CLAIM_STATE.PROPOSED:
-      return {
-        label: "Proposed",
-        icon: DocumentText,
-        badgeClass: "border-blue-500/30 bg-blue-500/10 text-blue-700 dark:text-blue-300",
-      };
+      return { label: "Proposed", short: "Proposed", icon: DocumentText, tone: "chain" };
     case CLAIM_STATE.CHALLENGED:
-      return {
-        label: "Challenged",
-        icon: Warning2,
-        badgeClass: "border-orange-500/30 bg-orange-500/10 text-orange-700 dark:text-orange-300",
-      };
+      return { label: "Challenged", short: "Challenged", icon: Warning2, tone: "warn" };
     case CLAIM_STATE.REVIEW_REQUESTED:
       return {
-        label: "Review Requested",
+        label: "Review requested",
+        short: "In review",
         icon: ShieldSearch,
-        badgeClass: "border-purple-500/30 bg-purple-500/10 text-purple-700 dark:text-purple-300",
+        tone: "primary",
       };
     case CLAIM_STATE.COMMIT_1:
-      return {
-        label: "Phase 1: Commit",
-        icon: Lock,
-        badgeClass: "border-indigo-500/30 bg-indigo-500/10 text-indigo-700 dark:text-indigo-300",
-      };
+      return { label: "Phase 1 · Sealed commit", short: "Sealed", icon: Lock, tone: "sealed" };
     case CLAIM_STATE.REVEAL_1:
-      return {
-        label: "Phase 1: Reveal",
-        icon: Unlock,
-        badgeClass: "border-cyan-500/30 bg-cyan-500/10 text-cyan-700 dark:text-cyan-300",
-      };
+      return { label: "Phase 1 · Reveal", short: "Revealing", icon: Unlock, tone: "chain" };
     case CLAIM_STATE.DISCUSSION:
-      return {
-        label: "Discussion / Debate",
-        icon: Activity,
-        badgeClass: "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300",
-      };
+      return { label: "Discussion round", short: "Discussion", icon: Activity, tone: "warn" };
     case CLAIM_STATE.COMMIT_2:
-      return {
-        label: "Phase 2: Commit",
-        icon: Lock,
-        badgeClass: "border-indigo-500/30 bg-indigo-500/10 text-indigo-700 dark:text-indigo-300",
-      };
+      return { label: "Phase 2 · Sealed commit", short: "Sealed", icon: Lock, tone: "sealed" };
     case CLAIM_STATE.REVEAL_2:
-      return {
-        label: "Phase 2: Reveal",
-        icon: Unlock,
-        badgeClass: "border-cyan-500/30 bg-cyan-500/10 text-cyan-700 dark:text-cyan-300",
-      };
+      return { label: "Phase 2 · Reveal", short: "Revealing", icon: Unlock, tone: "chain" };
     case CLAIM_STATE.FINALIZED_UNCHALLENGED:
       return {
-        label: "Finalized (Unchallenged)",
+        label: "Finalized · unchallenged",
+        short: "Finalized",
         icon: TickCircle,
-        badgeClass: "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+        tone: "yes",
       };
     case CLAIM_STATE.FINALIZED_REVIEWED:
       return {
-        label: "Finalized (Jury Consensus)",
+        label: "Finalized · jury consensus",
+        short: "Finalized",
         icon: ShieldTick,
-        badgeClass: "border-emerald-600/30 bg-emerald-600/10 text-emerald-800 dark:text-emerald-200 font-semibold",
+        tone: "yes",
       };
     case CLAIM_STATE.UNRESOLVED:
       return {
-        label: "Unresolved (No Consensus)",
+        label: "Unresolved · no consensus",
+        short: "Unresolved",
         icon: CloseCircle,
-        badgeClass: "border-red-500/30 bg-red-500/10 text-red-700 dark:text-red-300",
+        tone: "no",
       };
     case CLAIM_STATE.CANCELLED:
-      return {
-        label: "Cancelled",
-        icon: CloseCircle,
-        badgeClass: "border-zinc-500/30 bg-zinc-500/10 text-zinc-600 dark:text-zinc-400",
-      };
-    default:
-      return {
-        label: typeof state === "string" ? state : `State ${state}`,
-        icon: Judge,
-        badgeClass: "border-border bg-muted text-muted-foreground",
-      };
+      return { label: "Cancelled", short: "Cancelled", icon: CloseCircle, tone: "neutral" };
+    default: {
+      const fallback = typeof state === "string" ? state : `State ${state}`;
+      return { label: fallback, short: fallback, icon: Judge, tone: "neutral" };
+    }
   }
 }
 
 /**
- * StateBadge pairs color with an explicit text label and icon per PRD §26.7.
- * Never communicates status using color alone.
+ * StateBadge pairs colour with an explicit text label and icon per PRD §26.7 —
+ * status is never communicated by colour alone.
  */
 export function StateBadge({ state, className = "", size = "md" }: StateBadgeProps) {
   const config = getStateConfig(state);
   const Icon = config.icon;
 
-  const iconSize = size === "sm" ? "12" : size === "lg" ? "18" : "14";
+  const iconSize = size === "sm" ? "12" : size === "lg" ? "16" : "13";
   const sizeClasses =
     size === "sm"
-      ? "text-[11px] px-2 py-0.5 gap-1"
+      ? "text-[10px] px-2 py-0.5 gap-1"
       : size === "lg"
-        ? "text-sm px-3 py-1 gap-2"
-        : "text-xs px-2.5 py-1 gap-1.5";
+        ? "text-xs px-3 py-1 gap-1.5"
+        : "text-[11px] px-2.5 py-0.5 gap-1.5";
 
   return (
-    <Badge
-      variant="outline"
-      className={`inline-flex items-center font-medium shadow-2xs border ${config.badgeClass} ${sizeClasses} ${className}`}
+    <span
+      className={cn(
+        "inline-flex w-fit items-center rounded-full border font-mono font-semibold tracking-[0.06em] uppercase",
+        TONE_CLASS[config.tone],
+        sizeClasses,
+        className,
+      )}
     >
       <Icon size={iconSize} variant="Bold" className="shrink-0" />
-      <span>{config.label}</span>
-    </Badge>
+      <span>{size === "sm" ? config.short : config.label}</span>
+    </span>
   );
 }

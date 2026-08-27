@@ -1,72 +1,78 @@
-import { Badge } from "@/components/ui/badge";
-import { Warning2, ShieldCross, Cpu, Lock, Link21 } from "iconsax-react";
+import { PageHeader, ExperimentalTag } from "@/components/viz/page-header";
+import { Panel } from "@/components/viz/panel";
+import { Warning2, ShieldCross, Cpu, Lock, Link21 } from "@/components/icons";
+
+const RISKS = [
+  {
+    index: "01",
+    icon: Cpu,
+    tone: "warn" as const,
+    title: "Large language model non-determinism & hallucination",
+    body: "LLMs may misinterpret complex domain-specific evidence, hallucinate factual relationships, or fall for subtle adversarial prompt injections. OpenVerdict mitigates this with strict 3-family model diversity, temperature 0, and structured output validation — but AI inference cannot provide absolute mathematical correctness.",
+  },
+  {
+    index: "02",
+    icon: Lock,
+    tone: "warn" as const,
+    title: "Unaudited Move smart contracts & capability risk",
+    body: "The Move packages deployed on Sui testnet and demonstration mainnet environments are experimental and have not undergone a formal third-party security audit. Protocol parameters, caps and coin pools should be constrained to low-value demonstration balances.",
+  },
+  {
+    index: "03",
+    icon: Link21,
+    tone: "chain" as const,
+    title: "Oracle latency & disputation windows",
+    body: "Optimistic claims rely on bonded challenge windows. If network congestion or off-chain indexer delays prevent timely challenge submission before epoch deadlines, a malicious proposal could finalize unchallenged. Prefer direct review for latency-critical oracle integrations.",
+  },
+];
 
 export default function RiskPage() {
   return (
-    <div className="max-w-4xl mx-auto py-8 sm:py-12 px-4 sm:px-6 lg:px-8 space-y-8">
-      <div className="space-y-2 border-b border-border/80 pb-6">
-        <div className="flex items-center gap-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-            <Warning2 size="18" variant="Bold" />
-          </div>
-          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground">
-            Risk Disclosure &amp; Protocol Limitations
-          </h1>
-          <Badge
-            variant="outline"
-            className="border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300 text-[11px] font-semibold"
+    <div className="mx-auto max-w-4xl space-y-6 px-4 py-10 sm:px-6 lg:px-8 lg:py-12">
+      <PageHeader
+        eyebrow="Before you deploy capital"
+        title="Risk disclosure"
+        description="OpenVerdict is an experimental decentralized oracle and AI jury protocol. Understand the technical and economic risks first."
+        icon={Warning2}
+        badges={<ExperimentalTag />}
+      />
+
+      <div className="space-y-4">
+        {RISKS.map((risk) => (
+          <Panel
+            key={risk.index}
+            label={`Risk ${risk.index}`}
+            icon={risk.icon}
+            tone={risk.tone}
           >
-            Experimental
-          </Badge>
-        </div>
-        <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed">
-          OpenVerdict is an experimental decentralized oracle and AI jury protocol. Users and developers must understand the technical and economic risks before deploying capital.
-        </p>
-      </div>
+            <h2 className="text-base font-semibold text-ocean">{risk.title}</h2>
+            <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{risk.body}</p>
+          </Panel>
+        ))}
 
-      <div className="space-y-6 text-sm text-muted-foreground leading-relaxed">
-        {/* Risk 1: AI Model Limitations */}
-        <section className="rounded-2xl border border-border/80 bg-card p-6 shadow-xs space-y-3">
-          <div className="flex items-center gap-2 text-foreground font-bold text-base">
-            <Cpu size="20" variant="Bold" className="text-amber-500" />
-            <h2>1. Large Language Model Non-Determinism &amp; Hallucinations</h2>
+        {/* Hackathon caps — deliberately louder than the other cards. */}
+        <section className="ov-edge relative overflow-hidden rounded-2xl border border-unsure/35 bg-unsure/6 p-5">
+          <div className="flex items-start gap-3">
+            <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-unsure/15 text-unsure">
+              <ShieldCross size="20" variant="Bold" />
+            </span>
+            <div className="space-y-2">
+              <span className="font-mono text-[10px] font-semibold tracking-[0.16em] text-unsure uppercase">
+                Risk 04
+              </span>
+              <h2 className="text-base font-semibold text-ocean">
+                Demonstration caps &amp; hackathon environment
+              </h2>
+              <p className="text-sm leading-relaxed text-foreground/80">
+                During this release period all prediction market pools (for example{" "}
+                <code className="rounded bg-card px-1 py-0.5 font-mono text-xs text-ocean">
+                  DemoBinaryPool
+                </code>
+                ) and jury bounties are strictly capped. Do not deposit meaningful financial
+                capital.
+              </p>
+            </div>
           </div>
-          <p className="text-xs text-muted-foreground leading-relaxed">
-            Large language models (LLMs) may misinterpret complex domain-specific evidence, hallucinate factual relationships, or succumb to subtle adversarial prompt injections. While OpenVerdict mitigates this via strict 3-model diversity, zero temperature, and structured output validation, AI inference cannot provide absolute mathematical correctness.
-          </p>
-        </section>
-
-        {/* Risk 2: Smart Contract & Unaudited Move Code */}
-        <section className="rounded-2xl border border-border/80 bg-card p-6 shadow-xs space-y-3">
-          <div className="flex items-center gap-2 text-foreground font-bold text-base">
-            <Lock size="20" variant="Bold" className="text-red-500" />
-            <h2>2. Unaudited Move Smart Contracts &amp; Capability Risk</h2>
-          </div>
-          <p className="text-xs text-muted-foreground leading-relaxed">
-            The Move protocol packages deployed on Sui Testnet and demonstration Mainnet environments are experimental and have not undergone a formal third-party security audit. Protocol parameters, caps, and coin pools should be constrained to low-value demonstration balances.
-          </p>
-        </section>
-
-        {/* Risk 3: Economic Attack Vectors & Frontrunning */}
-        <section className="rounded-2xl border border-border/80 bg-card p-6 shadow-xs space-y-3">
-          <div className="flex items-center gap-2 text-foreground font-bold text-base">
-            <Link21 size="20" variant="Bold" className="text-blue-500" />
-            <h2>3. Oracle Latency &amp; Disputation Windows</h2>
-          </div>
-          <p className="text-xs text-muted-foreground leading-relaxed">
-            Optimistic claims rely on bonded challenge windows. If network congestion or off-chain indexer delays prevent timely challenge submissions before epoch deadlines, malicious proposals could finalize unchallenged. Direct review mode should be preferred for latency-critical oracle integrations.
-          </p>
-        </section>
-
-        {/* Risk 4: Capped Demonstration Funds */}
-        <section className="rounded-2xl border border-amber-500/40 bg-amber-500/10 p-6 space-y-2 text-amber-950 dark:text-amber-100">
-          <div className="flex items-center gap-2 font-bold text-base">
-            <ShieldCross size="20" variant="Bold" className="text-amber-600" />
-            <h2>4. Demonstration Caps &amp; Hackathon Environment</h2>
-          </div>
-          <p className="text-xs leading-relaxed">
-            During this release period, all prediction market pools (e.g. <code>DemoBinaryPool</code>) and jury bounties are strictly capped. Do not deposit meaningful financial capital.
-          </p>
         </section>
       </div>
     </div>

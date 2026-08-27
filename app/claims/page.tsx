@@ -4,20 +4,47 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 import Link from "next/link";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { ClaimCard } from "@/components/claim/claim-card";
+import { PageHeader, ExperimentalTag } from "@/components/viz/page-header";
+import { Stagger } from "@/components/viz/reveal";
+import { cn } from "@/lib/utils";
 import type { ClaimInspection } from "@/lib/engine/contract";
 import {
   DocumentText,
   SearchNormal1,
-  Filter,
   ShieldSearch,
   InfoCircle,
   Warning2,
   Refresh,
-} from "iconsax-react";
+} from "@/components/icons";
 
 type FilterTab = "ALL" | "ACTIVE" | "PROPOSED" | "JURY" | "FINALIZED" | "UNRESOLVED";
+
+const TABS: { key: FilterTab; label: string }[] = [
+  { key: "ALL", label: "All claims" },
+  { key: "ACTIVE", label: "Active" },
+  { key: "PROPOSED", label: "Proposed" },
+  { key: "JURY", label: "In jury" },
+  { key: "FINALIZED", label: "Finalized" },
+  { key: "UNRESOLVED", label: "Unresolved" },
+];
+
+function matchesTab(state: number, tab: FilterTab): boolean {
+  switch (tab) {
+    case "ALL":
+      return true;
+    case "ACTIVE":
+      return state < 9;
+    case "PROPOSED":
+      return state === 1;
+    case "JURY":
+      return state >= 3 && state <= 8;
+    case "FINALIZED":
+      return state === 9 || state === 10;
+    case "UNRESOLVED":
+      return state === 11;
+  }
+}
 
 export default function ClaimsPage() {
   const [claims, setClaims] = useState<ClaimInspection[]>([]);
@@ -72,158 +99,157 @@ export default function ClaimsPage() {
     };
   }, []);
 
-  const filteredClaims = useMemo(() => {
-    return claims.filter((claim) => {
-      // 1. Text search
-      if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase();
-        const matchesStatement = claim.statement.toLowerCase().includes(q);
-        const matchesId = claim.claimId.toLowerCase().includes(q);
-        if (!matchesStatement && !matchesId) return false;
-      }
+  /** Per-tab counts so the filter rail doubles as a directory summary. */
+  const counts = useMemo(() => {
+    const out = {} as Record<FilterTab, number>;
+    for (const tab of TABS) {
+      out[tab.key] = claims.filter((c) => matchesTab(c.state, tab.key)).length;
+    }
+    return out;
+  }, [claims]);
 
-      // 2. State tab filter
-      const s = claim.state;
-      if (activeFilter === "ALL") return true;
-      if (activeFilter === "ACTIVE") return s < 9;
-      if (activeFilter === "PROPOSED") return s === 1;
-      if (activeFilter === "JURY") return s >= 3 && s <= 8;
-      if (activeFilter === "FINALIZED") return s === 9 || s === 10;
-      if (activeFilter === "UNRESOLVED") return s === 11;
-      return true;
-    });
-  }, [claims, searchQuery, activeFilter]);
+  const filteredClaims = useMemo(
+    () =>
+      claims.filter((claim) => {
+        if (searchQuery.trim()) {
+          const q = searchQuery.toLowerCase();
+          if (
+            !claim.statement.toLowerCase().includes(q) &&
+            !claim.claimId.toLowerCase().includes(q)
+          ) {
+            return false;
+          }
+        }
+        return matchesTab(claim.state, activeFilter);
+      }),
+    [claims, searchQuery, activeFilter],
+  );
 
   return (
-    <div className="max-w-7xl mx-auto py-8 sm:py-12 px-4 sm:px-6 lg:px-8 space-y-8">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border/80 pb-6">
-        <div className="space-y-1">
-          <div className="flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-              <DocumentText size="18" variant="Bold" />
-            </div>
-            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground">
-              Claims Directory
-            </h1>
-            <Badge
-              variant="outline"
-              className="border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300 text-[11px] font-semibold"
-            >
-              Experimental
-            </Badge>
-          </div>
-          <p className="text-xs sm:text-sm text-muted-foreground">
-            Explore all on-chain assertions, disputes, active jury deliberations, and finalized certificates.
-          </p>
-        </div>
-
-        <Link href="/fact-check">
-          <Button size="sm" className="min-h-[44px] px-5 font-semibold shadow-xs">
-            <ShieldSearch size="16" variant="Bold" className="mr-1.5" />
-            New Fact-Check
+    <div className="mx-auto max-w-7xl space-y-8 px-4 py-10 sm:px-6 lg:px-8 lg:py-12">
+      <PageHeader
+        eyebrow="Directory"
+        title="Claims directory"
+        description="Every on-chain assertion, dispute, live jury deliberation and finalized certificate the engine has indexed."
+        icon={DocumentText}
+        badges={<ExperimentalTag />}
+        actions={
+          <Button asChild className="min-h-[42px] px-5 font-semibold shadow-xs">
+            <Link href="/fact-check">
+              <ShieldSearch size="16" variant="Bold" />
+              New fact-check
+            </Link>
           </Button>
-        </Link>
-      </div>
+        }
+      />
 
-      {/* Filter and Search Controls */}
-      <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4">
-        {/* Search Input */}
-        <div className="relative flex-1 max-w-md">
+      {/* Search + state filters */}
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <div className="relative w-full max-w-md">
           <SearchNormal1
             size="16"
-            variant="Bold"
-            className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground"
+            className="pointer-events-none absolute top-1/2 left-3.5 -translate-y-1/2 text-muted-foreground"
           />
           <Input
-            placeholder="Search claims by statement or ID..."
-            className="pl-10 h-11 text-xs sm:text-sm"
+            placeholder="Search claims by statement or object id…"
+            className="h-11 pl-10 text-sm"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
+            aria-label="Search claims"
           />
         </div>
 
-        {/* State Filter Chips */}
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 max-w-full">
-          <Filter size="16" variant="Bold" className="text-muted-foreground shrink-0 hidden sm:inline" />
-          {(
-            [
-              { key: "ALL", label: "All Claims" },
-              { key: "ACTIVE", label: "Active" },
-              { key: "PROPOSED", label: "Proposed" },
-              { key: "JURY", label: "In Jury" },
-              { key: "FINALIZED", label: "Finalized" },
-              { key: "UNRESOLVED", label: "Unresolved" },
-            ] as const
-          ).map((tab) => (
-            <button
-              key={tab.key}
-              onClick={() => setActiveFilter(tab.key)}
-              className={`rounded-lg px-3 py-2 text-xs font-semibold whitespace-nowrap transition-colors min-h-[38px] ${
-                activeFilter === tab.key
-                  ? "bg-primary text-primary-foreground shadow-xs"
-                  : "bg-muted/70 text-muted-foreground hover:bg-muted hover:text-foreground"
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
+        <div
+          className="ov-scroll flex items-center gap-1 overflow-x-auto rounded-full border border-border bg-card p-1"
+          role="tablist"
+          aria-label="Filter claims by lifecycle state"
+        >
+          {TABS.map((tab) => {
+            const active = activeFilter === tab.key;
+            return (
+              <button
+                key={tab.key}
+                role="tab"
+                aria-selected={active}
+                onClick={() => setActiveFilter(tab.key)}
+                className={cn(
+                  "flex min-h-[34px] shrink-0 items-center gap-1.5 rounded-full px-3 text-xs font-semibold whitespace-nowrap transition-colors",
+                  active
+                    ? "bg-sea/12 text-primary"
+                    : "text-muted-foreground hover:bg-surface hover:text-ocean",
+                )}
+              >
+                {tab.label}
+                <span
+                  className={cn(
+                    "rounded-full px-1.5 font-mono text-[10px] tabular-nums",
+                    active ? "bg-sea/15 text-primary" : "bg-surface-2 text-muted-foreground",
+                  )}
+                >
+                  {counts[tab.key] ?? 0}
+                </span>
+              </button>
+            );
+          })}
         </div>
       </div>
 
-      {/* Claims Content List / Grid */}
+      {/* Results */}
       {loading ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-3">
           {[1, 2, 3, 4, 5, 6].map((i) => (
-            <div key={i} className="h-64 rounded-xl border border-border/60 bg-muted/40 animate-pulse" />
+            <div
+              key={i}
+              className="ov-edge h-[420px] animate-pulse rounded-2xl border border-border bg-card"
+            />
           ))}
         </div>
       ) : engineOffline ? (
-        <div className="rounded-2xl border border-dashed border-border p-12 text-center space-y-4 bg-muted/20">
-          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-amber-500/10 text-amber-600 mx-auto">
-            <Warning2 size="26" variant="Bold" />
-          </div>
-          <div className="space-y-1">
-            <h3 className="text-lg font-bold text-foreground">Engine Offline / Standalone Mode</h3>
-            <p className="text-xs text-muted-foreground max-w-md mx-auto leading-relaxed">
-              The engine returned a 503 response. The backend engine service or RPC connection is currently being wired.
-            </p>
-          </div>
-          <div className="flex items-center justify-center gap-3 pt-2">
+        <div className="flex flex-col items-center gap-3 rounded-2xl border border-dashed border-border bg-card px-6 py-16 text-center">
+          <span className="grid size-12 place-items-center rounded-xl bg-unsure/10 text-unsure">
+            <Warning2 size="24" variant="Bold" />
+          </span>
+          <h2 className="text-lg font-semibold text-ocean">Engine offline / standalone mode</h2>
+          <p className="max-w-md text-xs leading-relaxed text-muted-foreground">
+            The engine returned a 503 response. The backend engine service or RPC connection is
+            currently being wired.
+          </p>
+          <div className="flex flex-wrap items-center justify-center gap-2 pt-1">
             <Button
               variant="outline"
               size="sm"
               onClick={() => loadClaims()}
-              className="min-h-[40px] text-xs font-semibold"
+              className="min-h-[40px] font-semibold"
             >
-              <Refresh size="14" variant="Bold" className="mr-1.5" />
-              Retry Connection
+              <Refresh size="14" variant="Bold" />
+              Retry connection
             </Button>
-            <Link href="/verify">
-              <Button size="sm" className="min-h-[40px] text-xs font-semibold">
-                Use Offline Verifier
-              </Button>
-            </Link>
+            <Button asChild size="sm" className="min-h-[40px] font-semibold">
+              <Link href="/verify">Use offline verifier</Link>
+            </Button>
           </div>
         </div>
       ) : filteredClaims.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-border p-12 text-center space-y-3 bg-muted/20">
-          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-muted text-muted-foreground mx-auto">
-            <InfoCircle size="20" variant="Bold" />
-          </div>
-          <h3 className="text-base font-semibold text-foreground">No matching claims found</h3>
-          <p className="text-xs text-muted-foreground max-w-sm mx-auto">
+        <div className="flex flex-col items-center gap-3 rounded-2xl border border-dashed border-border bg-card px-6 py-16 text-center">
+          <span className="grid size-11 place-items-center rounded-xl bg-surface text-muted-foreground">
+            <InfoCircle size="22" variant="Bold" />
+          </span>
+          <h2 className="text-base font-semibold text-ocean">No matching claims</h2>
+          <p className="max-w-sm text-xs text-muted-foreground">
             {searchQuery
-              ? `No claims matched "${searchQuery}". Try adjusting your search query.`
-              : "No claims currently match the selected filter category."}
+              ? `Nothing matched “${searchQuery}”. Try a different statement fragment or object id.`
+              : "No claims currently match the selected lifecycle filter."}
           </p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <Stagger
+          className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-3"
+          itemClassName="h-full"
+        >
           {filteredClaims.map((claim) => (
             <ClaimCard key={claim.claimId} claim={claim} />
           ))}
-        </div>
+        </Stagger>
       )}
     </div>
   );

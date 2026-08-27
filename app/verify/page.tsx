@@ -1,13 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  computeVoteCommitment,
-} from "@/lib/protocol/commitment";
+import { PageHeader, ExperimentalTag, MetaTag } from "@/components/viz/page-header";
+import { Panel, FieldLabel, Well } from "@/components/viz/panel";
+import { VerdictGauge } from "@/components/viz/verdict-gauge";
+import { cn } from "@/lib/utils";
+import { computeVoteCommitment } from "@/lib/protocol/commitment";
 import { computeTruthScoreBps, agentProbabilityBps } from "@/lib/protocol/truthScore";
 import { toHex, fromHex } from "@/lib/protocol/hash";
 import { OUTCOME, type VoteOutcome } from "@/lib/protocol/constants";
@@ -20,20 +21,53 @@ import {
   CloseCircle,
   Add,
   Trash,
-} from "iconsax-react";
+  Code1,
+  Warning2,
+} from "@/components/icons";
+
+const SAMPLE = {
+  claimId: "0x0000000000000000000000000000000000000000000000000000000000000001",
+  agentProfileId: "0x0000000000000000000000000000000000000000000000000000000000000002",
+  jurySeatId: "0x0000000000000000000000000000000000000000000000000000000000000003",
+  evidenceRoot: "0x1111111111111111111111111111111111111111111111111111111111111111",
+  outputHash: "0x2222222222222222222222222222222222222222222222222222222222222222",
+  runHash: "0x3333333333333333333333333333333333333333333333333333333333333333",
+  salt: "0x4444444444444444444444444444444444444444444444444444444444444444",
+};
+
+/** Labelled hex/text field used across both verifier tabs. */
+function Field({
+  label,
+  hint,
+  className,
+  children,
+}: {
+  label: string;
+  hint?: string;
+  className?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className={cn("space-y-1.5", className)}>
+      <FieldLabel>{label}</FieldLabel>
+      {children}
+      {hint && <p className="text-[11px] text-muted-foreground">{hint}</p>}
+    </div>
+  );
+}
 
 export default function VerifyPage() {
-  // --- Tab 1: Commitment Verification State ---
-  const [claimId, setClaimId] = useState("0x0000000000000000000000000000000000000000000000000000000000000001");
-  const [agentProfileId, setAgentProfileId] = useState("0x0000000000000000000000000000000000000000000000000000000000000002");
-  const [jurySeatId, setJurySeatId] = useState("0x0000000000000000000000000000000000000000000000000000000000000003");
+  // --- Tab 1: commitment recomputation -----------------------------------
+  const [claimId, setClaimId] = useState(SAMPLE.claimId);
+  const [agentProfileId, setAgentProfileId] = useState(SAMPLE.agentProfileId);
+  const [jurySeatId, setJurySeatId] = useState(SAMPLE.jurySeatId);
   const [phase, setPhase] = useState<1 | 2>(1);
   const [outcome, setOutcome] = useState<VoteOutcome>(OUTCOME.YES);
   const [confidenceBps, setConfidenceBps] = useState(8500);
-  const [evidenceRootHex, setEvidenceRootHex] = useState("0x1111111111111111111111111111111111111111111111111111111111111111");
-  const [outputHashHex, setOutputHashHex] = useState("0x2222222222222222222222222222222222222222222222222222222222222222");
-  const [runHashHex, setRunHashHex] = useState("0x3333333333333333333333333333333333333333333333333333333333333333");
-  const [saltHex, setSaltHex] = useState("0x4444444444444444444444444444444444444444444444444444444444444444");
+  const [evidenceRootHex, setEvidenceRootHex] = useState(SAMPLE.evidenceRoot);
+  const [outputHashHex, setOutputHashHex] = useState(SAMPLE.outputHash);
+  const [runHashHex, setRunHashHex] = useState(SAMPLE.runHash);
+  const [saltHex, setSaltHex] = useState(SAMPLE.salt);
   const [expectedCommitmentHex, setExpectedCommitmentHex] = useState("");
 
   const [computedCommitmentHex, setComputedCommitmentHex] = useState<string | null>(null);
@@ -54,17 +88,32 @@ export default function VerifyPage() {
         run_hash: fromHex(runHashHex.trim()),
         salt: fromHex(saltHex.trim()),
       };
-
-      const commitmentBytes = computeVoteCommitment(preimage);
-      const hex = toHex(commitmentBytes);
-      setComputedCommitmentHex(hex);
+      setComputedCommitmentHex(toHex(computeVoteCommitment(preimage)));
     } catch (err) {
       setCommitmentError(err instanceof Error ? err.message : "Failed to compute commitment");
       setComputedCommitmentHex(null);
     }
   };
 
-  // --- Tab 2: Truth Score Recomputation State ---
+  const resetSample = () => {
+    setClaimId(SAMPLE.claimId);
+    setAgentProfileId(SAMPLE.agentProfileId);
+    setJurySeatId(SAMPLE.jurySeatId);
+    setPhase(1);
+    setOutcome(OUTCOME.YES);
+    setConfidenceBps(8500);
+    setEvidenceRootHex(SAMPLE.evidenceRoot);
+    setOutputHashHex(SAMPLE.outputHash);
+    setRunHashHex(SAMPLE.runHash);
+    setSaltHex(SAMPLE.salt);
+  };
+
+  const commitmentMatch =
+    computedCommitmentHex && expectedCommitmentHex.trim()
+      ? computedCommitmentHex.toLowerCase() === expectedCommitmentHex.trim().toLowerCase()
+      : null;
+
+  // --- Tab 2: truth score recomputation ----------------------------------
   interface JurorVoteInput {
     id: number;
     outcome: VoteOutcome;
@@ -79,384 +128,347 @@ export default function VerifyPage() {
     { id: 5, outcome: OUTCOME.UNSURE, confidenceBps: 5000 },
   ]);
 
-  const addVoteRow = () => {
-    setJurorVotes([
-      ...jurorVotes,
-      { id: Date.now(), outcome: OUTCOME.YES, confidenceBps: 8000 },
-    ]);
-  };
+  const addVoteRow = () =>
+    setJurorVotes([...jurorVotes, { id: Date.now(), outcome: OUTCOME.YES, confidenceBps: 8000 }]);
 
   const removeVoteRow = (id: number) => {
     if (jurorVotes.length <= 1) return;
     setJurorVotes(jurorVotes.filter((v) => v.id !== id));
   };
 
-  const updateVote = (id: number, field: "outcome" | "confidenceBps", value: number) => {
-    setJurorVotes(
-      jurorVotes.map((v) => {
-        if (v.id !== id) return v;
-        return { ...v, [field]: value };
-      }),
-    );
-  };
+  const updateVote = (id: number, field: "outcome" | "confidenceBps", value: number) =>
+    setJurorVotes(jurorVotes.map((v) => (v.id === id ? { ...v, [field]: value } : v)));
 
-  // Derived Truth Score calculations
-  const computedTruthScoreBps = computeTruthScoreBps(
-    jurorVotes.map((v) => ({ outcome: v.outcome, confidenceBps: v.confidenceBps })),
+  const computedTruthScoreBps = useMemo(
+    () =>
+      computeTruthScoreBps(
+        jurorVotes.map((v) => ({ outcome: v.outcome, confidenceBps: v.confidenceBps })),
+      ),
+    [jurorVotes],
   );
 
-  const totalProbabilities = jurorVotes.map((v) => {
+  const probabilities = jurorVotes.map((v) => {
     try {
       return agentProbabilityBps(v.outcome, v.confidenceBps);
     } catch {
       return 0;
     }
   });
-  const sumProbabilities = totalProbabilities.reduce((a, b) => a + b, 0);
+  const sumProbabilities = probabilities.reduce((a, b) => a + b, 0);
   const n = jurorVotes.length;
 
   return (
-    <div className="max-w-4xl mx-auto py-8 sm:py-12 px-4 sm:px-6 lg:px-8 space-y-8">
-      {/* Header */}
-      <div className="space-y-2 border-b border-border/80 pb-6">
-        <div className="flex items-center gap-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-            <ShieldTick size="18" variant="Bold" />
-          </div>
-          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground">
-            Client-Side Independent Verifier
-          </h1>
-          <Badge
-            variant="outline"
-            className="border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300 text-[11px] font-semibold"
-          >
-            Experimental
-          </Badge>
-        </div>
-        <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed">
-          Recompute cryptographic vote commitments (BCS + Blake2b-256) and consensus Truth Scores entirely within your local browser. Zero server trust required.
-        </p>
-      </div>
+    <div className="mx-auto max-w-5xl space-y-6 px-4 py-10 sm:px-6 lg:px-8 lg:py-12">
+      <PageHeader
+        eyebrow="Zero server trust"
+        title="Independent verifier"
+        description="Recompute cryptographic vote commitments (BCS + Blake2b-256) and consensus Truth Scores entirely inside your own browser. Nothing here calls the engine."
+        icon={ShieldTick}
+        badges={<ExperimentalTag />}
+        actions={<MetaTag tone="chain">Runs client-side</MetaTag>}
+      />
 
-      <Tabs defaultValue="commitment" className="space-y-6">
-        <TabsList className="grid grid-cols-2 max-w-md">
-          <TabsTrigger value="commitment" className="text-xs font-semibold">
-            <Lock size="14" variant="Bold" className="mr-1.5" />
-            Vote Commitment
+      <Tabs defaultValue="commitment" className="space-y-5">
+        <TabsList className="grid max-w-md grid-cols-2">
+          <TabsTrigger value="commitment" className="gap-1.5 text-xs font-semibold">
+            <Lock size="14" variant="Bold" />
+            Vote commitment
           </TabsTrigger>
-          <TabsTrigger value="truthscore" className="text-xs font-semibold">
-            <Award size="14" variant="Bold" className="mr-1.5" />
+          <TabsTrigger value="truthscore" className="gap-1.5 text-xs font-semibold">
+            <Award size="14" variant="Bold" />
             Truth Score
           </TabsTrigger>
         </TabsList>
 
-        {/* Tab 1: Commitment Recomputation */}
-        <TabsContent value="commitment" className="space-y-6">
-          <div className="rounded-2xl border border-border/80 bg-card p-6 shadow-xs space-y-5">
-            <div className="flex items-center justify-between border-b border-border/50 pb-3">
-              <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                Preimage Field Inputs (Move VotePreimageV1)
-              </span>
+        {/* ------------------------------------------------ Commitment tab */}
+        <TabsContent value="commitment" className="space-y-5">
+          <Panel
+            label="Preimage fields (Move VotePreimageV1)"
+            icon={Code1}
+            tone="sealed"
+            action={
               <Button
                 type="button"
                 variant="ghost"
                 size="sm"
-                onClick={() => {
-                  setClaimId("0x0000000000000000000000000000000000000000000000000000000000000001");
-                  setAgentProfileId("0x0000000000000000000000000000000000000000000000000000000000000002");
-                  setJurySeatId("0x0000000000000000000000000000000000000000000000000000000000000003");
-                  setPhase(1);
-                  setOutcome(OUTCOME.YES);
-                  setConfidenceBps(8500);
-                  setEvidenceRootHex("0x1111111111111111111111111111111111111111111111111111111111111111");
-                  setOutputHashHex("0x2222222222222222222222222222222222222222222222222222222222222222");
-                  setRunHashHex("0x3333333333333333333333333333333333333333333333333333333333333333");
-                  setSaltHex("0x4444444444444444444444444444444444444444444444444444444444444444");
-                }}
-                className="h-7 text-xs text-primary font-semibold"
+                onClick={resetSample}
+                className="h-7 text-xs font-semibold text-primary"
               >
-                Reset to Sample
+                Reset to sample
               </Button>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
-              <div className="space-y-1 sm:col-span-2">
-                <label className="font-semibold text-foreground">Claim ID (Hex Address):</label>
+            }
+          >
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <Field label="Claim id" className="sm:col-span-2">
                 <Input
-                  className="font-mono text-xs h-9"
+                  className="h-9 font-mono text-xs"
                   value={claimId}
                   onChange={(e) => setClaimId(e.target.value)}
                 />
-              </div>
+              </Field>
 
-              <div className="space-y-1">
-                <label className="font-semibold text-foreground">Agent Profile ID (Hex Address):</label>
+              <Field label="Agent profile id">
                 <Input
-                  className="font-mono text-xs h-9"
+                  className="h-9 font-mono text-xs"
                   value={agentProfileId}
                   onChange={(e) => setAgentProfileId(e.target.value)}
                 />
-              </div>
+              </Field>
 
-              <div className="space-y-1">
-                <label className="font-semibold text-foreground">Jury Seat ID (Hex Address):</label>
+              <Field label="Jury seat id">
                 <Input
-                  className="font-mono text-xs h-9"
+                  className="h-9 font-mono text-xs"
                   value={jurySeatId}
                   onChange={(e) => setJurySeatId(e.target.value)}
                 />
-              </div>
+              </Field>
 
-              <div className="space-y-1">
-                <label className="font-semibold text-foreground">Phase:</label>
+              <Field label="Phase">
                 <select
                   value={phase}
                   onChange={(e) => setPhase(Number(e.target.value) as 1 | 2)}
-                  className="w-full h-9 rounded-md border border-input bg-background px-3 text-xs font-semibold"
+                  className="h-9 w-full rounded-lg border border-input bg-card px-3 text-xs font-semibold text-ocean outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+                  aria-label="Phase"
                 >
-                  <option value={1}>Phase 1 (Initial Deliberation)</option>
-                  <option value={2}>Phase 2 (Discussion / Debate)</option>
+                  <option value={1}>Phase 1 — initial deliberation</option>
+                  <option value={2}>Phase 2 — discussion round</option>
                 </select>
-              </div>
+              </Field>
 
-              <div className="space-y-1">
-                <label className="font-semibold text-foreground">Outcome:</label>
+              <Field label="Outcome">
                 <select
                   value={outcome}
                   onChange={(e) => setOutcome(Number(e.target.value) as VoteOutcome)}
-                  className="w-full h-9 rounded-md border border-input bg-background px-3 text-xs font-semibold"
+                  className="h-9 w-full rounded-lg border border-input bg-card px-3 text-xs font-semibold text-ocean outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+                  aria-label="Outcome"
                 >
                   <option value={OUTCOME.YES}>YES (1)</option>
                   <option value={OUTCOME.NO}>NO (2)</option>
                   <option value={OUTCOME.UNSURE}>UNSURE (3)</option>
                 </select>
-              </div>
+              </Field>
 
-              <div className="space-y-1">
-                <label className="font-semibold text-foreground">Confidence (0..10000 Bps):</label>
+              <Field label="Confidence (0…10000 bps)">
                 <Input
                   type="number"
                   min={0}
                   max={10000}
-                  className="font-mono text-xs h-9"
+                  className="h-9 font-mono text-xs"
                   value={confidenceBps}
                   onChange={(e) => setConfidenceBps(Number(e.target.value))}
                 />
-              </div>
+              </Field>
 
-              <div className="space-y-1">
-                <label className="font-semibold text-foreground">Salt (32-byte Hex):</label>
+              <Field label="Salt (32-byte hex)">
                 <Input
-                  className="font-mono text-xs h-9"
+                  className="h-9 font-mono text-xs"
                   value={saltHex}
                   onChange={(e) => setSaltHex(e.target.value)}
                 />
-              </div>
+              </Field>
 
-              <div className="space-y-1 sm:col-span-2">
-                <label className="font-semibold text-foreground">Evidence Root (32-byte Hex):</label>
+              <Field label="Evidence root (32-byte hex)" className="sm:col-span-2">
                 <Input
-                  className="font-mono text-xs h-9"
+                  className="h-9 font-mono text-xs"
                   value={evidenceRootHex}
                   onChange={(e) => setEvidenceRootHex(e.target.value)}
                 />
-              </div>
+              </Field>
 
-              <div className="space-y-1 sm:col-span-2">
-                <label className="font-semibold text-foreground">Output Hash (32-byte Hex):</label>
+              <Field label="Output hash (32-byte hex)" className="sm:col-span-2">
                 <Input
-                  className="font-mono text-xs h-9"
+                  className="h-9 font-mono text-xs"
                   value={outputHashHex}
                   onChange={(e) => setOutputHashHex(e.target.value)}
                 />
-              </div>
+              </Field>
 
-              <div className="space-y-1 sm:col-span-2">
-                <label className="font-semibold text-foreground">Run Hash (32-byte Hex):</label>
+              <Field label="Run hash (32-byte hex)" className="sm:col-span-2">
                 <Input
-                  className="font-mono text-xs h-9"
+                  className="h-9 font-mono text-xs"
                   value={runHashHex}
                   onChange={(e) => setRunHashHex(e.target.value)}
                 />
-              </div>
+              </Field>
 
-              <div className="space-y-1 sm:col-span-2">
-                <label className="font-semibold text-foreground">
-                  Expected On-Chain Commitment (Optional, for auto-compare):
-                </label>
+              <Field
+                label="Expected on-chain commitment (optional)"
+                hint="Paste the commitment stored on Sui to compare byte-for-byte."
+                className="sm:col-span-2"
+              >
                 <Input
-                  placeholder="Paste on-chain commitment hex to compare..."
-                  className="font-mono text-xs h-9"
+                  placeholder="0x…"
+                  className="h-9 font-mono text-xs"
                   value={expectedCommitmentHex}
                   onChange={(e) => setExpectedCommitmentHex(e.target.value)}
                 />
-              </div>
+              </Field>
             </div>
 
             <Button
               onClick={handleComputeCommitment}
-              className="w-full min-h-[44px] font-semibold text-xs shadow-xs"
+              className="mt-5 min-h-[44px] w-full font-semibold shadow-xs"
             >
-              <Lock size="16" variant="Bold" className="mr-2" />
-              Recompute Blake2b-256 Commitment
+              <Lock size="16" variant="Bold" />
+              Recompute Blake2b-256 commitment
             </Button>
 
             {commitmentError && (
-              <div className="p-3 bg-destructive/10 text-destructive text-xs rounded-lg border border-destructive/30">
+              <div className="mt-3 flex items-start gap-2 rounded-xl border border-destructive/30 bg-destructive/5 p-3 text-xs text-destructive">
+                <Warning2 size="15" variant="Bold" className="mt-px shrink-0" />
                 {commitmentError}
               </div>
             )}
 
             {computedCommitmentHex && (
-              <div className="p-4 rounded-xl bg-muted/60 border border-border/80 space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                    Computed Commitment:
-                  </span>
-
-                  {expectedCommitmentHex.trim() && (
-                    <Badge
-                      variant="outline"
-                      className={`text-xs font-semibold px-2.5 py-0.5 flex items-center gap-1 ${
-                        computedCommitmentHex.toLowerCase() ===
-                        expectedCommitmentHex.trim().toLowerCase()
-                          ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
-                          : "border-red-500/40 bg-red-500/10 text-red-700 dark:text-red-300"
-                      }`}
+              <div className="mt-4 space-y-2.5 rounded-xl border border-border bg-surface p-4">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <FieldLabel>Computed commitment</FieldLabel>
+                  {commitmentMatch !== null && (
+                    <span
+                      className={cn(
+                        "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 font-mono text-[11px] font-bold",
+                        commitmentMatch
+                          ? "border-yes/30 bg-yes/8 text-yes"
+                          : "border-no/30 bg-no/8 text-no",
+                      )}
                     >
-                      {computedCommitmentHex.toLowerCase() ===
-                      expectedCommitmentHex.trim().toLowerCase() ? (
+                      {commitmentMatch ? (
                         <>
-                          <TickCircle size="13" variant="Bold" />
-                          Exact Byte Match
+                          <TickCircle size="12" variant="Bold" />
+                          Exact byte match
                         </>
                       ) : (
                         <>
-                          <CloseCircle size="13" variant="Bold" />
-                          Commitment Mismatch
+                          <CloseCircle size="12" variant="Bold" />
+                          Commitment mismatch
                         </>
                       )}
-                    </Badge>
+                    </span>
                   )}
                 </div>
-
-                <div className="font-mono text-xs font-bold text-foreground break-all bg-background p-3 rounded-lg border border-border/60">
+                <p className="rounded-lg border border-border bg-card p-3 font-mono text-xs font-semibold break-all text-ocean">
                   {computedCommitmentHex}
-                </div>
+                </p>
               </div>
             )}
-          </div>
+          </Panel>
+
+          <Well className="text-[11px] leading-relaxed text-muted-foreground">
+            The TypeScript <code className="font-mono text-ocean">computeVoteCommitment</code>{" "}
+            and the Move <code className="font-mono text-ocean">jury::compute_commitment</code>{" "}
+            are byte-identical by construction, and parity vectors in the test suite enforce it.
+            Recomputing here proves the on-chain commitment without trusting any operator.
+          </Well>
         </TabsContent>
 
-        {/* Tab 2: Truth Score Recomputation */}
-        <TabsContent value="truthscore" className="space-y-6">
-          <div className="rounded-2xl border border-border/80 bg-card p-6 shadow-xs space-y-6">
-            <div className="flex items-center justify-between border-b border-border/50 pb-3">
-              <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                Terminal Valid Round Votes ({jurorVotes.length} Jurors)
-              </span>
+        {/* ------------------------------------------------ Truth Score tab */}
+        <TabsContent value="truthscore" className="space-y-5">
+          <div className="grid gap-5 lg:grid-cols-3">
+            <Panel
+              label={`Terminal round votes (${jurorVotes.length})`}
+              icon={Award}
+              tone="primary"
+              className="lg:col-span-2"
+              action={
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={addVoteRow}
+                  className="min-h-[32px] text-xs font-semibold"
+                >
+                  <Add size="13" variant="Bold" />
+                  Add juror
+                </Button>
+              }
+            >
+              <ul className="space-y-2">
+                {jurorVotes.map((v, idx) => {
+                  const prob = probabilities[idx];
+                  return (
+                    <li
+                      key={v.id}
+                      className="flex flex-col gap-3 rounded-xl border border-border bg-surface p-3 sm:flex-row sm:items-center sm:justify-between"
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="grid size-7 place-items-center rounded-lg bg-sea/12 font-mono text-[11px] font-bold text-primary">
+                          {idx + 1}
+                        </span>
+                        <span className="text-xs font-semibold text-ocean">Juror {idx + 1}</span>
+                      </div>
 
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={addVoteRow}
-                className="h-8 text-xs font-semibold"
-              >
-                <Add size="14" variant="Bold" className="mr-1" />
-                Add Juror Vote
-              </Button>
-            </div>
-
-            {/* Juror Votes List */}
-            <div className="space-y-2.5">
-              {jurorVotes.map((v, idx) => {
-                const prob = agentProbabilityBps(v.outcome, v.confidenceBps);
-                return (
-                  <div
-                    key={v.id}
-                    className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 rounded-lg border border-border/60 bg-muted/30 text-xs"
-                  >
-                    <div className="flex items-center gap-2 font-mono font-bold">
-                      <span className="h-6 w-6 rounded-full bg-primary/10 text-primary flex items-center justify-center text-xs">
-                        #{idx + 1}
-                      </span>
-                      <span>Juror #{idx + 1}</span>
-                    </div>
-
-                    <div className="flex items-center gap-3 flex-wrap sm:flex-nowrap">
-                      <div className="flex items-center gap-1.5">
-                        <label className="text-muted-foreground text-[11px]">Outcome:</label>
+                      <div className="flex flex-wrap items-center gap-2 sm:flex-nowrap">
                         <select
                           value={v.outcome}
                           onChange={(e) =>
                             updateVote(v.id, "outcome", Number(e.target.value) as VoteOutcome)
                           }
-                          className="h-8 rounded-md border border-input bg-background px-2 text-xs font-semibold"
+                          className="h-8 rounded-lg border border-input bg-card px-2 text-xs font-semibold text-ocean outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+                          aria-label={`Juror ${idx + 1} outcome`}
                         >
                           <option value={OUTCOME.YES}>YES</option>
                           <option value={OUTCOME.NO}>NO</option>
                           <option value={OUTCOME.UNSURE}>UNSURE</option>
                         </select>
-                      </div>
 
-                      <div className="flex items-center gap-1.5">
-                        <label className="text-muted-foreground text-[11px]">Confidence:</label>
                         <Input
                           type="number"
                           min={0}
                           max={10000}
-                          className="w-20 h-8 text-xs font-mono"
+                          className="h-8 w-24 font-mono text-xs"
                           value={v.confidenceBps}
-                          onChange={(e) => updateVote(v.id, "confidenceBps", Number(e.target.value))}
+                          onChange={(e) =>
+                            updateVote(v.id, "confidenceBps", Number(e.target.value))
+                          }
+                          aria-label={`Juror ${idx + 1} confidence in basis points`}
                         />
-                        <span className="text-[11px] text-muted-foreground font-mono">bps</span>
+
+                        <span className="hidden font-mono text-[11px] text-muted-foreground md:inline">
+                          → <span className="font-semibold text-ocean">{prob} bps</span>
+                        </span>
+
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => removeVoteRow(v.id)}
+                          disabled={jurorVotes.length <= 1}
+                          className="size-8 shrink-0 p-0 text-muted-foreground hover:text-destructive"
+                          aria-label={`Remove juror ${idx + 1}`}
+                        >
+                          <Trash size="15" variant="Bold" />
+                        </Button>
                       </div>
+                    </li>
+                  );
+                })}
+              </ul>
 
-                      <div className="text-[11px] font-mono text-muted-foreground hidden md:inline">
-                        Mapped Prob: <span className="font-semibold text-foreground">{prob} bps</span>
-                      </div>
-
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => removeVoteRow(v.id)}
-                        disabled={jurorVotes.length <= 1}
-                        className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive shrink-0"
-                      >
-                        <Trash size="15" variant="Bold" />
-                      </Button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-
-            {/* Calculated Result Card */}
-            <div className="p-5 rounded-xl bg-card border-2 border-primary/30 shadow-xs space-y-4">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-                  <Award size="16" variant="Bold" className="text-primary" />
-                  Recomputed Truth Score
-                </span>
-                <span className="text-2xl font-extrabold font-mono text-primary">
-                  {computedTruthScoreBps !== null
-                    ? `${Math.round(computedTruthScoreBps / 100)} / 100`
-                    : "N/A"}
-                </span>
-              </div>
-
-              {/* Math breakdown */}
-              <div className="bg-muted/60 p-3 rounded-lg font-mono text-xs space-y-1 text-muted-foreground">
-                <div>• Sum of agent probabilities: {sumProbabilities} bps</div>
-                <div>• Total valid jurors (N): {n}</div>
-                <div>• Formula: ({sumProbabilities} + ⌊{n}/2⌋) / {n}</div>
-                <div className="font-bold text-foreground pt-1 border-t border-border/50">
-                  • Computed Score Bps: {computedTruthScoreBps} bps (
-                  {computedTruthScoreBps !== null ? (computedTruthScoreBps / 100).toFixed(2) : 0}%)
+              <Well className="mt-4 space-y-1 font-mono text-[11px] text-muted-foreground">
+                <div>• Σ agent probabilities: {sumProbabilities} bps</div>
+                <div>• Valid jurors (N): {n}</div>
+                <div>
+                  • Formula: ({sumProbabilities} + ⌊{n}/2⌋) / {n}
                 </div>
+                <div className="border-t border-border pt-1 font-bold text-ocean">
+                  • truthScoreBps = {computedTruthScoreBps} (
+                  {computedTruthScoreBps !== null
+                    ? (computedTruthScoreBps / 100).toFixed(2)
+                    : "0"}
+                  %)
+                </div>
+              </Well>
+            </Panel>
+
+            <Panel label="Recomputed score" icon={Award} tone="yes">
+              <div className="flex flex-col items-center gap-3">
+                <VerdictGauge scoreBps={computedTruthScoreBps} size={196} />
+                <p className="text-center text-[11px] leading-relaxed text-muted-foreground">
+                  Every value is derived locally from the votes above using the same integer
+                  half-up arithmetic the Move settlement module runs on-chain.
+                </p>
               </div>
-            </div>
+            </Panel>
           </div>
         </TabsContent>
       </Tabs>

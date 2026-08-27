@@ -1,124 +1,133 @@
 "use client";
 
-import { Badge } from "@/components/ui/badge";
+import { motion, useReducedMotion } from "motion/react";
 import { TimeDisplay } from "@/components/time-display";
+import { HashChip } from "@/components/viz/hash-chip";
+import { cn } from "@/lib/utils";
 import type { ResolutionEvent, ResolutionEventSource } from "@/lib/engine/contract";
-import {
-  Cpu,
-  Activity,
-  Hierarchy,
-  DocumentText,
-  Link21,
-  Lock,
-  TickCircle,
-} from "iconsax-react";
+import { Cpu, Activity, Hierarchy, DocumentText, Link21, Lock, TickCircle } from "@/components/icons";
 
 interface EventRowProps {
   event: ResolutionEvent;
+  /** Newly-streamed rows slide in; backfilled rows render at rest. */
+  animate?: boolean;
 }
 
 interface SourceConfig {
   label: string;
-  badgeClass: string;
+  chip: string;
+  spine: string;
   icon: typeof Cpu;
 }
 
+const SOURCES: Record<ResolutionEventSource, SourceConfig> = {
+  ENGINE: {
+    label: "ENGINE",
+    chip: "border-sealed/30 bg-sealed/8 text-sealed",
+    spine: "bg-sealed",
+    icon: Cpu,
+  },
+  GONKA_ROUTER: {
+    label: "GONKA",
+    chip: "border-family-b/30 bg-family-b/8 text-family-b",
+    spine: "bg-family-b",
+    icon: Activity,
+  },
+  TOOL: {
+    label: "TOOL",
+    chip: "border-unsure/30 bg-unsure/8 text-unsure",
+    spine: "bg-unsure",
+    icon: Hierarchy,
+  },
+  EVIDENCE: {
+    label: "EVIDENCE",
+    chip: "border-yes/30 bg-yes/8 text-yes",
+    spine: "bg-yes",
+    icon: DocumentText,
+  },
+  SUI: {
+    label: "SUI",
+    chip: "border-chain/30 bg-chain/8 text-chain",
+    spine: "bg-chain",
+    icon: Link21,
+  },
+};
+
 export function getSourceConfig(source: ResolutionEventSource): SourceConfig {
-  switch (source) {
-    case "ENGINE":
-      return {
-        label: "ENGINE",
-        badgeClass: "border-purple-500/40 bg-purple-500/10 text-purple-700 dark:text-purple-300",
-        icon: Cpu,
-      };
-    case "GONKA_ROUTER":
-      return {
-        label: "GONKA_ROUTER",
-        badgeClass: "border-blue-500/40 bg-blue-500/10 text-blue-700 dark:text-blue-300",
-        icon: Activity,
-      };
-    case "TOOL":
-      return {
-        label: "TOOL",
-        badgeClass: "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300",
-        icon: Hierarchy,
-      };
-    case "EVIDENCE":
-      return {
-        label: "EVIDENCE",
-        badgeClass: "border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
-        icon: DocumentText,
-      };
-    case "SUI":
-      return {
-        label: "SUI",
-        badgeClass: "border-cyan-500/40 bg-cyan-500/10 text-cyan-700 dark:text-cyan-300",
-        icon: Link21,
-      };
-    default:
-      return {
-        label: source,
-        badgeClass: "border-border bg-muted text-muted-foreground",
-        icon: Activity,
-      };
-  }
+  return (
+    SOURCES[source] ?? {
+      label: String(source),
+      chip: "border-border bg-surface text-muted-foreground",
+      spine: "bg-border",
+      icon: Activity,
+    }
+  );
 }
 
-export function EventRow({ event }: EventRowProps) {
-  const sourceConfig = getSourceConfig(event.source);
-  const SourceIcon = sourceConfig.icon;
-
+/**
+ * One row of the live resolution stream. A coloured spine encodes the emitting
+ * subsystem so a fast-scrolling log is still readable at a glance.
+ */
+export function EventRow({ event, animate = false }: EventRowProps) {
+  const reduce = useReducedMotion();
+  const source = getSourceConfig(event.source);
+  const SourceIcon = source.icon;
   const isRedacted = event.visibility === "INTERNAL_REDACTED";
 
   return (
-    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 p-3 rounded-lg border border-border/70 bg-card hover:bg-accent/30 transition-colors text-xs">
-      {/* Left side: Seq # + Source Badge + Kind */}
-      <div className="flex items-center gap-2.5 flex-wrap">
-        <span className="font-mono text-[11px] font-bold text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
+    <motion.li
+      initial={animate && !reduce ? { opacity: 0, x: -10 } : false}
+      animate={{ opacity: 1, x: 0 }}
+      transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
+      className="relative flex flex-col gap-2 overflow-hidden rounded-xl border border-border bg-card py-2.5 pr-3 pl-4 transition-colors hover:border-sea/35 sm:flex-row sm:items-center sm:justify-between"
+    >
+      <span aria-hidden className={cn("absolute inset-y-0 left-0 w-1", source.spine)} />
+
+      <div className="flex min-w-0 flex-wrap items-center gap-2">
+        <span className="rounded bg-surface px-1.5 py-0.5 font-mono text-[10px] font-bold text-muted-foreground tabular-nums">
           #{event.sequence}
         </span>
 
-        {/* Source Badge */}
-        <Badge
-          variant="outline"
-          className={`font-mono text-[10px] font-bold px-2 py-0.5 flex items-center gap-1 ${sourceConfig.badgeClass}`}
+        <span
+          className={cn(
+            "inline-flex items-center gap-1 rounded border px-1.5 py-0.5 font-mono text-[9px] font-bold tracking-[0.08em]",
+            source.chip,
+          )}
         >
-          <SourceIcon size="12" variant="Bold" />
-          <span>{sourceConfig.label}</span>
-        </Badge>
+          <SourceIcon size="11" variant="Bold" />
+          {source.label}
+        </span>
 
-        <span className="font-semibold text-foreground">{event.kind}</span>
+        <span className="font-mono text-xs font-semibold text-ocean">{event.kind}</span>
 
-        {/* Phase tag */}
-        <span className="text-[11px] text-muted-foreground bg-muted/60 px-1.5 py-0.5 rounded">
+        <span className="rounded bg-surface px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
           {event.phase}
         </span>
 
-        {/* Visibility / Confirmation */}
         {isRedacted ? (
-          <Badge variant="outline" className="text-[10px] text-zinc-500 bg-zinc-500/10 border-zinc-500/20 flex items-center gap-1">
+          <span className="inline-flex items-center gap-1 rounded border border-border bg-surface px-1.5 py-0.5 font-mono text-[9px] text-muted-foreground">
             <Lock size="10" variant="Bold" />
-            Redacted
-          </Badge>
+            REDACTED
+          </span>
         ) : (
-          <Badge variant="outline" className="text-[10px] text-emerald-600 bg-emerald-500/10 border-emerald-500/20 flex items-center gap-1">
+          <span className="inline-flex items-center gap-1 rounded border border-yes/25 bg-yes/8 px-1.5 py-0.5 font-mono text-[9px] text-yes">
             <TickCircle size="10" variant="Bold" />
-            Confirmed
-          </Badge>
-        )}
-      </div>
-
-      {/* Right side: Timestamp & Transaction Digest */}
-      <div className="flex items-center gap-3 text-muted-foreground text-[11px] font-mono shrink-0">
-        {event.transactionDigest && (
-          <span className="flex items-center gap-1 text-primary truncate max-w-[120px]" title={event.transactionDigest}>
-            <Link21 size="12" variant="Bold" />
-            <span>Tx: {event.transactionDigest.slice(0, 8)}...</span>
+            PUBLIC
           </span>
         )}
 
+        {event.actorId && <HashChip value={event.actorId} label="seat agent" tone="muted" />}
+      </div>
+
+      <div className="flex shrink-0 flex-wrap items-center gap-2">
+        {event.artifactHash && (
+          <HashChip value={event.artifactHash} label="artifact" tone="muted" />
+        )}
+        {event.transactionDigest && (
+          <HashChip value={event.transactionDigest} label="tx" tone="chain" head={8} tail={4} />
+        )}
         <TimeDisplay isoString={event.occurredAt} showLocal={false} />
       </div>
-    </div>
+    </motion.li>
   );
 }

@@ -1,63 +1,56 @@
-import { Badge } from "@/components/ui/badge";
-import { DocumentText, InfoCircle, Lock, Global } from "iconsax-react";
+import { PageHeader, ExperimentalTag } from "@/components/viz/page-header";
+import { Panel } from "@/components/viz/panel";
+import { DocumentText, InfoCircle, Lock, Global, Warning2 } from "@/components/icons";
 
 export default function PrivacyPage() {
   return (
-    <div className="max-w-4xl mx-auto py-8 sm:py-12 px-4 sm:px-6 lg:px-8 space-y-8">
-      <div className="space-y-2 border-b border-border/80 pb-6">
-        <div className="flex items-center gap-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-            <DocumentText size="18" variant="Bold" />
-          </div>
-          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground">
-            Privacy Notice
-          </h1>
-          <Badge
-            variant="outline"
-            className="border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300 text-[11px] font-semibold"
-          >
-            Experimental
-          </Badge>
-        </div>
-        <p className="text-xs sm:text-sm text-muted-foreground">
-          How OpenVerdict treats submitted claims, evidence URLs, and on-chain oracle data.
+    <div className="mx-auto max-w-4xl space-y-6 px-4 py-10 sm:px-6 lg:px-8 lg:py-12">
+      <PageHeader
+        eyebrow="Data handling"
+        title="Privacy notice"
+        description="How OpenVerdict treats submitted claims, evidence URLs and on-chain oracle data."
+        icon={DocumentText}
+        badges={<ExperimentalTag />}
+      />
+
+      <Panel label="01 · Public & permanent storage" icon={Global} tone="chain">
+        <h2 className="text-base font-semibold text-ocean">
+          Blockchain and Walrus storage are public and permanent
+        </h2>
+        <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+          When you submit a fact-check claim, pasted text or evidence URL, the content is parsed,
+          hashed and published to the <strong className="text-ocean">Sui public blockchain</strong>{" "}
+          and <strong className="text-ocean">Walrus decentralized storage</strong>.
         </p>
-      </div>
 
-      <div className="space-y-6 text-sm text-muted-foreground leading-relaxed">
-        <section className="space-y-2">
-          <h2 className="text-base font-bold text-foreground flex items-center gap-2">
-            <Global size="18" variant="Bold" className="text-primary" />
-            1. Public &amp; Permanent Nature of Blockchain &amp; Walrus Storage
-          </h2>
-          <p>
-            When you submit a fact-check claim, pasted text, or evidence URL, the content is parsed, hashed, and published to the <strong>Sui public blockchain</strong> and <strong>Walrus decentralized storage</strong>.
+        <div className="mt-4 flex items-start gap-2.5 rounded-xl border border-unsure/30 bg-unsure/8 p-3.5">
+          <Warning2 size="17" variant="Bold" className="mt-0.5 shrink-0 text-unsure" />
+          <p className="text-xs leading-relaxed text-foreground/85">
+            <strong className="font-semibold text-ocean">Warning.</strong> Do not submit private
+            personal data, confidential keys, credentials or proprietary information. Stored
+            blobs and transaction records are globally immutable and permanent.
           </p>
-          <p className="text-xs text-amber-800 dark:text-amber-200 bg-amber-500/10 p-3 rounded-lg border border-amber-500/30">
-            <strong>Warning:</strong> Do not submit private personal data, confidential keys, credentials, or proprietary information. Stored blobs and transaction records are globally immutable and permanent.
-          </p>
-        </section>
+        </div>
+      </Panel>
 
-        <section className="space-y-2">
-          <h2 className="text-base font-bold text-foreground flex items-center gap-2">
-            <Lock size="18" variant="Bold" className="text-primary" />
-            2. AI Inference Processing (GonkaRouter)
-          </h2>
-          <p>
-            Submitted claims and sanitized evidence text are transmitted to LLM inference providers via GonkaRouter for jury deliberations. Inference prompts and model outputs are public and audited to prevent adversarial prompt injections.
-          </p>
-        </section>
+      <Panel label="02 · AI inference processing" icon={Lock} tone="sealed">
+        <h2 className="text-base font-semibold text-ocean">GonkaRouter inference</h2>
+        <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+          Submitted claims and sanitized evidence text are transmitted to LLM inference providers
+          via GonkaRouter for jury deliberation. Inference prompts and model outputs are public
+          and audited to prevent adversarial prompt injection. Models never receive URLs, API
+          keys or transaction authority, and salts never leave the engine.
+        </p>
+      </Panel>
 
-        <section className="space-y-2">
-          <h2 className="text-base font-bold text-foreground flex items-center gap-2">
-            <InfoCircle size="18" variant="Bold" className="text-primary" />
-            3. Web Analytics &amp; Cookies
-          </h2>
-          <p>
-            The OpenVerdict observer interface does not use tracking cookies, advertising beacons, or third-party analytics trackers. Web server logs contain standard ephemeral access records for rate-limiting and DDoS prevention only.
-          </p>
-        </section>
-      </div>
+      <Panel label="03 · Analytics & cookies" icon={InfoCircle} tone="primary">
+        <h2 className="text-base font-semibold text-ocean">No tracking</h2>
+        <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+          The OpenVerdict observer interface uses no tracking cookies, advertising beacons or
+          third-party analytics trackers. Web server logs contain standard ephemeral access
+          records for rate limiting and DDoS prevention only.
+        </p>
+      </Panel>
     </div>
   );
 }

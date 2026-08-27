@@ -13,7 +13,7 @@ import {
   LogoutCurve,
   Refresh,
   Wallet,
-} from "iconsax-react";
+} from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import {
   Popover,
@@ -128,7 +128,7 @@ export function WalletConnectButton() {
           aria-label={`Wallet ${address}`}
         >
           <span
-            className="h-2 w-2 shrink-0 rounded-full bg-emerald-500"
+            className="h-2 w-2 shrink-0 rounded-full bg-live"
             aria-hidden="true"
           />
           <span className="truncate">{truncateAddress(address)}</span>
@@ -137,7 +137,7 @@ export function WalletConnectButton() {
       </PopoverTrigger>
       <PopoverContent align="end" className="w-64 p-2">
         <div className="border-b border-border px-2 pb-2">
-          <p className="text-xs font-medium text-foreground">Connected wallet</p>
+          <p className="text-xs font-medium text-ocean">Connected wallet</p>
           <p className="mt-1 break-all font-mono text-xs text-muted-foreground">
             {address}
           </p>

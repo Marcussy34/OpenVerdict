@@ -6,8 +6,11 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { PageHeader, ExperimentalTag } from "@/components/viz/page-header";
+import { Panel, FieldLabel } from "@/components/viz/panel";
+import { PIPELINE_STAGES } from "@/components/viz/pipeline";
+import { cn } from "@/lib/utils";
 import {
   ShieldSearch,
   InfoCircle,
@@ -18,13 +21,18 @@ import {
   Warning2,
   Judge,
   ArrowRight,
-} from "iconsax-react";
+  Refresh,
+} from "@/components/icons";
+
+const MAX_URLS = 5;
+const MAX_CLAIM = 1000;
+const MAX_TEXT = 20000;
 
 function FactCheckContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  // Initialize state directly from URL query parameters
+  // Initialize state directly from URL query parameters (home hand-off).
   const [claim, setClaim] = useState(() => searchParams.get("claim") || "");
   const [text, setText] = useState("");
   const [urls, setUrls] = useState<string[]>(() => {
@@ -38,9 +46,7 @@ function FactCheckContent() {
   const [isEngineOffline, setIsEngineOffline] = useState(false);
 
   const addUrlField = () => {
-    if (urls.length < 5) {
-      setUrls([...urls, ""]);
-    }
+    if (urls.length < MAX_URLS) setUrls([...urls, ""]);
   };
 
   const updateUrl = (index: number, value: string) => {
@@ -50,11 +56,7 @@ function FactCheckContent() {
   };
 
   const removeUrl = (index: number) => {
-    if (urls.length === 1) {
-      setUrls([""]);
-    } else {
-      setUrls(urls.filter((_, i) => i !== index));
-    }
+    setUrls(urls.length === 1 ? [""] : urls.filter((_, i) => i !== index));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -67,15 +69,12 @@ function FactCheckContent() {
       setErrorMessage("Claim statement must be at least 5 characters long.");
       return;
     }
-    if (trimmedClaim.length > 1000) {
-      setErrorMessage("Claim statement cannot exceed 1000 characters.");
+    if (trimmedClaim.length > MAX_CLAIM) {
+      setErrorMessage(`Claim statement cannot exceed ${MAX_CLAIM} characters.`);
       return;
     }
 
-    const filteredUrls = urls
-      .map((u) => u.trim())
-      .filter((u) => u.length > 0);
-
+    const filteredUrls = urls.map((u) => u.trim()).filter((u) => u.length > 0);
     for (const u of filteredUrls) {
       if (!u.startsWith("https://") && !u.startsWith("http://")) {
         setErrorMessage(`Invalid URL '${u}': must start with https:// or http://`);
@@ -84,7 +83,6 @@ function FactCheckContent() {
     }
 
     setSubmitting(true);
-
     try {
       const res = await fetch("/api/fact-checks", {
         method: "POST",
@@ -103,12 +101,10 @@ function FactCheckContent() {
       }
 
       const data = await res.json();
-
       if (!res.ok) {
         setErrorMessage(data.message || data.error || "Failed to submit fact-check");
         return;
       }
-
       if (data.claimId) {
         router.push(`/claims/${encodeURIComponent(data.claimId)}`);
       }
@@ -119,44 +115,34 @@ function FactCheckContent() {
     }
   };
 
-  return (
-    <div className="max-w-4xl mx-auto py-8 sm:py-12 px-4 sm:px-6 lg:px-8 space-y-8">
-      {/* Header */}
-      <div className="space-y-2">
-        <div className="flex items-center gap-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-            <ShieldSearch size="18" variant="Bold" />
-          </div>
-          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground">
-            Direct Fact-Check Review
-          </h1>
-          <Badge
-            variant="outline"
-            className="border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300 text-[11px] font-semibold"
-          >
-            Experimental
-          </Badge>
-        </div>
-        <p className="text-sm text-muted-foreground leading-relaxed">
-          Submit bounded factual claims and evidence URLs for decentralized multi-model AI deliberation. The protocol coordinates 5 distinct AI models (DeepSeek, Kimi, MiniMax) through cryptographic commit-reveal.
-        </p>
-      </div>
+  const claimTooLong = claim.length > MAX_CLAIM * 0.9;
 
-      {/* Engine Offline Warning (503 state) */}
+  return (
+    <div className="mx-auto max-w-5xl space-y-6 px-4 py-10 sm:px-6 lg:px-8 lg:py-12">
+      <PageHeader
+        eyebrow="Direct review"
+        title="Submit a fact-check"
+        description="Submit a bounded factual claim and its evidence URLs for decentralized multi-model AI deliberation. Five distinct models deliberate under cryptographic commit-reveal."
+        icon={ShieldSearch}
+        badges={<ExperimentalTag />}
+      />
+
       {isEngineOffline && (
-        <Alert className="border-amber-500/40 bg-amber-500/10 text-amber-900 dark:text-amber-100">
-          <Warning2 size="20" variant="Bold" className="text-amber-600 dark:text-amber-400" />
-          <AlertTitle className="font-semibold text-sm">
-            Engine Backend Offline / Not Wired
+        <Alert className="border-unsure/35 bg-unsure/8">
+          <Warning2 size="18" variant="Bold" className="text-unsure" />
+          <AlertTitle className="text-sm font-semibold text-ocean">
+            Engine backend offline / not wired
           </AlertTitle>
-          <AlertDescription className="text-xs space-y-2 mt-1">
+          <AlertDescription className="mt-1 space-y-2 text-xs text-muted-foreground">
             <p>
-              The OpenVerdict verification engine backend is not currently connected (returned 503). In full deployment, this triggers an on-chain Move claim creation and schedules the 5-agent jury.
+              The verification engine returned 503. In full deployment this submission triggers
+              an on-chain Move claim creation and schedules the five-agent jury.
             </p>
             <p>
-              You can test the client-side cryptographic commit-reveal and Truth Score recomputation on the{" "}
-              <Link href="/verify" className="underline font-bold text-primary">
-                Verify page
+              You can still exercise the client-side commit-reveal and Truth Score recomputation
+              on the{" "}
+              <Link href="/verify" className="font-semibold text-primary hover:underline">
+                verifier page
               </Link>
               .
             </p>
@@ -164,169 +150,191 @@ function FactCheckContent() {
         </Alert>
       )}
 
-      {/* Validation Error Alert */}
       {errorMessage && (
         <Alert variant="destructive">
           <Warning2 size="18" variant="Bold" />
-          <AlertTitle className="text-sm font-semibold">Validation Error</AlertTitle>
+          <AlertTitle className="text-sm font-semibold">Validation error</AlertTitle>
           <AlertDescription className="text-xs">{errorMessage}</AlertDescription>
         </Alert>
       )}
 
-      {/* Main Submission Form */}
-      <form
-        onSubmit={handleSubmit}
-        className="rounded-2xl border border-border/80 bg-card p-6 shadow-xs space-y-6"
-      >
-        {/* Field 1: Factual Claim Statement */}
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <label htmlFor="claim-text" className="text-sm font-semibold text-foreground flex items-center gap-1.5">
-              <span>Claim Statement</span>
-              <span className="text-red-500">*</span>
-            </label>
-            <span className="text-xs font-mono text-muted-foreground">
-              {claim.length}/1000 chars
-            </span>
-          </div>
-          <Textarea
-            id="claim-text"
-            required
-            placeholder="State the exact factual assertion to be verified (e.g. 'DeepSeek released the V4 model weights on August 15, 2026')..."
-            className="min-h-[100px] text-sm focus-visible:ring-2 focus-visible:ring-primary"
-            value={claim}
-            onChange={(e) => setClaim(e.target.value)}
-            maxLength={1000}
-          />
-          <p className="text-[11px] text-muted-foreground">
-            Clear, falsifiable, bounded assertions resolve fastest and achieve higher consensus.
-          </p>
-        </div>
+      <div className="grid gap-6 lg:grid-cols-3">
+        {/* Form */}
+        <form onSubmit={handleSubmit} className="space-y-5 lg:col-span-2">
+          <Panel label="Claim statement" icon={DocumentText} tone="primary">
+            <div className="space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <label htmlFor="claim-text" className="text-sm font-semibold text-ocean">
+                  What should the jury verify? <span className="text-no">*</span>
+                </label>
+                <span
+                  className={cn(
+                    "font-mono text-[11px] tabular-nums",
+                    claimTooLong ? "text-unsure" : "text-muted-foreground",
+                  )}
+                >
+                  {claim.length}/{MAX_CLAIM}
+                </span>
+              </div>
+              <Textarea
+                id="claim-text"
+                required
+                placeholder="State the exact factual assertion to be verified — e.g. “DeepSeek released the V4 model weights on August 15, 2026”…"
+                className="min-h-[110px] text-sm"
+                value={claim}
+                onChange={(e) => setClaim(e.target.value)}
+                maxLength={MAX_CLAIM}
+              />
+              <p className="text-[11px] text-muted-foreground">
+                Clear, falsifiable, bounded assertions resolve fastest and reach higher
+                consensus.
+              </p>
+            </div>
+          </Panel>
 
-        {/* Field 2: Admitted Source URLs */}
-        <div className="space-y-3">
-          <div className="flex items-center justify-between">
-            <label className="text-sm font-semibold text-foreground flex items-center gap-1.5">
-              <Link21 size="16" variant="Bold" className="text-muted-foreground" />
-              <span>Evidence Source URLs (Up to 5)</span>
-            </label>
+          <Panel
+            label="Evidence source URLs"
+            icon={Link21}
+            action={
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={addUrlField}
+                disabled={urls.length >= MAX_URLS}
+                className="min-h-[32px] text-xs font-semibold"
+              >
+                <Add size="13" variant="Bold" />
+                Add URL
+              </Button>
+            }
+          >
+            <div className="space-y-2">
+              {urls.map((urlVal, index) => (
+                <div key={index} className="flex items-center gap-2">
+                  <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-surface font-mono text-[11px] font-semibold text-muted-foreground">
+                    {index + 1}
+                  </span>
+                  <Input
+                    type="url"
+                    placeholder="https://example.com/press-release-or-doc"
+                    className="h-10 font-mono text-xs"
+                    value={urlVal}
+                    onChange={(e) => updateUrl(index, e.target.value)}
+                    aria-label={`Evidence source URL ${index + 1}`}
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => removeUrl(index)}
+                    className="size-10 shrink-0 p-0 text-muted-foreground hover:text-destructive"
+                    aria-label={`Remove URL ${index + 1}`}
+                  >
+                    <Trash size="16" variant="Bold" />
+                  </Button>
+                </div>
+              ))}
+              <p className="text-[11px] text-muted-foreground">
+                Up to {MAX_URLS} sources. Each is crawled through an SSRF-safe proxy, sanitized
+                to plain text, and Merkle-frozen to Walrus before any model sees it.
+              </p>
+            </div>
+          </Panel>
+
+          <Panel label="Supporting context (optional)" icon={DocumentText}>
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <label htmlFor="context-text" className="text-sm font-semibold text-ocean">
+                    Pasted context
+                  </label>
+                  <span className="font-mono text-[11px] text-muted-foreground tabular-nums">
+                    {text.length}/{MAX_TEXT.toLocaleString()}
+                  </span>
+                </div>
+                <Textarea
+                  id="context-text"
+                  placeholder="Paste excerpts, article text or background context to accompany the claim…"
+                  className="min-h-[90px] font-mono text-xs"
+                  value={text}
+                  onChange={(e) => setText(e.target.value)}
+                  maxLength={MAX_TEXT}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <label htmlFor="criteria-text" className="text-sm font-semibold text-ocean">
+                  Resolution criteria
+                </label>
+                <Input
+                  id="criteria-text"
+                  placeholder="e.g. “Resolves YES if primary source documentation confirms the release before 23:59 UTC”…"
+                  className="h-10 text-xs"
+                  value={resolutionCriteria}
+                  onChange={(e) => setResolutionCriteria(e.target.value)}
+                  maxLength={2000}
+                />
+                <p className="text-[11px] text-muted-foreground">
+                  Left blank, deterministic default criteria are derived from the statement.
+                </p>
+              </div>
+            </div>
+          </Panel>
+
+          <div className="ov-edge flex flex-col items-stretch justify-between gap-3 rounded-2xl border border-border bg-card p-4 sm:flex-row sm:items-center">
+            <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
+              <InfoCircle size="14" variant="Bold" className="mt-px shrink-0" />
+              No gas fees and no wallet are required for direct-review submissions.
+            </p>
             <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={addUrlField}
-              disabled={urls.length >= 5}
-              className="h-8 text-xs font-semibold"
+              type="submit"
+              disabled={submitting || !claim.trim()}
+              aria-busy={submitting}
+              className="min-h-[44px] w-full px-7 font-semibold shadow-xs sm:w-auto"
             >
-              <Add size="14" variant="Bold" className="mr-1" />
-              Add URL
+              {submitting ? (
+                <>
+                  <Refresh size="16" variant="Linear" className="motion-safe:animate-spin" />
+                  Submitting…
+                </>
+              ) : (
+                <>
+                  Start fact-check
+                  <ArrowRight size="16" variant="Bold" />
+                </>
+              )}
             </Button>
           </div>
+        </form>
 
-          <div className="space-y-2">
-            {urls.map((urlVal, index) => (
-              <div key={index} className="flex items-center gap-2">
-                <Input
-                  type="url"
-                  placeholder="https://example.com/press-release-or-doc"
-                  className="text-xs h-10 font-mono"
-                  value={urlVal}
-                  onChange={(e) => updateUrl(index, e.target.value)}
-                />
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => removeUrl(index)}
-                  className="h-10 w-10 p-0 text-muted-foreground hover:text-destructive shrink-0"
-                  aria-label="Remove URL"
-                >
-                  <Trash size="16" variant="Bold" />
-                </Button>
-              </div>
-            ))}
-          </div>
-          <p className="text-[11px] text-muted-foreground">
-            Sources are crawled via SSRF-safe proxies, sanitized to plain text, and Merkle-frozen to Walrus decentralized storage.
-          </p>
-        </div>
+        {/* What happens next */}
+        <aside className="space-y-4">
+          <Panel label="What happens next" icon={Judge} tone="sealed" className="lg:sticky lg:top-24">
+            <ol className="space-y-3">
+              {PIPELINE_STAGES.map((stage) => (
+                <li key={stage.index} className="flex gap-3">
+                  <span className="mt-0.5 grid size-7 shrink-0 place-items-center rounded-lg bg-surface font-mono text-[10px] font-bold text-muted-foreground">
+                    {stage.index}
+                  </span>
+                  <div className="min-w-0">
+                    <FieldLabel>{stage.kicker}</FieldLabel>
+                    <p className="text-xs font-semibold text-ocean">{stage.title}</p>
+                    <p className="mt-0.5 text-[11px] leading-snug text-muted-foreground">
+                      {stage.body}
+                    </p>
+                  </div>
+                </li>
+              ))}
+            </ol>
 
-        {/* Field 3: Optional Pasted Context / Text */}
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <label htmlFor="context-text" className="text-sm font-semibold text-foreground flex items-center gap-1.5">
-              <DocumentText size="16" variant="Bold" className="text-muted-foreground" />
-              <span>Pasted Context / Supporting Text (Optional)</span>
-            </label>
-            <span className="text-xs font-mono text-muted-foreground">
-              {text.length}/20,000 chars
-            </span>
-          </div>
-          <Textarea
-            id="context-text"
-            placeholder="Paste excerpts, article text, or background context to accompany the claim..."
-            className="min-h-[90px] text-xs font-mono focus-visible:ring-2 focus-visible:ring-primary"
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            maxLength={20000}
-          />
-        </div>
-
-        {/* Field 4: Optional Resolution Criteria */}
-        <div className="space-y-2">
-          <label htmlFor="criteria-text" className="text-sm font-semibold text-foreground flex items-center gap-1.5">
-            <Judge size="16" variant="Bold" className="text-muted-foreground" />
-            <span>Resolution Criteria (Optional)</span>
-          </label>
-          <Input
-            id="criteria-text"
-            placeholder="e.g. 'Resolves YES if primary source documentation confirms the release before 23:59 UTC'..."
-            className="text-xs h-10"
-            value={resolutionCriteria}
-            onChange={(e) => setResolutionCriteria(e.target.value)}
-            maxLength={2000}
-          />
-          <p className="text-[11px] text-muted-foreground">
-            If left blank, deterministic default criteria will be derived based on the claim statement.
-          </p>
-        </div>
-
-        {/* Submit Actions */}
-        <div className="pt-4 border-t border-border flex flex-col sm:flex-row items-center justify-between gap-4">
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <InfoCircle size="15" variant="Bold" className="shrink-0" />
-            <span>No gas fees required for Direct Review submissions.</span>
-          </div>
-
-          <Button
-            type="submit"
-            disabled={submitting || !claim.trim()}
-            className="w-full sm:w-auto min-h-[44px] px-8 font-semibold shadow-xs"
-          >
-            {submitting ? (
-              <span className="flex items-center gap-2">
-                <span className="h-4 w-4 rounded-full border-2 border-primary-foreground border-t-transparent animate-spin" />
-                Submitting Fact-Check...
-              </span>
-            ) : (
-              <span className="flex items-center gap-1.5">
-                <span>Start Fact-Check</span>
-                <ArrowRight size="16" variant="Bold" />
-              </span>
-            )}
-          </Button>
-        </div>
-      </form>
-
-      {/* Protocol Explanation Footer */}
-      <div className="rounded-xl border border-border/60 bg-muted/30 p-5 space-y-3 text-xs text-muted-foreground">
-        <h3 className="font-semibold text-foreground flex items-center gap-1.5">
-          <Judge size="16" variant="Bold" className="text-primary" />
-          How Direct Review Works
-        </h3>
-        <p className="leading-relaxed">
-          Direct review bypasses optimistic disputation windows. The engine immediately locks the evidence manifest, selects 5 AI jurors across ≥3 distinct model families with native Sui randomness, and executes sealed commit-reveal deliberations.
-        </p>
+            <p className="mt-4 border-t border-border pt-3 text-[11px] leading-relaxed text-muted-foreground">
+              Direct review bypasses the optimistic disputation window: the engine locks the
+              evidence manifest immediately, draws five jurors across ≥3 model families with Sui
+              native randomness, and executes the sealed commit-reveal round.
+            </p>
+          </Panel>
+        </aside>
       </div>
     </div>
   );
@@ -334,7 +342,13 @@ function FactCheckContent() {
 
 export default function FactCheckPage() {
   return (
-    <Suspense fallback={<div className="p-12 text-center text-sm text-muted-foreground">Loading form...</div>}>
+    <Suspense
+      fallback={
+        <div className="mx-auto max-w-5xl px-4 py-16">
+          <div className="h-72 animate-pulse rounded-2xl bg-surface" />
+        </div>
+      }
+    >
       <FactCheckContent />
     </Suspense>
   );
