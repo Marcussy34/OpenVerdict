@@ -293,11 +293,13 @@ async function main(): Promise<void> {
         evidenceCutoffMs: now + 40_000,
         proposalDeadlineMs: now + 45_000,
         challengeDeadlineMs: now + 50_000,
-        firstCommitDeadlineMs: now + 20 * MINUTE,
-        firstRevealDeadlineMs: now + 24 * MINUTE,
-        discussionDeadlineMs: now + 27 * MINUTE,
-        secondCommitDeadlineMs: now + 38 * MINUTE,
-        secondRevealDeadlineMs: now + 44 * MINUTE,
+        // Five SERIAL live runs, each up to 240s + a repair attempt, can eat
+        // ~40 min before the first commit (canary 11 blew a 20-min window).
+        firstCommitDeadlineMs: now + 50 * MINUTE,
+        firstRevealDeadlineMs: now + 56 * MINUTE,
+        discussionDeadlineMs: now + 60 * MINUTE,
+        secondCommitDeadlineMs: now + 75 * MINUTE,
+        secondRevealDeadlineMs: now + 82 * MINUTE,
       },
     });
     console.log(`claim created: ${claimId}`);
