@@ -1170,7 +1170,7 @@ async function waitUntil(timestampMs: number, label: string): Promise<void> {
   }
 }
 
-async function waitForOnChainDeadline(
+export async function waitForOnChainDeadline(
   client: OpenVerdictSuiClient,
   timestampMs: number,
   label: string,
