@@ -6,6 +6,7 @@ import {
   useDAppKit,
   useWalletConnection,
 } from "@mysten/dapp-kit-react";
+import { isEnokiWallet, isGoogleWallet } from "@mysten/enoki";
 import {
   ArrowDown2,
   Copy,
@@ -100,11 +101,13 @@ export function WalletConnectButton() {
   if (!connection.account) {
     // Google-only onboarding: launch the Enoki zkLogin flow directly instead
     // of the generic wallet modal (which lists every installed extension).
+    // Identify the wallet by Enoki's metadata feature, NEVER by display name —
+    // any extension can register a wallet-standard wallet named "Google".
     // The modal remains only as a fallback when Enoki keys are not configured.
     const connectWithGoogle = async () => {
       const googleWallet = dAppKit.stores.$wallets
         .get()
-        .find((wallet) => /google/i.test(wallet.name));
+        .find((wallet) => isEnokiWallet(wallet) && isGoogleWallet(wallet));
       if (!googleWallet) {
         setConnectRequest((request) => request + 1);
         return;
