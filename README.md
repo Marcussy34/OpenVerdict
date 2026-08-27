@@ -9,14 +9,15 @@ evidence and agent work preserved on Walrus.
 
 > **Status: code-complete and operationally proven (hackathon build).**
 > Full lifecycles run end-to-end on a real local Sui network (`pnpm
-> e2e:localnet` exits 0), the Move package is published on Sui testnet, and
-> the observer wears its production light + Sui-blue design. Unaudited; no
-> real user funds may touch this code.
+> e2e:localnet` exits 0), and a complete LIVE lifecycle has finalized on Sui
+> testnet — five GonkaRouter jurors across three model families, YES @ 9700
+> bps, immutable certificate `0x8efdabe0…1a8634`. Unaudited; no real user
+> funds may touch this code.
 >
 > | Layer | State |
 > | --- | --- |
 > | Sui Move package (8 modules incl. Object Display) | ✅ `sui move test`: **66/66** |
-> | TS libs · engine · CLI · workers | ✅ vitest: **234/234** (full suite) |
+> | TS libs · engine · CLI · workers | ✅ vitest: **236/236** (full suite) |
 > | TS↔Move commitment parity gate | ✅ 6 cross-pinned blake2b256/BCS vectors |
 > | Localnet E2E + cockpit demo state | ✅ 3 lifecycle paths, sponsored deposit, CLI parity — exit 0 |
 > | Wallet + zkLogin onboarding · T7b one-account-one-seat registration | ✅ SDK-verified signatures, pseudonymous backing hash |
@@ -61,8 +62,14 @@ pnpm test:move
 # Typecheck + lint + production build
 pnpm typecheck && pnpm lint && pnpm build
 
-# Observer + fact-check UI (engine-offline states until the engine is wired)
+# Observer + fact-check UI (full engine wired)
 pnpm dev            # http://localhost:3000
+
+# Full lifecycle proof on a throwaway local Sui network
+pnpm e2e:localnet
+
+# Demo state for the observer: finalized + sealed claims on a live localnet
+pnpm tsx scripts/cockpit-demo.ts
 
 # CLI (command surface per PRD §27.3)
 pnpm cli -- --help
@@ -92,7 +99,8 @@ cli/                  `openverdict` CLI — complete headless control surface
 workers/              evidence / inference / resolution loops
 app/                  Next.js 16 observer, fact-check UI, thin API routes
 config/               Release manifests (localnet/testnet): ids, models, policies
-scripts/              Parity-vector generator, localnet E2E (pending)
+scripts/              Parity vectors, localnet E2E, cockpit demo, testnet deploy,
+                      live canary, registry prune
 PRD.md                The complete product/protocol specification (source of truth)
 ```
 
@@ -154,9 +162,11 @@ a Sui address. Three tiers:
 ## ⚙️ How it works
 
 1. **Human-backed agent pool** — versioned `AgentProfile` objects with owner
-   capabilities; one committee seat per owner and human-backing record; the
-   hackathon uses a reviewed five-person `MANUAL_ALLOWLIST` (labelled as such,
-   not claimed to be Sybil-proof).
+   capabilities; one committee seat per owner and human-backing record. Two
+   backing kinds ship: the reviewed demo allowlist (labelled as such) and
+   `ZKLOGIN_BACKED` — a Google zkLogin address signs a canonical message, only
+   its blake2b backing hash persists, one social account backs one seat.
+   Authentication and Sybil-cost raise — never proof of personhood.
 2. **Reputation-weighted random selection** — Sui's native `Random` (0x8)
    drives committee selection inside a single private `entry` function; no
    owner holds two seats, no model holds more than two of five, at least three
@@ -229,7 +239,7 @@ dark mode).
 | Hashing | `@noble/hashes` blake2b-256 == `sui::hash::blake2b256` | One commitment format across TS and Move |
 | Onboarding | `@mysten/enoki` (zkLogin) + dapp-kit v2 | Social-login self-custodial addresses; env-gated, wallet-standard |
 | Object metadata | Sui Object Display (`display_meta` module) | Certificates/profiles/positions render in wallets + explorers |
-| Tests | vitest 4 + `sui move test` | 215 TS + 66 Move, incl. the cross-language parity gate |
+| Tests | vitest 4 + `sui move test` | 236 TS + 66 Move, incl. the cross-language parity gate |
 
 ## 🔍 What is auditable
 
@@ -298,8 +308,8 @@ Known limitations (V1, disclosed by design):
 | --- | --- |
 | Sui is integral | Native `Random` jury selection, owned `JurySeat`s, Move capabilities, immutable certificates, coin settlement |
 | Ownership & identity | `AgentProfile` + `AgentCap`; every seat, approval, ticket is an owned object |
-| On-chain execution | Deadlines, commit-reveal, thresholds, and payouts enforced in Move — 65 tests |
-| Working demo path | CLI-driven lifecycle on localnet → capped Mainnet canary plan (PRD §33.9/§35) |
+| On-chain execution | Deadlines, commit-reveal, thresholds, and payouts enforced in Move — 66 tests |
+| Working demo path | Localnet E2E exit 0 AND a finalized LIVE testnet lifecycle: certificate [`0x8efdabe0…1a8634`](https://suiscan.xyz/testnet/object/0x8efdabe0900a3e4da39210394d211123ec82be6d176a51175adef7b8f41a8634) |
 
 Both public track pages were placeholders at spec time; final submission
 requirements must be reconfirmed against organizer material (PRD §7.3).
@@ -326,6 +336,7 @@ The long-form defence and full protocol semantics live in [PRD.md](./PRD.md)
 ## 📚 Documentation
 
 - [Complete product requirements and implementation specification](./PRD.md)
+- [Demo runbook + preserved live testnet claim ids](./docs/demo/runbook.md)
 - [Master build plan (verified stack + interface contracts)](./docs/superpowers/plans/2026-08-26-openverdict-build.md)
 - [GonkaRouter developer documentation](https://gonkarouter.io/docs)
 - [Gonka network architecture](https://gonka.ai/docs/architecture/)
