@@ -7,22 +7,34 @@ See how the verdict was reached.
 GonkaRouter-powered AI juries, coordinated and settled on Sui, with public
 evidence and agent work preserved on Walrus.
 
-> **Status: implementation in progress (hackathon build).**
-> The protocol, libraries, and observer are implemented and tested; the engine
-> wiring and localnet end-to-end run are landing next. Nothing is deployed,
-> nothing is audited, and no real user funds may touch this code.
+> **Status: code-complete and operationally proven (hackathon build).**
+> Full lifecycles run end-to-end on a real local Sui network (`pnpm
+> e2e:localnet` exits 0), the Move package is published on Sui testnet, and
+> the observer wears its production light + Sui-blue design. Unaudited; no
+> real user funds may touch this code.
 >
 > | Layer | State |
 > | --- | --- |
 > | Sui Move package (8 modules incl. Object Display) | ✅ `sui move test`: **66/66** |
-> | TS protocol · Gonka adapter · evidence · Walrus libs | ✅ vitest: **215/215** (full suite) |
+> | TS libs · engine · CLI · workers | ✅ vitest: **234/234** (full suite) |
 > | TS↔Move commitment parity gate | ✅ 6 cross-pinned blake2b256/BCS vectors |
-> | Next.js observer + fact-check UI (23 routes) | ✅ builds, typechecks, lints |
-> | Engine, storage, CLI, workers | ✅ merged — full lifecycle over the SuiGateway seam |
-> | Wallet + zkLogin onboarding · Localnet E2E | 🚧 in progress |
-> | Testnet canary · Railway deploy · live Gonka smoke | ⏳ planned (T8a/T8/T8b) |
+> | Localnet E2E + cockpit demo state | ✅ 3 lifecycle paths, sponsored deposit, CLI parity — exit 0 |
+> | Wallet + zkLogin onboarding · T7b one-account-one-seat registration | ✅ SDK-verified signatures, pseudonymous backing hash |
+> | Observer + fact-check UI (light + Sui blue redesign) | ✅ 14 routes; builds, typechecks, lints |
+> | Sui testnet package | ✅ published — ids in `config/release.testnet.json` |
+> | Live-model canary · Railway public URL | 🚧 gas top-up / builder unstick pending |
 >
-> Full specification: [PRD.md](./PRD.md) · Build plan: [docs/superpowers/plans/2026-08-26-openverdict-build.md](./docs/superpowers/plans/2026-08-26-openverdict-build.md)
+> Full specification: [PRD.md](./PRD.md) · Live status: [docs/STATUS.md](./docs/STATUS.md) · Build plan: [docs/superpowers/plans/2026-08-26-openverdict-build.md](./docs/superpowers/plans/2026-08-26-openverdict-build.md)
+
+## Screenshots
+
+Captured from the one-command cockpit demo (`pnpm tsx scripts/cockpit-demo.ts`)
+— a finalized verdict and a sealed mid-jury claim on a real local Sui chain.
+
+| | |
+| --- | --- |
+| ![Home](docs/screenshots/01-home.png) | ![Claim report](docs/screenshots/03-claim-report.png) |
+| ![Live observer](docs/screenshots/04-observer-sealed.png) | ![Agent registry](docs/screenshots/05-agents.png) |
 
 ## One-liner
 
