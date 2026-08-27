@@ -75,13 +75,17 @@
 
 ## OPEN ITEMS / next verifications
 
-1. **Worker-driven scored verdict not yet re-proven**: 3 browser claims went
-   UNRESOLVED (zero votes) from (a) short localnet ladder — FIXED, now
-   6/8/9/12/14-minute defaults in engine.ts — and (b) worker gas contention
-   (3 workers share the operator signer; equivocation stalls; ledger lists
-   per-worker gas isolation as future work). The user's next form submission
-   is the live test: expect commits+reveals+score in ~15 min. If reveals
-   still starve, options: widen further, or single-writer worker mode.
+1. **RESOLVED 2026-08-28 (late session)**: worker-driven SCORED verdict
+   proven — claim `0x8661bf53…db84` (zkLogin statement) submitted via the
+   public API reached FINALIZED_REVIEWED (state 10) in <4 min: 5/5 commits,
+   5/5 reveals (YES, avg 8020 bps), certificate `0x76264101…`. Fix chain
+   (commits f313c2e, a20eac7, 48fc86a, 1e86aad, 7486a65, fe1b6a1): tick
+   advisory-lock, gateway signer self-healing, stale-gas retry, per-claim
+   worker isolation, in-gateway approveRun serialization, factory-rebuilt
+   retries + inference-failure logging. Seven earlier claims from the debug
+   ladder sit at honest UNRESOLVED — debugging artifacts, keep or ignore.
+   NOTE: `next start` serves COMPILED lib code — after any lib/** change,
+   `pnpm build` before restarting the stack or web/workers run different code.
 2. **Railway builder flip** (user, dashboard) → then add
    `https://app-production-1a8a.up.railway.app` origin + `/`-suffixed
    redirect URI in Google console + Enoki allowed origins.

@@ -1,6 +1,6 @@
 # OpenVerdict — Product Status Snapshot
 
-> Last updated: 2026-08-27. Source of truth for claims below: the code and its
+> Last updated: 2026-08-28. Source of truth for claims below: the code and its
 > test suites (`pnpm test`, `pnpm test:move`), not this file.
 
 ## What the product is right now
@@ -30,8 +30,18 @@ operational proof and public deployments in flight.
 
 - Live testnet canary COMPLETE (2026-08-27): full lifecycle with live GonkaRouter juries — 5/5 SCHEMA_VALID across 3 model families, YES @ 9700 bps recomputed == on-chain, certificate `0x8efdabe0…1a8634` (see docs/demo/runbook.md table).
 - Live GonkaRouter inference VERIFIED 2026-08-27: account catalog = deepseek-ai/DeepSeek-V4-Flash-0731, MiniMaxAI/MiniMax-M2.7, moonshotai/Kimi-K2.6 (3 families); real completion returned id `devshard-…` (the OpenAI-compatible endpoint id shape — preserved verbatim as the Gonka Request ID). Full live jury round runs at the testnet canary.
+- Multi-process production stack PROVEN 2026-08-28: a claim submitted through
+  the public API/form reached a SCORED verdict fully worker-driven — 5/5
+  commits + reveals, round-1 threshold, certificate `0x76264101…` on localnet
+  in under 4 minutes. Getting there fixed a six-layer concurrency stack
+  (commits f313c2e…fe1b6a1): advisory-lock tick serialization, cross-process
+  profile→signer self-healing, stale-gas retry, per-claim worker error
+  isolation, in-gateway approveRun serialization (previously only the E2E
+  harness proxy had it), and factory-rebuilt transaction retries.
 - No public URL yet: four Railway builds stuck at "scheduling on Metal builder" — needs a dashboard builder flip/retry.
-- Frontend visual redesign (light + Sui blue, user-directed) in flight via a dedicated design agent.
+- Landing redesign v3 SHIPPED 2026-08-28 (Sharplink-style: Archivo type,
+  #0E76FF/#F3F3F3, globe hero docking into a live stat card, sticky protocol
+  stack, FAQ, footer claim form + rising wordmark; commit 83322e1).
 - Unaudited; hackathon-grade trust model (single run-attestor + evidence-freezer capabilities, documented).
 
 ## Keys only the user can provide
