@@ -212,8 +212,10 @@ async function main(): Promise<void> {
 
     const controller = createFakeController();
     db = createDb();
-    const engineGateway = serializeRunApprovals(
-      createSuiGateway({ client, manifest, signers: signerRegistry }),
+    const engineGateway = rebaseDeadlinesForLocalLifecycle(
+      serializeRunApprovals(
+        createSuiGateway({ client, manifest, signers: signerRegistry }),
+      ),
     );
     const engine = await createEngine({
       network: "localnet",
@@ -319,6 +321,7 @@ async function main(): Promise<void> {
   }
 }
 
+/** ONLY serializes approveRun (concurrent operator txs equivocate gas). */
 export function serializeRunApprovals(gateway: SuiGateway): SuiGateway {
   let approvalTail = Promise.resolve();
   return new Proxy(gateway, {
@@ -333,6 +336,23 @@ export function serializeRunApprovals(gateway: SuiGateway): SuiGateway {
           return result;
         };
       }
+      const value = Reflect.get(target, property, receiver) as unknown;
+      return typeof value === "function" ? value.bind(target) : value;
+    },
+  });
+}
+
+/**
+ * Localnet-lifecycle deadline rebase: at createClaim time, replace whatever
+ * deadlines the caller computed with a fixed fast ladder anchored to NOW, so
+ * long harness setup cannot drift claims into already-passed windows.
+ * LOCAL HARNESSES ONLY (E2E + cockpit) — this silently overrode the testnet
+ * canary's wide deadlines for four runs when it lived inside
+ * serializeRunApprovals; never compose it into a live-network gateway.
+ */
+export function rebaseDeadlinesForLocalLifecycle(gateway: SuiGateway): SuiGateway {
+  return new Proxy(gateway, {
+    get(target, property, receiver) {
       if (property === "createClaim") {
         return (input: Parameters<SuiGateway["createClaim"]>[0]) => {
           const now = Date.now();

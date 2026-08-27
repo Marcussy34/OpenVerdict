@@ -33,7 +33,11 @@ import {
   repositoryRoot,
   writeEngineCompatibleManifest,
 } from "./deploy-localnet";
-import { serializeRunApprovals, waitForOnChainDeadline } from "./localnet-e2e";
+import {
+  rebaseDeadlinesForLocalLifecycle,
+  serializeRunApprovals,
+  waitForOnChainDeadline,
+} from "./localnet-e2e";
 
 const AGENT_COUNT = 7;
 const runtimeManifestPath = join(repositoryRoot, ".localnet/release.runtime.json");
@@ -195,7 +199,9 @@ async function main(): Promise<void> {
       db,
       walrus: createLocalWalrusStore(join(repositoryRoot, ".localnet/walrus-local")),
       gonka: adapter,
-      suiGateway: serializeRunApprovals(createSuiGateway({ client, manifest, signers })),
+      suiGateway: rebaseDeadlinesForLocalLifecycle(
+        serializeRunApprovals(createSuiGateway({ client, manifest, signers })),
+      ),
       initialAgents: agents,
     });
 
