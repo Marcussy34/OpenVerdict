@@ -319,6 +319,8 @@ async function main(): Promise<void> {
 
     const inspection = await engine.inspect(claimId);
     await waitUntil("first reveal window", inspection.deadlines.firstCommitDeadlineMs);
+    // COMMIT_1 → REVEAL_1 transition is explicit; reveal refuses in COMMIT_1.
+    await engine.advance(claimId);
     const reveals = await engine.votesReveal(claimId, 1);
     console.log(`revealed ${reveals.length} votes`);
 
