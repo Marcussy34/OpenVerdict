@@ -206,7 +206,22 @@ export class RealSuiGateway implements SuiGateway {
     return this.executeOperator(buildLockCommitteeTransaction(this.#manifest, input));
   }
 
+  // juryRun processes seats concurrently, but every approveRun is signed by
+  // the operator whose gas coin and RunAttestorCap admit ONE transaction at a
+  // time — parallel approvals equivocate and 4 of 5 seats die ("reserved for
+  // another transaction"). Tail-chain them so approvals execute sequentially
+  // while the agent-signed parts of each seat stay parallel. (The localnet E2E
+  // harness proved this serialization as an external proxy; this is the same
+  // fix at the source.)
+  #approveTail: Promise<unknown> = Promise.resolve();
+
   async approveRun(input: GatewayApproveRunInput): Promise<RunApprovalResult> {
+    const task = this.#approveTail.then(() => this.approveRunNow(input));
+    this.#approveTail = task.catch(() => undefined);
+    return task;
+  }
+
+  private async approveRunNow(input: GatewayApproveRunInput): Promise<RunApprovalResult> {
     const operator = this.#signers.getOperator();
     const runAttestorCapId = await this.findOwnedObject(
       operator.toSuiAddress(),

@@ -1598,6 +1598,14 @@ class OpenVerdictEngine implements Engine {
     input: OracleInferenceInput,
     error: unknown,
   ): Promise<void> {
+    // Surface the underlying cause: the audit row only keeps a category
+    // (PROVIDER_ERROR etc.), which made real failures (an on-chain abort in
+    // acceptJurySeat, a Walrus read error) invisible in operations.
+    process.stderr.write(
+      `inference failed: claim ${claim.claimId.slice(0, 10)}… seat ${seat.jurySeatId.slice(0, 10)}… (${agent.manifest.modelId}): ${
+        error instanceof Error ? error.message : String(error)
+      }\n`,
+    );
     const failedAudit = terminalFailureAudit(error);
     const timestampMs = this.#now();
     const runId = failedAudit?.runId ?? deterministicId(`failed:${input.runId}`);

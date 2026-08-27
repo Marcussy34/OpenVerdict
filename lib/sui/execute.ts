@@ -31,10 +31,16 @@ export class SuiTransactionExecutionError extends Error {
 // names the exact object, so recovery can refetch it authoritatively.
 const STALE_OBJECT_PATTERN =
   /Object ID (0x[0-9a-f]+) Version \S+ Digest \S+ is not available for consumption/i;
+// Equivocation: another in-flight transaction from the same sender holds the
+// object lock (usually the shared gas coin). It clears when that tx settles.
+const RESERVED_OBJECT_PATTERN = /reserved for another transaction/i;
+
+function errorText(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
 
 function staleObjectId(error: unknown): string | undefined {
-  const message = error instanceof Error ? error.message : String(error);
-  return STALE_OBJECT_PATTERN.exec(message)?.[1];
+  return STALE_OBJECT_PATTERN.exec(errorText(error))?.[1];
 }
 
 /** Sign, execute, wait for indexing, and normalize the Sui v2 result union.
@@ -57,17 +63,28 @@ export async function executeAndWait(
       submitted = await signer.signAndExecuteTransaction({ transaction, client });
       break;
     } catch (error) {
-      const objectId = attempt < 4 ? staleObjectId(error) : undefined;
-      if (!objectId) throw error;
-      const fresh = await client.core.getObject({ objectId, include: {} });
-      transaction.setGasPayment([
-        {
-          objectId,
-          version: fresh.object.version,
-          digest: fresh.object.digest,
-        },
-      ]);
-      await new Promise((resolve) => setTimeout(resolve, 250 * attempt));
+      if (attempt >= 4) throw error;
+      const staleId = staleObjectId(error);
+      const reserved = RESERVED_OBJECT_PATTERN.test(errorText(error));
+      if (!staleId && !reserved) throw error;
+      // Once the blocking transaction settles, the coin's version has moved:
+      // the retry must rebuild with the CURRENT ref, not the cached one.
+      const gasIds = staleId
+        ? [staleId]
+        : (transaction.getData().gasData.payment ?? []).map((ref) => ref.objectId);
+      if (gasIds.length === 0) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 350 * attempt));
+      const freshRefs = await Promise.all(
+        gasIds.map(async (objectId) => {
+          const fresh = await client.core.getObject({ objectId, include: {} });
+          return {
+            objectId,
+            version: fresh.object.version,
+            digest: fresh.object.digest,
+          };
+        }),
+      );
+      transaction.setGasPayment(freshRefs);
     }
   }
   assertSuccessful(submitted);
