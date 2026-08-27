@@ -28,7 +28,7 @@ operational proof and public deployments in flight.
 
 ## What is NOT true yet
 
-- Sui TESTNET package IS published (ids in `config/release.testnet.json`, publish digest `6RfnhZDHzk7NNNvCJqT5Cf2Z4aUjddbA6hJ9WsMe7ULL`), but the live-model canary has not completed green yet (operator gas exhausted — faucet round needed).
+- Live testnet canary COMPLETE (2026-08-27): full lifecycle with live GonkaRouter juries — 5/5 SCHEMA_VALID across 3 model families, YES @ 9700 bps recomputed == on-chain, certificate `0x8efdabe0…1a8634` (see docs/demo/runbook.md table).
 - Live GonkaRouter inference VERIFIED 2026-08-27: account catalog = deepseek-ai/DeepSeek-V4-Flash-0731, MiniMaxAI/MiniMax-M2.7, moonshotai/Kimi-K2.6 (3 families); real completion returned id `devshard-…` (the OpenAI-compatible endpoint id shape — preserved verbatim as the Gonka Request ID). Full live jury round runs at the testnet canary.
 - No public URL yet: four Railway builds stuck at "scheduling on Metal builder" — needs a dashboard builder flip/retry.
 - Frontend visual redesign (light + Sui blue, user-directed) in flight via a dedicated design agent.

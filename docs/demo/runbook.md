@@ -78,13 +78,18 @@ Run one jury round; verify five real `msg_…` ids across ≥3 model families.
 
 ## Preserved demo claim (filled as completed)
 
+Completed 2026-08-27 by canary 17 — a full DIRECT_REVIEW lifecycle on Sui
+testnet with live GonkaRouter inference (5/5 SCHEMA_VALID across all three
+model families, 5 sealed commits, 5 reveals, deterministic finalize).
+
 | Item | Value |
 | --- | --- |
-| Network | — |
-| Claim object | — |
-| Committee / seats | — |
-| Evidence bundle + root | — |
-| Gonka Request IDs | — |
-| Certificate | — |
-| Truth Score | — |
-| Pool settle / payout digests | — |
+| Network | Sui **testnet** (package `0xb411210a52dad799b9b4a53e3a44b30c3c8b8a3b1981795f830166533a474c1d`) |
+| Claim object | `0xd649cececdf546a5f886b07b0517ec45bd301de06045044e79c6642298bdb9d4` |
+| Committee / seats | 5 seats, 3 model families — selection digest `EDVnWpVFjtRTqJBgv3J9dj95zL9kqSgpJAvVreaXTWHk` |
+| Evidence bundle root | `0x66aeedcb8e3f633cbe5e347a5aa15e6e517d18492913ccaadd87e482432dbcfc` |
+| Gonka Request IDs | `devshard-63948-430` (DeepSeek), `devshard-63625-928` (MiniMax), `devshard-63948-432` (DeepSeek), `devshard-63939-297` (Kimi), `devshard-63610-968` (MiniMax) |
+| Certificate | `0x8efdabe0900a3e4da39210394d211123ec82be6d176a51175adef7b8f41a8634` — [suiscan](https://suiscan.xyz/testnet/object/0x8efdabe0900a3e4da39210394d211123ec82be6d176a51175adef7b8f41a8634) |
+| Finalize digest | `3FuF8jUCkHmqN19fyFNQhTE96DsiAb4sbS4yD72Uzic3` |
+| Truth Score | **YES — 9700 bps**, off-chain recompute == on-chain value |
+| Pool settle / payout digests | exercised on localnet by `pnpm e2e:localnet` (sponsored deposit + payout); not part of the testnet canary |

@@ -44,7 +44,7 @@
 | T7b zkLogin-backed agent registration | ✅ merged e717721 (SDK signature verify, backing hash, guarded POST) |
 | Visual redesign (user-directed: light + Sui blue) | ✅ merged 3b74a9d (all 14 routes, iconsax React-19 fix, observer seat-state fix) |
 | T8 docs/env | ✅ STATUS/README/runbook truth-ups current |
-| T8a testnet canary (required) | 🚧 package PUBLISHED; canary 11 proved live inference (5/5 devshard ids, 3/5 SCHEMA_VALID); registry pruned 32→7; canary 12 running with 50-min windows |
+| T8a testnet canary (required) | ✅ COMPLETE — canary 17 exit 0: 5/5 live SCHEMA_VALID (3 families), 5 commits + 5 reveals on-chain, YES @ 9700 bps recomputed == on-chain, certificate 0x8efdabe0…1a8634 |
 | Railway deploy | ⛔ 4 builds stuck "scheduling on Metal builder" — needs dashboard builder flip (user) |
 | T8b live Gonka smoke | ✅ live API verified (catalog + real completions + request ids) |
 | T9 submission package | queued (video script ready; records after canary green) |
