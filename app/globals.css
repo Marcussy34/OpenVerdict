@@ -47,6 +47,13 @@
     --color-surface: var(--surface);
     --color-surface-2: var(--surface-2);
 
+    /* Night: the contained deep band the swarm globe lives on. */
+    --color-night: var(--night);
+    --color-night-2: var(--night-2);
+    --color-night-fg: var(--night-fg);
+    --color-night-muted: var(--night-muted);
+    --color-night-line: var(--night-line);
+
     --color-sidebar-ring: var(--sidebar-ring);
     --color-sidebar-border: var(--sidebar-border);
     --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -152,6 +159,15 @@
     --grid-line: rgb(1 24 41 / 3.2%);
     --glow-a: rgb(77 162 255 / 13%);
     --glow-b: rgb(192 230 255 / 40%);
+
+    /* --- Night band ------------------------------------------------------- */
+    /* Deep Ocean derivatives. Used ONLY inside contained dark slabs (the hero
+       swarm stage and the closing CTA) so the product identity stays light. */
+    --night: #04121f;
+    --night-2: #071e33;
+    --night-fg: #eaf4ff;
+    --night-muted: #93b6d2;
+    --night-line: rgb(133 197 255 / 16%);
 }
 
 @layer base {
@@ -253,6 +269,17 @@
     background: transparent;
 }
 
+/* Masks the leading/trailing edge of a horizontal rail (marquees). */
+.ov-fade-x {
+    mask-image: linear-gradient(
+        to right,
+        transparent 0,
+        #000 24px,
+        #000 calc(100% - 40px),
+        transparent 100%
+    );
+}
+
 /* Masks the top/bottom of a scrolling log so entries fade rather than clip. */
 .ov-fade-y {
     mask-image: linear-gradient(
@@ -262,6 +289,72 @@
         #000 calc(100% - 20px),
         transparent 100%
     );
+}
+
+/* ---------------------------------------------------------------------------
+   Night band — the contained deep slab the swarm globe is staged on.
+
+   The product identity stays light; these classes exist so exactly two
+   surfaces (the hero stage and the closing CTA) can go deep without any page
+   ever half-migrating into a dark theme.
+--------------------------------------------------------------------------- */
+
+.ov-slab {
+    background:
+        radial-gradient(118% 88% at 76% 12%, rgb(77 162 255 / 22%), transparent 60%),
+        radial-gradient(84% 70% at 8% 96%, rgb(81 69 205 / 26%), transparent 66%),
+        linear-gradient(163deg, #072033 0%, #04121f 54%, #030c17 100%);
+}
+
+/* Hairline lattice over the slab — the same engineering grid, inverted. */
+.ov-slab-grid {
+    background-image:
+        linear-gradient(to right, rgb(146 205 255 / 6%) 1px, transparent 1px),
+        linear-gradient(to bottom, rgb(146 205 255 / 6%) 1px, transparent 1px);
+    background-size: 54px 54px;
+    mask-image: radial-gradient(76% 66% at 50% 42%, #000 0, transparent 78%);
+}
+
+/* Poster plate behind the WebGL canvas: what you see before the chunk lands,
+   and the whole picture if WebGL is unavailable. */
+.ov-globe-plate {
+    background:
+        radial-gradient(circle at 33% 27%, rgb(77 162 255 / 34%), transparent 56%),
+        radial-gradient(circle at 50% 50%, #0c2f4d 0%, #06192b 62%, #030f1c 100%);
+    box-shadow:
+        0 0 110px -28px rgb(77 162 255 / 62%),
+        inset 0 0 60px -22px rgb(192 230 255 / 30%);
+}
+
+/* Heads-up display chips floating over the globe. */
+.ov-hud-chip {
+    border-radius: 0.7rem;
+    border: 1px solid rgb(255 255 255 / 12%);
+    background: rgb(5 20 34 / 68%);
+    padding: 0.4rem 0.6rem;
+    backdrop-filter: blur(10px);
+    box-shadow: 0 10px 28px -14px rgb(0 0 0 / 80%);
+}
+.ov-hud-stem {
+    display: block;
+    margin-inline: auto;
+    width: 1px;
+    height: 18px;
+    background: linear-gradient(to bottom, rgb(255 255 255 / 42%), transparent);
+}
+
+/* Glass field inside a night slab — inputs, wells and secondary panels. */
+.ov-night-field {
+    border-color: rgb(255 255 255 / 12%) !important;
+    background: rgb(255 255 255 / 5%) !important;
+    color: var(--night-fg) !important;
+}
+.ov-night-field::placeholder {
+    color: rgb(147 182 210 / 65%);
+}
+.ov-night-field:focus-visible {
+    border-color: rgb(77 162 255 / 55%) !important;
+    background: rgb(255 255 255 / 8%) !important;
 }
 
 /* ---------------------------------------------------------------------------
@@ -349,6 +442,22 @@
     animation: ov-rise 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
+/* Seamless rail: the track holds the list twice, so -50% loops invisibly. */
+@keyframes ov-marquee {
+    from {
+        transform: translateX(0);
+    }
+    to {
+        transform: translateX(-50%);
+    }
+}
+.ov-marquee {
+    animation: ov-marquee 46s linear infinite;
+}
+.ov-marquee:hover {
+    animation-play-state: paused;
+}
+
 @media (prefers-reduced-motion: reduce) {
     *,
     *::before,
@@ -364,5 +473,10 @@
     }
     .ov-lift:hover {
         transform: none;
+    }
+    /* The rail parks at its start instead of snapping to the loop point. */
+    .ov-marquee {
+        animation: none !important;
+        transform: none !important;
     }
 }

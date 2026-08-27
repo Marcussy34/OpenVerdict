@@ -93,7 +93,9 @@ export function Pipeline({ className }: { className?: string }) {
           strokeOpacity="0.45"
           strokeWidth="1"
           vectorEffect="non-scaling-stroke"
-          className={reduce ? undefined : "ov-flow"}
+          // The dash pattern is static; only its march is dropped, by the
+          // prefers-reduced-motion block in globals.css.
+          className="ov-flow"
         />
       </svg>
 
@@ -103,10 +105,14 @@ export function Pipeline({ className }: { className?: string }) {
           return (
             <motion.li
               key={stage.index}
-              initial={reduce ? false : { opacity: 0, y: 16 }}
-              whileInView={reduce ? undefined : { opacity: 1, y: 0 }}
+              initial={{ opacity: 0, y: 16 }}
+              whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true, margin: "0px 0px 20% 0px" }}
-              transition={{ duration: 0.5, delay: i * 0.07, ease: [0.22, 1, 0.36, 1] }}
+              transition={{
+                duration: reduce ? 0 : 0.5,
+                delay: reduce ? 0 : i * 0.07,
+                ease: [0.22, 1, 0.36, 1],
+              }}
               className="ov-edge ov-lift relative flex h-full flex-col gap-3 rounded-2xl border border-border bg-card p-4"
             >
               <div className="flex items-center justify-between gap-2">

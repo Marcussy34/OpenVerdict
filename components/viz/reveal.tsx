@@ -31,10 +31,17 @@ export function Reveal({
   return (
     <Comp
       className={className}
-      initial={reduce ? false : { opacity: 0, y }}
-      whileInView={reduce ? undefined : { opacity: 1, y: 0 }}
+      // The reduced-motion branch lives in the TRANSITION, never in `initial`:
+      // `useReducedMotion()` is null on the server and true on the client's
+      // first render, so branching on the rendered style hydrates mismatched.
+      initial={{ opacity: 0, y }}
+      whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once, margin: "0px 0px 20% 0px" }}
-      transition={{ duration: 0.55, delay, ease: [0.22, 1, 0.36, 1] }}
+      transition={{
+        duration: reduce ? 0 : 0.55,
+        delay: reduce ? 0 : delay,
+        ease: [0.22, 1, 0.36, 1],
+      }}
     >
       {children}
     </Comp>

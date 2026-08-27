@@ -92,9 +92,9 @@ export function PhaseRail({ currentPhase, className = "" }: PhaseRailProps) {
           aria-hidden
           className="absolute top-[52px] left-[calc(8.33%+1.25rem)] hidden h-0.5 origin-left rounded-full bg-gradient-to-r from-yes to-sea lg:block"
           style={{ maxWidth: "calc(83.34% - 2.5rem)" }}
-          initial={reduce ? false : { width: 0 }}
+          initial={{ width: 0 }}
           animate={{ width: `calc((83.34% - 2.5rem) * ${fill / 100})` }}
-          transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
+          transition={{ duration: reduce ? 0 : 0.8, ease: [0.22, 1, 0.36, 1] }}
         />
 
         <ol className="relative grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">

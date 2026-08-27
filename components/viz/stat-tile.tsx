@@ -1,8 +1,8 @@
 "use client";
 
 import * as React from "react";
+import NumberFlow from "@number-flow/react";
 import { cn } from "@/lib/utils";
-import { useCountUp } from "./use-count-up";
 import type { IconComponent } from "@/components/icons";
 
 const TONE_TEXT: Record<string, string> = {
@@ -49,8 +49,9 @@ export function StatTile({
   animate?: boolean;
 }) {
   const numeric = typeof value === "number" ? value : null;
-  const counted = useCountUp(animate ? numeric : null);
-  const shown = numeric === null ? value : animate ? Math.round(counted) : numeric;
+  // NumberFlow rolls each digit independently and honours reduced-motion itself.
+  const shown =
+    numeric === null ? value : animate ? <NumberFlow value={numeric} /> : numeric;
 
   return (
     <div
@@ -59,6 +60,11 @@ export function StatTile({
         className,
       )}
     >
+      {/* Brand wash that warms on hover — the tile answers the pointer. */}
+      <span
+        aria-hidden
+        className="pointer-events-none absolute inset-x-0 -top-16 h-24 bg-[radial-gradient(60%_100%_at_50%_100%,var(--glow-a),transparent_70%)] opacity-0 transition-opacity duration-300 group-hover:opacity-100"
+      />
       <div className="flex items-start justify-between gap-2">
         <span className="min-w-0 truncate font-mono text-[10px] font-semibold tracking-[0.14em] text-muted-foreground uppercase">
           {label}

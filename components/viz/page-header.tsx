@@ -4,6 +4,7 @@ import { ArrowLeft2,
   type IconComponent,
 } from "@/components/icons";
 import { cn } from "@/lib/utils";
+import { GlobeMotif } from "./globe-motif";
 
 /**
  * One page header for every route: optional breadcrumb, an icon plate, an
@@ -34,7 +35,10 @@ export function PageHeader({
   children?: React.ReactNode;
 }) {
   return (
-    <div className={cn("border-b border-border pb-6", className)}>
+    <div className={cn("relative isolate border-b border-border pb-6", className)}>
+      {/* Faint globe echo, right-aligned behind the title block. */}
+      <GlobeMotif className="top-1/2 right-2 -z-10 hidden size-[260px] -translate-y-1/2 opacity-[0.16] xl:block" />
+
       {backHref && (
         <Link
           href={backHref}

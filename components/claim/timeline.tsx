@@ -179,11 +179,10 @@ export function ClaimTimeline({ claim }: TimelineProps) {
       <motion.div
         aria-hidden
         className="absolute top-3 left-[13px] w-0.5 origin-top rounded-full bg-gradient-to-b from-yes via-yes to-sea"
-        initial={reduce ? false : { height: 0 }}
-        whileInView={reduce ? undefined : { height: `calc(${fillPercent}% - 0px)` }}
+        initial={{ height: 0 }}
+        whileInView={{ height: `calc(${fillPercent}% - 0px)` }}
         viewport={{ once: true }}
-        transition={{ duration: 0.9, ease: [0.22, 1, 0.36, 1] }}
-        style={reduce ? { height: `${fillPercent}%` } : undefined}
+        transition={{ duration: reduce ? 0 : 0.9, ease: [0.22, 1, 0.36, 1] }}
       />
 
       <ol className="space-y-3">
@@ -193,10 +192,14 @@ export function ClaimTimeline({ claim }: TimelineProps) {
             <motion.li
               key={step.id}
               className="relative"
-              initial={reduce ? false : { opacity: 0, x: 8 }}
-              whileInView={reduce ? undefined : { opacity: 1, x: 0 }}
+              initial={{ opacity: 0, x: 8 }}
+              whileInView={{ opacity: 1, x: 0 }}
               viewport={{ once: true, margin: "0px 0px 20% 0px" }}
-              transition={{ duration: 0.4, delay: idx * 0.04, ease: [0.22, 1, 0.36, 1] }}
+              transition={{
+                duration: reduce ? 0 : 0.4,
+                delay: reduce ? 0 : idx * 0.04,
+                ease: [0.22, 1, 0.36, 1],
+              }}
             >
               {/* Node */}
               <span

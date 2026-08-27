@@ -27,9 +27,13 @@ export function VerdictSpotlight({ claim }: { claim: ClaimInspection }) {
 
   return (
     <motion.aside
-      initial={reduce ? false : { opacity: 0, y: 18 }}
-      animate={reduce ? undefined : { opacity: 1, y: 0 }}
-      transition={{ duration: 0.65, delay: 0.12, ease: [0.22, 1, 0.36, 1] }}
+      initial={{ opacity: 0, y: 18 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{
+        duration: reduce ? 0 : 0.65,
+        delay: reduce ? 0 : 0.12,
+        ease: [0.22, 1, 0.36, 1],
+      }}
       className="ov-edge relative isolate overflow-hidden rounded-3xl border border-border bg-card"
     >
       <div

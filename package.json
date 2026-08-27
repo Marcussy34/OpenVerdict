@@ -32,6 +32,8 @@
     "@mysten/sui": "^2.26.2",
     "@mysten/walrus": "^1.2.19",
     "@noble/hashes": "^2.3.0",
+    "@number-flow/react": "^0.6.2",
+    "@react-three/fiber": "^9.7.0",
     "@tanstack/react-query": "^5.102.5",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
@@ -49,6 +51,7 @@
     "react-dom": "19.2.8",
     "shadcn": "^4.19.0",
     "tailwind-merge": "^3.6.0",
+    "three": "^0.185.1",
     "zod": "^4.4.3"
   },
   "devDependencies": {
@@ -58,6 +61,7 @@
     "@types/pg": "^8.23.1",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.5",
+    "@types/three": "^0.185.4",
     "eslint": "^9.39.5",
     "eslint-config-next": "16.3.3",
     "tailwindcss": "^4.3.3",
