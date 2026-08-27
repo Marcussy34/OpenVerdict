@@ -311,6 +311,9 @@ async function main(): Promise<void> {
     const selectedAtMs = Date.now();
     const committee = await engine.selectCommittee(claimId);
     console.log(`committee selected in ${committee.digest}`);
+    // Idempotent re-freeze AFTER selection binds each seat to the evidence
+    // root (jury::commit_vote aborts 21 E_EVIDENCE_NOT_BOUND otherwise).
+    await engine.evidenceFreeze(claimId, 1);
 
     const jury = await engine.juryRun(claimId, 1);
     for (const run of jury.runs) {
