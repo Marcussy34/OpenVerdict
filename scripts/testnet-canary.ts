@@ -155,7 +155,7 @@ async function main(): Promise<void> {
   const underfunded: string[] = [];
   for (const address of signers.listAgentAddresses()) {
     const balance = await client.core.getBalance({ owner: address });
-    if (BigInt(balance.balance.balance ?? 0) < 5_000_000n) underfunded.push(address);
+    if (BigInt(balance.balance.balance ?? 0) < 15_000_000n) underfunded.push(address);
   }
   if (underfunded.length === 0) {
     console.log("agents already funded; skipping fund step");
