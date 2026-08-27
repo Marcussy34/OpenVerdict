@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { AgentCard } from "@/components/agents/agent-card";
+import { ZkLoginRegistrationCard } from "@/components/agents/zklogin-registration-card";
 import type { AgentDirectoryEntry } from "@/lib/engine/contract";
 import {
   Profile2User,
@@ -104,6 +105,8 @@ export default function AgentsPage() {
           </p>
         </div>
       </div>
+
+      <ZkLoginRegistrationCard onRegistered={loadAgents} />
 
       {/* Search & Filter Bar */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4">

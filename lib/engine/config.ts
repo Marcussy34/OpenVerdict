@@ -8,6 +8,7 @@ import type { AgentManifest } from "../protocol";
 import type { DbHandle } from "../storage";
 import type { OpenVerdictSuiClient, SignerRegistry, SuiGateway } from "../sui";
 import type { WalrusStore } from "../walrus";
+import type { ZkLoginVerifier } from "./zklogin";
 
 export interface EngineAgentConfig {
   manifest: AgentManifest;
@@ -29,6 +30,10 @@ export interface EngineConfig {
   signers?: SignerRegistry;
   suiGateway?: SuiGateway;
   initialAgents?: EngineAgentConfig[];
+  /** Stub in tests; defaults to Mysten SDK verification through GraphQL. */
+  zkLoginVerifier?: ZkLoginVerifier;
+  /** Required override for localnet; testnet/mainnet use Mysten's network URL. */
+  zkLoginGraphqlUrl?: string;
   retrievalPolicy?: RetrievalPolicy;
   retrieve?: (
     url: string,

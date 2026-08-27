@@ -2,19 +2,28 @@ import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PGlite } from "@electric-sql/pglite";
-import { afterEach, describe, expect, it } from "vitest";
+import { Ed25519Keypair } from "@mysten/sui/keypairs/ed25519";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { createFakeGonkaAdapter } from "../gonka";
-import { blake2b256, toHex, type AgentManifest } from "../protocol";
-import { createDb } from "../storage";
+import { blake2b256, fromHex, toHex, type AgentManifest } from "../protocol";
+import { createDb, createRepository } from "../storage";
 import {
   FakeSuiGateway,
+  SignerRegistry,
+  fakeId,
+  type BoundAgentSigner,
   type GatewayAcceptSeatInput,
   type GatewayBindEvidenceInput,
   type FakeSuiAgent,
   type ReleaseManifest,
 } from "../sui";
 import { createLocalWalrusStore } from "../walrus";
-import { createEngine, type EngineAgentConfig } from "./index";
+import {
+  buildZkLoginBackingMessage,
+  createEngine,
+  EngineValidationError,
+  type EngineAgentConfig,
+} from "./index";
 
 const databases: PGlite[] = [];
 
@@ -169,6 +178,217 @@ describe("headless engine", () => {
     expect((await setup.engine.report(claimId)).finalRoundVotes).toHaveLength(5);
   });
 });
+
+describe("zkLogin-backed agent registration", () => {
+  const zkLoginAddress = `0x${"ab".repeat(32)}`;
+  const signature = "c2lnbmF0dXJl";
+
+  it("builds the exact v1 canonical backing message", () => {
+    expect(
+      new TextDecoder().decode(
+        buildZkLoginBackingMessage(zkLoginAddress, "testnet"),
+      ),
+    ).toBe(
+      `OpenVerdict agent backing v1\naddress: ${zkLoginAddress}\nnetwork: testnet`,
+    );
+  });
+
+  it("verifies, registers, and persists a ZKLOGIN_BACKED agent", async () => {
+    const setup = await registrationSetup({ verifierResult: true });
+
+    const result = await setup.engine.registerZkBackedAgent({
+      zkLoginAddress,
+      signature,
+      modelId: "model-b",
+      role: "INVESTIGATOR",
+    });
+
+    const expectedBackingHash = toHex(blake2b256(fromHex(zkLoginAddress)));
+    expect(setup.verify).toHaveBeenCalledOnce();
+    expect(setup.verify).toHaveBeenCalledWith({
+      zkLoginAddress,
+      message: buildZkLoginBackingMessage(zkLoginAddress, "localnet"),
+      signature,
+    });
+    expect(result).toEqual({
+      agentProfileId: setup.gateway.agents[1]!.agentProfileId,
+      humanBackingHash: expectedBackingHash,
+      backingKind: "ZKLOGIN_BACKED",
+      digest: "fake-0001-register_agent",
+    });
+    expect(setup.gateway.registrations).toHaveLength(1);
+    expect(setup.gateway.registrations[0]).toMatchObject({
+      agentIndex: 1,
+      bondAmount: 1,
+      manifestBlobId: expect.any(String),
+    });
+    expect(toHex(setup.gateway.registrations[0]!.humanBackingHash)).toBe(
+      expectedBackingHash,
+    );
+
+    const saved = await createRepository(setup.db).getAgentManifest(
+      result.agentProfileId,
+    );
+    expect(saved).toMatchObject({
+      role: "INVESTIGATOR",
+      agentCapId: setup.gateway.agents[1]!.agentCapId,
+      active: true,
+      manifest: {
+        agentProfileId: result.agentProfileId,
+        owner: setup.gateway.agents[1]!.owner,
+        humanAttestationHash: expectedBackingHash,
+        humanVerificationProvider: "zklogin:enoki",
+        modelId: "model-b",
+        providerId: "gonkarouter",
+      },
+    });
+  });
+
+  it("rejects a bad zkLogin signature before registration", async () => {
+    const setup = await registrationSetup({ verifierResult: false });
+
+    await expect(
+      setup.engine.registerZkBackedAgent({
+        zkLoginAddress,
+        signature,
+        modelId: "model-a",
+        role: "SKEPTIC",
+      }),
+    ).rejects.toThrow("zkLogin signature is invalid");
+    expect(setup.gateway.registrations).toHaveLength(0);
+  });
+
+  it("rejects an active duplicate human backing", async () => {
+    const setup = await registrationSetup({ verifierResult: true });
+    const request = {
+      zkLoginAddress,
+      signature,
+      modelId: "model-a",
+      role: "SOURCE_AUTHENTICITY",
+    } as const;
+
+    await setup.engine.registerZkBackedAgent(request);
+
+    await expect(setup.engine.registerZkBackedAgent(request)).rejects.toThrow(
+      "one social account can back only one active jury seat",
+    );
+    expect(setup.gateway.registrations).toHaveLength(1);
+  });
+
+  it("rejects model and role values outside the manifest policy", async () => {
+    const setup = await registrationSetup({ verifierResult: true });
+
+    await expect(
+      setup.engine.registerZkBackedAgent({
+        zkLoginAddress,
+        signature,
+        modelId: "unknown-model",
+        role: "SKEPTIC",
+      }),
+    ).rejects.toThrow(EngineValidationError);
+    await expect(
+      setup.engine.registerZkBackedAgent({
+        zkLoginAddress,
+        signature,
+        modelId: "model-a",
+        role: "ANALYST",
+      }),
+    ).rejects.toThrow(EngineValidationError);
+    expect(setup.verify).not.toHaveBeenCalled();
+  });
+
+  it("rejects a non-canonical Sui address before verification", async () => {
+    const setup = await registrationSetup({ verifierResult: true });
+
+    await expect(
+      setup.engine.registerZkBackedAgent({
+        zkLoginAddress: "0xabc",
+        signature,
+        modelId: "model-a",
+        role: "SKEPTIC",
+      }),
+    ).rejects.toThrow("canonical lowercase 32-byte Sui address");
+    expect(setup.verify).not.toHaveBeenCalled();
+  });
+
+  it("rejects registration after deterministic signer capacity is exhausted", async () => {
+    const setup = await registrationSetup({
+      verifierResult: true,
+      signerCount: 1,
+      initialAgentCount: 1,
+    });
+
+    await expect(
+      setup.engine.registerZkBackedAgent({
+        zkLoginAddress,
+        signature,
+        modelId: "model-a",
+        role: "SKEPTIC",
+      }),
+    ).rejects.toThrow("operational agent signer capacity exhausted");
+    expect(setup.gateway.registrations).toHaveLength(0);
+  });
+});
+
+class RecordingFakeSuiGateway extends FakeSuiGateway {
+  readonly registrations: Parameters<FakeSuiGateway["registerAgent"]>[0][] = [];
+
+  override async registerAgent(
+    input: Parameters<FakeSuiGateway["registerAgent"]>[0],
+  ) {
+    this.registrations.push(input);
+    return super.registerAgent(input);
+  }
+}
+
+async function registrationSetup(options: {
+  verifierResult: boolean;
+  signerCount?: number;
+  initialAgentCount?: number;
+}) {
+  const directory = await mkdtemp(join(tmpdir(), "openverdict-registration-"));
+  const manifest = testManifest();
+  const manifestPath = join(directory, "release.json");
+  await writeFile(manifestPath, JSON.stringify(manifest));
+  const db = createDb({ dataDir: "memory://" });
+  if (!(db instanceof PGlite)) throw new Error("expected pglite");
+  databases.push(db);
+
+  const signers = testSignerRegistry(options.signerCount ?? 3);
+  const agents = signers.listAgents().map<FakeSuiAgent>((agent, index) => ({
+    agentProfileId: fakeId(`registration-profile:${index}`),
+    owner: agent.address,
+    agentCapId: fakeId(`registration-cap:${index}`),
+    modelId: manifest.gonka.models[index % manifest.gonka.models.length]!,
+    role: "SKEPTIC",
+  }));
+  const gateway = new RecordingFakeSuiGateway(agents);
+  const verify = vi.fn(async () => options.verifierResult);
+  const initialAgentCount = options.initialAgentCount ?? 1;
+  const engine = await createEngine({
+    network: "localnet",
+    manifestPath,
+    db,
+    walrus: createLocalWalrusStore(join(directory, "walrus")),
+    gonka: createFakeGonkaAdapter([]),
+    suiGateway: gateway,
+    signers,
+    initialAgents: agents.slice(0, initialAgentCount).map(toEngineAgent),
+    zkLoginVerifier: { verify },
+    now: () => Date.parse("2026-08-27T00:00:00.000Z"),
+  });
+  return { engine, db, gateway, verify };
+}
+
+function testSignerRegistry(count: number): SignerRegistry {
+  const signers: BoundAgentSigner[] = Array.from({ length: count }, (_, index) => {
+    const keypair = Ed25519Keypair.fromSecretKey(
+      blake2b256(new TextEncoder().encode(`registration-signer:${index}`)),
+    );
+    return { keypair, address: keypair.toSuiAddress(), index };
+  });
+  return new SignerRegistry(undefined, signers);
+}
 
 async function engineSetup(
   gateway: FakeSuiGateway,

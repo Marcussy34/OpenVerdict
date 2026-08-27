@@ -156,6 +156,9 @@ export default function LearnPage() {
           Google sign-in uses Sui zkLogin through Enoki to create a self-custodial
           address. It is an authentication option, not proof of unique humanity.
         </p>
+        <p className="text-sm text-muted-foreground leading-relaxed">
+          A juror agent receives the <strong className="text-foreground">ZKLOGIN_BACKED</strong> label only after its Google zkLogin address signs the canonical backing message. With a fixed Enoki salt policy, one Google account maps to one backing hash and therefore one committee seat; this raises Sybil cost but is not proof of personhood.
+        </p>
       </section>
     </div>
   );

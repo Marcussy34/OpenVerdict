@@ -1,4 +1,7 @@
 import { randomBytes, randomUUID } from "node:crypto";
+import { parseSerializedSignature } from "@mysten/sui/cryptography";
+import { SuiGraphQLClient } from "@mysten/sui/graphql";
+import { isValidPersonalMessageSignature } from "@mysten/sui/verify";
 import {
   buildEvidenceManifest,
   canonicalizeHtml,
@@ -76,16 +79,29 @@ import type {
   ResolutionEventSource,
   ResolutionEventVisibility,
   TxResult,
+  ZkBackedRegistrationRequest,
+  ZkBackedRegistrationResult,
 } from "./contract";
 import type { EngineAgentConfig, EngineConfig } from "./config";
 import {
   ClaimNotFoundError,
   EngineStateError,
   EngineValidationError,
+  ZkLoginVerificationError,
 } from "./errors";
+import {
+  buildZkLoginBackingMessage,
+  ZKLOGIN_AGENT_ROLES,
+  type ZkLoginAgentRole,
+  type ZkLoginVerificationInput,
+  type ZkLoginVerifier,
+} from "./zklogin";
 
 const ZERO_OBJECT_ID = `0x${"00".repeat(32)}` as const;
 const MAX_LOCAL_WALRUS_EPOCH = Number.MAX_SAFE_INTEGER;
+const SUI_ADDRESS_PATTERN = /^0x[0-9a-f]{64}$/;
+const MAX_ZKLOGIN_SIGNATURE_LENGTH = 16_384;
+const ZKLOGIN_VERIFICATION_PROVIDER = "zklogin:enoki";
 const DEFAULT_EVIDENCE_POLICY: RetrievalPolicy = {
   maxBytes: 5_000_000,
   maxRedirects: 3,
@@ -108,6 +124,8 @@ interface EngineDependencies {
   retrieve: NonNullable<EngineConfig["retrieve"]>;
   retrievalPolicy: RetrievalPolicy;
   eventPollIntervalMs: number;
+  zkLoginVerifier: ZkLoginVerifier;
+  operationalAgentSlots: readonly { address: string; index: number }[];
 }
 
 export async function createEngine(config: EngineConfig): Promise<Engine> {
@@ -120,6 +138,8 @@ export async function createEngine(config: EngineConfig): Promise<Engine> {
   await migrate(config.db);
   const repository = createRepository(config.db);
   const gateway = resolveGateway(config, manifest);
+  const operationalAgentSlots =
+    config.signers?.listAgents().map(({ address, index }) => ({ address, index })) ?? [];
   const engine = new OpenVerdictEngine({
     repository,
     manifest,
@@ -130,6 +150,8 @@ export async function createEngine(config: EngineConfig): Promise<Engine> {
     retrieve: config.retrieve ?? retrieveEvidence,
     retrievalPolicy: config.retrievalPolicy ?? manifestEvidencePolicy(manifest),
     eventPollIntervalMs: config.eventPollIntervalMs ?? 1_000,
+    zkLoginVerifier: config.zkLoginVerifier ?? createDefaultZkLoginVerifier(config),
+    operationalAgentSlots,
   });
   await engine.initialize(config.initialAgents ?? []);
   return engine;
@@ -145,6 +167,9 @@ class OpenVerdictEngine implements Engine {
   readonly #retrieve: NonNullable<EngineConfig["retrieve"]>;
   readonly #retrievalPolicy: RetrievalPolicy;
   readonly #eventPollIntervalMs: number;
+  readonly #zkLoginVerifier: ZkLoginVerifier;
+  readonly #operationalAgentSlots: readonly { address: string; index: number }[];
+  #registrationTail: Promise<void> = Promise.resolve();
 
   constructor(dependencies: EngineDependencies) {
     this.#repository = dependencies.repository;
@@ -156,6 +181,8 @@ class OpenVerdictEngine implements Engine {
     this.#retrieve = dependencies.retrieve;
     this.#retrievalPolicy = dependencies.retrievalPolicy;
     this.#eventPollIntervalMs = dependencies.eventPollIntervalMs;
+    this.#zkLoginVerifier = dependencies.zkLoginVerifier;
+    this.#operationalAgentSlots = dependencies.operationalAgentSlots;
   }
 
   async initialize(agents: EngineAgentConfig[]): Promise<void> {
@@ -201,6 +228,38 @@ class OpenVerdictEngine implements Engine {
     );
     await this.ingestFactCheckEvidence(claim, req);
     return { claimId: claim.claimId };
+  }
+
+  async registerZkBackedAgent(
+    req: ZkBackedRegistrationRequest,
+  ): Promise<ZkBackedRegistrationResult> {
+    validateZkBackedRegistrationRequest(req, this.#manifest);
+    const message = buildZkLoginBackingMessage(
+      req.zkLoginAddress,
+      this.#manifest.network,
+    );
+
+    let verified: boolean;
+    try {
+      verified = await this.#zkLoginVerifier.verify({
+        zkLoginAddress: req.zkLoginAddress,
+        message,
+        signature: req.signature,
+      });
+    } catch (error) {
+      throw new ZkLoginVerificationError(
+        "zkLogin signature verification is temporarily unavailable",
+        { cause: error },
+      );
+    }
+    if (!verified) {
+      throw new EngineValidationError("zkLogin signature is invalid for the backing message");
+    }
+
+    const humanBackingHash = toHex(blake2b256(fromHex(req.zkLoginAddress)));
+    return this.withRegistrationLock(() =>
+      this.registerVerifiedZkBackedAgent(req, humanBackingHash),
+    );
   }
 
   async claimCreate(req: ClaimCreateRequest): Promise<{ claimId: string; digest: string }> {
@@ -1810,6 +1869,113 @@ class OpenVerdictEngine implements Engine {
     };
   }
 
+  private async registerVerifiedZkBackedAgent(
+    req: ValidatedZkBackedRegistrationRequest,
+    humanBackingHash: `0x${string}`,
+  ): Promise<ZkBackedRegistrationResult> {
+    const agents = await this.#repository.listAgentManifests();
+    if (
+      agents.some(
+        (agent) =>
+          agent.active &&
+          agent.manifest.humanAttestationHash.toLowerCase() ===
+            humanBackingHash,
+      )
+    ) {
+      throw new EngineValidationError(
+        "an active agent already uses this backing; one social account can back only one active jury seat",
+      );
+    }
+
+    // Demo signers are a fixed deterministic pool. Never reuse a slot whose
+    // operational address already appears in a persisted agent manifest.
+    const usedOwners = new Set(
+      agents.map((agent) => agent.manifest.owner.toLowerCase()),
+    );
+    const slot = this.#operationalAgentSlots.find(
+      (candidate) => !usedOwners.has(candidate.address.toLowerCase()),
+    );
+    if (!slot) {
+      throw new EngineValidationError(
+        `operational agent signer capacity exhausted (${this.#operationalAgentSlots.length} deterministic slots configured)`,
+      );
+    }
+
+    // Persist only the pseudonymous backing hash; the social address and its
+    // signature are used for authentication and deliberately not stored.
+    const manifestBytes = canonicalJsonBytes({
+      backingKind: "ZKLOGIN_BACKED",
+      humanBackingHash,
+      humanVerificationProvider: ZKLOGIN_VERIFICATION_PROVIDER,
+      modelId: req.modelId,
+      network: this.#manifest.network,
+      operationalOwner: slot.address,
+      role: req.role,
+      version: "1",
+    });
+    const manifestHashBytes = blake2b256(manifestBytes);
+    const manifestUpload = await this.#walrus.put(manifestBytes, {
+      identifier: `agent-${humanBackingHash.slice(2, 18)}.json`,
+    });
+    const result = await this.#gateway.registerAgent({
+      agentIndex: slot.index,
+      bondAmount: 1,
+      manifestHash: manifestHashBytes,
+      manifestBlobId: manifestUpload.blobId,
+      modelHash: blake2b256(new TextEncoder().encode(req.modelId)),
+      roleHash: blake2b256(
+        new TextEncoder().encode(`OPENVERDICT_ROLE_${req.role}`),
+      ),
+      humanBackingHash: fromHex(humanBackingHash),
+    });
+
+    const timestamp = this.isoNow();
+    const manifest: AgentManifest = {
+      agentProfileId: result.agentProfileId as `0x${string}`,
+      owner: result.owner as `0x${string}`,
+      humanAttestationHash: humanBackingHash,
+      humanVerificationProvider: ZKLOGIN_VERIFICATION_PROVIDER,
+      version: "1",
+      manifestBlobId: manifestUpload.blobId,
+      manifestHash: toHex(manifestHashBytes),
+      promptHash: deterministicId(`prompt:v1:${req.role}`),
+      modelId: req.modelId,
+      providerId: "gonkarouter",
+      toolPolicyHash: deterministicId("tools:v1"),
+      evidencePolicyHash: evidencePolicyId(this.#manifest),
+      publicKey: result.owner,
+      registeredAtMs: this.#now(),
+      registeredCheckpoint: result.checkpoint ?? 0,
+    };
+    await this.#repository.saveAgentManifest({
+      manifest,
+      role: req.role,
+      ...(result.agentCapId === undefined
+        ? {}
+        : { agentCapId: result.agentCapId }),
+      active: true,
+      reputation: {},
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    });
+
+    return {
+      agentProfileId: result.agentProfileId,
+      humanBackingHash,
+      backingKind: "ZKLOGIN_BACKED",
+      digest: result.digest,
+    };
+  }
+
+  private async withRegistrationLock<T>(operation: () => Promise<T>): Promise<T> {
+    const result = this.#registrationTail.then(operation);
+    this.#registrationTail = result.then(
+      () => undefined,
+      () => undefined,
+    );
+    return result;
+  }
+
   private async requiredCommittee(claimId: string): Promise<CommitteeRecord> {
     const committee = await this.#repository.getCommitteeForClaim(claimId);
     if (!committee) throw new EngineStateError("claim has no selected committee");
@@ -2066,6 +2232,98 @@ class OpenVerdictEngine implements Engine {
 
   private isoNow(): string {
     return new Date(this.#now()).toISOString();
+  }
+}
+
+type ValidatedZkBackedRegistrationRequest = ZkBackedRegistrationRequest & {
+  zkLoginAddress: `0x${string}`;
+  role: ZkLoginAgentRole;
+};
+
+function validateZkBackedRegistrationRequest(
+  request: ZkBackedRegistrationRequest,
+  manifest: ReleaseManifest,
+): asserts request is ValidatedZkBackedRegistrationRequest {
+  if (
+    typeof request.zkLoginAddress !== "string" ||
+    !SUI_ADDRESS_PATTERN.test(request.zkLoginAddress)
+  ) {
+    throw new EngineValidationError(
+      "zkLoginAddress must be a canonical lowercase 32-byte Sui address",
+    );
+  }
+  if (
+    typeof request.signature !== "string" ||
+    request.signature.length === 0 ||
+    request.signature.length > MAX_ZKLOGIN_SIGNATURE_LENGTH ||
+    !/^[A-Za-z0-9+/]+={0,2}$/.test(request.signature)
+  ) {
+    throw new EngineValidationError("signature must be a bounded base64 string");
+  }
+  if (
+    typeof request.modelId !== "string" ||
+    !manifest.gonka.models.includes(request.modelId)
+  ) {
+    throw new EngineValidationError(
+      "modelId must be present in the release manifest catalog",
+    );
+  }
+  if (typeof request.role !== "string" || !isZkLoginAgentRole(request.role)) {
+    throw new EngineValidationError(
+      `role must be one of ${ZKLOGIN_AGENT_ROLES.join(", ")}`,
+    );
+  }
+}
+
+function isZkLoginAgentRole(role: string): role is ZkLoginAgentRole {
+  return ZKLOGIN_AGENT_ROLES.some((candidate) => candidate === role);
+}
+
+function createDefaultZkLoginVerifier(config: EngineConfig): ZkLoginVerifier {
+  const configuredUrl = config.zkLoginGraphqlUrl?.trim();
+  const graphqlUrl =
+    configuredUrl ||
+    (config.network === "localnet"
+      ? undefined
+      : `https://sui-${config.network}.mystenlabs.com/graphql`);
+  return new MystenSdkZkLoginVerifier(config.network, graphqlUrl);
+}
+
+/** Uses the SDK helper, which delegates zkLogin JWK/epoch checks to GraphQL. */
+class MystenSdkZkLoginVerifier implements ZkLoginVerifier {
+  readonly #client?: SuiGraphQLClient;
+
+  constructor(
+    network: EngineConfig["network"],
+    graphqlUrl: string | undefined,
+  ) {
+    if (graphqlUrl) {
+      this.#client = new SuiGraphQLClient({
+        network,
+        url: graphqlUrl,
+      });
+    }
+  }
+
+  async verify(input: ZkLoginVerificationInput): Promise<boolean> {
+    try {
+      if (parseSerializedSignature(input.signature).signatureScheme !== "ZkLogin") {
+        return false;
+      }
+    } catch {
+      return false;
+    }
+
+    if (!this.#client) {
+      throw new Error(
+        "zkLogin GraphQL verification requires zkLoginGraphqlUrl on localnet",
+      );
+    }
+
+    return isValidPersonalMessageSignature(input.message, input.signature, {
+      address: input.zkLoginAddress,
+      client: this.#client,
+    });
   }
 }
 

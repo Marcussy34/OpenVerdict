@@ -221,8 +221,37 @@ export type AgentDirectoryEntry = {
 // Engine interface (plan contract C5)
 // ---------------------------------------------------------------------------
 
+/**
+ * zkLogin-backed agent registration (plan T7b): the OWNER identity is a
+ * zkLogin (social-login) address; under one OAuth aud with a fixed salt
+ * service, one social account = one address = one backing hash, and the Move
+ * rule "one committee seat per human_backing_hash" makes it one seat.
+ * Authentication + Sybil-cost raise only — NEVER proof of personhood.
+ */
+export type ZkBackedRegistrationRequest = {
+  /** The zkLogin address that owns/backs this agent. */
+  zkLoginAddress: string;
+  /** Base64 zkLogin signature over the canonical backing message. */
+  signature: string;
+  /** Model id from the release manifest catalog. */
+  modelId: string;
+  /** Role label, e.g. SKEPTIC / SOURCE_AUTHENTICITY. */
+  role: string;
+};
+
+export type ZkBackedRegistrationResult = {
+  agentProfileId: string;
+  humanBackingHash: `0x${string}`;
+  backingKind: "ZKLOGIN_BACKED";
+  digest: string;
+};
+
 export interface Engine {
   factCheckStart(req: FactCheckRequest): Promise<{ claimId: string }>;
+  /** Verify the zkLogin signature, derive the backing hash, register on-chain. */
+  registerZkBackedAgent(
+    req: ZkBackedRegistrationRequest,
+  ): Promise<ZkBackedRegistrationResult>;
   claimCreate(req: ClaimCreateRequest): Promise<{ claimId: string; digest: string }>;
   propose(claimId: string, outcome: VoteOutcome): Promise<TxResult>;
   challenge(claimId: string, reason: ChallengeReason): Promise<TxResult>;

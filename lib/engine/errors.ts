@@ -31,3 +31,11 @@ export class EngineValidationError extends EngineError {
     super("VALIDATION_ERROR", message);
   }
 }
+
+export class ZkLoginVerificationError extends EngineError {
+  override readonly name = "ZkLoginVerificationError";
+
+  constructor(message: string, options?: ErrorOptions) {
+    super("ZKLOGIN_VERIFICATION_UNAVAILABLE", message, options);
+  }
+}

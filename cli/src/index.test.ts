@@ -67,6 +67,12 @@ describe("OpenVerdict CLI", () => {
 function fakeEngine(): Engine {
   return {
     factCheckStart: async () => ({ claimId: "0xclaim" }),
+    registerZkBackedAgent: async () => ({
+      agentProfileId: "0xagent",
+      humanBackingHash: "0xbacking",
+      backingKind: "ZKLOGIN_BACKED",
+      digest: "digest-register",
+    }),
     claimCreate: async () => ({ claimId: "0xclaim", digest: "digest-create" }),
     propose: async () => ({ digest: "digest-propose" }),
     challenge: async () => ({ digest: "digest-challenge" }),

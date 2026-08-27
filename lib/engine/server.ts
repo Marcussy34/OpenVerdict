@@ -88,6 +88,9 @@ async function buildServerEngine(): Promise<Engine> {
     gonka,
     suiClient,
     signers,
+    ...(process.env.OPENVERDICT_ZKLOGIN_GRAPHQL_URL?.trim()
+      ? { zkLoginGraphqlUrl: process.env.OPENVERDICT_ZKLOGIN_GRAPHQL_URL.trim() }
+      : {}),
   });
 }
 
