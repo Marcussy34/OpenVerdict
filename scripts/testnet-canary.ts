@@ -68,6 +68,55 @@ async function fundAgents(
   return result.digest;
 }
 
+
+interface DiscoveredAgent {
+  index: number;
+  owner: string;
+  profileId: string;
+  capId: string;
+}
+
+/** Reuse prior registrations: one AgentCap per deterministic owner address. */
+async function discoverAgents(
+  client: OpenVerdictSuiClient,
+  manifest: ReleaseManifest,
+  signers: SignerRegistry,
+): Promise<DiscoveredAgent[] | null> {
+  const type = `${manifest.packageId}::agent_registry::AgentCap`;
+  const found: DiscoveredAgent[] = [];
+  for (let index = 0; index < AGENT_COUNT; index += 1) {
+    const owner = signers.getAgentAt(index).address;
+    let cursor: string | null = null;
+    let cap: { objectId: string; json?: Record<string, unknown> } | null = null;
+    do {
+      const page = (await client.core.listOwnedObjects({
+        owner,
+        type,
+        cursor,
+        limit: 50,
+        include: { json: true },
+      })) as {
+        objects: Array<{ objectId: string; json?: Record<string, unknown> }>;
+        cursor: string | null;
+        hasNextPage: boolean;
+      };
+      if (page.objects[0]) {
+        cap = page.objects[0];
+        break;
+      }
+      cursor = page.cursor;
+      if (!page.hasNextPage) break;
+    } while (cursor !== null);
+    if (!cap) return null;
+    const profileId =
+      (cap.json?.agent_profile_id as string | undefined) ??
+      (cap.json?.agentProfileId as string | undefined);
+    if (!profileId) return null;
+    found.push({ index, owner, profileId, capId: cap.objectId });
+  }
+  return found;
+}
+
 async function registerAgents(
   client: OpenVerdictSuiClient,
   manifest: ReleaseManifest,
@@ -164,7 +213,46 @@ async function main(): Promise<void> {
     console.log(`topped up ${underfunded.length} agents in ${fundDigest}`);
   }
 
-  const agents = await registerAgents(client, manifest, signers);
+  let agents: Array<{ config: EngineAgentConfig; profileId: string; modelId: string }>;
+  const discovered = await discoverAgents(client, manifest, signers);
+  if (discovered) {
+    console.log(`reusing ${discovered.length} previously registered agents`);
+    agents = discovered.map(({ index, owner, profileId, capId }) => {
+      signers.bindAgentProfile({ agentProfileId: profileId, agentCapId: capId, owner });
+      const sourceRole = index < 3;
+      const role = sourceRole ? "SOURCE_AUTHENTICITY" : "SKEPTIC";
+      const modelId = manifest.gonka.models[sourceRole ? 0 : index < 5 ? 1 : 2]!;
+      const humanHash = blake2b256(new TextEncoder().encode(`testnet-human-${index}`));
+      const manifestHash = blake2b256(new TextEncoder().encode(`testnet-manifest-${index}`));
+      return {
+        profileId,
+        modelId,
+        config: {
+          role,
+          agentCapId: capId,
+          manifest: {
+            agentProfileId: profileId as HexString,
+            owner: owner as HexString,
+            humanAttestationHash: toHex(humanHash),
+            humanVerificationProvider: "testnet-demo-allowlist",
+            version: "1",
+            manifestBlobId: `testnet-manifest-${index}`,
+            manifestHash: toHex(manifestHash),
+            promptHash: hexHash(`prompt-${index}`),
+            modelId,
+            providerId: "gonkarouter",
+            toolPolicyHash: hexHash(`tools-${index}`),
+            evidencePolicyHash: hexHash("OPENVERDICT_EVIDENCE_POLICY_V1"),
+            publicKey: owner,
+            registeredAtMs: Date.now(),
+            registeredCheckpoint: 0,
+          } satisfies AgentManifest,
+        },
+      };
+    });
+  } else {
+    agents = await registerAgents(client, manifest, signers);
+  }
 
   const gonka = createGonkaAdapter({
     baseUrl: env("GONKA_ROUTER_BASE_URL"),

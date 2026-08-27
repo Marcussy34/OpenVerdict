@@ -177,6 +177,10 @@ class OpenVerdictEngine implements Engine {
     validateFactCheckRequest(req);
     const deadlines =
       req.deadlines ?? defaultDeadlines(this.#now(), this.#manifest.network);
+    if (process.env.OPENVERDICT_DEBUG_DEADLINES === "1") {
+      console.error("FCS req.deadlines:", JSON.stringify(req.deadlines));
+      console.error("FCS effective:", JSON.stringify(deadlines), "now:", Date.now());
+    }
     const resolutionCriteria =
       req.resolutionCriteria?.trim() ||
       "Determine whether the bounded claim is supported by the frozen evidence available before the evidence cutoff. Return YES, NO, or UNSURE when evidence conflicts or is insufficient.";
