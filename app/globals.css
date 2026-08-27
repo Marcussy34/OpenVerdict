@@ -22,7 +22,13 @@
 @theme inline {
     --font-heading: var(--font-sans);
     --font-sans: var(--font-sans);
+    --font-narrow: var(--font-narrow);
     --font-mono: var(--font-mono);
+
+    /* Landing (v3) surface language — sharp rectangles, one accent blue. */
+    --color-accent-blue: var(--ov-accent);
+    --color-paper: var(--ov-paper);
+    --color-ink: var(--ov-ink);
 
     /* Sui brand anchors, usable directly: bg-sea/10, text-ocean, bg-aqua. */
     --color-sea: var(--brand-sea);
@@ -95,20 +101,33 @@
 }
 
 :root {
-    /* --- Sui brand ------------------------------------------------------ */
-    --brand-sea: #4da2ff; /* graphics, fills, rings, glow — never body text */
-    --brand-sea-strong: #0f6fd6; /* solid surfaces under white text (4.9:1) */
-    --brand-sea-ink: #0a66c8; /* blue text and links on white (5.6:1) */
-    --brand-ocean: #011829; /* ink for headings (18:1) */
-    --brand-aqua: #c0e6ff; /* pale tinted surfaces + highlights */
+    /* --- Landing (v3) foundation ----------------------------------------- */
+    /* One accent blue, one light surface, sharp corners. The product pages
+       inherit these anchors so the whole site reads as one design. */
+    --ov-accent: #0e76ff; /* arrow chips, pins, links, accents */
+    --ov-surface: #f3f3f3; /* chips, buttons, light text on dark */
+    --ov-paper: #f7f7f5; /* body background */
+    --ov-ink: #000000;
+    --ov-line: rgb(0 0 0 / 15%); /* hairlines on light */
+    --ov-line-dark: rgb(243 243 243 / 15%); /* hairlines on dark */
+    --ov-fill: rgb(0 0 0 / 3%); /* faint row fills (FAQ) */
+    --ov-navy: #04122b; /* deep section ground */
+    --ov-navy-2: #0a2c5e; /* navy midtone */
+
+    /* --- Sui brand, re-anchored on the landing accent -------------------- */
+    --brand-sea: #0e76ff; /* graphics, fills, rings, glow — never body text */
+    --brand-sea-strong: #0b60d8; /* solid surfaces under white text (5.7:1) */
+    --brand-sea-ink: #0a5ccc; /* blue text and links on white (6.1:1) */
+    --brand-ocean: #04122b; /* ink for headings (17:1) */
+    --brand-aqua: #c4d5e7; /* pale tinted surfaces + highlights */
 
     /* --- Neutral paper --------------------------------------------------- */
-    --background: #fbfcfd;
+    --background: #f7f7f5;
     --foreground: #0b1b28;
     --card: #ffffff;
     --card-foreground: #0b1b28;
-    --surface: #f4f7fa;
-    --surface-2: #e9eff5;
+    --surface: #f3f3f3;
+    --surface-2: #e6e6e4;
     --popover: #ffffff;
     --popover-foreground: #0b1b28;
 
@@ -121,9 +140,9 @@
     --accent: #eef4fb;
     --accent-foreground: #0b1b28;
     --destructive: #ce2c2c;
-    --border: rgb(1 24 41 / 10%);
-    --input: rgb(1 24 41 / 14%);
-    --ring: rgb(77 162 255 / 55%);
+    --border: rgb(0 0 0 / 12%);
+    --input: rgb(0 0 0 / 16%);
+    --ring: rgb(14 118 255 / 55%);
 
     /* --- Semantic signals (all AA on white) ------------------------------ */
     --signal-yes: #0e7a4b;
@@ -152,22 +171,21 @@
     --sidebar-primary-foreground: #ffffff;
     --sidebar-accent: #eef4fb;
     --sidebar-accent-foreground: #0b1b28;
-    --sidebar-border: rgb(1 24 41 / 10%);
-    --sidebar-ring: rgb(77 162 255 / 55%);
+    --sidebar-border: rgb(0 0 0 / 12%);
+    --sidebar-ring: rgb(14 118 255 / 55%);
 
     /* --- Ambient shell ---------------------------------------------------- */
-    --grid-line: rgb(1 24 41 / 3.2%);
-    --glow-a: rgb(77 162 255 / 13%);
-    --glow-b: rgb(192 230 255 / 40%);
+    --grid-line: rgb(0 0 0 / 3.2%);
+    --glow-a: rgb(14 118 255 / 9%);
+    --glow-b: rgb(196 213 231 / 42%);
 
     /* --- Night band ------------------------------------------------------- */
-    /* Deep Ocean derivatives. Used ONLY inside contained dark slabs (the hero
-       swarm stage and the closing CTA) so the product identity stays light. */
-    --night: #04121f;
-    --night-2: #071e33;
-    --night-fg: #eaf4ff;
-    --night-muted: #93b6d2;
-    --night-line: rgb(133 197 255 / 16%);
+    /* Deep navy derivatives, matched to the landing's hero ground. */
+    --night: #04122b;
+    --night-2: #072141;
+    --night-fg: #f3f3f3;
+    --night-muted: #93aac6;
+    --night-line: rgb(243 243 243 / 15%);
 }
 
 @layer base {
@@ -188,11 +206,11 @@
         font-variant-numeric: tabular-nums;
         letter-spacing: -0.01em;
     }
-    /* Headings sit in Ocean ink; body copy stays a softer slate. */
+    /* Headings inherit their ink so a section can set one colour for all its
+       type — the landing flips between black and #F3F3F3 constantly. */
     h1,
     h2,
     h3 {
-        @apply text-ocean;
         text-wrap: balance;
     }
     ::selection {
@@ -357,6 +375,315 @@
     background: rgb(255 255 255 / 8%) !important;
 }
 
+/* ===========================================================================
+   Landing v3 — the sharp-rectangle surface language.
+
+   Zero border-radius, 28px gutters, dashed hairlines, 6px blue corner pins and
+   split buttons. Everything here is scoped to classes the landing opts into, so
+   the product pages keep their own (softer) card language while inheriting the
+   same fonts and palette.
+   ======================================================================== */
+
+/* Lenis smooth scroll — the library drives scroll, so the native one stands
+   down while it is mounted (landing only; destroyed on unmount). */
+html.lenis,
+html.lenis body {
+    height: auto;
+}
+.lenis.lenis-smooth {
+    scroll-behavior: auto !important;
+}
+.lenis.lenis-smooth [data-lenis-prevent] {
+    overscroll-behavior: contain;
+}
+.lenis.lenis-stopped {
+    overflow: hidden;
+}
+
+/* Uppercase micro-label: eyebrows, nav chips, buttons, number chips, legal. */
+.ov-micro {
+    font-family: var(--font-narrow), ui-sans-serif, system-ui, sans-serif;
+    font-size: 13px;
+    font-weight: 500;
+    line-height: 18.2px;
+    letter-spacing: 1.04px;
+    text-transform: uppercase;
+}
+.ov-micro-sm {
+    font-size: 11px;
+    line-height: 15px;
+    letter-spacing: 0.88px;
+}
+
+/* Display type: 400 weight even at 88px — the big sizes are NOT bold. */
+.ov-display {
+    font-weight: 400;
+    line-height: 1.06;
+    letter-spacing: -0.02em;
+    text-wrap: balance;
+}
+
+/* --- Split button: content block + separate blue arrow chip --------------- */
+.ov-btn {
+    display: inline-flex;
+    align-items: stretch;
+    gap: 2px;
+    height: 34px;
+    flex: none;
+}
+.ov-btn__label {
+    display: inline-flex;
+    align-items: center;
+    padding-inline: 16px;
+    background: var(--ov-surface);
+    color: #000;
+    white-space: nowrap;
+    transition: background-color 0.2s ease;
+}
+.ov-btn__chip {
+    display: grid;
+    place-items: center;
+    width: 32px;
+    flex: none;
+    background: var(--ov-accent);
+    color: #fff;
+    transition: background-color 0.2s ease;
+}
+.ov-btn__chip svg {
+    transition: transform 0.2s ease;
+}
+.ov-btn:hover .ov-btn__label {
+    background: #e4e4e4;
+}
+.ov-btn:hover .ov-btn__chip {
+    background: #0060e0;
+}
+.ov-btn:hover .ov-btn__chip svg {
+    transform: translateX(2px);
+}
+.ov-btn:focus-visible {
+    outline: 2px solid var(--ov-accent);
+    outline-offset: 2px;
+}
+/* Secondary on dark sections: translucent block, no blue chip. */
+.ov-btn--dark .ov-btn__label {
+    background: rgb(238 238 240 / 10%);
+    color: var(--ov-surface);
+}
+.ov-btn--dark:hover .ov-btn__label {
+    background: rgb(238 238 240 / 18%);
+}
+.ov-btn--dark .ov-btn__chip {
+    background: rgb(238 238 240 / 10%);
+    color: var(--ov-surface);
+}
+.ov-btn--dark:hover .ov-btn__chip {
+    background: rgb(238 238 240 / 18%);
+}
+/* Secondary on light sections. */
+.ov-btn--muted .ov-btn__label {
+    background: rgb(0 0 0 / 6%);
+    color: #000;
+}
+.ov-btn--muted:hover .ov-btn__label {
+    background: rgb(0 0 0 / 10%);
+}
+.ov-btn--muted .ov-btn__chip {
+    background: rgb(0 0 0 / 6%);
+    color: #000;
+}
+.ov-btn--muted:hover .ov-btn__chip {
+    background: rgb(0 0 0 / 10%);
+}
+
+/* --- Nav chip: one sharp 34px block, themed by its header --------------- */
+/* The header sets --chip-bg / --chip-fg per section theme, so the wallet
+   button (whose logic must stay untouched) inherits the same skin. */
+.ov-nav-chip {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    height: 34px;
+    min-height: 34px;
+    padding-inline: 14px;
+    /* Inside the header the chip is borderless; anywhere else on a product
+       page it keeps a hairline so it still reads as a control. */
+    border: 1px solid var(--chip-border, var(--ov-line));
+    border-radius: 0;
+    box-shadow: none;
+    background: var(--chip-bg, var(--ov-surface));
+    color: var(--chip-fg, #000);
+    font-family: var(--font-narrow), ui-sans-serif, system-ui, sans-serif;
+    font-size: 13px;
+    font-weight: 500;
+    line-height: 18.2px;
+    letter-spacing: 1.04px;
+    text-transform: uppercase;
+    transition:
+        background-color 0.2s ease,
+        color 0.2s ease;
+}
+.ov-nav-chip:hover:not(:disabled) {
+    background: var(--chip-bg-hover, #e4e4e4);
+    color: var(--chip-fg, #000);
+}
+.ov-nav-chip[data-active="true"] {
+    background: var(--ov-accent);
+    color: #fff;
+}
+.ov-nav-chip:focus-visible {
+    outline: 2px solid var(--ov-accent);
+    outline-offset: 2px;
+}
+
+/* --- Hairlines: dashed 1px guides, the page's structural furniture ------- */
+.ov-hr {
+    height: 1px;
+    width: 100%;
+    background-image: repeating-linear-gradient(
+        to right,
+        var(--ov-line) 0 4px,
+        transparent 4px 9px
+    );
+}
+.ov-vr {
+    width: 1px;
+    background-image: repeating-linear-gradient(
+        to bottom,
+        var(--ov-line) 0 4px,
+        transparent 4px 9px
+    );
+}
+.ov-on-dark .ov-hr,
+.ov-hr--dark {
+    background-image: repeating-linear-gradient(
+        to right,
+        var(--ov-line-dark) 0 4px,
+        transparent 4px 9px
+    );
+}
+.ov-on-dark .ov-vr,
+.ov-vr--dark {
+    background-image: repeating-linear-gradient(
+        to bottom,
+        var(--ov-line-dark) 0 4px,
+        transparent 4px 9px
+    );
+}
+
+/* --- Section grounds ----------------------------------------------------- */
+/* Hero navy: near-black at the top, a blue floor at the bottom. Kept flat
+   through the middle band so the globe's own edge scrims blend into it. */
+.ov-navy-ground {
+    background:
+        radial-gradient(78% 52% at 50% 104%, rgb(31 94 172 / 62%) 0%, transparent 70%),
+        linear-gradient(180deg, #040f1c 0%, #04121f 46%, #05182e 100%);
+}
+/* The light wash section 2 sits on — sampled from the reference. */
+.ov-light-wash {
+    background: radial-gradient(
+        100% 130% at 50% -30%,
+        #c4d5e7 45%,
+        #fdfbf7 85%,
+        #f7f7f5 100%
+    );
+}
+/* Propositions: light at the top, deep navy by the bottom. */
+.ov-light-to-navy {
+    background: linear-gradient(
+        180deg,
+        #dae5f2 0%,
+        #a9c2e0 18%,
+        #4d7cb8 42%,
+        #123a76 66%,
+        #04122b 86%,
+        #020c1c 100%
+    );
+}
+/* Manifesto: near-black at the top fading into the light list below. */
+.ov-navy-to-light {
+    background: linear-gradient(
+        180deg,
+        #010a18 0%,
+        #06254c 34%,
+        #2f5c94 58%,
+        #a8c1de 78%,
+        #f2f4f2 96%,
+        #f7f7f5 100%
+    );
+}
+/* Footer: light blue → accent family → deep navy. */
+.ov-footer-ground {
+    background: linear-gradient(
+        180deg,
+        #cddcee 0%,
+        #6f9bd2 16%,
+        #1f62c4 38%,
+        #0d3f8e 60%,
+        #061c3f 82%,
+        #030f24 100%
+    );
+}
+
+/* The globe's heads-up display stands down once the visual has docked into
+   the stat card, where it would fight the card's own readouts. */
+.ov-hud-layer {
+    transition: opacity 0.35s ease;
+}
+/* !important because the globe pins its anchored chips with inline opacity. */
+[data-hud="off"] .ov-hud-layer {
+    opacity: 0 !important;
+}
+
+/* Dark glass panel — the hero's live verdict card. */
+.ov-glass {
+    background: rgb(38 38 41 / 45%);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+}
+
+/* Metallic wordmark: silver-to-white vertical gradient clipped to the type. */
+.ov-wordmark {
+    background-image: linear-gradient(
+        180deg,
+        #ffffff 0%,
+        #dfe8f3 24%,
+        #93a9c3 48%,
+        #ffffff 68%,
+        #8ea4bf 100%
+    );
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+}
+
+/* FAQ answer: 0fr → 1fr animates the row height without measuring it. */
+.ov-collapse {
+    display: grid;
+    grid-template-rows: 0fr;
+    transition: grid-template-rows 0.3s ease;
+}
+.ov-collapse[data-open="true"] {
+    grid-template-rows: 1fr;
+}
+.ov-collapse > div {
+    overflow: hidden;
+}
+
+/* A slow vertical drift for the opportunity section's ambient column. */
+@keyframes ov-drift {
+    from {
+        transform: translateY(0);
+    }
+    to {
+        transform: translateY(-50%);
+    }
+}
+.ov-drift {
+    animation: ov-drift 26s linear infinite;
+}
+
 /* ---------------------------------------------------------------------------
    Motion primitives
 --------------------------------------------------------------------------- */
@@ -475,8 +802,17 @@
         transform: none;
     }
     /* The rail parks at its start instead of snapping to the loop point. */
-    .ov-marquee {
+    .ov-marquee,
+    .ov-drift {
         animation: none !important;
         transform: none !important;
+    }
+    /* The FAQ opens instantly rather than animating its row height. */
+    .ov-collapse {
+        transition: none !important;
+    }
+    /* No scroll-driven dimming: every proposition stays fully legible. */
+    [data-proposition] {
+        opacity: 1 !important;
     }
 }

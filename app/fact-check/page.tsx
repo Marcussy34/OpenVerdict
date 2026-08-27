@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, Suspense } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,6 +10,12 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { PageHeader, ExperimentalTag } from "@/components/viz/page-header";
 import { Panel, FieldLabel } from "@/components/viz/panel";
 import { PIPELINE_STAGES } from "@/components/viz/pipeline";
+import {
+  useClaimSubmission,
+  MAX_CLAIM,
+  MAX_TEXT,
+  MAX_URLS,
+} from "@/components/claim/use-claim-submission";
 import { cn } from "@/lib/utils";
 import {
   ShieldSearch,
@@ -24,12 +30,7 @@ import {
   Refresh,
 } from "@/components/icons";
 
-const MAX_URLS = 5;
-const MAX_CLAIM = 1000;
-const MAX_TEXT = 20000;
-
 function FactCheckContent() {
-  const router = useRouter();
   const searchParams = useSearchParams();
 
   // Initialize state directly from URL query parameters (home hand-off).
@@ -41,9 +42,9 @@ function FactCheckContent() {
   });
   const [resolutionCriteria, setResolutionCriteria] = useState("");
 
-  const [submitting, setSubmitting] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [isEngineOffline, setIsEngineOffline] = useState(false);
+  // Validation, the POST and the redirect all live in the shared hook, so this
+  // page and the landing footer's one-line form behave identically.
+  const { submit, submitting, errorMessage, isEngineOffline } = useClaimSubmission();
 
   const addUrlField = () => {
     if (urls.length < MAX_URLS) setUrls([...urls, ""]);
@@ -61,58 +62,7 @@ function FactCheckContent() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setErrorMessage(null);
-    setIsEngineOffline(false);
-
-    const trimmedClaim = claim.trim();
-    if (trimmedClaim.length < 5) {
-      setErrorMessage("Claim statement must be at least 5 characters long.");
-      return;
-    }
-    if (trimmedClaim.length > MAX_CLAIM) {
-      setErrorMessage(`Claim statement cannot exceed ${MAX_CLAIM} characters.`);
-      return;
-    }
-
-    const filteredUrls = urls.map((u) => u.trim()).filter((u) => u.length > 0);
-    for (const u of filteredUrls) {
-      if (!u.startsWith("https://") && !u.startsWith("http://")) {
-        setErrorMessage(`Invalid URL '${u}': must start with https:// or http://`);
-        return;
-      }
-    }
-
-    setSubmitting(true);
-    try {
-      const res = await fetch("/api/fact-checks", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          claim: trimmedClaim,
-          text: text.trim() || undefined,
-          urls: filteredUrls,
-          resolutionCriteria: resolutionCriteria.trim() || undefined,
-        }),
-      });
-
-      if (res.status === 503) {
-        setIsEngineOffline(true);
-        return;
-      }
-
-      const data = await res.json();
-      if (!res.ok) {
-        setErrorMessage(data.message || data.error || "Failed to submit fact-check");
-        return;
-      }
-      if (data.claimId) {
-        router.push(`/claims/${encodeURIComponent(data.claimId)}`);
-      }
-    } catch {
-      setIsEngineOffline(true);
-    } finally {
-      setSubmitting(false);
-    }
+    await submit({ claim, text, urls, resolutionCriteria });
   };
 
   const claimTooLong = claim.length > MAX_CLAIM * 0.9;

@@ -91,7 +91,7 @@ export function WalletConnectButton() {
       <Button
         variant="outline"
         size="sm"
-        className="min-h-[44px] px-3"
+        className="ov-nav-chip"
         disabled
         aria-busy="true"
       >
@@ -131,7 +131,7 @@ export function WalletConnectButton() {
         <Button
           variant="outline"
           size="sm"
-          className="min-h-[44px] px-3 font-semibold"
+          className="ov-nav-chip"
           onClick={() => setSignInOpen(true)}
         >
           <Wallet size="16" variant="Bold" aria-hidden="true" />
@@ -175,7 +175,7 @@ export function WalletConnectButton() {
         <Button
           variant="outline"
           size="sm"
-          className="min-h-[44px] max-w-40 gap-2 px-3 font-mono tabular-nums"
+          className="ov-nav-chip max-w-40 font-mono tabular-nums"
           aria-label={`Wallet ${address}`}
         >
           <span

@@ -1,12 +1,15 @@
 import type { Metadata } from "next";
 import "./globals.css";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Archivo, Archivo_Narrow, Geist_Mono } from "next/font/google";
 import { cn } from "@/lib/utils";
 import { SiteHeader } from "@/components/site-header";
 import { SiteFooter } from "@/components/site-footer";
 import { WalletProviders } from "@/components/wallet/providers";
 
-const geist = Geist({ subsets: ["latin"], variable: "--font-sans" });
+// Archivo carries every heading and paragraph; the big display sizes run at 400.
+const archivo = Archivo({ subsets: ["latin"], variable: "--font-sans" });
+// Archivo Narrow carries every uppercase micro-label: eyebrows, chips, buttons.
+const archivoNarrow = Archivo_Narrow({ subsets: ["latin"], variable: "--font-narrow" });
 // Mono carries every hash, object id, digest, bps value and score in the UI.
 const geistMono = Geist_Mono({ subsets: ["latin"], variable: "--font-mono" });
 
@@ -23,7 +26,12 @@ export default function RootLayout({
     // Light is the demo theme; every token lives in globals.css :root.
     <html
       lang="en"
-      className={cn("font-sans", geist.variable, geistMono.variable)}
+      className={cn(
+        "font-sans",
+        archivo.variable,
+        archivoNarrow.variable,
+        geistMono.variable,
+      )}
       suppressHydrationWarning
     >
       <body className="antialiased min-h-screen flex flex-col bg-background">

@@ -225,7 +225,7 @@ export function SwarmGlobe({
       />
 
       {/* ------------------------------------------------------- phase rail */}
-      <div className="pointer-events-none absolute inset-x-0 top-0 p-2 [text-shadow:0_1px_8px_rgba(3,12,20,0.95)] sm:p-3">
+      <div className="ov-hud-layer pointer-events-none absolute inset-x-0 top-0 p-2 [text-shadow:0_1px_8px_rgba(3,12,20,0.95)] sm:p-3">
         <div className="flex min-w-0 flex-col gap-2">
           <span className="inline-flex w-fit items-center gap-1.5 rounded-full border border-white/12 bg-white/6 px-2 py-1 font-mono text-[9px] font-semibold tracking-[0.14em] text-white/55 uppercase backdrop-blur-sm">
             <Global size="11" variant="Bold" className="text-[#4da2ff]" />
@@ -274,7 +274,7 @@ export function SwarmGlobe({
       </div>
 
       {/* Verdict stamp — lands with the certificate at the end of the cycle. */}
-      <div className="pointer-events-none absolute right-2 bottom-2 w-[9.5rem] sm:right-3 sm:bottom-3">
+      <div className="ov-hud-layer pointer-events-none absolute right-2 bottom-2 w-[9.5rem] sm:right-3 sm:bottom-3">
         <AnimatePresence>
           {settled && (
             <motion.div
@@ -315,7 +315,7 @@ export function SwarmGlobe({
       </div>
 
       {/* -------------------------------------------------- swarm transcript */}
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 p-2 pr-2 [text-shadow:0_1px_8px_rgba(3,12,20,0.95)] sm:p-3 sm:pr-44">
+      <div className="ov-hud-layer pointer-events-none absolute inset-x-0 bottom-0 p-2 pr-2 [text-shadow:0_1px_8px_rgba(3,12,20,0.95)] sm:p-3 sm:pr-44">
         <div className="flex items-center gap-2 font-mono text-[9px] font-semibold tracking-[0.14em] text-white/35 uppercase">
           {settled ? (
             <TickCircle size="11" variant="Bold" className="text-[#7ee8b0]" />
@@ -348,7 +348,7 @@ export function SwarmGlobe({
       {/* Rendered last so a chip that drifts under the rail paints over it. */}
       <div
         ref={originAnchor}
-        className="pointer-events-none absolute top-0 left-0 hidden will-change-transform sm:block"
+        className="ov-hud-layer pointer-events-none absolute top-0 left-0 hidden will-change-transform sm:block"
         style={{ visibility: "hidden" }}
       >
         <div className="-translate-x-1/2 -translate-y-full">
@@ -370,7 +370,7 @@ export function SwarmGlobe({
       {!settled && (
         <div
           ref={agentAnchor}
-          className="pointer-events-none absolute top-0 left-0 hidden will-change-transform lg:block"
+          className="ov-hud-layer pointer-events-none absolute top-0 left-0 hidden will-change-transform lg:block"
           style={{ visibility: "hidden" }}
         >
           {/* Hangs BELOW its node so it can never collide with the claim chip. */}

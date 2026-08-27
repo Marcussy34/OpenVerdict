@@ -2,186 +2,209 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
-import {
-  Judge,
-  ShieldSearch,
-  DocumentText,
-  Profile2User,
-  ShieldTick,
-  Activity,
-} from "@/components/icons";
-import { Button } from "@/components/ui/button";
+import { useEffect, useState } from "react";
 import { WalletConnectButton } from "@/components/wallet/connect-button";
+import { Arrow } from "@/components/landing/primitives";
 import { cn } from "@/lib/utils";
 
 const NAV_ITEMS = [
-  { href: "/fact-check", label: "Fact-Check", icon: ShieldSearch },
-  { href: "/claims", label: "Claims", icon: DocumentText },
-  { href: "/agents", label: "Agents", icon: Profile2User },
-  { href: "/verify", label: "Verify", icon: ShieldTick },
-  { href: "/status", label: "Status", icon: Activity },
+  { href: "/fact-check", label: "Fact-check" },
+  { href: "/claims", label: "Claims" },
+  { href: "/agents", label: "Agents" },
+  { href: "/verify", label: "Verify" },
+  { href: "/status", label: "Status" },
 ];
 
-/** The OpenVerdict mark: a Sui-blue plate carrying the jury glyph. */
-export function BrandMark({ size = 36 }: { size?: number }) {
+/**
+ * The OpenVerdict mark: a sharp sealed-record glyph — the certificate frame,
+ * the rotated seal inside it, and the accent square at its centre.
+ */
+export function BrandMark({ size = 30 }: { size?: number }) {
   return (
-    <span
+    <svg
       aria-hidden
-      className="grid shrink-0 place-items-center rounded-xl text-white shadow-[0_2px_8px_-2px_rgba(15,111,214,0.55)] ring-1 ring-inset ring-white/25"
-      style={{
-        width: size,
-        height: size,
-        backgroundImage: "linear-gradient(140deg, var(--brand-sea), var(--brand-sea-strong))",
-      }}
+      viewBox="0 0 32 32"
+      width={size}
+      height={size}
+      fill="none"
+      className="shrink-0"
     >
-      <Judge size={String(Math.round(size * 0.55))} variant="Bold" />
-    </span>
+      <rect x="1" y="1" width="30" height="30" stroke="currentColor" strokeWidth="1.5" />
+      <path d="M16 6.5 25.5 16 16 25.5 6.5 16 16 6.5Z" stroke="currentColor" strokeWidth="1.5" />
+      <rect x="12.5" y="12.5" width="7" height="7" fill="var(--ov-accent)" />
+    </svg>
   );
 }
 
+/** Theme the header paints in — driven by the section under it. */
+type HeaderTheme = "dark" | "light";
+
+const THEME_VARS: Record<HeaderTheme, React.CSSProperties> = {
+  light: {
+    ["--chip-bg" as string]: "#F3F3F3",
+    ["--chip-fg" as string]: "#000000",
+    ["--chip-bg-hover" as string]: "#E4E4E4",
+    ["--chip-border" as string]: "transparent",
+  },
+  dark: {
+    ["--chip-bg" as string]: "rgba(238,238,240,0.10)",
+    ["--chip-fg" as string]: "#F3F3F3",
+    ["--chip-bg-hover" as string]: "rgba(238,238,240,0.20)",
+    ["--chip-border" as string]: "transparent",
+  },
+};
+
 export function SiteHeader() {
   const pathname = usePathname();
-  // The sheet is keyed to the route it was opened on, so navigating away closes
-  // it without an effect that would fight React's render pass.
+  const isLanding = pathname === "/";
+
+  // The landing opens on the dark hero and flips with its sections; every
+  // product page is simply light. Both sides render the same first pass, so
+  // there is no hydration mismatch.
+  const [observed, setObserved] = useState<HeaderTheme | null>(null);
+  const theme: HeaderTheme = isLanding ? (observed ?? "dark") : "light";
+
+  // The sheet is keyed to the route it was opened on, so navigating away
+  // closes it without an effect fighting React's render pass.
   const [openedOnPath, setOpenedOnPath] = useState<string | null>(null);
-  const mobileMenuOpen = openedOnPath === pathname;
-  const toggleMobileMenu = () =>
+  const menuOpen = openedOnPath === pathname;
+  const toggleMenu = () =>
     setOpenedOnPath((prev) => (prev === pathname ? null : pathname));
 
-  const isActive = (href: string) =>
-    pathname === href || (href !== "/" && pathname.startsWith(href));
+  // Sections declare data-header-theme; the one crossing the header's centre
+  // line wins. Collapsing the root to that line means exactly one can match.
+  useEffect(() => {
+    if (!isLanding || typeof IntersectionObserver === "undefined") return;
+    const sections = Array.from(
+      document.querySelectorAll<HTMLElement>("[data-header-theme]"),
+    );
+    if (!sections.length) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (!entry.isIntersecting) continue;
+          const next = entry.target.getAttribute("data-header-theme");
+          if (next === "dark" || next === "light") setObserved(next);
+        }
+      },
+      { rootMargin: "-34px 0px -100% 0px", threshold: 0 },
+    );
+    sections.forEach((section) => observer.observe(section));
+    return () => observer.disconnect();
+  }, [isLanding, pathname]);
+
+  const isActive = (href: string) => pathname === href || pathname.startsWith(`${href}/`);
+  const dark = theme === "dark";
 
   return (
-    <header className="sticky top-0 z-40 w-full border-b border-border bg-background/80 backdrop-blur-xl supports-[backdrop-filter]:bg-background/70">
-      <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
-        {/* Brand & wordmark */}
+    <header
+      style={THEME_VARS[theme]}
+      className={cn(
+        "top-0 z-[999] w-full",
+        isLanding
+          ? "fixed"
+          : "sticky border-b border-[var(--ov-line)] bg-[var(--ov-paper)]/85 backdrop-blur-xl",
+      )}
+    >
+      <div className="flex h-[74px] items-center justify-between gap-4 px-5 md:px-7">
+        {/* Brand */}
         <Link
           href="/"
-          className="flex shrink-0 items-center gap-2.5 rounded-lg focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
           aria-label="OpenVerdict home"
+          className={cn(
+            "flex shrink-0 items-center gap-2.5 transition-colors",
+            dark ? "text-[#F3F3F3]" : "text-black",
+          )}
         >
-          <BrandMark />
-          <span className="flex flex-col leading-none">
-            <span className="text-[17px] font-semibold tracking-tight text-ocean">
-              OpenVerdict
-            </span>
-            <span className="mt-0.5 font-mono text-[9px] font-semibold tracking-[0.16em] text-muted-foreground uppercase">
-              Verification engine
-            </span>
+          <BrandMark size={26} />
+          <span className="text-[19px] leading-none font-medium tracking-[-0.01em]">
+            OpenVerdict
           </span>
         </Link>
 
-        {/* Desktop navigation — one pill rail, active item filled with brand tint. */}
-        <nav className="hidden items-center gap-0.5 rounded-full border border-border bg-card/70 p-1 lg:flex">
-          {NAV_ITEMS.map((item) => {
-            const Icon = item.icon;
-            const active = isActive(item.href);
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                aria-current={active ? "page" : undefined}
-                className={cn(
-                  "flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[13px] font-medium transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
-                  active
-                    ? "bg-sea/12 font-semibold text-primary"
-                    : "text-muted-foreground hover:bg-surface hover:text-ocean",
-                )}
-              >
-                <Icon size="15" variant={active ? "Bold" : "Linear"} />
-                {item.label}
-              </Link>
-            );
-          })}
-        </nav>
-
-        {/* Right CTA & mobile hamburger */}
-        <div className="flex shrink-0 items-center gap-2">
-          <Button
-            asChild
-            size="sm"
-            className="hidden min-h-[38px] px-4 font-semibold shadow-xs xl:inline-flex"
-          >
-            <Link href="/fact-check">
-              <ShieldSearch size="15" variant="Bold" />
-              Start fact-check
+        {/* Chip rail */}
+        <div className="hidden items-center gap-[2px] lg:flex">
+          {NAV_ITEMS.map((item) => (
+            <Link
+              key={item.href}
+              href={item.href}
+              data-active={isActive(item.href) ? "true" : undefined}
+              aria-current={isActive(item.href) ? "page" : undefined}
+              className="ov-nav-chip"
+            >
+              {item.label}
             </Link>
-          </Button>
-
+          ))}
           <WalletConnectButton />
-
-          <Button
-            variant="outline"
-            size="sm"
-            className="min-h-[40px] min-w-[40px] p-2 lg:hidden"
-            onClick={toggleMobileMenu}
-            aria-expanded={mobileMenuOpen}
-            aria-label="Toggle navigation menu"
+          <Link
+            href={isLanding ? "#submit" : "/fact-check"}
+            aria-label="Submit a claim"
+            className="ov-nav-chip w-[34px] px-0"
           >
-            <span className="sr-only">Toggle menu</span>
-            <span className="flex w-4 flex-col gap-1">
+            <Arrow />
+          </Link>
+        </div>
+
+        {/* Compact rail */}
+        <div className="flex items-center gap-[2px] lg:hidden">
+          <WalletConnectButton />
+          <button
+            type="button"
+            className="ov-nav-chip w-[34px] px-0"
+            aria-expanded={menuOpen}
+            aria-label="Toggle navigation menu"
+            onClick={toggleMenu}
+          >
+            <span className="flex w-4 flex-col gap-[3px]" aria-hidden>
               <span
                 className={cn(
-                  "block h-0.5 w-full rounded-full bg-ocean transition-transform duration-200",
-                  mobileMenuOpen && "translate-y-1.5 rotate-45",
+                  "block h-[1.5px] w-full bg-current transition-transform duration-200",
+                  menuOpen && "translate-y-[4.5px] rotate-45",
                 )}
               />
               <span
                 className={cn(
-                  "block h-0.5 w-full rounded-full bg-ocean transition-opacity duration-200",
-                  mobileMenuOpen && "opacity-0",
+                  "block h-[1.5px] w-full bg-current transition-opacity duration-200",
+                  menuOpen && "opacity-0",
                 )}
               />
               <span
                 className={cn(
-                  "block h-0.5 w-full rounded-full bg-ocean transition-transform duration-200",
-                  mobileMenuOpen && "-translate-y-1.5 -rotate-45",
+                  "block h-[1.5px] w-full bg-current transition-transform duration-200",
+                  menuOpen && "-translate-y-[4.5px] -rotate-45",
                 )}
               />
             </span>
-          </Button>
+          </button>
         </div>
       </div>
 
-      {/* Mobile dropdown */}
-      {mobileMenuOpen && (
-        <div className="space-y-1 border-b border-border bg-card px-4 pt-2 pb-4 lg:hidden">
-          {NAV_ITEMS.map((item) => {
-            const Icon = item.icon;
-            const active = isActive(item.href);
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={cn(
-                  "flex min-h-[44px] items-center gap-2.5 rounded-xl px-3 py-2.5 text-[15px] font-medium",
-                  active
-                    ? "bg-sea/12 font-semibold text-primary"
-                    : "text-muted-foreground hover:bg-surface hover:text-ocean",
-                )}
-              >
-                <Icon size="18" variant={active ? "Bold" : "Linear"} />
-                {item.label}
-              </Link>
-            );
-          })}
+      {menuOpen && (
+        <nav
+          className={cn(
+            "flex flex-col gap-[2px] px-5 pb-5 lg:hidden",
+            dark ? "bg-[#04122b]/95" : "bg-[var(--ov-paper)]/97",
+          )}
+        >
+          {NAV_ITEMS.map((item) => (
+            <Link
+              key={item.href}
+              href={item.href}
+              data-active={isActive(item.href) ? "true" : undefined}
+              className="ov-nav-chip !h-11 !justify-start"
+            >
+              {item.label}
+            </Link>
+          ))}
           <Link
-            href="/learn"
-            className="flex min-h-[44px] items-center gap-2.5 rounded-xl px-3 py-2.5 text-[15px] font-medium text-muted-foreground hover:bg-surface hover:text-ocean"
+            href={isLanding ? "#submit" : "/fact-check"}
+            className="ov-nav-chip !h-11 !justify-start"
+            onClick={toggleMenu}
           >
-            <Judge size="18" variant="Linear" />
-            How it works
+            Submit a claim
           </Link>
-          <div className="pt-2">
-            <Button asChild className="min-h-[44px] w-full justify-center font-semibold">
-              <Link href="/fact-check">
-                <ShieldSearch size="18" variant="Bold" />
-                Start fact-check
-              </Link>
-            </Button>
-          </div>
-        </div>
+        </nav>
       )}
     </header>
   );
