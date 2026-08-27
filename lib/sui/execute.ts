@@ -51,40 +51,53 @@ function staleObjectId(error: unknown): string | undefined {
 export async function executeAndWait(
   client: OpenVerdictSuiClient,
   signer: Signer,
-  transaction: Transaction,
+  transactionOrFactory: Transaction | (() => Transaction),
 ): Promise<ExecutedTxResult> {
-  // CLI 1.52 cannot decode SDK 2.26's simulation-only ValidDuring expiration.
-  if (client.network === "localnet") {
-    transaction.setGasBudgetIfNotSet(2_000_000_000);
-  }
+  const makeTransaction = (): Transaction => {
+    const tx =
+      typeof transactionOrFactory === "function"
+        ? transactionOrFactory()
+        : transactionOrFactory;
+    // CLI 1.52 cannot decode SDK 2.26's simulation-only ValidDuring expiration.
+    if (client.network === "localnet") tx.setGasBudgetIfNotSet(2_000_000_000);
+    return tx;
+  };
+  let transaction = makeTransaction();
   let submitted: Awaited<ReturnType<Signer["signAndExecuteTransaction"]>>;
   for (let attempt = 1; ; attempt += 1) {
     try {
       submitted = await signer.signAndExecuteTransaction({ transaction, client });
       break;
     } catch (error) {
-      if (attempt >= 4) throw error;
+      if (attempt >= 5) throw error;
       const staleId = staleObjectId(error);
       const reserved = RESERVED_OBJECT_PATTERN.test(errorText(error));
       if (!staleId && !reserved) throw error;
-      // Once the blocking transaction settles, the coin's version has moved:
-      // the retry must rebuild with the CURRENT ref, not the cached one.
-      const gasIds = staleId
-        ? [staleId]
-        : (transaction.getData().gasData.payment ?? []).map((ref) => ref.objectId);
-      if (gasIds.length === 0) throw error;
-      await new Promise((resolve) => setTimeout(resolve, 350 * attempt));
-      const freshRefs = await Promise.all(
-        gasIds.map(async (objectId) => {
-          const fresh = await client.core.getObject({ objectId, include: {} });
-          return {
-            objectId,
-            version: fresh.object.version,
-            digest: fresh.object.digest,
-          };
-        }),
+      // The prior build's resolved input/gas versions are baked into the
+      // Transaction, so a retry MUST rebuild from scratch; a factory gives a
+      // clean rebuild, a plain Transaction can only have its gas repinned.
+      const priorGas = (transaction.getData().gasData.payment ?? []).map(
+        (ref) => ref.objectId,
       );
-      transaction.setGasPayment(freshRefs);
+      await new Promise((resolve) => setTimeout(resolve, 400 * attempt));
+      transaction = makeTransaction();
+      // Pin gas at its authoritative current version (coin listings can lag;
+      // getObject does not). Never pin a stale NON-gas input as gas — a stale
+      // EvidenceCap once ended up as "payment" that way and poisoned retries.
+      const gasIds = reserved || (staleId && priorGas.includes(staleId)) ? priorGas : [];
+      if (gasIds.length > 0) {
+        const freshRefs = await Promise.all(
+          gasIds.map(async (objectId) => {
+            const fresh = await client.core.getObject({ objectId, include: {} });
+            return {
+              objectId,
+              version: fresh.object.version,
+              digest: fresh.object.digest,
+            };
+          }),
+        );
+        transaction.setGasPayment(freshRefs);
+      }
     }
   }
   assertSuccessful(submitted);

@@ -73,7 +73,7 @@ export class RealSuiGateway implements SuiGateway {
     const result = await executeAndWait(
       this.#client,
       agent.keypair,
-      buildRegisterAgentTransaction(this.#manifest, input),
+      () => buildRegisterAgentTransaction(this.#manifest, input),
     );
     const profileId = requiredObjectId(result, "agentProfile");
     const capId = requiredObjectId(result, "agentCap");
@@ -93,13 +93,13 @@ export class RealSuiGateway implements SuiGateway {
   }
 
   async createClaim(input: GatewayCreateClaimInput): Promise<ClaimCreationResult> {
-    const transaction = input.directReviewStarted
-      ? buildStartFactCheckTransaction(this.#manifest, input)
-      : buildCreateClaimTransaction(this.#manifest, input);
     const result = await executeAndWait(
       this.#client,
       this.#signers.getOperator(),
-      transaction,
+      () =>
+        input.directReviewStarted
+          ? buildStartFactCheckTransaction(this.#manifest, input)
+          : buildCreateClaimTransaction(this.#manifest, input),
     );
     const event = findEvent(result.moveEvents, "ClaimCreated");
     const claimId = optionalId(event?.json?.claim_id) ?? requiredObjectId(result, "claim");
@@ -113,18 +113,18 @@ export class RealSuiGateway implements SuiGateway {
 
   async startDirectReview(claimId: string): Promise<TxResult> {
     return this.executeOperator(
-      buildStartDirectReviewTransaction(this.#manifest, { claimId }),
+      () => buildStartDirectReviewTransaction(this.#manifest, { claimId }),
     );
   }
 
   async startChallengedReview(claimId: string): Promise<TxResult> {
     return this.executeOperator(
-      buildStartChallengedReviewTransaction(this.#manifest, { claimId }),
+      () => buildStartChallengedReviewTransaction(this.#manifest, { claimId }),
     );
   }
 
   async propose(input: ProposeOutcomeTransactionInput): Promise<TxResult> {
-    return this.executeOperator(buildProposeOutcomeTransaction(this.#manifest, input));
+    return this.executeOperator(() => buildProposeOutcomeTransaction(this.#manifest, input));
   }
 
   async challenge(input: ChallengeOutcomeTransactionInput): Promise<TxResult> {
@@ -132,7 +132,7 @@ export class RealSuiGateway implements SuiGateway {
       await executeAndWait(
         this.#client,
         this.#signers.getChallenger(),
-        buildChallengeOutcomeTransaction(this.#manifest, input),
+        () => buildChallengeOutcomeTransaction(this.#manifest, input),
       ),
     );
   }
@@ -141,7 +141,7 @@ export class RealSuiGateway implements SuiGateway {
     const result = await executeAndWait(
       this.#client,
       this.#signers.getOperator(),
-      buildSelectCommitteeTransaction(this.#manifest, { claimId }),
+      () => buildSelectCommitteeTransaction(this.#manifest, { claimId }),
     );
     return this.selectionResult(result, 1);
   }
@@ -153,7 +153,7 @@ export class RealSuiGateway implements SuiGateway {
       await executeAndWait(
         this.#client,
         agent.keypair,
-        buildAcceptJurySeatTransaction(this.#manifest, {
+        () => buildAcceptJurySeatTransaction(this.#manifest, {
           jurySeatId: input.jurySeatId,
           agentCapId,
         }),
@@ -172,7 +172,7 @@ export class RealSuiGateway implements SuiGateway {
     const result = await executeAndWait(
       this.#client,
       operator,
-      buildFreezeEvidenceTransaction(this.#manifest, { ...input, evidenceCapId }),
+      () => buildFreezeEvidenceTransaction(this.#manifest, { ...input, evidenceCapId }),
     );
     const event = findEvent(result.moveEvents, "EvidenceFrozen");
     const evidenceBundleId =
@@ -188,7 +188,7 @@ export class RealSuiGateway implements SuiGateway {
       await executeAndWait(
         this.#client,
         agent.keypair,
-        buildBindJurySeatEvidenceTransaction(this.#manifest, {
+        () => buildBindJurySeatEvidenceTransaction(this.#manifest, {
           jurySeatId: input.jurySeatId,
           roundTallyId: input.roundTallyId,
           evidenceBundleId: input.evidenceBundleId,
@@ -203,7 +203,7 @@ export class RealSuiGateway implements SuiGateway {
     committeeId: string;
     roundTallyId: string;
   }): Promise<TxResult> {
-    return this.executeOperator(buildLockCommitteeTransaction(this.#manifest, input));
+    return this.executeOperator(() => buildLockCommitteeTransaction(this.#manifest, input));
   }
 
   // juryRun processes seats concurrently, but every approveRun is signed by
@@ -230,7 +230,7 @@ export class RealSuiGateway implements SuiGateway {
     const result = await executeAndWait(
       this.#client,
       operator,
-      buildApproveRunTransaction(this.#manifest, { ...input, runAttestorCapId }),
+      () => buildApproveRunTransaction(this.#manifest, { ...input, runAttestorCapId }),
     );
     const event = findEvent(result.moveEvents, "RunApproved");
     const runApprovalId =
@@ -245,7 +245,7 @@ export class RealSuiGateway implements SuiGateway {
       await executeAndWait(
         this.#client,
         agent.keypair,
-        buildCommitVoteTransaction(this.#manifest, { ...input, agentCapId }),
+        () => buildCommitVoteTransaction(this.#manifest, { ...input, agentCapId }),
       ),
     );
   }
@@ -256,7 +256,7 @@ export class RealSuiGateway implements SuiGateway {
     const result = await executeAndWait(
       this.#client,
       agent.keypair,
-      buildRevealVoteTransaction(this.#manifest, { ...input, agentCapId }),
+      () => buildRevealVoteTransaction(this.#manifest, { ...input, agentCapId }),
     );
     const event = findEvent(result.moveEvents, "VoteRevealed");
     const revealedVoteId =
@@ -266,14 +266,14 @@ export class RealSuiGateway implements SuiGateway {
   }
 
   async advancePhase(claimId: string): Promise<TxResult> {
-    return this.executeOperator(buildAdvancePhaseTransaction(this.#manifest, { claimId }));
+    return this.executeOperator(() => buildAdvancePhaseTransaction(this.#manifest, { claimId }));
   }
 
   async openDiscussion(input: {
     claimId: string;
     firstRoundTallyId: string;
   }): Promise<TxResult> {
-    return this.executeOperator(buildOpenDiscussionTransaction(this.#manifest, input));
+    return this.executeOperator(() => buildOpenDiscussionTransaction(this.#manifest, input));
   }
 
   async createSecondRound(input: {
@@ -284,7 +284,7 @@ export class RealSuiGateway implements SuiGateway {
     const result = await executeAndWait(
       this.#client,
       this.#signers.getOperator(),
-      buildCreateSecondRoundSeatsTransaction(this.#manifest, input),
+      () => buildCreateSecondRoundSeatsTransaction(this.#manifest, input),
     );
     return this.selectionResult(result, 2, input.committeeId);
   }
@@ -298,7 +298,7 @@ export class RealSuiGateway implements SuiGateway {
     const result = await executeAndWait(
       this.#client,
       this.#signers.getOperator(),
-      buildFinalizeClaimTransaction(this.#manifest, input),
+      () => buildFinalizeClaimTransaction(this.#manifest, input),
     );
     return finalizeResult(result);
   }
@@ -307,7 +307,7 @@ export class RealSuiGateway implements SuiGateway {
     const result = await executeAndWait(
       this.#client,
       this.#signers.getOperator(),
-      buildFinalizeUnchallengedTransaction(this.#manifest, { claimId }),
+      () => buildFinalizeUnchallengedTransaction(this.#manifest, { claimId }),
     );
     return finalizeResult(result);
   }
@@ -316,7 +316,7 @@ export class RealSuiGateway implements SuiGateway {
     claimId: string;
     payoutTicketId: string;
   }): Promise<TxResult> {
-    return this.executeOperator(buildWithdrawPayoutTransaction(this.#manifest, input));
+    return this.executeOperator(() => buildWithdrawPayoutTransaction(this.#manifest, input));
   }
 
   async health(): Promise<SuiGatewayHealth> {
