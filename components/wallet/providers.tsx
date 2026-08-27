@@ -78,7 +78,13 @@ function RegisterEnokiWallets() {
       network,
       apiKey,
       providers: {
-        google: { clientId: googleClientId },
+        google: {
+          clientId: googleClientId,
+          // Default redirect is the CURRENT page, so signing in from /agents
+          // sends an unregistered redirect_uri and Google 400s. Pin the one
+          // registered URI (origin + "/") for every page.
+          redirectUrl: `${window.location.origin}/`,
+        },
       },
     });
 
