@@ -8,15 +8,18 @@ import {
   useCurrentNetwork,
 } from "@mysten/dapp-kit-react";
 import { isEnokiNetwork, registerEnokiWallets } from "@mysten/enoki";
-import { SuiGrpcClient } from "@mysten/sui/grpc";
+import { SuiJsonRpcClient } from "@mysten/sui/jsonRpc";
 
 type OpenVerdictNetwork = "localnet" | "testnet" | "mainnet";
 
 const NETWORKS: OpenVerdictNetwork[] = ["localnet", "testnet", "mainnet"];
-const GRPC_URLS: Record<OpenVerdictNetwork, string> = {
+// JSON-RPC endpoints: Mysten's *.sui.io hosts are unreachable from some
+// networks (TLS interception), which silently killed zkLogin finalization
+// after a successful Google OAuth. publicnode serves the same API reliably.
+const RPC_URLS: Record<OpenVerdictNetwork, string> = {
   localnet: "http://127.0.0.1:9000",
-  testnet: "https://fullnode.testnet.sui.io:443",
-  mainnet: "https://fullnode.mainnet.sui.io:443",
+  testnet: "https://sui-testnet-rpc.publicnode.com",
+  mainnet: "https://sui-rpc.publicnode.com",
 };
 
 function getDefaultNetwork(value: string | undefined): OpenVerdictNetwork {
@@ -34,7 +37,7 @@ export const dAppKit = createDAppKit({
   // Browser extensions and Enoki use Wallet Standard; avoid the optional web-wallet SSR initializer.
   slushWalletConfig: null,
   createClient: (network) =>
-    new SuiGrpcClient({ network, baseUrl: GRPC_URLS[network] }),
+    new SuiJsonRpcClient({ network, url: RPC_URLS[network] }),
 });
 
 // Register the concrete instance so every v2 hook retains the network type.
