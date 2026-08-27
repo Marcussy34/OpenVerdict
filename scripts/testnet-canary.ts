@@ -329,18 +329,34 @@ async function main(): Promise<void> {
       selectedAtMs +
       Math.floor((preCommit.deadlines.firstCommitDeadlineMs - selectedAtMs) / 2);
     await waitUntil("acceptance window", acceptanceMs + 5_000);
-    const commits = await engine.votesCommit(claimId, 1);
+    // This machine's RPC path hiccups (canary 15 died on a transient
+    // `fetch failed` mid-resolution). Engine writes are idempotent per seat
+    // and identical tx bytes share a digest, so retrying is safe.
+    const withRpcRetry = async <T>(label: string, action: () => Promise<T>): Promise<T> => {
+      for (let attempt = 1; ; attempt += 1) {
+        try {
+          return await action();
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          const transient = /fetch failed|ECONNRESET|ETIMEDOUT|socket|network|terminated/i.test(message);
+          if (!transient || attempt >= 4) throw error;
+          console.log(`${label}: transient RPC failure (attempt ${attempt}) — retrying in 5s`);
+          await new Promise((resolve) => setTimeout(resolve, 5_000));
+        }
+      }
+    };
+    const commits = await withRpcRetry("commit", () => engine.votesCommit(claimId, 1));
     console.log(`committed ${commits.length} votes`);
 
     const inspection = await engine.inspect(claimId);
     await waitUntil("first reveal window", inspection.deadlines.firstCommitDeadlineMs);
     // COMMIT_1 → REVEAL_1 transition is explicit; reveal refuses in COMMIT_1.
-    await engine.advance(claimId);
-    const reveals = await engine.votesReveal(claimId, 1);
+    await withRpcRetry("advance", () => engine.advance(claimId));
+    const reveals = await withRpcRetry("reveal", () => engine.votesReveal(claimId, 1));
     console.log(`revealed ${reveals.length} votes`);
 
     await waitUntil("finalization window", inspection.deadlines.firstRevealDeadlineMs);
-    const finalize = await engine.finalize(claimId);
+    const finalize = await withRpcRetry("finalize", () => engine.finalize(claimId));
     console.log(`finalized: ${finalize.result} score=${finalize.truthScoreBps}`);
     console.log(`certificate: ${finalize.certificateId}`);
 
