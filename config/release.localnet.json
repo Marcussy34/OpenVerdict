@@ -2,9 +2,9 @@
   "network": "localnet",
   "suiRpcUrl": "http://127.0.0.1:9000",
   "suiFaucetUrl": "http://127.0.0.1:9123/v2/gas",
-  "packageId": "",
-  "registryObjectId": "",
-  "demoPoolObjectId": "",
+  "packageId": "0xa565e5eb1cad20b92556107741c56a3c8eb5eb1f33f44a6532dcde0beff5515d",
+  "registryObjectId": "0xc820e048a0a6cd86e787fc15c6741cbdc086604a0f9c10e1113c90e5f75819ff",
+  "demoPoolObjectId": "0x90e9c2b67c4345d721f93cf8074d6b43640907ac66dccb505717c5218c710430",
   "clockObjectId": "0x6",
   "randomObjectId": "0x8",
   "coinType": "0x2::sui::SUI",
@@ -27,5 +27,9 @@
     "maxSeatsPerModel": 2,
     "minDistinctModels": 3
   },
-  "explorerTxTemplate": ""
+  "explorerTxTemplate": "",
+  "adminCapObjectId": "0x76ab417c634274625095266b15c4c860199006c73ec4ebe93169b7a9f07c6c4e",
+  "pauseCapObjectId": "0x9848c18f8c2af390b62519ac1bf022507dd20d5690392611a19d064d4b2be907",
+  "evidenceCapObjectId": "0x481122600a2b4d660c85ca07007a009352153a953f63899f568a330734e1ab53",
+  "runAttestorCapObjectId": "0x76a11bef34f6ef2b2518d50af8bc5025d837bd31ea4e7e5a2bd830f1fca86a8a"
 }
