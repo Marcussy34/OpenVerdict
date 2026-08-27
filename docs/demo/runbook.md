@@ -11,10 +11,29 @@ Node ≥22, pnpm, Sui CLI ≥1.52. `pnpm install` at the repo root.
 ## 1. Offline proof (no network, no keys)
 
 ```bash
-pnpm test && pnpm test:move   # 215 TS + 66 Move
+pnpm test && pnpm test:move   # 234 TS + 66 Move
 pnpm e2e:localnet             # spawns a local Sui network, deploys, runs 3 full
                               # lifecycles + sponsored deposit, exits 0 on success
 ```
+
+## 1b. Cockpit demo state (local, one command)
+
+```bash
+pnpm tsx scripts/cockpit-demo.ts   # ~3 min: localnet + deploy + 2 demo claims
+```
+
+Prints `STATE READY` plus exact env exports and leaves the chain running; then
+
+```bash
+SUI_OPERATOR_SECRET_KEY=<printed> OPENVERDICT_AGENT_SEED=cockpit-demo-fixed-seed \
+OPENVERDICT_RELEASE_MANIFEST=.localnet/release.runtime.json pnpm dev
+# pkill -f "sui start" when finished
+```
+
+Produces claim #1 FINALIZED (unanimous-lean YES, Truth Score 8850 bps, minted
+certificate) and claim #2 SEALED mid-jury (five Blake2b-256 commitments
+on-chain, unrevealed) so the report page, live observer, event stream, agents
+directory and status page all render real chain-backed data.
 
 ## 2. Testnet deploy (T8a)
 
