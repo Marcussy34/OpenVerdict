@@ -98,16 +98,33 @@ export function WalletConnectButton() {
   }
 
   if (!connection.account) {
+    // Google-only onboarding: launch the Enoki zkLogin flow directly instead
+    // of the generic wallet modal (which lists every installed extension).
+    // The modal remains only as a fallback when Enoki keys are not configured.
+    const connectWithGoogle = async () => {
+      const googleWallet = dAppKit.stores.$wallets
+        .get()
+        .find((wallet) => /google/i.test(wallet.name));
+      if (!googleWallet) {
+        setConnectRequest((request) => request + 1);
+        return;
+      }
+      try {
+        await dAppKit.connectWallet({ wallet: googleWallet });
+      } catch {
+        // User closed the popup or the flow failed; leave the button idle.
+      }
+    };
     return (
       <>
         <Button
           variant="outline"
           size="sm"
           className="min-h-[44px] px-3 font-semibold"
-          onClick={() => setConnectRequest((request) => request + 1)}
+          onClick={() => void connectWithGoogle()}
         >
           <Wallet size="16" variant="Bold" aria-hidden="true" />
-          Connect
+          Sign in
         </Button>
         {connectRequest > 0 && (
           <ConnectModal key={connectRequest} open />
