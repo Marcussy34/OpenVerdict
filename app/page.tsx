@@ -36,17 +36,17 @@ const GUARANTEES = [
   {
     icon: Judge,
     title: "Collusion-resistant diversity",
-    body: "Committees strictly enforce ≥3 distinct model families (DeepSeek, Kimi, MiniMax) and a maximum of one seat per human identity, so no single vendor or operator can steer a verdict.",
+    body: "≥3 model families and one seat per human identity — no single vendor or operator steers a verdict.",
   },
   {
     icon: Award,
     title: "Deterministic Truth Scores",
-    body: "Consensus scores use pure integer half-up arithmetic over opened confidence ratings, treating UNSURE as an honest uncertainty signal rather than a forced binary.",
+    body: "Integer arithmetic over opened confidences; UNSURE is an honest signal, not a forced binary.",
   },
   {
     icon: Link21,
     title: "Client-side verifiable",
-    body: "Every commitment, Merkle root and Truth Score can be recomputed directly in your browser, without trusting any server or oracle operator.",
+    body: "Recompute every commitment, Merkle root and Truth Score in your browser — no trusted server.",
   },
 ];
 
@@ -170,8 +170,8 @@ export default function HomePage() {
 
             <p className="max-w-xl text-base leading-relaxed text-muted-foreground sm:text-lg">
               Five AI jurors from distinct model families review frozen evidence under
-              cryptographic commit-reveal. Verdicts settle on Sui with a deterministic Truth
-              Score and an immutable certificate — every step reproducible by anyone.
+              commit-reveal. Verdicts settle on Sui with a deterministic Truth Score and an
+              immutable certificate — every step reproducible.
             </p>
 
             {/* Fast fact-check entry */}
@@ -274,7 +274,7 @@ export default function HomePage() {
           value={stats.claims}
           icon={DocumentText}
           tone="primary"
-          hint="Read directly from on-chain Move objects."
+          hint="Read from on-chain objects."
         />
         <StatTile
           label="Jury seats drawn"
@@ -296,7 +296,7 @@ export default function HomePage() {
           unit={stats.avg === null ? undefined : "/100"}
           icon={Award}
           tone="chain"
-          hint="Averaged across settled certificates only."
+          hint="Across settled certificates."
         />
       </Stagger>
 
@@ -310,9 +310,8 @@ export default function HomePage() {
             Five deterministic phases, each one auditable
           </h2>
           <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-            Nothing in the loop depends on trusting the operator. Evidence is frozen before any
-            model sees it, votes are sealed before any model can copy another, and the final
-            score is arithmetic anyone can rerun.
+            No step trusts the operator: evidence freezes before any model sees it, votes
+            seal before any can copy another, and the score is arithmetic anyone can rerun.
           </p>
         </Reveal>
 
@@ -331,7 +330,7 @@ export default function HomePage() {
               Recent claims &amp; fact-checks
             </h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              Every assertion the engine has indexed, with its jury state and settled verdict.
+              Every indexed claim, with jury state and verdict.
             </p>
           </div>
 
@@ -431,8 +430,8 @@ export default function HomePage() {
             Put a claim in front of the jury
           </h2>
           <p className="mx-auto mt-2 max-w-lg text-sm leading-relaxed text-muted-foreground">
-            Direct review skips the optimistic window: evidence is frozen, five jurors are drawn
-            by on-chain randomness, and the commit-reveal round begins immediately.
+            Evidence freezes, five jurors are drawn by on-chain randomness, and
+            commit-reveal starts immediately.
           </p>
           <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
             <Button asChild className="min-h-[44px] px-6 font-semibold">

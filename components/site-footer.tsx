@@ -38,9 +38,8 @@ export function SiteFooter() {
               </span>
             </div>
             <p className="max-w-md text-sm leading-relaxed text-muted-foreground">
-              Decentralized intelligence verification engine coordinating diverse GonkaRouter
-              AI juries on Sui, with cryptographic commit-reveal and permanent evidence
-              storage on Walrus.
+              GonkaRouter AI juries, settled on Sui under commit-reveal, evidence
+              preserved on Walrus.
             </p>
             <div className="flex max-w-md items-start gap-2.5 rounded-xl border border-border bg-surface p-3">
               <InfoCircle
@@ -51,8 +50,8 @@ export function SiteFooter() {
               />
               <p className="text-xs leading-relaxed text-muted-foreground">
                 <strong className="font-semibold text-ocean">Engine-first architecture.</strong>{" "}
-                This dashboard is a strict, read-only projection of authoritative on-chain Move
-                objects, Walrus blobs and public resolution events.
+                This dashboard is a read-only projection of on-chain objects, Walrus
+                blobs and public events.
               </p>
             </div>
           </div>

@@ -138,13 +138,9 @@ export function WalletConnectButton() {
           Sign in
         </Button>
         <Dialog open={signInOpen} onOpenChange={setSignInOpen}>
-          <DialogContent className="max-w-xs gap-4 p-6">
+          <DialogContent className="max-w-xs gap-4 p-6" aria-describedby={undefined}>
             <DialogHeader className="space-y-1.5">
               <DialogTitle className="text-base">Sign in</DialogTitle>
-              <DialogDescription className="text-xs">
-                One click creates a self-custodial Sui address via zkLogin — no
-                extension, no seed phrase.
-              </DialogDescription>
             </DialogHeader>
             <Button
               variant="outline"
