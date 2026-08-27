@@ -32,3 +32,4 @@ move/openverdict/build/
 
 # playwright scratch
 .playwright-cli/
+.testnet/
