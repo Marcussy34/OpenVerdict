@@ -41,6 +41,35 @@ engine — malformed model output can never become a vote.
    claim replay, but their answer shapes the audit story.)
 7. **Credits** for the judging window / demo video takes.
 
+## Deep technical questions (engineer-to-engineer, with our evidence)
+
+1. **Is `response_format: json_object` actually enforced for MiniMax-M2.7?**
+   Accepted with HTTP 200, temp 0, strict system contract — yet MiniMax
+   returns schema-invalid content in ~8/8 runs while DeepSeek-V4-Flash and
+   Kimi-K2.6 comply 100%. Any grammar-constrained decoding option planned?
+2. **Determinism & worker attestation**: at temperature 0, does the same
+   request reproduce the same tokens across your decentralized worker
+   network (GPU/quantization heterogeneity)? Are model weights
+   version-pinned, and is the executing worker attested anywhere? (We build
+   verification on top of you — this is our deepest dependency.)
+3. **Request-id semantics**: format `devshard-<n>-<m>` — what are the
+   components? Globally unique and permanent? Any (planned) lookup endpoint:
+   id → model, timestamp, token counts? We persist ids in public audit
+   bundles; a verification endpoint makes them third-party-checkable.
+4. **Today's ~1h of raw gateway 502s** (no request ids assigned): router or
+   upstream provider pool? Status page / Retry-After guidance? Are 502s ever
+   billed?
+5. **Per-key concurrency and rate limits**: we serialize five jury calls and
+   want to parallelize — official concurrent-request and burst limits?
+6. **4096-token output cap**: account tier or platform-wide? Behavior if
+   `max_tokens` exceeds it — clamp or error?
+7. **Latency SLOs per family**: Kimi-K2.6 sometimes needs >120s (we run 240s
+   timeouts) and threw one transient PROVIDER_ERROR today — expected p99?
+8. **Model lifecycle**: deprecation/renaming policy for model ids? Our
+   on-chain agent profiles pin model ids by hash, so catalog churn matters.
+9. **`usage` fields**: we've seen token usage missing/malformed occasionally
+   (we flag, never trust) — guaranteed or best-effort?
+
 ## For judges & mentors
 
 - Track fit: Gonka "AI for Society" fact-checker + Sui "AI × Sui".
