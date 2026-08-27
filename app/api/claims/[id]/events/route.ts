@@ -81,7 +81,9 @@ export async function GET(req: Request, context: RouteContext) {
         try {
           for await (const event of engine.events(id, fromSequence)) {
             if (isAborted) break;
-            const sseChunk = `id: ${event.sequence}\nevent: ${event.kind}\ndata: ${JSON.stringify(event)}\n\n`;
+            // Unnamed SSE events: EventSource.onmessage only fires for default
+            // "message" events, and the payload already carries `kind`.
+            const sseChunk = `id: ${event.sequence}\ndata: ${JSON.stringify(event)}\n\n`;
             controller.enqueue(encoder.encode(sseChunk));
           }
         } catch {
