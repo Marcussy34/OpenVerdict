@@ -253,7 +253,7 @@ async function runSuiPublish(clientConfigPath: string): Promise<unknown> {
   }
 }
 
-async function resolveDeploymentIds(
+export async function resolveDeploymentIds(
   client: OpenVerdictSuiClient,
   publishOutput: unknown,
   digest: string,
@@ -379,7 +379,7 @@ function walkRecords(
   for (const nested of Object.values(record)) walkRecords(nested, visit);
 }
 
-function findStringByKey(value: unknown, key: string): string | undefined {
+export function findStringByKey(value: unknown, key: string): string | undefined {
   let found: string | undefined;
   walkRecords(value, (record) => {
     if (found === undefined && typeof record[key] === "string") {
@@ -398,7 +398,7 @@ async function objectExists(client: OpenVerdictSuiClient, id: string): Promise<b
   }
 }
 
-async function readConfig(path: string): Promise<MutableLocalnetConfig> {
+export async function readConfig(path: string): Promise<MutableLocalnetConfig> {
   const value = JSON.parse(await readFile(path, "utf8")) as unknown;
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
     throw new Error(`${path} must contain a JSON object`);
@@ -406,7 +406,7 @@ async function readConfig(path: string): Promise<MutableLocalnetConfig> {
   return value as MutableLocalnetConfig;
 }
 
-async function writeDeploymentConfig(
+export async function writeDeploymentConfig(
   path: string,
   config: MutableLocalnetConfig,
   ids: DeploymentObjectIds,
@@ -427,7 +427,7 @@ function objectId(value: unknown): string | undefined {
     : undefined;
 }
 
-async function runProcess(
+export async function runProcess(
   command: string,
   args: string[],
   options: { cwd: string; timeoutMs: number },
