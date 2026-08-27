@@ -1,0 +1,13 @@
+# Secrets and local runtime state must NEVER enter the build context.
+.env
+.env.*
+!.env.example
+.testnet/
+.localnet/
+.pglite/
+.git/
+.github/
+node_modules/
+.next/
+.firecrawl/
+*.log

@@ -17,6 +17,7 @@ RUN pnpm build
 FROM base AS runtime
 WORKDIR /app
 ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 PORT=3000
-COPY --from=build /app ./
+COPY --from=build --chown=node:node /app ./
+USER node
 EXPOSE 3000
 CMD ["node", "scripts/start-production.mjs"]
