@@ -205,11 +205,11 @@ async function main(): Promise<void> {
         evidenceCutoffMs: now + 40_000,
         proposalDeadlineMs: now + 45_000,
         challengeDeadlineMs: now + 50_000,
-        firstCommitDeadlineMs: now + 7 * MINUTE,
-        firstRevealDeadlineMs: now + 10 * MINUTE,
-        discussionDeadlineMs: now + 12 * MINUTE,
-        secondCommitDeadlineMs: now + 16 * MINUTE,
-        secondRevealDeadlineMs: now + 19 * MINUTE,
+        firstCommitDeadlineMs: now + 20 * MINUTE,
+        firstRevealDeadlineMs: now + 24 * MINUTE,
+        discussionDeadlineMs: now + 27 * MINUTE,
+        secondCommitDeadlineMs: now + 38 * MINUTE,
+        secondRevealDeadlineMs: now + 44 * MINUTE,
       },
     });
     console.log(`claim created: ${claimId}`);

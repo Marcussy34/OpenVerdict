@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { blake2b256, toHex } from "../protocol/hash";
 import {
   createGonkaAdapterWithDependencies as createGonkaAdapter,
+  extractJsonObject,
   type GonkaAdapterDependencies,
 } from "./adapter";
 import { canonicalJsonBytes } from "./canonical";
@@ -330,5 +331,31 @@ describe("createGonkaAdapter", () => {
 
     expect(audit.status).toBe("RECEIVED");
     expect(audit.gonkaRequestId).toBe("msg_valid_1");
+  });
+});
+
+describe("extractJsonObject", () => {
+  it("parses clean JSON directly", () => {
+    expect(extractJsonObject('{"a":1}')).toEqual({ a: 1 });
+  });
+
+  it("extracts JSON after reasoning prose", () => {
+    const content = '**Analysis:** thinking about {braces} here.\n\n{"outcome":"YES","n":2}';
+    expect(extractJsonObject(content)).toEqual({ outcome: "YES", n: 2 });
+  });
+
+  it("extracts fenced JSON", () => {
+    expect(extractJsonObject('```json\n{"ok":true}\n```')).toEqual({ ok: true });
+  });
+
+  it("handles braces inside strings", () => {
+    expect(extractJsonObject('preamble {"text":"a } b { c","k":1}')).toEqual({
+      text: "a } b { c",
+      k: 1,
+    });
+  });
+
+  it("throws when no object exists", () => {
+    expect(() => extractJsonObject("no json here")).toThrow();
   });
 });
