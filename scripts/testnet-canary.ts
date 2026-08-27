@@ -170,7 +170,7 @@ async function main(): Promise<void> {
   const gonka = createGonkaAdapter({
     baseUrl: env("GONKA_ROUTER_BASE_URL"),
     apiKey: env("GONKA_ROUTER_API_KEY"),
-    timeoutMs: 120_000,
+    timeoutMs: 240_000,
     maxRetries: 1,
   });
   const db = createDb({ dataDir: join(repositoryRoot, ".testnet/pglite") });
