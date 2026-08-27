@@ -33,7 +33,7 @@ import { repositoryRoot, writeEngineCompatibleManifest } from "./deploy-localnet
 import { serializeRunApprovals } from "./localnet-e2e";
 
 const AGENT_COUNT = 7;
-const AGENT_FUND_MIST = 40_000_000n; // 0.04 SUI gas per agent
+const AGENT_FUND_MIST = 20_000_000n; // 0.02 SUI top-up per underfunded agent
 const MINUTE = 60_000;
 
 function env(name: string): string {
@@ -152,17 +152,16 @@ async function main(): Promise<void> {
     AGENT_COUNT,
   );
 
-  const firstAgent = signers.listAgentAddresses()[0]!;
-  const firstBalance = await client.core.getBalance({ owner: firstAgent });
-  if (BigInt(firstBalance.balance.balance ?? 0) > 10_000_000n) {
+  const underfunded: string[] = [];
+  for (const address of signers.listAgentAddresses()) {
+    const balance = await client.core.getBalance({ owner: address });
+    if (BigInt(balance.balance.balance ?? 0) < 5_000_000n) underfunded.push(address);
+  }
+  if (underfunded.length === 0) {
     console.log("agents already funded; skipping fund step");
   } else {
-    const fundDigest = await fundAgents(
-      client,
-      operator,
-      signers.listAgentAddresses(),
-    );
-    console.log(`funded ${AGENT_COUNT} agents in ${fundDigest}`);
+    const fundDigest = await fundAgents(client, operator, underfunded);
+    console.log(`topped up ${underfunded.length} agents in ${fundDigest}`);
   }
 
   const agents = await registerAgents(client, manifest, signers);
