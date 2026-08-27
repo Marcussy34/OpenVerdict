@@ -2364,15 +2364,22 @@ function defaultDeadlines(
   network: ReleaseManifest["network"],
 ): ClaimCreateRequest["deadlines"] {
   if (network === "localnet") {
+    // Worker-friendly ladder: multi-process worker cadence (poll loops +
+    // acceptance window = selection + half-way-to-commit) needs real room, or
+    // browser-submitted claims miss every commit window and finalize
+    // UNRESOLVED. Test harnesses pass explicit deadlines and are unaffected.
     return {
-      evidenceCutoffMs: now + 8_000,
-      proposalDeadlineMs: now + 10_000,
-      challengeDeadlineMs: now + 12_000,
-      firstCommitDeadlineMs: now + 20_000,
-      firstRevealDeadlineMs: now + 30_000,
-      discussionDeadlineMs: now + 40_000,
-      secondCommitDeadlineMs: now + 55_000,
-      secondRevealDeadlineMs: now + 65_000,
+      evidenceCutoffMs: now + 45_000,
+      proposalDeadlineMs: now + 50_000,
+      challengeDeadlineMs: now + 55_000,
+      // Minutes-scale windows: the three workers share one operator signer,
+      // so equivocation stalls (objects reserved by a sibling's tx) can eat
+      // tens of seconds per phase; short ladders lose whole windows to it.
+      firstCommitDeadlineMs: now + 360_000,
+      firstRevealDeadlineMs: now + 480_000,
+      discussionDeadlineMs: now + 540_000,
+      secondCommitDeadlineMs: now + 720_000,
+      secondRevealDeadlineMs: now + 840_000,
     };
   }
   const minute = 60_000;
