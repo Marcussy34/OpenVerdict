@@ -358,4 +358,20 @@ describe("extractJsonObject", () => {
   it("throws when no object exists", () => {
     expect(() => extractJsonObject("no json here")).toThrow();
   });
+
+  it("ignores JSON drafts inside <think> blocks (MiniMax-M2.7)", () => {
+    const content =
+      '<think>Draft entry: {"check":"c","evidenceIds":[],"assessment":"MIXED","finding":"f"}</think>\n' +
+      '{"outcome":"UNSURE","confidenceBps":4000}';
+    expect(extractJsonObject(content)).toEqual({ outcome: "UNSURE", confidenceBps: 4000 });
+  });
+
+  it("returns the root object, not a final nested entry (backward-scan regression)", () => {
+    const content =
+      'reasoning first drafts {"check":"warmup","evidenceIds":[],"assessment":"MIXED","finding":"draft"} then answers\n' +
+      '{"outcome":"YES","confidenceBps":9000,"publicReasoningTrace":[{"check":"last","evidenceIds":["ev-1"],"assessment":"SUPPORTS","finding":"tail entry"}]}';
+    const extracted = extractJsonObject(content) as Record<string, unknown>;
+    expect(extracted.outcome).toBe("YES");
+    expect(Array.isArray(extracted.publicReasoningTrace)).toBe(true);
+  });
 });
