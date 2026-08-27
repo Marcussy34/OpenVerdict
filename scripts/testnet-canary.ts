@@ -293,13 +293,14 @@ async function main(): Promise<void> {
         evidenceCutoffMs: now + 40_000,
         proposalDeadlineMs: now + 45_000,
         challengeDeadlineMs: now + 50_000,
-        // Five SERIAL live runs, each up to 240s + a repair attempt, can eat
-        // ~40 min before the first commit (canary 11 blew a 20-min window).
-        firstCommitDeadlineMs: now + 50 * MINUTE,
-        firstRevealDeadlineMs: now + 56 * MINUTE,
-        discussionDeadlineMs: now + 60 * MINUTE,
-        secondCommitDeadlineMs: now + 75 * MINUTE,
-        secondRevealDeadlineMs: now + 82 * MINUTE,
+        // Serial live runs finish in ~2-3 min; the binding constraint is the
+        // ACCEPTANCE window (selection + half-way-to-commit) that lock waits
+        // for. 15 min to commit ⇒ acceptance ~7.5 min ⇒ ~20 min end to end.
+        firstCommitDeadlineMs: now + 15 * MINUTE,
+        firstRevealDeadlineMs: now + 18 * MINUTE,
+        discussionDeadlineMs: now + 20 * MINUTE,
+        secondCommitDeadlineMs: now + 28 * MINUTE,
+        secondRevealDeadlineMs: now + 32 * MINUTE,
       },
     });
     console.log(`claim created: ${claimId}`);
@@ -307,6 +308,7 @@ async function main(): Promise<void> {
     await waitUntil("evidence cutoff", now + 40_000);
     await engine.evidenceFreeze(claimId, 1);
     console.log("evidence frozen (phase 1)");
+    const selectedAtMs = Date.now();
     const committee = await engine.selectCommittee(claimId);
     console.log(`committee selected in ${committee.digest}`);
 
@@ -317,6 +319,13 @@ async function main(): Promise<void> {
           `status=${run.status} gonkaRequestId=${run.gonkaRequestId}`,
       );
     }
+    // jury::lock_committee opens at selection + (commit − selection) / 2
+    // (E_DEADLINE_NOT_REACHED = 20 before that) — wait the window out.
+    const preCommit = await engine.inspect(claimId);
+    const acceptanceMs =
+      selectedAtMs +
+      Math.floor((preCommit.deadlines.firstCommitDeadlineMs - selectedAtMs) / 2);
+    await waitUntil("acceptance window", acceptanceMs + 5_000);
     const commits = await engine.votesCommit(claimId, 1);
     console.log(`committed ${commits.length} votes`);
 
