@@ -58,6 +58,8 @@ export type FactCheckRequest = {
   urls: string[];
   /** Resolution criteria; a deterministic default is derived when omitted. */
   resolutionCriteria?: string;
+  /** Optional explicit deadlines (canary/operator use); network defaults otherwise. */
+  deadlines?: ClaimCreateRequest["deadlines"];
 };
 
 export type ClaimCreateRequest = {

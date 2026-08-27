@@ -29,7 +29,7 @@ import {
   type ReleaseManifest,
 } from "../lib/sui";
 import { createLocalWalrusStore } from "../lib/walrus";
-import { repositoryRoot } from "./deploy-localnet";
+import { repositoryRoot, writeEngineCompatibleManifest } from "./deploy-localnet";
 import { serializeRunApprovals } from "./localnet-e2e";
 
 const AGENT_COUNT = 7;
@@ -131,9 +131,14 @@ async function waitUntil(label: string, deadlineMs: number): Promise<void> {
 }
 
 async function main(): Promise<void> {
-  const manifest = await loadReleaseManifest(
+  // Strip deploy-only cap keys into an engine-compatible runtime manifest,
+  // mirroring the localnet flow.
+  const runtimeManifestPath = join(repositoryRoot, ".testnet/release.runtime.json");
+  await writeEngineCompatibleManifest(
     join(repositoryRoot, "config/release.testnet.json"),
+    runtimeManifestPath,
   );
+  const manifest = await loadReleaseManifest(runtimeManifestPath);
   assert.ok(manifest.packageId, "run scripts/deploy-testnet.ts first");
   const rpcUrl = manifest.suiRpcFallbackUrl ?? manifest.suiRpcUrl;
   const client = createFallbackClient({ network: "testnet", suiRpcUrl: rpcUrl });
@@ -147,12 +152,18 @@ async function main(): Promise<void> {
     AGENT_COUNT,
   );
 
-  const fundDigest = await fundAgents(
-    client,
-    operator,
-    signers.listAgentAddresses(),
-  );
-  console.log(`funded ${AGENT_COUNT} agents in ${fundDigest}`);
+  const firstAgent = signers.listAgentAddresses()[0]!;
+  const firstBalance = await client.core.getBalance({ owner: firstAgent });
+  if (BigInt(firstBalance.balance.balance ?? 0) > 10_000_000n) {
+    console.log("agents already funded; skipping fund step");
+  } else {
+    const fundDigest = await fundAgents(
+      client,
+      operator,
+      signers.listAgentAddresses(),
+    );
+    console.log(`funded ${AGENT_COUNT} agents in ${fundDigest}`);
+  }
 
   const agents = await registerAgents(client, manifest, signers);
 
@@ -165,7 +176,7 @@ async function main(): Promise<void> {
   const db = createDb({ dataDir: join(repositoryRoot, ".testnet/pglite") });
   const engine: Engine = await createEngine({
     network: "testnet",
-    manifestPath: join(repositoryRoot, "config/release.testnet.json"),
+    manifestPath: runtimeManifestPath,
     db,
     walrus: createLocalWalrusStore(join(repositoryRoot, ".testnet/walrus-local")),
     gonka,
@@ -179,29 +190,31 @@ async function main(): Promise<void> {
     const now = Date.now();
     const statement =
       "The Sui testnet chain identifier reported by JSON-RPC is 4c78adac.";
-    const { claimId } = await engine.claimCreate({
-      statement,
+    const { claimId } = await engine.factCheckStart({
+      claim: statement,
+      text:
+        "Snapshot: POST sui_getChainIdentifier to the public testnet JSON-RPC " +
+        "endpoint returned {\"jsonrpc\":\"2.0\",\"result\":\"4c78adac\"} on 2026-08-27.",
+      urls: [],
       resolutionCriteria:
         "YES if the canonical Sui testnet chain identifier equals 4c78adac per " +
         "sui_getChainIdentifier before the evidence cutoff; NO if it differs; " +
         "UNSURE if the endpoint cannot be read. Admissible: the submitted " +
         "statement text snapshot.",
-      mode: 1,
       deadlines: {
-        evidenceCutoffMs: now + 1 * MINUTE,
-        proposalDeadlineMs: now + 1 * MINUTE + 5_000,
-        challengeDeadlineMs: now + 1 * MINUTE + 10_000,
+        evidenceCutoffMs: now + 40_000,
+        proposalDeadlineMs: now + 45_000,
+        challengeDeadlineMs: now + 50_000,
         firstCommitDeadlineMs: now + 7 * MINUTE,
         firstRevealDeadlineMs: now + 10 * MINUTE,
         discussionDeadlineMs: now + 12 * MINUTE,
         secondCommitDeadlineMs: now + 16 * MINUTE,
         secondRevealDeadlineMs: now + 19 * MINUTE,
       },
-      committeeBudget: "10000000",
-      evidenceBudget: "5000000",
     });
     console.log(`claim created: ${claimId}`);
 
+    await waitUntil("evidence cutoff", now + 40_000);
     await engine.evidenceFreeze(claimId, 1);
     console.log("evidence frozen (phase 1)");
     const committee = await engine.selectCommittee(claimId);

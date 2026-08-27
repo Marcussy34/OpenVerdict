@@ -175,7 +175,8 @@ class OpenVerdictEngine implements Engine {
 
   async factCheckStart(req: FactCheckRequest): Promise<{ claimId: string }> {
     validateFactCheckRequest(req);
-    const deadlines = defaultDeadlines(this.#now(), this.#manifest.network);
+    const deadlines =
+      req.deadlines ?? defaultDeadlines(this.#now(), this.#manifest.network);
     const resolutionCriteria =
       req.resolutionCriteria?.trim() ||
       "Determine whether the bounded claim is supported by the frozen evidence available before the evidence cutoff. Return YES, NO, or UNSURE when evidence conflicts or is insufficient.";

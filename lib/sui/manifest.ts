@@ -56,7 +56,9 @@ export const releaseManifestSchema = z
       .optional(),
     explorerTxTemplate: z.string(),
   })
-  .strict();
+  // Strip (don't reject) unknown top-level keys: deploy scripts persist
+  // capability object ids alongside the engine fields in the same file.
+  .strip();
 
 export type ReleaseManifest = z.infer<typeof releaseManifestSchema>;
 
