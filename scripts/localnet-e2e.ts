@@ -319,7 +319,7 @@ async function main(): Promise<void> {
   }
 }
 
-function serializeRunApprovals(gateway: SuiGateway): SuiGateway {
+export function serializeRunApprovals(gateway: SuiGateway): SuiGateway {
   let approvalTail = Promise.resolve();
   return new Proxy(gateway, {
     get(target, property, receiver) {
@@ -1336,11 +1336,14 @@ function delay(milliseconds: number): Promise<void> {
   return new Promise((resolvePromise) => setTimeout(resolvePromise, milliseconds));
 }
 
-main().catch((error: unknown) => {
-  process.stderr.write(`E2E_LOCALNET_FAILED [${activeStep}]: ${errorMessage(error)}\n`);
-  if (error instanceof Error && error.stack) {
-    process.stderr.write(`${error.stack.slice(0, 8_000)}\n`);
-  }
-  process.stderr.write(`See ${join(localnetDir, "sui.log")} for localnet logs.\n`);
-  process.exitCode = 1;
-});
+// Entry guard: the canary imports helpers from this module without running it.
+if (process.argv[1]?.endsWith("localnet-e2e.ts")) {
+  main().catch((error: unknown) => {
+    process.stderr.write(`E2E_LOCALNET_FAILED [${activeStep}]: ${errorMessage(error)}\n`);
+    if (error instanceof Error && error.stack) {
+      process.stderr.write(`${error.stack.slice(0, 8_000)}\n`);
+    }
+    process.stderr.write(`See ${join(localnetDir, "sui.log")} for localnet logs.\n`);
+    process.exitCode = 1;
+  });
+}
