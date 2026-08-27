@@ -44,6 +44,22 @@ declare module "@mysten/dapp-kit-react" {
   }
 }
 
+function SuppressExtensionNoise() {
+  useEffect(() => {
+    // MetaMask's Sui adapter rejects unhandled during its own session restore
+    // on page load (extension code we cannot catch at the source). Suppress
+    // ONLY that known message so every real rejection still surfaces.
+    const onRejection = (event: PromiseRejectionEvent) => {
+      const message =
+        event.reason instanceof Error ? event.reason.message : String(event.reason);
+      if (message.includes("Failed to connect to MetaMask")) event.preventDefault();
+    };
+    window.addEventListener("unhandledrejection", onRejection);
+    return () => window.removeEventListener("unhandledrejection", onRejection);
+  }, []);
+  return null;
+}
+
 function RegisterEnokiWallets() {
   const client = useCurrentClient();
   const network = useCurrentNetwork();
@@ -72,6 +88,7 @@ function RegisterEnokiWallets() {
 export function WalletProviders({ children }: { children: ReactNode }) {
   return (
     <DAppKitProvider dAppKit={dAppKit}>
+      <SuppressExtensionNoise />
       <RegisterEnokiWallets />
       {children}
     </DAppKitProvider>
