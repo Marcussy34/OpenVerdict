@@ -147,7 +147,7 @@ export class RealSuiGateway implements SuiGateway {
   }
 
   async acceptJurySeat(input: GatewayAcceptSeatInput): Promise<TxResult> {
-    const agent = this.#signers.getAgentByProfileId(input.agentProfileId);
+    const agent = await this.agentForProfile(input.agentProfileId);
     const agentCapId = await this.agentCapId(input.agentProfileId);
     return txResult(
       await executeAndWait(
@@ -182,7 +182,7 @@ export class RealSuiGateway implements SuiGateway {
   }
 
   async bindJurySeatEvidence(input: GatewayBindEvidenceInput): Promise<TxResult> {
-    const agent = this.#signers.getAgentByProfileId(input.agentProfileId);
+    const agent = await this.agentForProfile(input.agentProfileId);
     const agentCapId = await this.agentCapId(input.agentProfileId);
     return txResult(
       await executeAndWait(
@@ -224,7 +224,7 @@ export class RealSuiGateway implements SuiGateway {
   }
 
   async commitVote(input: GatewayCommitVoteInput): Promise<TxResult> {
-    const agent = this.#signers.getAgentByProfileId(input.agentProfileId);
+    const agent = await this.agentForProfile(input.agentProfileId);
     const agentCapId = await this.agentCapId(input.agentProfileId);
     return txResult(
       await executeAndWait(
@@ -236,7 +236,7 @@ export class RealSuiGateway implements SuiGateway {
   }
 
   async revealVote(input: GatewayRevealVoteInput): Promise<RevealVoteResult> {
-    const agent = this.#signers.getAgentByProfileId(input.agentProfileId);
+    const agent = await this.agentForProfile(input.agentProfileId);
     const agentCapId = await this.agentCapId(input.agentProfileId);
     const result = await executeAndWait(
       this.#client,
@@ -392,8 +392,31 @@ export class RealSuiGateway implements SuiGateway {
     };
   }
 
+  /** Resolve a signer for an agent profile, self-healing across processes.
+   * Committee selection binds profile→signer in the process that ran it, but
+   * each worker holds its own in-memory SignerRegistry — so a worker that did
+   * not process the selection must re-derive the binding from the on-chain
+   * profile's owner before it can sign for a seat. */
+  private async agentForProfile(agentProfileId: string) {
+    try {
+      return this.#signers.getAgentByProfileId(agentProfileId);
+    } catch (error) {
+      if (!(error instanceof SignerRegistryError)) throw error;
+      const profile = await this.#client.core.getObject({
+        objectId: agentProfileId,
+        include: { json: true },
+      });
+      const owner = optionalId(profile.object.json?.owner);
+      if (!owner) {
+        throw new Error(`agent profile ${agentProfileId} has no readable owner`);
+      }
+      const agentCapId = await this.findAgentCap(owner, agentProfileId);
+      return this.#signers.bindAgentProfile({ agentProfileId, owner, agentCapId });
+    }
+  }
+
   private async agentCapId(agentProfileId: string): Promise<string> {
-    const agent = this.#signers.getAgentByProfileId(agentProfileId);
+    const agent = await this.agentForProfile(agentProfileId);
     if (agent.agentCapId) return agent.agentCapId;
     const capId = await this.findAgentCap(agent.address, agentProfileId);
     this.#signers.bindAgentProfile({
