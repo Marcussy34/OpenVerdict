@@ -3,6 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { SplitButton, Eyebrow, CornerPin, GridGuides, Arrow } from "./primitives";
+import { HeroVideo } from "./hero-video";
 import { SuiMark, GonkaMark } from "@/components/brand/logos";
 import type { ClaimInspection } from "@/lib/engine/contract";
 
@@ -18,33 +19,25 @@ function truncate(text: string, max: number) {
 /**
  * Section 1 — the night stage.
  *
- * The globe renders inline and scrolls away with the page like any other
- * content — no scroll choreography.
+ * The generated network instrument sits behind the copy and travels with the
+ * existing hero-to-card dock choreography.
  */
 export function Hero({
   latest,
-  children,
 }: {
   latest: ClaimInspection | null;
-  /** The globe. */
-  children?: React.ReactNode;
 }) {
   return (
     <section
       id="top"
       className="ov-navy-ground ov-on-dark relative min-h-[100svh] overflow-hidden text-[#F3F3F3]"
     >
+      <HeroVideo />
       <GridGuides columns={3} dark className="hidden md:block" />
 
       <div className="relative z-30 flex min-h-[100svh] flex-col px-5 pt-[86px] pb-7 md:px-7 md:pb-8 lg:justify-between lg:pt-[104px]">
-        {/* The globe's footprint. It stacks above the type on small screens and
-            floats behind it, centre-right, from lg up. */}
-        <div className="pointer-events-none relative mx-auto aspect-square w-full max-w-[300px] shrink-0 sm:max-w-[380px] lg:absolute lg:top-1/2 lg:left-[63%] lg:mx-0 lg:w-[40vw] lg:max-w-[540px] lg:-translate-x-1/2 lg:-translate-y-1/2">
-          {children}
-        </div>
-
         {/* Headline — exits left as the shrink begins (data-hero-exit). */}
-        <div data-hero-exit="left" className="mt-6 max-w-[520px] lg:mt-0">
+        <div data-hero-exit="left" className="max-w-[520px]">
           <h1 className="ov-display text-[clamp(2.75rem,9vw,5.5rem)]">
             Agentic
             <br />

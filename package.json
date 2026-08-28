@@ -22,7 +22,9 @@
     "test:watch": "vitest",
     "test:move": "cd move/openverdict && sui move test",
     "cli": "tsx cli/src/index.ts",
-    "e2e:localnet": "tsx scripts/localnet-e2e.ts"
+    "e2e:localnet": "tsx scripts/localnet-e2e.ts",
+    "media:landing": "tsx tools/landing-video/generate.ts",
+    "media:landing:optimize": "bash tools/landing-video/optimize.sh"
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.5.7",
@@ -57,6 +59,7 @@
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.3.6",
+    "@google/genai": "2.19.0",
     "@tailwindcss/postcss": "^4.3.3",
     "@types/node": "^26.3.0",
     "@types/pg": "^8.23.1",

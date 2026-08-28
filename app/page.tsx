@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect, useMemo, useRef } from "react";
-import { SwarmGlobe } from "@/components/globe/swarm-globe";
 import { Hero } from "@/components/landing/hero";
 import { HeroShrink } from "@/components/landing/hero-shrink";
 import { SmoothScroll } from "@/components/landing/smooth-scroll";
@@ -47,8 +46,6 @@ export default function HomePage() {
     [claims],
   );
 
-  const globe = <SwarmGlobe className="lg:max-w-none" />;
-
   return (
     <>
 
@@ -60,9 +57,7 @@ export default function HomePage() {
           <Productivity cardRef={cardRef} entranceRef={entranceRef} claims={claims} />
         }
       >
-        <Hero latest={latest}>
-          {globe}
-        </Hero>
+        <Hero latest={latest} />
       </HeroShrink>
 
       <Propositions />

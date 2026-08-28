@@ -681,6 +681,9 @@ const ripple = (() => {
 
 const TMP = new THREE.Vector3();
 const CAM_DIR = new THREE.Vector3();
+/** The ripple disc faces +Z; these turn it to face its point on the globe. */
+const DISC_FORWARD = new THREE.Vector3(0, 0, 1);
+const DISC_DIR = new THREE.Vector3();
 /** Reduced motion parks the cycle here — mid-deliberation, network at its busiest. */
 const STILL_FRAME_MS = 9200;
 
@@ -715,7 +718,11 @@ function SceneBody({
     if (!node || !mesh) return;
     const [x, y, z] = nodePosition(node, 1);
     mesh.position.set(x, y, z);
-    mesh.lookAt(x * 2, y * 2, z * 2);
+    // Orient in the PARENT's space. `lookAt` aims in WORLD space, so with the
+    // globe tilted and spinning it pointed the patch somewhere off the node
+    // entirely — the projected ring came out lopsided and clipped, and drifted
+    // further out of true as the globe turned.
+    mesh.quaternion.setFromUnitVectors(DISC_FORWARD, DISC_DIR.set(x, y, z).normalize());
     land.uniforms.uClaim.value.set(x, y, z).normalize();
     invalidate();
   }, [originIndex, invalidate]);

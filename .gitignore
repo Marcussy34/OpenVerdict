@@ -33,3 +33,6 @@ move/openverdict/build/
 # playwright scratch
 .playwright-cli/
 .testnet/
+
+# Billable media-generation intermediates; only selected web assets are tracked.
+artifacts/landing-video/

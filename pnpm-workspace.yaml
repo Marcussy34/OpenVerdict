@@ -1,7 +1,9 @@
 packages:
   - "."
 allowBuilds:
+  '@google/genai': true
   esbuild: true
+  protobufjs: true
   unrs-resolver: true
 minimumReleaseAgeExclude:
   - '@tanstack/query-core@5.102.5'

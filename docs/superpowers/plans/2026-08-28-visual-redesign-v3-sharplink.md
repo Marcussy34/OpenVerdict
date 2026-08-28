@@ -74,9 +74,13 @@ SKIP that section entirely per user); …022405 = FAQ; …022417/…022424 = foo
 ## Page composition (9 sections; matches screenshots minus news)
 
 ### 1. HERO (dark navy, full viewport)
-- Right/center visual: **SwarmGlobe** (existing components/globe/*) over a
-  deep navy radial + very subtle thin-line wireframe frames (1px
-  rgba(243,243,243,0.35) rectangles echoing the original's overlay).
+- Right/center visual (2026-08-28 addendum): a quality-first Google Cloud
+  generated kinetic network instrument replaces the hero-only SwarmGlobe.
+  Its titanium Earth armature and distributed optical nodes represent Gonka;
+  five hardware anchors represent the jury; a restrained sapphire waterdrop
+  references Sui. It uses #0E76FF / #F3F3F3, preserves left-side copy space,
+  pauses offscreen, and falls back to its exact poster for reduced motion or
+  codec failure. The lower protocol-section SwarmGlobe remains unchanged.
 - Left: h1 Archivo 400 88px (2 lines, max-w ~500px): `Agentic\nResolution`.
   Below: the two split-buttons: primary `SUBMIT A CLAIM` (blue arrow chip;
   scrolls to the footer claim form) + secondary `WATCH LIVE CLAIMS`
