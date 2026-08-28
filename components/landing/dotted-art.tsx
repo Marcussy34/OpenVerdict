@@ -69,8 +69,7 @@ export function EvidencePinArt({ className, size }: { className?: string; size?:
       <path d="M56 134 120 168 184 134 120 100Z" {...DASH} />
       <path d="M56 116 120 150 184 116 120 82Z" {...DASH} />
       <path d="M56 116v18M184 116v18M56 134v18M184 134v18" />
-      {/* the pin driven through the stack */}
-      <path d="M120 32v72" />
+      {/* the pin sitting on the stack (no shaft — it read as a stray line) */}
       <path d="M120 32c-11 0-20 9-20 20 0 14 20 30 20 30s20-16 20-30c0-11-9-20-20-20Z" />
       <circle cx="120" cy="52" r="6" {...DASH} />
     </Frame>
@@ -87,10 +86,6 @@ export function CertificateArt({ className, size }: { className?: string; size?:
       <circle cx="150" cy="146" r="20" />
       <circle cx="150" cy="146" r="12" {...DASH} />
       <path d="M144 146l4.5 5 8-9" strokeWidth={2} />
-      {/* chain links running off the page */}
-      <path d="M40 190h34a10 10 0 0 0 0-20H58" />
-      <path d="M200 190h-34a10 10 0 0 1 0-20h16" />
-      <path d="M96 180h48" {...DASH} />
     </Frame>
   );
 }
