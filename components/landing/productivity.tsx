@@ -27,11 +27,13 @@ export const STAT_CARD_BACKGROUND =
  * lands on top of the arriving visual rather than punching through it.
  */
 const HEADLINE = ["Pioneering", "Verifiability"];
-// The three guarantee cards on the entrance clock: row 01 starts while the
-// handoff is still dissolving, then one every ROW_STEP. `ENTRANCE_COMPLETE` is
-// the moment the last one lands — the hero's runway is exactly that long, so
-// the page moves on the instant the sequence finishes.
-const ROW_START = 0.3;
+// The three guarantee cards on the entrance clock, which starts at the mask's
+// landing: row 01 is already sliding in as the dissolve begins, then one every
+// ROW_STEP, so the column emerges with the section rather than after it. The
+// last lands with the headline's final letters. `ENTRANCE_COMPLETE` is that
+// moment — the hero's runway is exactly that long, so the page moves on the
+// instant the sequence finishes.
+const ROW_START = 0.08;
 const ROW_STEP = 0.22;
 const ROW_WINDOW = 0.26;
 export const ENTRANCE_COMPLETE = ROW_START + (ROWS.length - 1) * ROW_STEP + ROW_WINDOW;
