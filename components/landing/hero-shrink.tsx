@@ -3,6 +3,7 @@
 import * as React from "react";
 import { useScrollFrame, clamp01, lerp } from "./scroll-driver";
 import { GridGuides } from "./primitives";
+import { ENTRANCE_COMPLETE } from "./productivity";
 
 /**
  * The reference's opening move, seamless edition.
@@ -34,14 +35,11 @@ const FADE_VH = 24;
 const GHOST_START_VH = 36;
 const GHOST_VH = 44;
 const GHOST_FLOOR = 0.35;
-// One unit of the revealed section's entrance clock, and the clock value at
-// which it is finished — the last guarantee row in `productivity.tsx` lands at
-// 0.55 + 2 × 0.22 + 0.26. The runway is exactly that long, so the very next
-// scroll moves the page on instead of holding a screen that has nothing left
-// to play.
+// One unit of the revealed section's entrance clock. The runway runs until that
+// section says its entrance is done, so the very next scroll moves the page on
+// instead of holding a screen that has nothing left to play.
 const ENTRANCE_VH = 50;
-const ENTRANCE_END = 1.25;
-const RUNWAY_VH = MASK_VH + ENTRANCE_VH * ENTRANCE_END;
+const RUNWAY_VH = MASK_VH + ENTRANCE_VH * ENTRANCE_COMPLETE;
 
 // The same timeline as fractions of the runway, which is what the frame reads.
 const EXIT_PORTION = EXIT_VH / RUNWAY_VH;

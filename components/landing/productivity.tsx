@@ -27,6 +27,14 @@ export const STAT_CARD_BACKGROUND =
  * lands on top of the arriving visual rather than punching through it.
  */
 const HEADLINE = ["Pioneering", "Verifiability"];
+// The three guarantee cards on the entrance clock: row 01 starts while the
+// handoff is still dissolving, then one every ROW_STEP. `ENTRANCE_COMPLETE` is
+// the moment the last one lands — the hero's runway is exactly that long, so
+// the page moves on the instant the sequence finishes.
+const ROW_START = 0.3;
+const ROW_STEP = 0.22;
+const ROW_WINDOW = 0.26;
+export const ENTRANCE_COMPLETE = ROW_START + (ROWS.length - 1) * ROW_STEP + ROW_WINDOW;
 /** Deterministic pseudo-random reveal threshold per letter (SSR-stable). */
 function letterThreshold(i: number) {
   const x = Math.sin((i + 1) * 12.9898) * 43758.5453;
@@ -115,9 +123,9 @@ export function Productivity({
 
     rowRefs.current.forEach((el, i) => {
       if (!el) return;
-      // One by one from the side, first row starting only once the dissolve
-      // is well underway and the headline is mostly in (q ~ 0.55).
-      const rq = clamp01((q - (0.55 + i * 0.22)) / 0.26);
+      // One by one from the side, the first arriving through the tail of the
+      // dissolve so the column is already filling in as the hero hands off.
+      const rq = clamp01((q - (ROW_START + i * ROW_STEP)) / ROW_WINDOW);
       el.style.opacity = rq.toFixed(3);
       el.style.transform = `translate3d(${((1 - rq) * 64).toFixed(1)}px, ${((1 - rq) * 24).toFixed(1)}px, 0)`;
     });
