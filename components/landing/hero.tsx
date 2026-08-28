@@ -52,10 +52,14 @@ export function Hero({
             <br />
             Resolution
           </h1>
-          {/* Stacked, not side by side — the second CTA sits under the first. */}
-          <div className="mt-6 flex flex-col items-start gap-[2px] lg:mt-7">
-            <SplitButton href="#submit">Submit a claim</SplitButton>
-            <SplitButton href="/claims" tone="dark" chip={false}>
+          {/* Stacked and flush: a fit-content grid column sizes to the wider
+              button (the one carrying the arrow chip) and the other stretches
+              to meet it, so both rows end on the same edge. */}
+          <div className="mt-6 grid w-fit gap-[2px] lg:mt-7">
+            <SplitButton href="#submit" stretch>
+              Submit a claim
+            </SplitButton>
+            <SplitButton href="/claims" tone="dark" chip={false} stretch>
               Watch live claims
             </SplitButton>
           </div>
