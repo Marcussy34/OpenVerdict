@@ -10,29 +10,18 @@ import { Banner } from "@/components/landing/banner";
 import { Manifesto } from "@/components/landing/manifesto";
 import { Opportunity } from "@/components/landing/opportunity";
 import { Faq } from "@/components/landing/faq";
-import { LandingFooter } from "@/components/landing/footer";
 import type { ClaimInspection } from "@/lib/engine/contract";
 
 export default function HomePage() {
   const cardRef = useRef<HTMLDivElement>(null);
   const entranceRef = useRef(-1);
   const [claims, setClaims] = useState<ClaimInspection[]>([]);
-  const [network, setNetwork] = useState<string | null>(null);
-  const [packageId, setPackageId] = useState<string | null>(null);
   useEffect(() => {
     let ignore = false;
     fetch("/api/claims")
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
         if (!ignore && data?.claims) setClaims(data.claims as ClaimInspection[]);
-      })
-      .catch(() => {});
-    fetch("/api/status")
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        if (ignore || !data) return;
-        if (typeof data.network === "string") setNetwork(data.network);
-        if (typeof data.packageId === "string") setPackageId(data.packageId);
       })
       .catch(() => {});
     return () => {
@@ -65,7 +54,6 @@ export default function HomePage() {
       <Manifesto />
       <Opportunity />
       <Faq />
-      <LandingFooter network={network} packageId={packageId} />
     </>
   );
 }

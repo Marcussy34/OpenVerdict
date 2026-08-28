@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useReducedMotion } from "motion/react";
 import { CornerPin, GridGuides, Hairline, ArrowUp, Eyebrow } from "./primitives";
 import { ClaimForm } from "./claim-form";
@@ -31,15 +32,30 @@ const LEGAL = [
  * that rises into place as the footer scrolls in (static under reduced motion,
  * since the ride is driven from the shared scroll loop).
  */
-export function LandingFooter({
-  network,
-  packageId,
-}: {
-  network: string | null;
-  packageId: string | null;
-}) {
+export function LandingFooter() {
   const markRef = React.useRef<HTMLDivElement>(null);
   const reduce = useReducedMotion();
+  const pathname = usePathname();
+  // It closes every page now, so it reads its own deployment rather than being
+  // handed one, and stands the claim form down on the page that IS the form.
+  const [network, setNetwork] = React.useState<string | null>(null);
+  const [packageId, setPackageId] = React.useState<string | null>(null);
+  const withForm = pathname !== "/fact-check";
+
+  React.useEffect(() => {
+    let ignore = false;
+    fetch("/api/status")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (ignore || !data) return;
+        if (typeof data.network === "string") setNetwork(data.network);
+        if (typeof data.packageId === "string") setPackageId(data.packageId);
+      })
+      .catch(() => {});
+    return () => {
+      ignore = true;
+    };
+  }, []);
 
   useScrollFrame(
     ({ scrollY, vh }) => {
@@ -80,14 +96,18 @@ export function LandingFooter({
           {/* The claim form */}
           <div className="relative lg:col-span-5">
             <CornerPin className="-top-6 left-0" />
-            <h2 className="text-[19px] leading-snug font-medium tracking-[-0.01em]">
-              Put a claim on trial:
-            </h2>
-            <div className="mt-5">
-              <ClaimForm />
-            </div>
+            {withForm && (
+              <>
+                <h2 className="text-[19px] leading-snug font-medium tracking-[-0.01em]">
+                  Put a claim on trial:
+                </h2>
+                <div className="mt-5">
+                  <ClaimForm />
+                </div>
+              </>
+            )}
 
-            <div className="mt-12">
+            <div className={withForm ? "mt-12" : ""}>
               {/* Both marks in the page's own ink — the provenance line reads as
                   one sentence, not as two pasted logos. */}
               <Eyebrow className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[#F3F3F3]/60">

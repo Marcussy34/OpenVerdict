@@ -3,7 +3,7 @@ import "./globals.css";
 import { Archivo, Archivo_Narrow, Geist_Mono } from "next/font/google";
 import { cn } from "@/lib/utils";
 import { SiteHeader } from "@/components/site-header";
-import { SiteFooter } from "@/components/site-footer";
+import { LandingFooter } from "@/components/landing/footer";
 import { WalletProviders } from "@/components/wallet/providers";
 
 // Archivo carries every heading and paragraph; the big display sizes run at 400.
@@ -54,7 +54,9 @@ export default function RootLayout({
             <main id="main" className="flex-1">
               {children}
             </main>
-            <SiteFooter />
+            {/* One footer for the whole product — the landing's deep-blue
+                close, on every route. */}
+            <LandingFooter />
           </div>
         </WalletProviders>
       </body>
