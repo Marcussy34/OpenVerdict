@@ -54,9 +54,14 @@ export function Opportunity() {
         whileInView={{ opacity: 1, x: 0 }}
         viewport={{ once: true, margin: "0px 0px -10% 0px" }}
         transition={{ duration: reduce ? 0 : 1, ease: [0.22, 1, 0.36, 1] }}
-        className="pointer-events-none absolute top-0 right-0 hidden h-full w-[26vw] max-w-[380px] overflow-hidden lg:block"
+        // Sits in the band the list leaves empty — from where the row hairlines
+        // stop (62%) to the right edge — centred in it rather than pinned to
+        // the margin.
+        className="pointer-events-none absolute inset-y-0 right-0 left-[62%] hidden justify-center lg:flex"
       >
-        <AmbientColumn />
+        <div className="relative h-full w-[26vw] max-w-[380px] overflow-hidden">
+          <AmbientColumn />
+        </div>
       </motion.div>
 
       <div className="relative px-5 pt-4 pb-28 md:px-7 md:pb-32">
