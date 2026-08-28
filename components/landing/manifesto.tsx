@@ -11,6 +11,13 @@ const COPY =
 const WORDS = COPY.split(" ");
 /** How many words are mid-fade at any moment — the width of the wipe. */
 const WINDOW = Math.max(4, Math.round(WORDS.length * 0.22));
+/** Arrival: each word has its own moment on the entrance clock, scattered but
+ *  deterministic (a sin-hash, so server and client agree). */
+function wordThreshold(i: number) {
+  const x = Math.sin((i + 1) * 78.233) * 43758.5453;
+  return (x - Math.floor(x)) * 0.62;
+}
+const ARRIVAL_WINDOW = 0.34;
 
 /**
  * Section 6 — the manifesto, revealed word by word as the section crosses the
@@ -27,12 +34,17 @@ export function Manifesto() {
       const para = paraRef.current;
       if (!para) return;
       const r = para.getBoundingClientRect();
-      // Starts as the paragraph rises past 85vh, completes near mid-viewport.
+      // Two stacked clocks. Arrival: the words appear in scattered order as the
+      // paragraph first rises into view, each one settling at the dim base.
+      const arrival = clamp01((vh * 1.06 - r.top) / (vh * 0.34));
+      // Wipe: starts as the paragraph passes 85vh, completes near mid-viewport,
+      // and reads left to right through whatever has arrived.
       const progress = clamp01((vh * 0.85 - r.top) / (vh * 0.4 + r.height));
       const spans = para.children;
       for (let i = 0; i < spans.length; i++) {
         const t = clamp01((progress * (WORDS.length + WINDOW) - i) / WINDOW);
-        (spans[i] as HTMLElement).style.opacity = String(0.25 + 0.75 * t);
+        const a = clamp01((arrival - wordThreshold(i)) / ARRIVAL_WINDOW);
+        (spans[i] as HTMLElement).style.opacity = String(a * (0.25 + 0.75 * t));
       }
     },
     !reduce,
