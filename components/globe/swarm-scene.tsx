@@ -206,6 +206,115 @@ const land = (() => {
 })();
 
 /* -------------------------------------------------------------------------- */
+/* Land web                                                                    */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * The land dots wired to their nearest neighbours, so the Earth reads as one
+ * connected network rather than a scatter of points. Neighbours are found
+ * through a spatial hash — ~2.9k dots would be 8.5M distance checks brute
+ * force — capped per dot so the web stays a web, and lit by the same day/night
+ * term as the dots themselves.
+ */
+const web = (() => {
+  const dots = landDotPositions();
+  const count = dots.length / 3;
+  const REACH = 0.075; // a little past the dot grid's own spacing
+  const LINKS = 3; // neighbours each dot reaches for
+
+  const buckets = new Map<string, number[]>();
+  const cellOf = (v: number) => Math.floor(v / REACH);
+  for (let i = 0; i < count; i++) {
+    const k = `${cellOf(dots[i * 3] ?? 0)},${cellOf(dots[i * 3 + 1] ?? 0)},${cellOf(dots[i * 3 + 2] ?? 0)}`;
+    const list = buckets.get(k);
+    if (list) list.push(i);
+    else buckets.set(k, [i]);
+  }
+
+  // One entry per unordered pair, encoded as a single number.
+  const pairs = new Set<number>();
+  const near: Array<{ j: number; d: number }> = [];
+  for (let i = 0; i < count; i++) {
+    const x = dots[i * 3] ?? 0;
+    const y = dots[i * 3 + 1] ?? 0;
+    const z = dots[i * 3 + 2] ?? 0;
+    near.length = 0;
+    const cx = cellOf(x);
+    const cy = cellOf(y);
+    const cz = cellOf(z);
+    for (let ox = -1; ox <= 1; ox++) {
+      for (let oy = -1; oy <= 1; oy++) {
+        for (let oz = -1; oz <= 1; oz++) {
+          const list = buckets.get(`${cx + ox},${cy + oy},${cz + oz}`);
+          if (!list) continue;
+          for (const j of list) {
+            if (j === i) continue;
+            const dx = (dots[j * 3] ?? 0) - x;
+            const dy = (dots[j * 3 + 1] ?? 0) - y;
+            const dz = (dots[j * 3 + 2] ?? 0) - z;
+            const d = dx * dx + dy * dy + dz * dz;
+            if (d <= REACH * REACH) near.push({ j, d });
+          }
+        }
+      }
+    }
+    near.sort((a, b) => a.d - b.d);
+    for (let n = 0; n < Math.min(LINKS, near.length); n++) {
+      const j = near[n]?.j ?? i;
+      if (j === i) continue;
+      pairs.add(i < j ? i * count + j : j * count + i);
+    }
+  }
+
+  const positions = new Float32Array(pairs.size * 6);
+  let w = 0;
+  for (const encoded of pairs) {
+    const i = Math.floor(encoded / count);
+    const j = encoded % count;
+    for (const k of [i, j]) {
+      positions[w++] = dots[k * 3] ?? 0;
+      positions[w++] = dots[k * 3 + 1] ?? 0;
+      positions[w++] = dots[k * 3 + 2] ?? 0;
+    }
+  }
+
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+  geometry.computeBoundingSphere();
+
+  const material = new THREE.ShaderMaterial({
+    uniforms: {
+      uLightDir: { value: LIGHT_DIR },
+      uDim: { value: new THREE.Color("#1d5f96") },
+      uLitColor: { value: new THREE.Color("#8ecbff") },
+    },
+    transparent: true,
+    depthWrite: false,
+    vertexShader: /* glsl */ `
+      uniform vec3 uLightDir;
+      varying float vLight;
+      void main() {
+        vec3 nWorld = normalize(mat3(modelMatrix) * position);
+        vLight = max(dot(nWorld, normalize(uLightDir)), 0.0);
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: /* glsl */ `
+      uniform vec3 uDim;
+      uniform vec3 uLitColor;
+      varying float vLight;
+      void main() {
+        vec3 col = mix(uDim, uLitColor, smoothstep(0.0, 0.8, vLight));
+        gl_FragColor = vec4(col, 0.09 + vLight * 0.26);
+        #include <colorspace_fragment>
+      }
+    `,
+  });
+
+  return { geometry, material };
+})();
+
+/* -------------------------------------------------------------------------- */
 /* Arc ribbons                                                                 */
 /* -------------------------------------------------------------------------- */
 
@@ -712,6 +821,8 @@ function SceneBody({
         <mesh material={earthMaterial}>
           <sphereGeometry args={[0.995, 64, 48]} />
         </mesh>
+        {/* Under the dots, so a dot always paints over the links it holds. */}
+        <lineSegments geometry={web.geometry} material={web.material} />
         <points geometry={land.geometry} material={land.material} />
         <mesh ref={rippleRef} geometry={ripple.geometry} material={ripple.material} />
         <mesh geometry={arcs.geometry} material={arcs.material} />
