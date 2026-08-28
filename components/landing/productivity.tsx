@@ -70,6 +70,7 @@ export function Productivity({
     };
     if (reduce) {
       letters.current?.forEach(clear);
+      clear(h2Ref.current);
       clear(paraRef.current);
       clear(cardBoxRef.current);
       rowRefs.current.forEach(clear);
@@ -86,6 +87,10 @@ export function Productivity({
       q = (vh * 0.92 - rect.top) / (vh * 0.7);
     }
 
+    if (h2Ref.current) {
+      const hq = clamp01(q / 0.8);
+      h2Ref.current.style.transform = `translate3d(0, ${((1 - hq) * 28).toFixed(1)}px, 0)`;
+    }
     if (!letters.current && h2Ref.current) {
       letters.current = Array.from(h2Ref.current.querySelectorAll<HTMLElement>("[data-l]"));
     }
@@ -100,16 +105,18 @@ export function Productivity({
     }
 
     if (cardBoxRef.current) {
-      cardBoxRef.current.style.opacity = clamp01(q / 0.75).toFixed(3);
+      const cq = clamp01(q / 0.75);
+      cardBoxRef.current.style.opacity = cq.toFixed(3);
+      cardBoxRef.current.style.transform = `translate3d(0, ${((1 - cq) * 30).toFixed(1)}px, 0)`;
     }
 
     rowRefs.current.forEach((el, i) => {
       if (!el) return;
-      // One by one from the side, starting a beat after the headline begins
-      // so the right column trails it slightly (letters end at q ~ 0.78).
-      const rq = clamp01((q - (0.2 + i * 0.22)) / 0.26);
+      // One by one from the side, first row starting only once the dissolve
+      // is well underway and the headline is mostly in (q ~ 0.55).
+      const rq = clamp01((q - (0.55 + i * 0.22)) / 0.26);
       el.style.opacity = rq.toFixed(3);
-      el.style.transform = `translate3d(${((1 - rq) * 64).toFixed(1)}px, 0, 0)`;
+      el.style.transform = `translate3d(${((1 - rq) * 64).toFixed(1)}px, ${((1 - rq) * 24).toFixed(1)}px, 0)`;
     });
   });
 
