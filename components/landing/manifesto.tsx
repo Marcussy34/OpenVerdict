@@ -34,17 +34,24 @@ export function Manifesto() {
       const para = paraRef.current;
       if (!para) return;
       const r = para.getBoundingClientRect();
-      // Two stacked clocks. Arrival: the words appear in scattered order as the
-      // paragraph first rises into view, each one settling at the dim base.
-      const arrival = clamp01((vh * 1.06 - r.top) / (vh * 0.34));
-      // Wipe: starts as the paragraph passes 85vh, completes near mid-viewport,
-      // and reads left to right through whatever has arrived.
-      const progress = clamp01((vh * 0.85 - r.top) / (vh * 0.4 + r.height));
+      // Two stacked clocks, deliberately sequential — the scatter has to finish
+      // ON SCREEN before the wipe starts, or it plays out below the fold and
+      // the paragraph just looks like it appeared normally.
+      // Arrival: paragraph top from 98vh (barely peeking) to 55vh (the whole
+      // block sitting in the lower half); each word rises into the dim base at
+      // its own scattered moment.
+      const arrival = clamp01((vh * 0.98 - r.top) / (vh * 0.43));
+      // Wipe: picks up where the arrival ends and reads left to right.
+      const progress = clamp01((vh * 0.55 - r.top) / (vh * 0.4 + r.height));
       const spans = para.children;
       for (let i = 0; i < spans.length; i++) {
         const t = clamp01((progress * (WORDS.length + WINDOW) - i) / WINDOW);
         const a = clamp01((arrival - wordThreshold(i)) / ARRIVAL_WINDOW);
-        (spans[i] as HTMLElement).style.opacity = String(a * (0.25 + 0.75 * t));
+        const el = spans[i] as HTMLElement;
+        el.style.opacity = String(a * (0.25 + 0.75 * t));
+        // A short rise with the fade, so a word arriving among already-settled
+        // neighbours is unmistakable.
+        el.style.transform = a < 1 ? `translate3d(0, ${((1 - a) * 14).toFixed(1)}px, 0)` : "";
       }
     },
     !reduce,
