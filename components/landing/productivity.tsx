@@ -117,9 +117,13 @@ export function Productivity({
     if (cardBoxRef.current) {
       // The card is the dock's landing target: it must stay transform-static
       // (a moving target makes the landed mask visibly settle — "the drop").
-      // Its entrance is the mask landing itself plus this opacity ramp,
-      // completing with the frame's dissolve.
-      cardBoxRef.current.style.opacity = clamp01(q / 0.5).toFixed(3);
+      // Its entrance is the mask landing itself plus this ramp, which develops
+      // across the WHOLE entrance: the card is only fully opaque once every
+      // other element has landed. Eased so it is already most of the way there
+      // when the hero finishes dissolving off it — a linear ramp would wash the
+      // panel out at the handoff.
+      const cq = clamp01(q / ENTRANCE_COMPLETE);
+      cardBoxRef.current.style.opacity = Math.pow(cq, 0.55).toFixed(3);
       cardBoxRef.current.style.transform = "";
     }
 
