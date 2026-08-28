@@ -1,7 +1,7 @@
 "use client";
 
 import { motion, useReducedMotion } from "motion/react";
-import { Eyebrow, CornerPin, GridGuides, Hairline } from "./primitives";
+import { Eyebrow, CornerPin, Hairline } from "./primitives";
 import { JuryMark, SealMark, SeatMark, RecomputeMark } from "./dotted-art";
 import { Reveal } from "@/components/viz/reveal";
 
@@ -44,7 +44,8 @@ export function Opportunity() {
           "linear-gradient(180deg,#f7f7f5 0%,#eaeff5 32%,#f2f4f4 72%,#f7f7f5 100%)",
       }}
     >
-      <GridGuides columns={3} className="hidden md:block" />
+      {/* No column guides here: the row hairlines and the ambient column carry
+          the structure, and the verticals cut through the copy. */}
 
       {/* The ambient column: slow, looping, and light enough to ignore. */}
       <motion.div
