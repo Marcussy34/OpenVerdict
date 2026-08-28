@@ -105,9 +105,9 @@ export function Productivity({
 
     rowRefs.current.forEach((el, i) => {
       if (!el) return;
-      // One by one from the side, paced so the third row completes exactly
-      // as the last headline letters finish (letters end at q ~ 0.78).
-      const rq = clamp01((q - (0.08 + i * 0.22)) / 0.26);
+      // One by one from the side, starting a beat after the headline begins
+      // so the right column trails it slightly (letters end at q ~ 0.78).
+      const rq = clamp01((q - (0.2 + i * 0.22)) / 0.26);
       el.style.opacity = rq.toFixed(3);
       el.style.transform = `translate3d(${((1 - rq) * 64).toFixed(1)}px, 0, 0)`;
     });
