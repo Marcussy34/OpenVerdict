@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { Eyebrow, CornerPin, GridGuides, Hairline } from "./primitives";
-import { SwarmGlobe, type SwarmClaim, type SwarmAgent } from "@/components/globe/swarm-globe";
+import { SwarmGlobe } from "@/components/globe/swarm-globe";
 
 const ITEMS = [
   {
@@ -39,13 +39,7 @@ const INK = "#F3F3F3";
  * ground fades from paper to deep navy across the section, and the ink ramps
  * with it.
  */
-export function Propositions({
-  claims,
-  agents,
-}: {
-  claims: SwarmClaim[];
-  agents: SwarmAgent[];
-}) {
+export function Propositions() {
   const [active, setActive] = React.useState(0);
   const itemRefs = React.useRef<(HTMLDivElement | null)[]>([]);
 
@@ -123,7 +117,7 @@ export function Propositions({
               {/* Clipped: the globe's anchored chips drift past its own box. */}
               <div className="relative overflow-hidden border border-[#F3F3F3]/12 bg-[#04121f]">
                 <CornerPin className="-top-[3px] -left-[3px] z-10" />
-                <SwarmGlobe claims={claims} agents={agents} className="lg:max-w-none" />
+                <SwarmGlobe className="lg:max-w-none" />
                 <div className="flex items-center justify-between gap-3 border-t border-[#F3F3F3]/12 px-4 py-3">
                   <Eyebrow className="text-[#F3F3F3]/55">
                     {ITEMS[active]?.kicker}
