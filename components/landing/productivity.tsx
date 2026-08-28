@@ -25,13 +25,7 @@ export const STAT_CARD_BACKGROUND =
  * and `dockProgress` (0 → 1) drives the card chrome's crossfade so the content
  * lands on top of the arriving visual rather than punching through it.
  */
-export function Productivity({
-  cardSlotRef,
-  claims,
-}: {
-  cardSlotRef: React.RefObject<HTMLDivElement | null>;
-  claims: ClaimInspection[];
-}) {
+export function Productivity({ claims }: { claims: ClaimInspection[] }) {
   // Real counters off the read-only claim feed — nothing here is synthesised.
   const settled = claims.filter((c) => c.state >= 9 && c.state !== 12).length;
   const seats = claims.reduce((n, c) => n + (c.commitments?.length ?? 0), 0);
@@ -71,7 +65,6 @@ export function Productivity({
           <div className="relative">
             <CornerPin className="-top-2 left-0 z-40" />
             <div
-              ref={cardSlotRef}
               className="relative flex min-h-[520px] flex-col overflow-hidden lg:min-h-[640px]"
               style={{ background: STAT_CARD_BACKGROUND }}
             >

@@ -17,28 +17,20 @@ function truncate(text: string, max: number) {
 /**
  * Section 1 — the night stage.
  *
- * The globe itself is NOT rendered here: the page owns one instance and either
- * parks it over `heroSlotRef` or docks it into the stat card below. This
- * section only reserves the space and prints the type over it.
+ * The globe renders inline and scrolls away with the page like any other
+ * content — no scroll choreography.
  */
 export function Hero({
-  heroSlotRef,
-  plateVisible,
   latest,
   network,
   children,
 }: {
-  heroSlotRef: React.RefObject<HTMLDivElement | null>;
-  /** The poster plate stands in while the globe lives in the docking layer. */
-  plateVisible: boolean;
   latest: ClaimInspection | null;
   network: string | null;
-  /** The globe itself, when it is NOT riding the docking layer. */
+  /** The globe. */
   children?: React.ReactNode;
 }) {
   return (
-    // No `isolate` on the section: the docking layer (z-20) has to paint above
-    // this ground but below the z-30 type printed over it.
     <section
       data-header-theme="dark"
       id="top"
@@ -49,15 +41,7 @@ export function Hero({
       <div className="relative z-30 flex min-h-[100svh] flex-col px-5 pt-[86px] pb-7 md:px-7 md:pb-8 lg:justify-between lg:pt-[104px]">
         {/* The globe's footprint. It stacks above the type on small screens and
             floats behind it, centre-right, from lg up. */}
-        <div
-          ref={heroSlotRef}
-          className="pointer-events-none relative mx-auto aspect-square w-full max-w-[300px] shrink-0 sm:max-w-[380px] lg:absolute lg:top-1/2 lg:left-[63%] lg:mx-0 lg:w-[40vw] lg:max-w-[540px] lg:-translate-x-1/2 lg:-translate-y-1/2"
-        >
-          {plateVisible && (
-            <div aria-hidden className="absolute inset-0 grid place-items-center">
-              <div className="ov-globe-plate size-[74%] rounded-full" />
-            </div>
-          )}
+        <div className="pointer-events-none relative mx-auto aspect-square w-full max-w-[300px] shrink-0 sm:max-w-[380px] lg:absolute lg:top-1/2 lg:left-[63%] lg:mx-0 lg:w-[40vw] lg:max-w-[540px] lg:-translate-x-1/2 lg:-translate-y-1/2">
           {children}
         </div>
 
