@@ -68,7 +68,12 @@ export function DockLayer({
     box.style.clipPath = `inset(${clipY / scale}px ${clipX / scale}px)`;
     // The card's own surface fades in behind the globe as it travels, so the
     // visual crosses the light section as a solid panel rather than a ghost.
-    if (groundRef.current) groundRef.current.style.opacity = String(p);
+    // Held at zero through the hero (a linear ramp painted a faint rectangle
+    // around the free-floating globe); it only needs to be solid by the time
+    // the visual reaches the light wash.
+    if (groundRef.current) {
+      groundRef.current.style.opacity = String(clamp01((p - 0.35) / 0.4));
+    }
     // Past a third of the way in, the globe is reading as the card's texture,
     // so its own heads-up display gets out of the card's way.
     box.dataset.hud = p > 0.32 ? "off" : "on";

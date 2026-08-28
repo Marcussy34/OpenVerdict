@@ -214,15 +214,8 @@ export function SwarmGlobe({
         />
       )}
 
-      {/* Scrims: they keep HUD type readable where it crosses lit continents. */}
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-x-0 top-0 h-40 bg-gradient-to-b from-[#04121f]/75 via-[#04121f]/35 to-transparent"
-      />
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-x-0 bottom-0 h-36 bg-gradient-to-t from-[#04121f]/80 via-[#04121f]/40 to-transparent"
-      />
+      {/* No scrims: they read as a rectangle around the globe on the v3
+          ground. HUD type relies on its text-shadow instead. */}
 
       {/* ------------------------------------------------------- phase rail */}
       <div className="ov-hud-layer pointer-events-none absolute inset-x-0 top-0 p-2 [text-shadow:0_1px_8px_rgba(3,12,20,0.95)] sm:p-3">
