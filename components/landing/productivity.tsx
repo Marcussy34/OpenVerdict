@@ -123,7 +123,6 @@ export function Productivity({
   return (
     <section
       ref={sectionRef}
-      data-header-theme="light"
       className="ov-light-wash relative overflow-hidden text-black"
     >
       <GridGuides columns={3} className="hidden md:block" />

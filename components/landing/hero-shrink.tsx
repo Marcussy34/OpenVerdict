@@ -86,13 +86,12 @@ export function HeroShrink({
     // the rest is the hold, where the section's own entrances keep playing.
     const m = clamp01(p / MASK_PORTION);
 
-    // Pin the reveal section at (almost) its final position for the whole
-    // runway, instead of letting it slide in from the bottom — the shrink then
-    // plays out on one static screen, like the reference, and the fade
-    // uncovers the section already standing in place. It parks 40px low so
-    // its header-theme marker cannot cross the header line early, and settles
-    // that last 40px in the final few percent of the travel.
-    const lift = Math.max(0, (1 - p) * runway - 40);
+    // Pin the reveal section at its exact final position for the whole
+    // runway — the shrink plays out on one static screen and the fade
+    // uncovers the section already filling the viewport, no seam above it.
+    // (Its header-theme marker only exists in static mode, so pinning at
+    // zero cannot flip the header early.)
+    const lift = Math.max(0, (1 - p) * runway);
     if (revealRef.current) {
       revealRef.current.style.transform =
         lift > 0.5 ? `translate3d(0, ${-lift.toFixed(1)}px, 0)` : "";
@@ -170,6 +169,9 @@ export function HeroShrink({
           closes on the card exactly where it will stand when revealed. */}
       <div
         ref={revealRef}
+        // In static mode this wrapper is the section's light header marker;
+        // while the choreography runs, the wrapper's own stacked markers rule.
+        {...(active ? {} : { "data-header-theme": "light" })}
         className="relative will-change-transform"
         style={active ? { marginTop: "-100svh" } : undefined}
       >
