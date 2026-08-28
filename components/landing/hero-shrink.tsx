@@ -19,8 +19,10 @@ import { GridGuides } from "./primitives";
  * Progress is linear in scroll (stop means stop). Narrow viewports and
  * reduced motion collapse the runway: hero and section render statically.
  */
-const RUNWAY_VH = 120;
-const LIGHT_TAIL_VH = 55;
+const RUNWAY_VH = 200; // shrink-handoff plays in the first ~55%, then the
+// revealed section HOLDS pinned while its rows arrive — more scroll to finish.
+const MASK_PORTION = 0.55;
+const LIGHT_TAIL_VH = 120;
 
 export function HeroShrink({
   cardRef,
@@ -80,6 +82,9 @@ export function HeroShrink({
     const runway = wrap.offsetHeight - vh;
     if (runway < 1) return;
     const p = clamp01((scrollY - wrap.offsetTop) / runway);
+    // The mask + dissolve complete inside the first portion of the runway;
+    // the rest is the hold, where the section's own entrances keep playing.
+    const m = clamp01(p / MASK_PORTION);
 
     // Pin the reveal section at (almost) its final position for the whole
     // runway, instead of letting it slide in from the bottom — the shrink then
@@ -107,15 +112,16 @@ export function HeroShrink({
           }
         : { top: vh * 0.22, left: vw * 0.3, right: vw * 0.3, bottom: vh * 0.1 };
 
-    panel.style.clipPath = `inset(${lerp(0, target.top, p).toFixed(1)}px ${lerp(0, target.right, p).toFixed(1)}px ${lerp(0, target.bottom, p).toFixed(1)}px ${lerp(0, target.left, p).toFixed(1)}px)`;
+    panel.style.clipPath = `inset(${lerp(0, target.top, m).toFixed(1)}px ${lerp(0, target.right, m).toFixed(1)}px ${lerp(0, target.bottom, m).toFixed(1)}px ${lerp(0, target.left, m).toFixed(1)}px)`;
 
-    // The revealed section's entrance rides the tail of the runway, so its
-    // choreography plays while (and just after) the frame dissolves.
-    if (entranceRef) entranceRef.current = clamp01((p - 0.6) / 0.4);
+    // Entrance clock for the revealed section. Deliberately UNCLAMPED above 1:
+    // consumers clamp per element, and values past 1 are the hold phase where
+    // the guarantee rows arrive one by one.
+    if (entranceRef) entranceRef.current = (p - 0.33) / 0.22;
 
     // The whole frame — masked hero AND wash — dissolves over the last
     // stretch, revealing the real section (already in position underneath).
-    const fade = clamp01((p - 0.72) / 0.24);
+    const fade = clamp01((m - 0.72) / 0.24);
     frame.style.opacity = (1 - fade).toFixed(3);
     frame.style.visibility = fade >= 0.995 ? "hidden" : "";
   }, active);

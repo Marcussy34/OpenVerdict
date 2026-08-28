@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo, useRef } from "react";
 import { SwarmGlobe, type SwarmClaim, type SwarmAgent } from "@/components/globe/swarm-globe";
 import { Hero } from "@/components/landing/hero";
 import { HeroShrink } from "@/components/landing/hero-shrink";
+import { SmoothScroll } from "@/components/landing/smooth-scroll";
 import { Productivity } from "@/components/landing/productivity";
 import { Propositions } from "@/components/landing/propositions";
 import { Banner } from "@/components/landing/banner";
@@ -90,6 +91,7 @@ export default function HomePage() {
   return (
     <>
 
+      <SmoothScroll />
       <HeroShrink
         cardRef={cardRef}
         entranceRef={entranceRef}

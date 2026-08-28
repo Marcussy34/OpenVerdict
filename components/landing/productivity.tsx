@@ -83,7 +83,7 @@ export function Productivity({
     } else {
       const rect = sectionRef.current?.getBoundingClientRect();
       if (!rect) return;
-      q = clamp01((vh * 0.92 - rect.top) / (vh * 0.7));
+      q = (vh * 0.92 - rect.top) / (vh * 0.7);
     }
 
     if (!letters.current && h2Ref.current) {
@@ -105,7 +105,9 @@ export function Productivity({
 
     rowRefs.current.forEach((el, i) => {
       if (!el) return;
-      const rq = clamp01((q - (0.18 + i * 0.2)) / 0.22);
+      // The rows are the HOLD phase: they start after the handoff completes
+      // (q > 1) and arrive one by one across the extra scroll.
+      const rq = clamp01((q - (1.2 + i * 0.55)) / 0.5);
       el.style.opacity = rq.toFixed(3);
       el.style.transform = `translate3d(${((1 - rq) * 64).toFixed(1)}px, 0, 0)`;
     });
