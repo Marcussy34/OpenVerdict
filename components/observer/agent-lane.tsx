@@ -64,7 +64,7 @@ export function AgentLane({
       reasoning={reasoning}
       footer={
         meta.length > 0 ? (
-          <span className="w-full truncate font-mono text-[9px] tracking-[0.06em] text-muted-foreground uppercase">
+          <span className="ov-micro ov-micro-sm w-full truncate text-muted-foreground">
             {meta.join(" · ")}
           </span>
         ) : undefined

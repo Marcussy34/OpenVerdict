@@ -195,7 +195,7 @@ export function SeatStrip({
           <SealGlyph key={i} state={seat.state} outcome={seat.outcome} size={22} />
         ))}
       </div>
-      <span className="font-mono text-[10px] font-semibold tracking-[0.08em] text-muted-foreground uppercase">
+      <span className="ov-micro ov-micro-sm text-muted-foreground">
         {revealed > 0 ? `${revealed}/${seats.length} revealed` : `${sealed}/${seats.length} sealed`}
       </span>
     </div>
@@ -248,7 +248,7 @@ export function SeatSeal({
       {/* Seat number watermark */}
       <span
         aria-hidden
-        className="pointer-events-none absolute -top-3 right-1 font-mono text-5xl font-bold text-ocean/5 select-none"
+        className="pointer-events-none absolute -top-3 right-1 text-5xl font-medium text-ocean/5 select-none"
       >
         {seatIndex}
       </span>
@@ -259,12 +259,12 @@ export function SeatSeal({
           {/* Seat label and state stack vertically at narrow widths so the
               badges can never collide (fixes the 1440px "Runni#4" overlap). */}
           <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1">
-            <span className="font-mono text-[10px] font-semibold tracking-[0.14em] text-muted-foreground uppercase">
+            <span className="ov-micro ov-micro-sm text-muted-foreground">
               Seat {seatIndex}
             </span>
             <span
               className={cn(
-                "shrink-0 rounded px-1 py-px font-mono text-[9px] font-bold tracking-[0.1em] uppercase",
+                "ov-micro ov-micro-sm shrink-0 rounded px-1 py-px",
                 STATE_CHIP[state],
               )}
             >
@@ -299,7 +299,7 @@ export function SeatSeal({
               style?.chip,
             )}
           >
-            <span className="font-mono text-xs font-bold tracking-[0.08em]">{outcome}</span>
+            <span className="ov-micro">{outcome}</span>
             <span className="font-mono text-[11px] opacity-80">
               {confidenceBps !== undefined ? `${Math.round(confidenceBps / 100)}%` : "—"}
             </span>
@@ -331,7 +331,7 @@ export function SeatSeal({
         <div className="space-y-2 rounded-lg border border-sealed/20 bg-sealed/6 p-2.5">
           <div className="flex items-center gap-1.5 text-sealed">
             <Lock size="12" variant="Bold" />
-            <span className="font-mono text-[10px] font-semibold tracking-[0.1em] uppercase">
+            <span className="ov-micro ov-micro-sm">
               Blake2b-256 sealed
             </span>
           </div>
@@ -353,7 +353,7 @@ export function SeatSeal({
         <div className="space-y-2 rounded-lg border border-sea/30 bg-sea/8 p-2.5">
           <div className="flex items-center gap-1.5 text-primary">
             <Cpu size="12" variant="Bold" />
-            <span className="font-mono text-[10px] font-semibold tracking-[0.1em] uppercase">
+            <span className="ov-micro ov-micro-sm">
               Inference running
             </span>
           </div>
@@ -367,7 +367,7 @@ export function SeatSeal({
       ) : (
         <div className="flex items-center gap-1.5 rounded-lg border border-dashed border-border bg-surface px-2.5 py-2 text-[10px] text-muted-foreground">
           <Clock size="12" variant="Bold" />
-          <span className="font-mono tracking-[0.08em] uppercase">Awaiting commitment</span>
+          <span className="ov-micro ov-micro-sm">Awaiting commitment</span>
         </div>
       )}
 

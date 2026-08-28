@@ -82,7 +82,7 @@ export function Panel({
         >
           <div className="flex min-w-0 items-center gap-2">
             {Icon && <Icon size="15" className={cn("shrink-0", TONE_ICON[tone])} />}
-            <h2 className="truncate font-mono text-[11px] font-semibold tracking-[0.14em] text-muted-foreground uppercase">
+            <h2 className="ov-micro ov-micro-sm truncate text-muted-foreground">
               {label}
             </h2>
           </div>
@@ -110,7 +110,7 @@ export function FieldLabel({
   return (
     <span
       className={cn(
-        "block font-mono text-[10px] font-semibold tracking-[0.14em] text-muted-foreground uppercase",
+        "ov-micro ov-micro-sm block text-muted-foreground",
         className,
       )}
     >

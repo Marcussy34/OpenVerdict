@@ -66,7 +66,7 @@ export function StatTile({
         className="pointer-events-none absolute inset-x-0 -top-16 h-24 bg-[radial-gradient(60%_100%_at_50%_100%,var(--glow-a),transparent_70%)] opacity-0 transition-opacity duration-300 group-hover:opacity-100"
       />
       <div className="flex items-start justify-between gap-2">
-        <span className="min-w-0 truncate font-mono text-[10px] font-semibold tracking-[0.14em] text-muted-foreground uppercase">
+        <span className="ov-micro ov-micro-sm min-w-0 truncate text-muted-foreground">
           {label}
         </span>
         {Icon && (
@@ -84,13 +84,13 @@ export function StatTile({
       <div className="mt-3 flex items-baseline gap-1">
         <span
           className={cn(
-            "font-mono text-[1.65rem] leading-none font-semibold tracking-tight tabular-nums",
+            "text-[1.65rem] leading-none font-medium tracking-tight tabular-nums",
             TONE_TEXT[tone],
           )}
         >
           {shown}
         </span>
-        {unit && <span className="font-mono text-xs text-muted-foreground">{unit}</span>}
+        {unit && <span className="text-xs text-muted-foreground">{unit}</span>}
       </div>
 
       {hint && (

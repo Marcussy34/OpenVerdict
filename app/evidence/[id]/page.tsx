@@ -119,13 +119,13 @@ export default function EvidenceDetailPage({ params }: EvidenceDetailPageProps) 
           </div>
           <div className="space-y-1.5">
             <FieldLabel>Retention end epoch</FieldLabel>
-            <p className="font-mono text-sm font-semibold text-ocean tabular-nums">
+            <p className="text-sm font-semibold text-ocean tabular-nums">
               {evidence.walrusEndEpoch}
             </p>
           </div>
           <div className="space-y-1.5">
             <FieldLabel>Source class</FieldLabel>
-            <p className="font-mono text-sm font-semibold text-ocean">{evidence.sourceClass}</p>
+            <p className="ov-micro text-ocean">{evidence.sourceClass}</p>
           </div>
         </dl>
       </Panel>

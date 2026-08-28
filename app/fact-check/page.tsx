@@ -119,7 +119,7 @@ function FactCheckContent() {
                 </label>
                 <span
                   className={cn(
-                    "font-mono text-[11px] tabular-nums",
+                    "text-[11px] tabular-nums",
                     claimTooLong ? "text-unsure" : "text-muted-foreground",
                   )}
                 >
@@ -162,7 +162,7 @@ function FactCheckContent() {
             <div className="space-y-2">
               {urls.map((urlVal, index) => (
                 <div key={index} className="flex items-center gap-2">
-                  <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-surface font-mono text-[11px] font-semibold text-muted-foreground">
+                  <span className="ov-micro ov-micro-sm grid size-8 shrink-0 place-items-center rounded-lg bg-surface text-muted-foreground">
                     {index + 1}
                   </span>
                   <Input
@@ -199,14 +199,14 @@ function FactCheckContent() {
                   <label htmlFor="context-text" className="text-sm font-semibold text-ocean">
                     Pasted context
                   </label>
-                  <span className="font-mono text-[11px] text-muted-foreground tabular-nums">
+                  <span className="text-[11px] text-muted-foreground tabular-nums">
                     {text.length}/{MAX_TEXT.toLocaleString()}
                   </span>
                 </div>
                 <Textarea
                   id="context-text"
                   placeholder="Paste excerpts, article text or background context to accompany the claim…"
-                  className="min-h-[90px] font-mono text-xs"
+                  className="min-h-[90px] text-sm"
                   value={text}
                   onChange={(e) => setText(e.target.value)}
                   maxLength={MAX_TEXT}
@@ -264,7 +264,7 @@ function FactCheckContent() {
             <ol className="space-y-3">
               {PIPELINE_STAGES.map((stage) => (
                 <li key={stage.index} className="flex gap-3">
-                  <span className="mt-0.5 grid size-7 shrink-0 place-items-center rounded-lg bg-surface font-mono text-[10px] font-bold text-muted-foreground">
+                  <span className="ov-micro ov-micro-sm mt-0.5 grid size-7 shrink-0 place-items-center rounded-lg bg-surface text-muted-foreground">
                     {stage.index}
                   </span>
                   <div className="min-w-0">

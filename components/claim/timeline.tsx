@@ -222,7 +222,7 @@ export function ClaimTimeline({ claim }: TimelineProps) {
                   </div>
                   <span
                     className={cn(
-                      "shrink-0 rounded-full border px-2 py-0.5 font-mono text-[10px] font-semibold tracking-[0.06em] uppercase",
+                      "ov-micro ov-micro-sm shrink-0 rounded-full border px-2 py-0.5",
                       STATUS_CHIP[step.status],
                     )}
                   >

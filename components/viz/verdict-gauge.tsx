@@ -175,10 +175,10 @@ export function VerdictGauge({
         <div className="absolute inset-0 flex flex-col items-center justify-center">
           {score === null ? (
             <>
-              <span className="font-mono text-3xl font-bold text-muted-foreground">
+              <span className="text-3xl font-medium text-muted-foreground">
                 {emptyTitle}
               </span>
-              <span className="mt-1 max-w-[9.5rem] text-center font-mono text-[9px] leading-tight tracking-[0.1em] whitespace-pre-line text-muted-foreground uppercase">
+              <span className="ov-micro ov-micro-sm mt-1 max-w-[9.5rem] text-center leading-tight whitespace-pre-line text-muted-foreground">
                 {emptyLabel}
               </span>
             </>
@@ -187,18 +187,18 @@ export function VerdictGauge({
               <div className="flex items-baseline">
                 <span
                   className={cn(
-                    "font-mono text-[2.75rem] leading-none font-semibold tracking-tight tabular-nums",
+                    "text-[2.75rem] leading-none font-medium tracking-tight tabular-nums",
                     tier?.text,
                   )}
                 >
                   {Math.round(animated)}
                 </span>
-                <span className="ml-1 font-mono text-sm text-muted-foreground">/100</span>
+                <span className="ml-1 text-sm text-muted-foreground">/100</span>
               </div>
-              <span className="mt-1.5 font-mono text-[10px] tracking-[0.16em] text-muted-foreground uppercase">
+              <span className="ov-micro ov-micro-sm mt-1.5 text-muted-foreground">
                 Truth Score
               </span>
-              <span className="mt-0.5 font-mono text-[10px] text-muted-foreground/70">
+              <span className="mt-0.5 text-[11px] text-muted-foreground/70">
                 {scoreBps} bps
               </span>
             </>
@@ -209,7 +209,7 @@ export function VerdictGauge({
       {!compact && (
         <div
           className={cn(
-            "-mt-1 flex items-center gap-1.5 rounded-full border bg-card px-3 py-1 font-mono text-[10px] font-semibold tracking-[0.1em] uppercase",
+            "ov-micro ov-micro-sm -mt-1 flex items-center gap-1.5 rounded-full border bg-card px-3 py-1",
             score === null ? "border-border text-muted-foreground" : tier?.chip,
           )}
         >

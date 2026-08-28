@@ -62,7 +62,7 @@ export function StatusPill({
       <LiveDot tone={tone} pulse={pulse} />
       <span
         className={cn(
-          "font-mono text-[10px] font-semibold tracking-[0.12em] uppercase",
+          "ov-micro ov-micro-sm",
           TONE[tone].text,
         )}
       >

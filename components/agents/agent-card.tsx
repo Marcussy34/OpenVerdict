@@ -81,7 +81,7 @@ export function AgentCard({ agent, reportCard, showVoteDetails = false }: AgentC
         {showVoteDetails && reportCard && (
           <div className="space-y-2 rounded-xl border border-border bg-surface p-3">
             <div className="flex items-center justify-between gap-2">
-              <span className="font-mono text-[10px] font-semibold tracking-[0.12em] text-muted-foreground uppercase">
+              <span className="ov-micro ov-micro-sm text-muted-foreground">
                 Revealed vote
               </span>
               <span
@@ -125,7 +125,7 @@ export function AgentCard({ agent, reportCard, showVoteDetails = false }: AgentC
 
         {agent?.reputation && Object.keys(agent.reputation).length > 0 && (
           <div className="space-y-2">
-            <span className="font-mono text-[10px] font-semibold tracking-[0.12em] text-muted-foreground uppercase">
+            <span className="ov-micro ov-micro-sm text-muted-foreground">
               Reputation (bps)
             </span>
             <div className="space-y-1.5">

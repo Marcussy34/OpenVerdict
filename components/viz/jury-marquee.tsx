@@ -35,7 +35,7 @@ function MemberChip({ member }: { member: JuryMember }) {
         {shortModel(member.model)}
       </span>
       <span className="h-3 w-px bg-border" aria-hidden />
-      <span className="font-mono text-[10px] tracking-[0.1em] text-muted-foreground uppercase">
+      <span className="ov-micro ov-micro-sm text-muted-foreground">
         {member.role.replace(/_/g, " ")}
       </span>
     </span>
@@ -63,7 +63,7 @@ export function JuryMarquee({
         className,
       )}
     >
-      <span className="flex shrink-0 items-center gap-1.5 font-mono text-[10px] font-semibold tracking-[0.14em] text-muted-foreground uppercase">
+      <span className="ov-micro ov-micro-sm flex shrink-0 items-center gap-1.5 text-muted-foreground">
         <Cpu size="13" variant="Bold" className="text-primary" />
         <span className="hidden sm:inline">Jury pool</span>
       </span>
@@ -84,7 +84,7 @@ export function JuryMarquee({
 
       <Link
         href="/agents"
-        className="hidden shrink-0 items-center gap-1 pr-4 font-mono text-[10px] font-semibold tracking-[0.12em] text-primary uppercase hover:underline sm:flex"
+        className="ov-micro ov-micro-sm hidden shrink-0 items-center gap-1 pr-4 text-primary hover:underline sm:flex"
       >
         Registry
         <ArrowRight size="12" variant="Bold" />

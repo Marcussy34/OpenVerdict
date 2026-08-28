@@ -36,7 +36,7 @@ export function ClaimCard({ claim }: ClaimCardProps) {
           </MetaTag>
           <StateBadge state={claim.state} size="sm" />
         </div>
-        <span className="font-mono text-[9px] font-semibold tracking-[0.1em] text-unsure uppercase">
+        <span className="ov-micro ov-micro-sm text-unsure">
           Experimental
         </span>
       </div>
@@ -69,7 +69,7 @@ export function ClaimCard({ claim }: ClaimCardProps) {
         {/* Proposed vs settled outcome */}
         <dl className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-border bg-border">
           <div className="bg-card px-3 py-2">
-            <dt className="font-mono text-[9px] font-semibold tracking-[0.12em] text-muted-foreground uppercase">
+            <dt className="ov-micro ov-micro-sm text-muted-foreground">
               Proposed
             </dt>
             <dd className="mt-0.5 text-sm font-semibold text-ocean">
@@ -77,7 +77,7 @@ export function ClaimCard({ claim }: ClaimCardProps) {
             </dd>
           </div>
           <div className="bg-card px-3 py-2">
-            <dt className="font-mono text-[9px] font-semibold tracking-[0.12em] text-muted-foreground uppercase">
+            <dt className="ov-micro ov-micro-sm text-muted-foreground">
               Result
             </dt>
             <dd className="mt-0.5 text-sm font-semibold text-ocean">
@@ -94,7 +94,7 @@ export function ClaimCard({ claim }: ClaimCardProps) {
 
         {/* Consensus metric */}
         <div className="flex items-center justify-between gap-2">
-          <span className="font-mono text-[10px] font-semibold tracking-[0.12em] text-muted-foreground uppercase">
+          <span className="ov-micro ov-micro-sm text-muted-foreground">
             Consensus
           </span>
           <TruthScore scoreBps={truthScore} size="sm" showFormulaButton={false} />
@@ -103,7 +103,7 @@ export function ClaimCard({ claim }: ClaimCardProps) {
         {/* Deadline */}
         {claim.deadlines && (
           <div className="space-y-1 border-t border-border pt-3">
-            <span className="flex items-center gap-1.5 font-mono text-[10px] font-semibold tracking-[0.1em] text-muted-foreground uppercase">
+            <span className="ov-micro ov-micro-sm flex items-center gap-1.5 text-muted-foreground">
               <Clock size="12" variant="Bold" />
               {claim.state <= 1 ? "Challenge deadline" : "Next milestone"}
             </span>

@@ -140,7 +140,7 @@ export function TruthScore({
                   aria-label="Truth score position"
                 />
               </div>
-              <div className="flex justify-between font-mono text-[10px] text-muted-foreground">
+              <div className="flex justify-between text-[11px] text-muted-foreground">
                 <span>0 contradicted</span>
                 <span>50 uncertain</span>
                 <span>100 verified</span>

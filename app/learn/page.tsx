@@ -114,7 +114,7 @@ export default function LearnPage() {
               },
             ].map((row) => (
               <li key={row.step} className="flex gap-3">
-                <span className="grid size-7 shrink-0 place-items-center rounded-lg bg-sealed/10 font-mono text-[11px] font-bold text-sealed">
+                <span className="ov-micro ov-micro-sm grid size-7 shrink-0 place-items-center rounded-lg bg-sealed/10 text-sealed">
                   {row.step}
                 </span>
                 <div className="min-w-0 flex-1 space-y-1">
@@ -277,7 +277,7 @@ function SectionHeading({
         <span className="grid size-8 shrink-0 place-items-center rounded-xl bg-sea/12 text-primary ring-1 ring-sea/20">
           <Icon size="17" variant="Bold" />
         </span>
-        <span className="font-mono text-[10px] font-semibold tracking-[0.18em] text-muted-foreground tabular-nums">
+        <span className="ov-micro ov-micro-sm text-muted-foreground tabular-nums">
           {index}
         </span>
         <h2 className="text-lg font-semibold tracking-tight text-ocean sm:text-xl">{title}</h2>

@@ -223,7 +223,7 @@ export function SwarmGlobe({
       {/* ------------------------------------------------------- phase rail */}
       <div className="ov-hud-layer pointer-events-none absolute inset-x-0 top-0 p-2 [text-shadow:0_1px_8px_rgba(3,12,20,0.95)] sm:p-3">
         <div className="flex min-w-0 flex-col gap-2">
-          <span className="inline-flex w-fit items-center gap-1.5 rounded-full border border-white/12 bg-white/6 px-2 py-1 font-mono text-[9px] font-semibold tracking-[0.14em] text-white/55 uppercase backdrop-blur-sm">
+          <span className="inline-flex w-fit items-center gap-1.5 rounded-full border border-white/12 bg-white/6 px-2 py-1 ov-micro ov-micro-sm text-white/55 backdrop-blur-sm">
             <Global size="11" variant="Bold" className="text-[#4da2ff]" />
             Network schematic
           </span>
@@ -256,7 +256,7 @@ export function SwarmGlobe({
                   </span>
                   <span
                     className={cn(
-                      "font-mono text-[9.5px] tracking-[0.1em] uppercase transition-colors duration-500",
+                      "ov-micro ov-micro-sm transition-colors duration-500",
                       active ? "text-white" : done ? "text-white/45" : "text-white/25",
                     )}
                   >
@@ -289,18 +289,18 @@ export function SwarmGlobe({
                   real claim's, so the label states what actually happened. */}
               <span
                 className={cn(
-                  "flex items-center gap-1.5 font-mono text-[9px] font-semibold tracking-[0.16em] uppercase",
+                  "ov-micro ov-micro-sm flex items-center gap-1.5",
                   certified ? "text-[#7ee8b0]" : "text-[#8fdcff]",
                 )}
               >
                 <ShieldTick size="11" variant="Bold" />
                 {certified ? "Settled on Sui" : "Not yet settled"}
               </span>
-              <p className="mt-1 font-mono text-lg leading-none font-semibold text-white tabular-nums">
+              <p className="mt-1 text-lg leading-none font-medium text-white tabular-nums">
                 {claim.score ?? "——"}
                 {certified && <span className="text-[11px] text-white/45">/100</span>}
               </p>
-              <p className="mt-1 font-mono text-[9px] tracking-[0.1em] text-white/45 uppercase">
+              <p className="ov-micro ov-micro-sm mt-1 text-white/45">
                 {certified
                   ? `${claim.label ?? "Truth Score"} · certificate`
                   : (claim.label ?? "Awaiting jury")}
@@ -312,7 +312,7 @@ export function SwarmGlobe({
 
       {/* -------------------------------------------------- swarm transcript */}
       <div className="ov-hud-layer pointer-events-none absolute inset-x-0 bottom-0 p-2 pr-2 [text-shadow:0_1px_8px_rgba(3,12,20,0.95)] sm:p-3 sm:pr-44">
-        <div className="flex items-center gap-2 font-mono text-[9px] font-semibold tracking-[0.14em] text-white/35 uppercase">
+        <div className="ov-micro ov-micro-sm flex items-center gap-2 text-white/35">
           {settled ? (
             <TickCircle size="11" variant="Bold" className="text-[#7ee8b0]" />
           ) : (
@@ -329,9 +329,9 @@ export function SwarmGlobe({
                 animate={{ opacity: i === visibleLines.length - 1 ? 1 : 0.42 }}
                 exit={{ opacity: 0 }}
                 transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
-                className="truncate font-mono text-[10.5px] leading-tight"
+                className="truncate text-[12px] leading-tight"
               >
-                <span className={cn("font-semibold", TONE_TEXT[entry.tone])}>{entry.role}</span>
+                <span className={cn("ov-micro ov-micro-sm", TONE_TEXT[entry.tone])}>{entry.role}</span>
                 <span className="text-white/28"> · </span>
                 <span className="text-white/70">{entry.text}</span>
               </motion.p>
@@ -349,11 +349,11 @@ export function SwarmGlobe({
       >
         <div className="-translate-x-1/2 -translate-y-full">
           <div className="ov-hud-chip w-[13rem]">
-            <span className="flex items-center gap-1.5 font-mono text-[9px] font-semibold tracking-[0.16em] text-[#ffd479] uppercase">
+            <span className="ov-micro ov-micro-sm flex items-center gap-1.5 text-[#ffd479]">
               <span className="size-1.5 rounded-full bg-[#ffd479]" />
               Claim ingested
             </span>
-            <p className="mt-1 text-[10.5px] leading-snug text-white/80">
+            <p className="mt-1 text-[12px] leading-snug text-white/80">
               {truncate(claim.statement, 62)}
             </p>
           </div>
@@ -373,7 +373,7 @@ export function SwarmGlobe({
           <div className="-translate-x-1/2">
             <span className="ov-hud-stem rotate-180" />
             <div className="ov-hud-chip">
-              <span className="flex items-center gap-1.5 font-mono text-[9px] font-semibold tracking-[0.16em] text-[#8fdcff] uppercase">
+              <span className="ov-micro ov-micro-sm flex items-center gap-1.5 text-[#8fdcff]">
                 <Cpu size="11" variant="Bold" />
                 {spotlight.role.replace(/_/g, " ")}
               </span>

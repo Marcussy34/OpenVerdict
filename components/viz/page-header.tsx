@@ -52,7 +52,7 @@ export function PageHeader({
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div className="min-w-0 space-y-2">
           {eyebrow && (
-            <span className="block font-mono text-[10px] font-semibold tracking-[0.18em] text-primary uppercase">
+            <span className="ov-micro ov-micro-sm block text-primary">
               {eyebrow}
             </span>
           )}
@@ -89,7 +89,7 @@ export function ExperimentalTag({ className }: { className?: string }) {
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-full border border-unsure/30 bg-unsure/8 px-2 py-0.5 font-mono text-[10px] font-semibold tracking-[0.1em] text-unsure uppercase",
+        "ov-micro ov-micro-sm inline-flex items-center gap-1.5 rounded-full border border-unsure/30 bg-unsure/8 px-2 py-0.5 text-unsure",
         className,
       )}
     >
@@ -119,7 +119,7 @@ export function MetaTag({
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 font-mono text-[10px] font-semibold tracking-[0.1em] uppercase",
+        "ov-micro ov-micro-sm inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5",
         tones[tone],
         className,
       )}

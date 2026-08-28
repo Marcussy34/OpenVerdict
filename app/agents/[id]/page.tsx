@@ -202,7 +202,7 @@ export default function AgentDetailPage({ params }: AgentDetailPageProps) {
                 <div key={dim.key} className="space-y-1.5">
                   <div className="flex items-baseline justify-between gap-2">
                     <span className="text-xs font-semibold text-ocean">{dim.label}</span>
-                    <span className="font-mono text-xs text-muted-foreground tabular-nums">
+                    <span className="text-xs text-muted-foreground tabular-nums">
                       {typeof bps === "number" ? `${bps} bps · ${pct}%` : "—"}
                     </span>
                   </div>

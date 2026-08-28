@@ -42,7 +42,7 @@ export function VerdictSpotlight({ claim }: { claim: ClaimInspection }) {
       />
 
       <header className="flex items-center justify-between gap-3 border-b border-border px-5 py-3.5">
-        <span className="flex items-center gap-2 font-mono text-[10px] font-semibold tracking-[0.16em] text-muted-foreground uppercase">
+        <span className="ov-micro ov-micro-sm flex items-center gap-2 text-muted-foreground">
           <Award size="14" variant="Bold" className="text-primary" />
           {finalized ? "Latest settled verdict" : "Live jury round"}
         </span>
@@ -80,7 +80,7 @@ export function VerdictSpotlight({ claim }: { claim: ClaimInspection }) {
 
         <dl className="grid grid-cols-2 gap-2 text-[11px]">
           <div className="space-y-1">
-            <dt className="font-mono text-[9px] font-semibold tracking-[0.12em] text-muted-foreground uppercase">
+            <dt className="ov-micro ov-micro-sm text-muted-foreground">
               Claim object
             </dt>
             <dd>
@@ -88,7 +88,7 @@ export function VerdictSpotlight({ claim }: { claim: ClaimInspection }) {
             </dd>
           </div>
           <div className="space-y-1">
-            <dt className="font-mono text-[9px] font-semibold tracking-[0.12em] text-muted-foreground uppercase">
+            <dt className="ov-micro ov-micro-sm text-muted-foreground">
               {claim.result?.certificateId ? "Certificate" : "Committee"}
             </dt>
             <dd>

@@ -283,7 +283,7 @@ function FamilyChip({
       {label}
       <span
         className={cn(
-          "rounded-full px-1.5 font-mono text-[10px] tabular-nums",
+          "rounded-full px-1.5 text-[11px] tabular-nums",
           active ? "bg-sea/15 text-primary" : "bg-surface-2 text-muted-foreground",
         )}
       >

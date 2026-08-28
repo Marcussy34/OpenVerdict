@@ -327,7 +327,7 @@ export default function VerifyPage() {
                   {commitmentMatch !== null && (
                     <span
                       className={cn(
-                        "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 font-mono text-[11px] font-bold",
+                        "ov-micro ov-micro-sm inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5",
                         commitmentMatch
                           ? "border-yes/30 bg-yes/8 text-yes"
                           : "border-no/30 bg-no/8 text-no",
@@ -392,7 +392,7 @@ export default function VerifyPage() {
                       className="flex flex-col gap-3 rounded-xl border border-border bg-surface p-3 sm:flex-row sm:items-center sm:justify-between"
                     >
                       <div className="flex items-center gap-2">
-                        <span className="grid size-7 place-items-center rounded-lg bg-sea/12 font-mono text-[11px] font-bold text-primary">
+                        <span className="ov-micro ov-micro-sm grid size-7 place-items-center rounded-lg bg-sea/12 text-primary">
                           {idx + 1}
                         </span>
                         <span className="text-xs font-semibold text-ocean">Juror {idx + 1}</span>

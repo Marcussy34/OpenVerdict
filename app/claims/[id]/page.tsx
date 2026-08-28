@@ -293,7 +293,7 @@ export default function ClaimDetailPage({ params }: ClaimDetailPageProps) {
               </div>
               <div className="space-y-1">
                 <FieldLabel>Seat progress</FieldLabel>
-                <p className="font-mono text-sm font-semibold text-ocean tabular-nums">
+                <p className="text-sm font-semibold text-ocean tabular-nums">
                   {revealedCount} revealed · {sealedCount} sealed / {claim.commitments?.length ?? 0}
                 </p>
               </div>
@@ -318,7 +318,7 @@ export default function ClaimDetailPage({ params }: ClaimDetailPageProps) {
                     >
                       <ShieldTick size="12" variant="Bold" />
                     </span>
-                    <span className="font-mono text-[10px] tracking-[0.06em] text-muted-foreground uppercase">
+                    <span className="ov-micro ov-micro-sm text-muted-foreground">
                       {label} {ok ? "recomputed" : "unverified"}
                     </span>
                   </div>
@@ -538,11 +538,11 @@ export default function ClaimDetailPage({ params }: ClaimDetailPageProps) {
               <div className="grid gap-3 sm:grid-cols-3">
                 <div className="rounded-xl border border-yes/25 bg-yes/6 p-3">
                   <FieldLabel className="mb-1">Settled label</FieldLabel>
-                  <p className="font-mono text-xl font-semibold text-yes">{report.label}</p>
+                  <p className="text-xl font-semibold text-yes">{report.label}</p>
                 </div>
                 <div className="rounded-xl border border-border bg-surface p-3">
                   <FieldLabel className="mb-1">Truth score</FieldLabel>
-                  <p className="font-mono text-xl font-semibold text-ocean tabular-nums">
+                  <p className="text-xl font-semibold text-ocean tabular-nums">
                     {report.truthScore === null ? "——" : report.truthScore}
                     <span className="ml-1 text-xs text-muted-foreground">/100</span>
                   </p>
@@ -571,7 +571,7 @@ export default function ClaimDetailPage({ params }: ClaimDetailPageProps) {
 
               <Well>
                 <FieldLabel className="mb-1">Truth score formula</FieldLabel>
-                <p className="font-mono text-[11px] leading-relaxed text-foreground/85">
+                <p className="text-[13px] leading-relaxed text-foreground/85">
                   {report.truthScoreFormula}
                 </p>
               </Well>
@@ -624,7 +624,7 @@ export default function ClaimDetailPage({ params }: ClaimDetailPageProps) {
                             <div className="mt-1 flex flex-wrap items-center gap-1">
                               <span
                                 className={cn(
-                                  "rounded px-1 py-px font-mono text-[9px] font-bold tracking-[0.06em] uppercase",
+                                  "ov-micro ov-micro-sm rounded px-1 py-px",
                                   trace.assessment === "SUPPORTS"
                                     ? "bg-yes/10 text-yes"
                                     : trace.assessment === "CONTRADICTS"
@@ -656,14 +656,14 @@ export default function ClaimDetailPage({ params }: ClaimDetailPageProps) {
                 <FieldLabel>Sui Move protocol objects</FieldLabel>
                 <div className="grid gap-2 sm:grid-cols-2">
                   <div className="space-y-1">
-                    <span className="font-mono text-[10px] text-muted-foreground">
+                    <span className="ov-micro ov-micro-sm text-muted-foreground">
                       Claim object
                     </span>
                     <HashChip value={report.sui.claimObjectId} tone="chain" full />
                   </div>
                   {report.sui.committeeId && (
                     <div className="space-y-1">
-                      <span className="font-mono text-[10px] text-muted-foreground">
+                      <span className="ov-micro ov-micro-sm text-muted-foreground">
                         Committee object
                       </span>
                       <HashChip value={report.sui.committeeId} tone="sealed" full />
@@ -671,7 +671,7 @@ export default function ClaimDetailPage({ params }: ClaimDetailPageProps) {
                   )}
                   {report.sui.certificateId && (
                     <div className="space-y-1">
-                      <span className="font-mono text-[10px] text-muted-foreground">
+                      <span className="ov-micro ov-micro-sm text-muted-foreground">
                         Certificate object
                       </span>
                       <HashChip value={report.sui.certificateId} tone="yes" full />
@@ -679,7 +679,7 @@ export default function ClaimDetailPage({ params }: ClaimDetailPageProps) {
                   )}
                   {report.evidenceRoot && (
                     <div className="space-y-1">
-                      <span className="font-mono text-[10px] text-muted-foreground">
+                      <span className="ov-micro ov-micro-sm text-muted-foreground">
                         Evidence root
                       </span>
                       <HashChip value={report.evidenceRoot} tone="chain" full />
@@ -687,7 +687,7 @@ export default function ClaimDetailPage({ params }: ClaimDetailPageProps) {
                   )}
                 </div>
                 <div className="space-y-1 border-t border-border pt-2">
-                  <span className="font-mono text-[10px] text-muted-foreground">
+                  <span className="ov-micro ov-micro-sm text-muted-foreground">
                     Revealed vote objects ({report.sui.revealedVoteIds?.length ?? 0})
                   </span>
                   <div className="flex flex-wrap gap-1">
@@ -698,7 +698,7 @@ export default function ClaimDetailPage({ params }: ClaimDetailPageProps) {
                 </div>
                 {claim.result?.digest && (
                   <div className="space-y-1 border-t border-border pt-2">
-                    <span className="font-mono text-[10px] text-muted-foreground">
+                    <span className="ov-micro ov-micro-sm text-muted-foreground">
                       Finalization transaction
                     </span>
                     <HashChip value={claim.result.digest} tone="chain" full />

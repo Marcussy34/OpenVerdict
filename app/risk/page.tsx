@@ -57,7 +57,7 @@ export default function RiskPage() {
               <ShieldCross size="20" variant="Bold" />
             </span>
             <div className="space-y-2">
-              <span className="font-mono text-[10px] font-semibold tracking-[0.16em] text-unsure uppercase">
+              <span className="ov-micro ov-micro-sm text-unsure">
                 Risk 04
               </span>
               <h2 className="text-base font-semibold text-ocean">

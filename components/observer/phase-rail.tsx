@@ -70,10 +70,10 @@ export function PhaseRail({ currentPhase, className = "" }: PhaseRailProps) {
       />
 
       <header className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-3 sm:px-5">
-        <h2 className="font-mono text-[11px] font-semibold tracking-[0.14em] text-muted-foreground uppercase">
+        <h2 className="ov-micro ov-micro-sm text-muted-foreground">
           Phase progression
         </h2>
-        <span className="rounded-full border border-sea/30 bg-sea/10 px-2.5 py-0.5 font-mono text-[10px] font-semibold tracking-[0.08em] text-primary uppercase">
+        <span className="ov-micro ov-micro-sm rounded-full border border-sea/30 bg-sea/10 px-2.5 py-0.5 text-primary">
           Phase {activeIndex} of {PHASES.length} · {active.name}
         </span>
       </header>
@@ -126,7 +126,7 @@ export function PhaseRail({ currentPhase, className = "" }: PhaseRailProps) {
 
                 <span
                   className={cn(
-                    "mt-2 rounded px-1.5 py-px font-mono text-[9px] font-bold tracking-[0.1em] uppercase",
+                    "ov-micro ov-micro-sm mt-2 rounded px-1.5 py-px",
                     done
                       ? "bg-yes/10 text-yes"
                       : current

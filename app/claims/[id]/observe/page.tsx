@@ -293,7 +293,7 @@ export default function ObservePage({ params }: ObservePageProps) {
                 onClick={() => setSelectedSource(src)}
                 aria-pressed={selectedSource === src}
                 className={cn(
-                  "rounded-md px-2 py-1 font-mono text-[10px] font-semibold transition-colors",
+                  "ov-micro ov-micro-sm rounded-md px-2 py-1 transition-colors",
                   selectedSource === src
                     ? "bg-sea/12 text-primary"
                     : "bg-surface text-muted-foreground hover:text-ocean",

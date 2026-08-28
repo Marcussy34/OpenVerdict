@@ -130,7 +130,7 @@ export function Pipeline({ className }: { className?: string }) {
               </div>
 
               <div className="space-y-1">
-                <span className="block font-mono text-[10px] font-semibold tracking-[0.14em] text-muted-foreground uppercase">
+                <span className="ov-micro ov-micro-sm block text-muted-foreground">
                   {stage.kicker}
                 </span>
                 <h3 className="text-sm font-semibold text-ocean">{stage.title}</h3>

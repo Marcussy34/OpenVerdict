@@ -54,7 +54,7 @@ export function ClaimForm() {
           onChange={(e) => setUrl(e.target.value)}
           placeholder="Evidence source — https://…"
           aria-describedby={errorId}
-          className="min-w-0 flex-1 bg-transparent pb-1 font-mono text-[13px] leading-snug text-[#F3F3F3] placeholder:text-[#F3F3F3]/50 focus:outline-none"
+          className="min-w-0 flex-1 bg-transparent pb-1 text-[15px] leading-snug text-[#F3F3F3] placeholder:text-[#F3F3F3]/50 focus:outline-none"
         />
         <SplitButton
           type="submit"
