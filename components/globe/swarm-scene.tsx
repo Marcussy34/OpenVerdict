@@ -130,34 +130,6 @@ const earthMaterial = new THREE.ShaderMaterial({
   `,
 });
 
-const atmosphereMaterial = new THREE.ShaderMaterial({
-  uniforms: { uColor: { value: new THREE.Color("#4da2ff") } },
-  transparent: true,
-  depthWrite: false,
-  blending: THREE.AdditiveBlending,
-  side: THREE.BackSide,
-  vertexShader: /* glsl */ `
-    varying vec3 vN;
-    varying vec3 vP;
-    void main() {
-      vN = normalize(mat3(modelMatrix) * normal);
-      vP = (modelMatrix * vec4(position, 1.0)).xyz;
-      gl_Position = projectionMatrix * viewMatrix * vec4(vP, 1.0);
-    }
-  `,
-  fragmentShader: /* glsl */ `
-    uniform vec3 uColor;
-    varying vec3 vN;
-    varying vec3 vP;
-    void main() {
-      vec3 n = normalize(vN);
-      vec3 v = normalize(cameraPosition - vP);
-      float f = pow(1.0 - abs(dot(n, v)), 2.6);
-      gl_FragColor = vec4(uColor, f * 0.5);
-      #include <colorspace_fragment>
-    }
-  `,
-});
 
 /* -------------------------------------------------------------------------- */
 /* Land dots                                                                   */
@@ -739,9 +711,6 @@ function SceneBody({
       <group ref={spinRef} rotation={[0, -1.22, 0]}>
         <mesh material={earthMaterial}>
           <sphereGeometry args={[0.995, 64, 48]} />
-        </mesh>
-        <mesh material={atmosphereMaterial}>
-          <sphereGeometry args={[1.13, 48, 32]} />
         </mesh>
         <points geometry={land.geometry} material={land.material} />
         <mesh ref={rippleRef} geometry={ripple.geometry} material={ripple.material} />

@@ -1,8 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { useScrollFrame, clamp01, lerp, ease } from "./scroll-driver";
-import { STAT_CARD_BACKGROUND } from "./productivity";
+import { useScrollFrame, clamp01, lerp } from "./scroll-driver";
 
 /**
  * The dock move: the hero's globe scales and clips down INTO the stat card.
@@ -27,7 +26,6 @@ export function DockLayer({
 }) {
   const layerRef = React.useRef<HTMLDivElement>(null);
   const boxRef = React.useRef<HTMLDivElement>(null);
-  const groundRef = React.useRef<HTMLDivElement>(null);
   const size = React.useRef({ w: 0, h: 0 });
 
   useScrollFrame(({ scrollY, vh }) => {
@@ -48,8 +46,10 @@ export function DockLayer({
       box.style.height = `${h.height}px`;
     }
 
-    // One hero-height of scrolling completes the dock.
-    const p = ease(clamp01(scrollY / Math.max(1, vh * 0.92)));
+    // One hero-height of scrolling completes the dock. Linear on purpose:
+    // easing made the globe move ~1.5x the page rate mid-travel, which read
+    // as the globe having momentum of its own during inertial scrolling.
+    const p = clamp01(scrollY / Math.max(1, vh * 0.92));
     // Cover, not contain: the visual always fills the card, whatever the
     // card's aspect turns out to be at this viewport.
     const cover = Math.max(c.width / h.width, c.height / h.height);
@@ -66,14 +66,6 @@ export function DockLayer({
 
     box.style.transform = `translate3d(${left - clipX}px, ${top - clipY}px, 0) scale(${scale})`;
     box.style.clipPath = `inset(${clipY / scale}px ${clipX / scale}px)`;
-    // The card's own surface fades in behind the globe as it travels, so the
-    // visual crosses the light section as a solid panel rather than a ghost.
-    // Held at zero through the hero (a linear ramp painted a faint rectangle
-    // around the free-floating globe); it only needs to be solid by the time
-    // the visual reaches the light wash.
-    if (groundRef.current) {
-      groundRef.current.style.opacity = String(clamp01((p - 0.35) / 0.4));
-    }
     // Past a third of the way in, the globe is reading as the card's texture,
     // so its own heads-up display gets out of the card's way.
     box.dataset.hud = p > 0.32 ? "off" : "on";
@@ -104,11 +96,6 @@ export function DockLayer({
         ref={boxRef}
         className="absolute top-0 left-0 origin-top-left will-change-transform"
       >
-        <div
-          ref={groundRef}
-          className="absolute inset-0"
-          style={{ background: STAT_CARD_BACKGROUND, opacity: 0 }}
-        />
         {children}
       </div>
     </div>

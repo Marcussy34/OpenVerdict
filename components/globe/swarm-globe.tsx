@@ -198,7 +198,10 @@ export function SwarmGlobe({
       {/* Poster plate: fills the frame before WebGL boots and if it never does. */}
       <div
         aria-hidden
-        className="absolute inset-0 -z-10 grid place-items-center overflow-hidden"
+        className={cn(
+          "absolute inset-0 -z-10 grid place-items-center overflow-hidden transition-opacity duration-700",
+          mounted && !reduce && "opacity-0",
+        )}
       >
         <div className="ov-globe-plate size-[74%] rounded-full" />
       </div>
