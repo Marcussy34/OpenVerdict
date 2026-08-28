@@ -28,10 +28,12 @@ const RUNWAY_VH = 200;
 // then the pinned 3-column content staggers in; the tail is the hold.
 const EXIT_PORTION = 0.2;
 const MASK_PORTION = 0.4;
-// The dissolve starts while the mask is still closing (per review: the panel
-// should already be ghosting as it shrinks) and completes just after landing.
-const FADE_START = 0.18;
-const FADE_LENGTH = 0.32;
+const FADE_PORTION = 0.12;
+// The PANEL itself ghosts against the (still opaque) wash while shrinking —
+// the section behind stays hidden until the frame's own dissolve at landing.
+const GHOST_START = 0.18;
+const GHOST_LENGTH = 0.22;
+const GHOST_FLOOR = 0.35;
 const LIGHT_TAIL_VH = 120;
 
 export function HeroShrink({
@@ -152,9 +154,12 @@ export function HeroShrink({
     // the guarantee rows arrive one by one.
     if (entranceRef) entranceRef.current = (p - MASK_PORTION) / 0.25;
 
-    // The travelling visual ghosts out across the second half of the flight
-    // and finishes dissolving just after it locks onto the card.
-    const fade = clamp01((p - FADE_START) / FADE_LENGTH);
+    // The travelling panel thins out over the opaque wash while it shrinks…
+    const ghost = clamp01((p - GHOST_START) / GHOST_LENGTH);
+    panel.style.opacity = (1 - (1 - GHOST_FLOOR) * ghost).toFixed(3);
+    // …and only at the landing does the whole frame (wash included) dissolve,
+    // revealing the section that was standing behind it.
+    const fade = clamp01((p - MASK_PORTION) / FADE_PORTION);
     frame.style.opacity = (1 - fade).toFixed(3);
     frame.style.visibility = fade >= 0.995 ? "hidden" : "";
   }, active);
