@@ -49,7 +49,7 @@ export function Hero({
               button (the one carrying the arrow chip) and the other stretches
               to meet it, so both rows end on the same edge. */}
           <div className="mt-6 grid w-fit gap-[2px] lg:mt-7">
-            <SplitButton href="#submit" stretch>
+            <SplitButton href="/fact-check" stretch>
               Submit a claim
             </SplitButton>
             <SplitButton href="/claims" tone="dark" chip={false} stretch>
@@ -108,7 +108,7 @@ function LatestVerdictCard({ latest }: { latest: ClaimInspection | null }) {
         <CornerPin className="top-0 left-0" />
         <Eyebrow className="text-[#F3F3F3]/50">Latest verdict</Eyebrow>
         <p className="mt-2 text-[15px] leading-snug text-[#F3F3F3]/75">
-          No verdicts yet — the first claim submitted below opens the docket.
+          No verdicts yet. The first claim submitted opens the docket.
         </p>
       </div>
     );

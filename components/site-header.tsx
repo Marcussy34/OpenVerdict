@@ -165,7 +165,7 @@ export function SiteHeader() {
             ))}
             <WalletConnectButton />
             <Link
-              href={isLanding ? "#submit" : "/fact-check"}
+              href="/fact-check"
               aria-label="Submit a claim"
               className="ov-nav-chip w-[34px] px-0"
             >
@@ -225,7 +225,7 @@ export function SiteHeader() {
               </Link>
             ))}
             <Link
-              href={isLanding ? "#submit" : "/fact-check"}
+              href="/fact-check"
               className="ov-nav-chip !h-11 !justify-start"
               onClick={toggleMenu}
             >

@@ -30,7 +30,7 @@ export function Banner() {
             </h2>
 
             <div className="flex flex-wrap items-center gap-[2px] gap-y-2">
-              <SplitButton href="#submit">Submit a claim</SplitButton>
+              <SplitButton href="/fact-check">Submit a claim</SplitButton>
               <SplitButton href="/learn" tone="dark" chip={false}>
                 How it works
               </SplitButton>

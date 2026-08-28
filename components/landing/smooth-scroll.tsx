@@ -9,7 +9,7 @@ import { useReducedMotion } from "motion/react";
  * expo-out settle — every effect on this page is a pure function of scrollY,
  * so the glide is what carries the whole choreography; a heavier wheel
  * multiplier keeps that glide from feeling slow.
- * Reduced motion skips it; `anchors` keeps #submit links working.
+ * Reduced motion skips it; `anchors` keeps in-page hash links working.
  */
 export function SmoothScroll() {
   const reduce = useReducedMotion();

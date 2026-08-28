@@ -2,10 +2,8 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
 import { useReducedMotion } from "motion/react";
 import { CornerPin, GridGuides, Hairline, ArrowUp, Eyebrow } from "./primitives";
-import { ClaimForm } from "./claim-form";
 import { SuiMark, GonkaMark } from "@/components/brand/logos";
 import { useScrollFrame, clamp01, ease } from "./scroll-driver";
 
@@ -28,19 +26,17 @@ const LEGAL = [
 /**
  * Section 9 — the deep-blue close.
  *
- * Carries the real claim form, the site's own links, and the giant wordmark
+ * Carries the provenance statement, the site's own links, and the giant wordmark
  * that rises into place as the footer scrolls in (static under reduced motion,
  * since the ride is driven from the shared scroll loop).
  */
 export function LandingFooter() {
   const markRef = React.useRef<HTMLDivElement>(null);
   const reduce = useReducedMotion();
-  const pathname = usePathname();
   // It closes every page now, so it reads its own deployment rather than being
-  // handed one, and stands the claim form down on the page that IS the form.
+  // handed one.
   const [network, setNetwork] = React.useState<string | null>(null);
   const [packageId, setPackageId] = React.useState<string | null>(null);
-  const withForm = pathname !== "/fact-check";
 
   React.useEffect(() => {
     let ignore = false;
@@ -85,7 +81,6 @@ export function LandingFooter() {
 
   return (
     <footer
-      id="submit"
       data-header-theme="dark"
       className="ov-footer-ground ov-on-dark relative z-30 isolate overflow-hidden text-[#F3F3F3]"
     >
@@ -93,31 +88,27 @@ export function LandingFooter() {
 
       <div className="relative z-10 px-5 pt-24 md:px-7 md:pt-28">
         <div className="grid gap-14 lg:grid-cols-12 lg:gap-7">
-          {/* The claim form */}
+          {/* Provenance, at the size it deserves — this column is the whole
+              statement of what the verdicts run on and settle to. */}
           <div className="relative lg:col-span-5">
             <CornerPin className="-top-6 left-0" />
-            {withForm && (
-              <>
-                <h2 className="text-[19px] leading-snug font-medium tracking-[-0.01em]">
-                  Put a claim on trial:
-                </h2>
-                <div className="mt-5">
-                  <ClaimForm />
-                </div>
-              </>
-            )}
-
-            <div className={withForm ? "mt-12" : ""}>
-              {/* Both marks in the page's own ink — the provenance line reads as
-                  one sentence, not as two pasted logos. */}
-              <Eyebrow className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[#F3F3F3]/60">
-                <SuiMark className="size-[15px]" />
-                Settled on Sui {(network ?? "testnet").toUpperCase()}
-                <span aria-hidden className="text-[#F3F3F3]/30">·</span>
-                <GonkaMark className="size-[14px]" />
-                Juries by GonkaRouter
-              </Eyebrow>
+            <div className="grid gap-9">
+              <div>
+                <Eyebrow className="text-[#F3F3F3]/50">Settled on</Eyebrow>
+                <p className="ov-display mt-3 flex items-center gap-3.5 text-[clamp(1.9rem,3.4vw,2.75rem)]">
+                  <SuiMark brand className="size-[0.85em]" />
+                  Sui
+                </p>
+              </div>
+              <div>
+                <Eyebrow className="text-[#F3F3F3]/50">Powered by</Eyebrow>
+                <p className="ov-display mt-3 flex items-center gap-3.5 text-[clamp(1.9rem,3.4vw,2.75rem)]">
+                  <GonkaMark className="size-[0.8em]" />
+                  GonkaRouter
+                </p>
+              </div>
             </div>
+
           </div>
 
           {/* Links */}
