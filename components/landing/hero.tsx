@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { SplitButton, Eyebrow, CornerPin, GridGuides, Arrow } from "./primitives";
-import { SuiMark } from "@/components/brand/logos";
+import { SuiMark, GonkaMark } from "@/components/brand/logos";
 import type { ClaimInspection } from "@/lib/engine/contract";
 
 /** Terminal states carry a settled outcome; anything lower is still running. */
@@ -23,11 +23,9 @@ function truncate(text: string, max: number) {
  */
 export function Hero({
   latest,
-  network,
   children,
 }: {
   latest: ClaimInspection | null;
-  network: string | null;
   /** The globe. */
   children?: React.ReactNode;
 }) {
@@ -70,18 +68,24 @@ export function Hero({
           data-hero-exit="ground"
           className="mt-10 grid gap-7 lg:mt-16 lg:grid-cols-12 lg:items-end lg:gap-5"
         >
-          <div className="lg:col-span-3">
-            <Eyebrow className="text-[#F3F3F3]/50">Settled on</Eyebrow>
-            <p className="mt-1.5 flex items-center gap-2 text-[19px] leading-none font-medium tracking-[-0.01em]">
-              {/* The official Sui mark, in Sui's own blue against the night stage. */}
-              <SuiMark brand className="size-[20px]" />
-              <span>
-                Sui{" "}
-                <span className="text-[#F3F3F3]/55">
-                  {(network ?? "testnet").toUpperCase()}
-                </span>
-              </span>
-            </p>
+          {/* Provenance, both halves of it. The exact network is stated in the
+              footer and on /status; here it is just the two names. */}
+          <div className="grid gap-4 lg:col-span-3">
+            <div>
+              <Eyebrow className="text-[#F3F3F3]/50">Settled on</Eyebrow>
+              <p className="mt-1.5 flex items-center gap-2 text-[19px] leading-none font-medium tracking-[-0.01em]">
+                {/* The official Sui mark, in Sui's own blue against the night stage. */}
+                <SuiMark brand className="size-[20px]" />
+                Sui
+              </p>
+            </div>
+            <div>
+              <Eyebrow className="text-[#F3F3F3]/50">Powered by</Eyebrow>
+              <p className="mt-1.5 flex items-center gap-2 text-[19px] leading-none font-medium tracking-[-0.01em]">
+                <GonkaMark className="size-[19px]" />
+                GonkaRouter
+              </p>
+            </div>
           </div>
 
           {/* The reference's hero blurb, measured off the live site:

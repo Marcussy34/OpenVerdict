@@ -60,7 +60,7 @@ export default function HomePage() {
           <Productivity cardRef={cardRef} entranceRef={entranceRef} claims={claims} />
         }
       >
-        <Hero latest={latest} network={network}>
+        <Hero latest={latest}>
           {globe}
         </Hero>
       </HeroShrink>
