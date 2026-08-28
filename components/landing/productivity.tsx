@@ -36,7 +36,12 @@ const HEADLINE = ["Pioneering", "Verifiability"];
 const ROW_START = 0.08;
 const ROW_STEP = 0.22;
 const ROW_WINDOW = 0.26;
-export const ENTRANCE_COMPLETE = ROW_START + (ROWS.length - 1) * ROW_STEP + ROW_WINDOW;
+/** Every element of the section has landed here. */
+const ROWS_COMPLETE = ROW_START + (ROWS.length - 1) * ROW_STEP + ROW_WINDOW;
+/** …and the card keeps deepening for one more beat of scroll before the page
+ *  is handed back. That tail is what the hero's runway ends on. */
+const CARD_TAIL = 0.5;
+export const ENTRANCE_COMPLETE = ROWS_COMPLETE + CARD_TAIL;
 /** Deterministic pseudo-random reveal threshold per letter (SSR-stable). */
 function letterThreshold(i: number) {
   const x = Math.sin((i + 1) * 12.9898) * 43758.5453;
@@ -118,12 +123,13 @@ export function Productivity({
       // The card is the dock's landing target: it must stay transform-static
       // (a moving target makes the landed mask visibly settle — "the drop").
       // Its entrance is the mask landing itself plus this ramp, which develops
-      // across the WHOLE entrance: the card is only fully opaque once every
-      // other element has landed. Eased so it is already most of the way there
-      // when the hero finishes dissolving off it — a linear ramp would wash the
-      // panel out at the handoff.
+      // across the WHOLE entrance and then some: everything else has landed by
+      // ROWS_COMPLETE, and the card goes on deepening through CARD_TAIL, hitting
+      // full strength on the last of the scroll before the page is released.
+      // Eased hard so it is already most of the way there when the hero
+      // dissolves off it — a linear ramp washes the panel out at the handoff.
       const cq = clamp01(q / ENTRANCE_COMPLETE);
-      cardBoxRef.current.style.opacity = Math.pow(cq, 0.55).toFixed(3);
+      cardBoxRef.current.style.opacity = Math.pow(cq, 0.35).toFixed(3);
       cardBoxRef.current.style.transform = "";
     }
 
