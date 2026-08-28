@@ -44,8 +44,10 @@ export function Manifesto() {
       // block sitting in the lower half); the copy materialises letter by
       // letter in scattered order — pure opacity, nothing moves.
       const arrival = clamp01((vh * 0.98 - r.top) / (vh * 0.43));
-      // Wipe: picks up where the arrival ends and reads left to right.
-      const progress = clamp01((vh * 0.55 - r.top) / (vh * 0.4 + r.height));
+      // Wipe: picks up where the arrival ends and reads left to right, done by
+      // the time the paragraph reaches the top third — a fixed 28vh of travel,
+      // not one that stretched with the paragraph's own height.
+      const progress = clamp01((vh * 0.58 - r.top) / (vh * 0.28));
       // The wipe writes the word spans; the arrival writes the letters nested
       // inside them, and CSS multiplies the two — no element carries both.
       const spans = para.children;
