@@ -3,7 +3,8 @@
 import * as React from "react";
 import { SplitButton, Eyebrow, CornerPin, NumberChip, GridGuides } from "./primitives";
 import { BallotSealArt, EvidencePinArt, CertificateArt } from "./dotted-art";
-import { Reveal } from "@/components/viz/reveal";
+import { useReducedMotion } from "motion/react";
+import { useScrollFrame, clamp01 } from "./scroll-driver";
 import { useCountUp } from "@/components/viz/use-count-up";
 import type { ClaimInspection } from "@/lib/engine/contract";
 
@@ -25,12 +26,22 @@ export const STAT_CARD_BACKGROUND =
  * and `dockProgress` (0 → 1) drives the card chrome's crossfade so the content
  * lands on top of the arriving visual rather than punching through it.
  */
+const HEADLINE = ["Pioneering", "Verifiability"];
+/** Deterministic pseudo-random reveal threshold per letter (SSR-stable). */
+function letterThreshold(i: number) {
+  const x = Math.sin((i + 1) * 12.9898) * 43758.5453;
+  return 0.04 + (x - Math.floor(x)) * 0.58;
+}
+
 export function Productivity({
   cardRef,
+  entranceRef,
   claims,
 }: {
   /** Marks the stat card frame the hero's closing mask converges on. */
   cardRef?: React.RefObject<HTMLDivElement | null>;
+  /** Entrance progress from the hero choreography (−1 = drive it locally). */
+  entranceRef?: React.MutableRefObject<number>;
   claims: ClaimInspection[];
 }) {
   // Real counters off the read-only claim feed — nothing here is synthesised.
@@ -39,8 +50,70 @@ export function Productivity({
   const settledCount = useCountUp(settled);
   const seatCount = useCountUp(seats);
 
+  const reduce = useReducedMotion() ?? false;
+  const sectionRef = React.useRef<HTMLElement>(null);
+  const h2Ref = React.useRef<HTMLHeadingElement>(null);
+  const paraRef = React.useRef<HTMLParagraphElement>(null);
+  const cardBoxRef = React.useRef<HTMLDivElement>(null);
+  const rowRefs = React.useRef<Array<HTMLDivElement | null>>([]);
+  const letters = React.useRef<HTMLElement[] | null>(null);
+
+  // Everything below is scrubbed by scroll — a pure function of position,
+  // consistent with the rest of the page (stop means stop). While the hero
+  // choreography runs, its runway provides the progress; otherwise it comes
+  // from this section's own place in the viewport.
+  useScrollFrame(({ vh }) => {
+    const clear = (el: HTMLElement | null) => {
+      if (!el) return;
+      el.style.opacity = "";
+      el.style.transform = "";
+    };
+    if (reduce) {
+      letters.current?.forEach(clear);
+      clear(paraRef.current);
+      clear(cardBoxRef.current);
+      rowRefs.current.forEach(clear);
+      return;
+    }
+
+    const ext = entranceRef?.current ?? -1;
+    let q: number;
+    if (ext >= 0) {
+      q = ext;
+    } else {
+      const rect = sectionRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      q = clamp01((vh * 0.92 - rect.top) / (vh * 0.7));
+    }
+
+    if (!letters.current && h2Ref.current) {
+      letters.current = Array.from(h2Ref.current.querySelectorAll<HTMLElement>("[data-l]"));
+    }
+    letters.current?.forEach((el, i) => {
+      el.style.opacity = clamp01((q - letterThreshold(i)) / 0.16).toFixed(3);
+    });
+
+    const pq = clamp01((q - 0.45) / 0.3);
+    if (paraRef.current) {
+      paraRef.current.style.opacity = pq.toFixed(3);
+      paraRef.current.style.transform = `translate3d(0, ${((1 - pq) * 14).toFixed(1)}px, 0)`;
+    }
+
+    if (cardBoxRef.current) {
+      cardBoxRef.current.style.opacity = clamp01(q / 0.75).toFixed(3);
+    }
+
+    rowRefs.current.forEach((el, i) => {
+      if (!el) return;
+      const rq = clamp01((q - (0.18 + i * 0.2)) / 0.22);
+      el.style.opacity = rq.toFixed(3);
+      el.style.transform = `translate3d(${((1 - rq) * 64).toFixed(1)}px, 0, 0)`;
+    });
+  });
+
   return (
     <section
+      ref={sectionRef}
       data-header-theme="light"
       className="ov-light-wash relative overflow-hidden text-black"
     >
@@ -52,20 +125,25 @@ export function Productivity({
               clear of the docking layer that flies through at z-20. */}
           <div className="relative z-30 flex flex-col justify-between">
             <CornerPin className="-top-6 left-0 hidden lg:block" />
-            <Reveal>
-              <h2 className="ov-display text-[clamp(2.5rem,5.2vw,4.25rem)]">
-                Pioneering
-                <br />
-                Verifiability
-              </h2>
-            </Reveal>
-            <Reveal delay={0.08}>
-              <p className="mt-10 max-w-[330px] text-[15px] leading-[1.5] text-black/70 lg:mt-0">
-                Five jurors drawn across at least three model families deliberate under
-                commit–reveal, and the tally settles on-chain. Every score is integer
-                arithmetic anyone can rerun against the same frozen evidence.
-              </p>
-            </Reveal>
+            <h2 ref={h2Ref} className="ov-display text-[clamp(2.5rem,5.2vw,4.25rem)]">
+              {HEADLINE.map((word) => (
+                <span key={word} className="block">
+                  {Array.from(word).map((ch, i) => (
+                    <span key={i} data-l className="inline-block">
+                      {ch}
+                    </span>
+                  ))}
+                </span>
+              ))}
+            </h2>
+            <p
+              ref={paraRef}
+              className="mt-10 max-w-[330px] text-[15px] leading-[1.5] text-black/70 lg:mt-0"
+            >
+              Five jurors drawn across at least three model families deliberate under
+              commit–reveal, and the tally settles on-chain. Every score is integer
+              arithmetic anyone can rerun against the same frozen evidence.
+            </p>
           </div>
 
           {/* Centre: the dock target */}
@@ -73,7 +151,10 @@ export function Productivity({
             <CornerPin className="-top-2 left-0 z-40" />
             <div
               className="relative flex min-h-[520px] flex-col overflow-hidden lg:min-h-[640px]"
-              ref={cardRef}
+              ref={(el) => {
+                cardBoxRef.current = el;
+                if (cardRef) cardRef.current = el;
+              }}
               style={{ background: STAT_CARD_BACKGROUND }}
             >
               {/* Scrim: keeps the readouts legible over the docked globe, so it
@@ -109,7 +190,13 @@ export function Productivity({
           {/* Right: the three guarantees, each with its dotted schematic */}
           <div className="relative z-30 flex flex-col gap-4">
             {ROWS.map((row, i) => (
-              <Reveal key={row.title} delay={0.08 * i} y={22}>
+              <div
+                key={row.title}
+                ref={(el) => {
+                  rowRefs.current[i] = el;
+                }}
+                className="will-change-transform"
+              >
                 <div
                   className="relative flex min-h-[172px] items-start justify-between gap-4 overflow-hidden p-5 lg:min-h-[204px]"
                   // Opaque on purpose: the docking globe flies past at z-20 and
@@ -130,7 +217,7 @@ export function Productivity({
                     size={200}
                   />
                 </div>
-              </Reveal>
+              </div>
             ))}
           </div>
         </div>

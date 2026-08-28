@@ -23,6 +23,7 @@ type RegistryAgent = {
 
 export default function HomePage() {
   const cardRef = useRef<HTMLDivElement>(null);
+  const entranceRef = useRef(-1);
   const [claims, setClaims] = useState<ClaimInspection[]>([]);
   const [registry, setRegistry] = useState<RegistryAgent[]>([]);
   const [network, setNetwork] = useState<string | null>(null);
@@ -91,7 +92,10 @@ export default function HomePage() {
 
       <HeroShrink
         cardRef={cardRef}
-        reveal={<Productivity cardRef={cardRef} claims={claims} />}
+        entranceRef={entranceRef}
+        reveal={
+          <Productivity cardRef={cardRef} entranceRef={entranceRef} claims={claims} />
+        }
       >
         <Hero latest={latest} network={network}>
           {globe}

@@ -24,11 +24,15 @@ const LIGHT_TAIL_VH = 55;
 
 export function HeroShrink({
   cardRef,
+  entranceRef,
   reveal,
   children,
 }: {
   /** The stat card the mask converges on — lives inside `reveal`. */
   cardRef: React.RefObject<HTMLDivElement | null>;
+  /** 0→1 entrance progress for the revealed section (−1 = choreography off,
+   *  let the section drive its own entrance from viewport position). */
+  entranceRef?: React.MutableRefObject<number>;
   /** The section revealed behind the choreography (productivity). */
   reveal: React.ReactNode;
   /** The hero panel. */
@@ -64,7 +68,8 @@ export function HeroShrink({
       el.style.visibility = "";
     }
     if (revealRef.current) revealRef.current.style.transform = "";
-  }, [active]);
+    if (entranceRef) entranceRef.current = -1;
+  }, [active, entranceRef]);
 
   useScrollFrame(({ scrollY, vh, vw }) => {
     const wrap = wrapRef.current;
@@ -103,6 +108,10 @@ export function HeroShrink({
         : { top: vh * 0.22, left: vw * 0.3, right: vw * 0.3, bottom: vh * 0.1 };
 
     panel.style.clipPath = `inset(${lerp(0, target.top, p).toFixed(1)}px ${lerp(0, target.right, p).toFixed(1)}px ${lerp(0, target.bottom, p).toFixed(1)}px ${lerp(0, target.left, p).toFixed(1)}px)`;
+
+    // The revealed section's entrance rides the tail of the runway, so its
+    // choreography plays while (and just after) the frame dissolves.
+    if (entranceRef) entranceRef.current = clamp01((p - 0.6) / 0.4);
 
     // The whole frame — masked hero AND wash — dissolves over the last
     // stretch, revealing the real section (already in position underneath).
