@@ -47,6 +47,37 @@ export function BrandMark({ size = 30 }: { size?: number }) {
   );
 }
 
+/**
+ * Where the app lives. The two are meant to be separate hosts —
+ * openverdict.info for the story, app.openverdict.info for the console — so
+ * set NEXT_PUBLIC_APP_URL in the marketing deployment and the header will hand
+ * visitors across. Unset (one host, and in development) it stays in-app at
+ * /app, and the same link works either way.
+ */
+const APP_HOME = process.env.NEXT_PUBLIC_APP_URL || "/app";
+
+/** The one control that crosses to the console, wherever the console lives. */
+export function AppLink({
+  children,
+  className,
+  onClick,
+}: {
+  children: React.ReactNode;
+  className?: string;
+  onClick?: () => void;
+}) {
+  const label = "Open the OpenVerdict app";
+  return APP_HOME.startsWith("http") ? (
+    <a href={APP_HOME} aria-label={label} className={className} onClick={onClick}>
+      {children}
+    </a>
+  ) : (
+    <Link href={APP_HOME} aria-label={label} className={className} onClick={onClick}>
+      {children}
+    </Link>
+  );
+}
+
 /** Theme the header paints in — driven by the section under it. */
 type HeaderTheme = "dark" | "light";
 
@@ -164,13 +195,9 @@ export function SiteHeader() {
               </Link>
             ))}
             <WalletConnectButton />
-            <Link
-              href="/fact-check"
-              aria-label="Submit a claim"
-              className="ov-nav-chip w-[34px] px-0"
-            >
-              <Arrow />
-            </Link>
+            <AppLink className="ov-nav-chip ov-nav-chip--accent w-[34px] px-0">
+              <Arrow size={16} />
+            </AppLink>
           </div>
 
           {/* Compact rail */}
@@ -224,13 +251,12 @@ export function SiteHeader() {
                 {item.label}
               </Link>
             ))}
-            <Link
-              href="/fact-check"
-              className="ov-nav-chip !h-11 !justify-start"
+            <AppLink
+              className="ov-nav-chip ov-nav-chip--accent !h-11 !justify-start"
               onClick={toggleMenu}
             >
-              Submit a claim
-            </Link>
+              Open the app
+            </AppLink>
           </nav>
         )}
       </header>

@@ -532,6 +532,19 @@
     outline-offset: 2px;
 }
 
+/* The one chip that carries an action rather than a destination: the crossing
+   into the app. Accent ground in both header themes. */
+.ov-nav-chip--accent {
+    background: var(--ov-accent);
+    color: #fff;
+    border-color: transparent;
+}
+/* Matches the generic chip's hover specificity so it is not overridden. */
+.ov-nav-chip--accent:hover:not(:disabled) {
+    background: #0060e0;
+    color: #fff;
+}
+
 /* --- Progressive blur under the fixed header ----------------------------- */
 /* Four stacked layers, each blurrier than the last and masked to a band
    closer to the top edge, so whatever scrolls under the chrome ramps smoothly
