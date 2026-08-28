@@ -107,8 +107,10 @@ export function Productivity({
     if (cardBoxRef.current) {
       // The card is the dock's landing target: it must stay transform-static
       // (a moving target makes the landed mask visibly settle — "the drop").
-      // Its entrance is the mask landing itself plus this opacity ramp.
-      cardBoxRef.current.style.opacity = clamp01(q / 0.5).toFixed(3);
+      // Its opacity rises in sync with the frame's early ghost-fade (which
+      // starts at p=0.18, i.e. q=-0.88 on this clock) so the crossfade reads
+      // as one continuous dissolve, complete just after the landing.
+      cardBoxRef.current.style.opacity = clamp01((q + 0.88) / 1.2).toFixed(3);
       cardBoxRef.current.style.transform = "";
     }
 

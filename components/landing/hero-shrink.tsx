@@ -28,7 +28,10 @@ const RUNWAY_VH = 200;
 // then the pinned 3-column content staggers in; the tail is the hold.
 const EXIT_PORTION = 0.2;
 const MASK_PORTION = 0.4;
-const FADE_PORTION = 0.12;
+// The dissolve starts while the mask is still closing (per review: the panel
+// should already be ghosting as it shrinks) and completes just after landing.
+const FADE_START = 0.18;
+const FADE_LENGTH = 0.32;
 const LIGHT_TAIL_VH = 120;
 
 export function HeroShrink({
@@ -149,9 +152,9 @@ export function HeroShrink({
     // the guarantee rows arrive one by one.
     if (entranceRef) entranceRef.current = (p - MASK_PORTION) / 0.25;
 
-    // Locked in, the travelling visual dissolves into the live metric card —
-    // the crossfade starts exactly at the landing, not during the flight.
-    const fade = clamp01((p - MASK_PORTION) / FADE_PORTION);
+    // The travelling visual ghosts out across the second half of the flight
+    // and finishes dissolving just after it locks onto the card.
+    const fade = clamp01((p - FADE_START) / FADE_LENGTH);
     frame.style.opacity = (1 - fade).toFixed(3);
     frame.style.visibility = fade >= 0.995 ? "hidden" : "";
   }, active);
