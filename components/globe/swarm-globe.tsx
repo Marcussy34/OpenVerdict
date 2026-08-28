@@ -21,11 +21,11 @@ import { cn } from "@/lib/utils";
 
 const SwarmScene = dynamic(() => import("./swarm-scene"), { ssr: false });
 
-/** Radians of rotation per pixel dragged. */
+/** Radians of rotation per pixel dragged, near enough equal on both axes. */
 const YAW_PER_PX = 0.007;
-const PITCH_PER_PX = 0.004;
-/** How far the globe can be tipped by hand, either way. */
-const PITCH_LIMIT = 0.45;
+const PITCH_PER_PX = 0.0065;
+/** How far the globe can be tipped by hand, either way (~57°). */
+const PITCH_LIMIT = 1;
 
 export function SwarmGlobe({ className }: { className?: string }) {
   const reduce = useReducedMotion() ?? false;

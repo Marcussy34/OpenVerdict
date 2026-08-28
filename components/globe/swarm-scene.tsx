@@ -710,10 +710,12 @@ function SceneBody({
       if (!dragging && !reduced) spin.rotation.y += delta * 0.055;
     }
     if (tilt) {
-      const k = Math.min(1, delta * 2.4);
       const pitch = hand?.pitch ?? 0;
       // The parallax lean freezes while dragging, so the two cannot fight over
-      // the same axis; the dragged pitch persists after release.
+      // the same axis; the dragged pitch persists after release. Under the hand
+      // the tilt tracks about five times harder than the idle lean, so pulling
+      // up or down answers as directly as pulling sideways does.
+      const k = Math.min(1, delta * (dragging ? 12 : 2.4));
       if (!dragging) {
         const px = reduced ? 0 : state.pointer.x;
         const py = reduced ? 0 : state.pointer.y;
