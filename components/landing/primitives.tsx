@@ -195,20 +195,27 @@ export function NumberChip({
  */
 export function GridGuides({
   columns = 3,
+  at,
   dark = false,
   className,
 }: {
   columns?: number;
+  /** Explicit guide positions (percentages), for sections that want only some
+   *  of the column lines — a guide that cuts through ruled rows reads as a
+   *  stray line, while the one beside them is furniture. */
+  at?: number[];
   dark?: boolean;
   className?: string;
 }) {
+  const positions =
+    at ?? Array.from({ length: columns - 1 }, (_, i) => ((i + 1) / columns) * 100);
   return (
     <div aria-hidden className={cn("pointer-events-none absolute inset-0", className)}>
-      {Array.from({ length: columns - 1 }, (_, i) => (
+      {positions.map((left, i) => (
         <span
           key={i}
           className={cn("absolute top-0 bottom-0", dark ? "ov-vr--dark" : "ov-vr")}
-          style={{ left: `${((i + 1) / columns) * 100}%`, width: 1 }}
+          style={{ left: `${left}%`, width: 1 }}
         />
       ))}
     </div>

@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { SplitButton, NumberChip, CornerPin, Hairline } from "./primitives";
+import { SplitButton, NumberChip, CornerPin, GridGuides, Hairline } from "./primitives";
 
 const ITEMS = [
   {
@@ -46,8 +46,9 @@ export function Faq() {
         background: "linear-gradient(180deg,#dfe7f1 0%,#eef1f3 42%,#f7f7f5 100%)",
       }}
     >
-      {/* No column guides: the question rows are already ruled horizontally,
-          and a vertical cut straight through them reads as a stray line. */}
+      {/* Only the first column guide: the second one cut straight through the
+          ruled question rows; this one runs beside them. */}
+      <GridGuides at={[100 / 3]} className="hidden md:block" />
 
       <div className="relative px-5 pt-20 pb-24 md:px-7 md:pt-24 md:pb-28">
         <div className="relative flex flex-wrap items-start justify-between gap-6">
