@@ -92,10 +92,7 @@ export function HeroShrink({
     // uncovers the section already standing in place. It parks 40px low so
     // its header-theme marker cannot cross the header line early, and settles
     // that last 40px in the final few percent of the travel.
-    // The pin decays slowly across the runway (+76px -> +40px), so the whole
-    // revealed section visibly drifts upward while you scroll, then settles
-    // its last 40px at the very end — the page always feels like it moves.
-    const lift = Math.max(0, (1 - p) * runway - (40 + (1 - p) * 36));
+    const lift = Math.max(0, (1 - p) * runway - 40);
     if (revealRef.current) {
       revealRef.current.style.transform =
         lift > 0.5 ? `translate3d(0, ${-lift.toFixed(1)}px, 0)` : "";
@@ -114,12 +111,6 @@ export function HeroShrink({
             bottom: Math.max(0, vh - c.bottom),
           }
         : { top: vh * 0.22, left: vw * 0.3, right: vw * 0.3, bottom: vh * 0.1 };
-
-    // The mask aims slightly HIGH while closing and slots DOWN into the card
-    // over the last stretch — the shrink reads as downward travel.
-    const slot = (1 - m) * vh * 0.07;
-    target.top = Math.max(0, target.top - slot);
-    target.bottom = target.bottom + slot;
 
     panel.style.clipPath = `inset(${lerp(0, target.top, m).toFixed(1)}px ${lerp(0, target.right, m).toFixed(1)}px ${lerp(0, target.bottom, m).toFixed(1)}px ${lerp(0, target.left, m).toFixed(1)}px)`;
 
