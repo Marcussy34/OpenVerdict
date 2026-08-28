@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { SwarmGlobe, type SwarmClaim, type SwarmAgent } from "@/components/globe/swarm-globe";
 import { Hero } from "@/components/landing/hero";
 import { HeroShrink } from "@/components/landing/hero-shrink";
@@ -22,6 +22,7 @@ type RegistryAgent = {
 };
 
 export default function HomePage() {
+  const cardRef = useRef<HTMLDivElement>(null);
   const [claims, setClaims] = useState<ClaimInspection[]>([]);
   const [registry, setRegistry] = useState<RegistryAgent[]>([]);
   const [network, setNetwork] = useState<string | null>(null);
@@ -88,13 +89,14 @@ export default function HomePage() {
   return (
     <>
 
-      <HeroShrink>
+      <HeroShrink
+        cardRef={cardRef}
+        reveal={<Productivity cardRef={cardRef} claims={claims} />}
+      >
         <Hero latest={latest} network={network}>
           {globe}
         </Hero>
       </HeroShrink>
-
-      <Productivity claims={claims} />
 
       <Propositions claims={swarmClaims} agents={swarmAgents} />
       <Banner />
