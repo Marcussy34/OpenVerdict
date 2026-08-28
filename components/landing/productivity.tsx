@@ -105,9 +105,11 @@ export function Productivity({
     }
 
     if (cardBoxRef.current) {
-      const cq = clamp01(q / 0.75);
-      cardBoxRef.current.style.opacity = cq.toFixed(3);
-      cardBoxRef.current.style.transform = `translate3d(0, ${((1 - cq) * 30).toFixed(1)}px, 0)`;
+      // The card is the dock's landing target: it must stay transform-static
+      // (a moving target makes the landed mask visibly settle — "the drop").
+      // Its entrance is the mask landing itself plus this opacity ramp.
+      cardBoxRef.current.style.opacity = clamp01(q / 0.5).toFixed(3);
+      cardBoxRef.current.style.transform = "";
     }
 
     rowRefs.current.forEach((el, i) => {
