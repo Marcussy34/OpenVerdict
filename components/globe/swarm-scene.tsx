@@ -599,12 +599,18 @@ const nodes = (() => {
 /* -------------------------------------------------------------------------- */
 
 const ripple = (() => {
-  const geometry = new THREE.CircleGeometry(0.34, 64);
+  // A disc with real radial subdivision, not a 64-vertex fan: every vertex is
+  // pushed onto the sphere, so the patch curves with the surface instead of
+  // chording flat across it.
+  const geometry = new THREE.RingGeometry(0, 0.42, 96, 14);
   const uniforms = {
     uT: { value: 0 },
     uAmp: { value: 0 },
     uColor: { value: new THREE.Color("#ffd479") },
-    uRadius: { value: 1.006 },
+    uRadius: { value: 1.004 },
+    /** Angular radius of the patch: atan(0.42) for a disc sitting at radius 1. */
+    uMaxAngle: { value: Math.atan(0.42) },
+    uLightDir: { value: LIGHT_DIR },
   };
   const material = new THREE.ShaderMaterial({
     uniforms,
@@ -614,29 +620,47 @@ const ripple = (() => {
     side: THREE.DoubleSide,
     vertexShader: /* glsl */ `
       uniform float uRadius;
-      varying vec2 vUv;
+      varying float vAngle;
+      varying vec3 vNormal;
+      varying vec3 vWorld;
       void main() {
-        vUv = uv;
-        // Bend the flat disc onto the sphere so the ripple hugs the surface.
         vec3 world = (modelMatrix * vec4(position, 1.0)).xyz;
-        world = normalize(world) * uRadius;
-        gl_Position = projectionMatrix * viewMatrix * vec4(world, 1.0);
+        vec3 n = normalize(world);
+        // Distance measured ALONG the sphere from the ingest point, so the
+        // rings are true circles on the surface and foreshorten toward the
+        // limb the way the land dots do.
+        vec3 centre = normalize((modelMatrix * vec4(0.0, 0.0, 0.0, 1.0)).xyz);
+        vAngle = acos(clamp(dot(n, centre), -1.0, 1.0));
+        vNormal = n;
+        vWorld = n * uRadius;
+        gl_Position = projectionMatrix * viewMatrix * vec4(vWorld, 1.0);
       }
     `,
     fragmentShader: /* glsl */ `
       uniform float uT;
       uniform float uAmp;
+      uniform float uMaxAngle;
       uniform vec3 uColor;
-      varying vec2 vUv;
+      uniform vec3 uLightDir;
+      varying float vAngle;
+      varying vec3 vNormal;
+      varying vec3 vWorld;
       void main() {
         if (uAmp < 0.01) discard;
-        float r = length(vUv - 0.5) * 2.0;
+        float r = vAngle / uMaxAngle;
         float a = 0.0;
         for (int i = 0; i < 2; i++) {
           float p = fract(uT + float(i) * 0.5);
           a += exp(-pow((r - p) / 0.09, 2.0)) * (1.0 - p * 0.8);
         }
         a *= smoothstep(1.0, 0.82, r);
+        // Sit in the globe's own light: bright on the lit face, banked on the
+        // night side, never a flat sticker at constant brightness.
+        float light = max(dot(vNormal, normalize(uLightDir)), 0.0);
+        a *= 0.4 + 0.6 * smoothstep(0.0, 0.7, light);
+        // And fade as the patch wraps out of sight rather than ending on a rim.
+        float facing = dot(vNormal, normalize(cameraPosition - vWorld));
+        a *= smoothstep(0.0, 0.34, facing);
         gl_FragColor = vec4(uColor, a * uAmp * 0.85);
         #include <colorspace_fragment>
       }
