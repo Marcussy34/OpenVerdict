@@ -29,7 +29,6 @@ const RUNWAY_VH = 200;
 const EXIT_PORTION = 0.2;
 const MASK_PORTION = 0.4;
 const FADE_PORTION = 0.12;
-const RADIUS_MAX = 20;
 const LIGHT_TAIL_VH = 120;
 
 export function HeroShrink({
@@ -142,10 +141,8 @@ export function HeroShrink({
           }
         : { top: vh * 0.22, left: vw * 0.3, right: vw * 0.3, bottom: vh * 0.1 };
 
-    // A soft radius appears mid-flight (reads as a travelling card) and
-    // returns to 0 so the landing on the sharp-cornered stat card is seamless.
-    const radius = (RADIUS_MAX * Math.sin(Math.PI * m)).toFixed(1);
-    panel.style.clipPath = `inset(${lerp(0, target.top, m).toFixed(1)}px ${lerp(0, target.right, m).toFixed(1)}px ${lerp(0, target.bottom, m).toFixed(1)}px ${lerp(0, target.left, m).toFixed(1)}px round ${radius}px)`;
+    // Sharp corners the whole way — the system's zero-radius identity.
+    panel.style.clipPath = `inset(${lerp(0, target.top, m).toFixed(1)}px ${lerp(0, target.right, m).toFixed(1)}px ${lerp(0, target.bottom, m).toFixed(1)}px ${lerp(0, target.left, m).toFixed(1)}px)`;
 
     // Entrance clock for the revealed section. Deliberately UNCLAMPED above 1:
     // consumers clamp per element, and values past 1 are the hold phase where

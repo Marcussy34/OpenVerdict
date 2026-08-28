@@ -199,7 +199,9 @@
     html {
         @apply font-sans;
         -webkit-font-smoothing: antialiased;
-        scroll-behavior: smooth;
+        /* No CSS smooth scrolling: Lenis writes scroll positions per frame,
+           and native smooth-behavior would animate toward each write —
+           the two easings fight and the page visibly lurches. */
     }
     /* Hashes, ids, scores and every numeric readout use tabular mono. */
     .font-mono {
