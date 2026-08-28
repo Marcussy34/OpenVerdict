@@ -244,7 +244,7 @@ export function Productivity({
                     </p>
                   </div>
                   <row.Art
-                    className="pointer-events-none absolute -right-4 -bottom-6 text-black/25"
+                    className="pointer-events-none absolute -right-4 -bottom-6 text-black/45"
                     size={200}
                   />
                 </div>

@@ -1,9 +1,11 @@
 import { cn } from "@/lib/utils";
 
 /**
- * Dotted schematics — 1px dashed line drawings in the reference's technical
+ * Dotted schematics: dashed line drawings in the reference's technical
  * register. Every stroke is `currentColor` so a section can tint the whole set
  * by setting text colour; nothing here carries meaning a screen reader needs.
+ * Stroke weights are set per grid so every drawing lands near a full pixel at
+ * the size it actually renders.
  */
 
 const DASH = { strokeDasharray: "2 3.2" } as const;
@@ -25,7 +27,9 @@ function Frame({
       height={size}
       fill="none"
       stroke="currentColor"
-      strokeWidth={1}
+      // These render around 200px on a 240 grid, so a 1px stroke lands at 0.8px
+      // and the drawing goes wispy. 1.6 puts it level with the list marks.
+      strokeWidth={1.6}
       strokeLinecap="round"
       strokeLinejoin="round"
       className={cn("shrink-0", className)}
@@ -51,7 +55,7 @@ export function BallotSealArt({ className, size }: { className?: string; size?: 
       <path d="M120 100v24" />
       <circle cx="120" cy="83" r="7" />
       {/* wax seal ticks */}
-      <path d="M113 76.5 127 89.5M127 76.5 113 89.5" strokeWidth={0.9} />
+      <path d="M113 76.5 127 89.5M127 76.5 113 89.5" strokeWidth={1.4} />
     </Frame>
   );
 }
@@ -78,11 +82,11 @@ export function CertificateArt({ className, size }: { className?: string; size?:
   return (
     <Frame className={className} size={size}>
       <path d="M74 58h92v112H74z" {...DASH} />
-      <path d="M90 84h60M90 100h60M90 116h38" strokeWidth={0.9} />
+      <path d="M90 84h60M90 100h60M90 116h38" strokeWidth={1.4} />
       {/* seal */}
       <circle cx="150" cy="146" r="20" />
       <circle cx="150" cy="146" r="12" {...DASH} />
-      <path d="M144 146l4.5 5 8-9" strokeWidth={1.2} />
+      <path d="M144 146l4.5 5 8-9" strokeWidth={2} />
       {/* chain links running off the page */}
       <path d="M40 190h34a10 10 0 0 0 0-20H58" />
       <path d="M200 190h-34a10 10 0 0 1 0-20h16" />
