@@ -577,14 +577,17 @@
     );
 }
 /* Propositions: light at the top, deep navy by the bottom. */
+/* Propositions: paper behind the heading, then the descent finishes before the
+   list starts (~28%) so every row sits on ground dark enough to carry white. */
 .ov-light-to-navy {
     background: linear-gradient(
         180deg,
         #dae5f2 0%,
-        #a9c2e0 18%,
-        #4d7cb8 42%,
-        #123a76 66%,
-        #04122b 86%,
+        #a9c2e0 14%,
+        #6b93c4 23%,
+        #24568f 31%,
+        #123a76 52%,
+        #04122b 76%,
         #020c1c 100%
     );
 }

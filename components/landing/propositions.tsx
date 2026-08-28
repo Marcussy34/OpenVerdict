@@ -27,8 +27,9 @@ const ITEMS = [
   },
 ];
 
-/** Ink for each item, following the section's light → navy descent. */
-const INK = ["#000000", "#0d2340", "#dbe6f5", "#F3F3F3"];
+/** The ground has already gone dark by the time the list starts, so every row
+ *  is on-dark: one white ink for all four, the active one at full strength. */
+const INK = "#F3F3F3";
 
 /**
  * Sections 3–4 — the protocol stack.
@@ -70,9 +71,9 @@ export function Propositions({
     // the sticky visual below stick to the section instead of the viewport.
     <section className="ov-light-to-navy relative z-30 isolate">
       {/* Two markers so the fixed header flips mid-section, where the ground
-          actually turns dark. */}
-      <div aria-hidden data-header-theme="light" className="absolute inset-x-0 top-0 h-[38%]" />
-      <div aria-hidden data-header-theme="dark" className="absolute inset-x-0 top-[38%] bottom-0" />
+          actually turns dark — matched to the gradient's 31% stop. */}
+      <div aria-hidden data-header-theme="light" className="absolute inset-x-0 top-0 h-[30%]" />
+      <div aria-hidden data-header-theme="dark" className="absolute inset-x-0 top-[30%] bottom-0" />
 
       <GridGuides columns={3} className="hidden md:block" />
 
@@ -92,7 +93,7 @@ export function Propositions({
           <div className="lg:col-span-8">
             {ITEMS.map((item, i) => (
               <div key={item.kicker}>
-                <Hairline dark={i >= 2} className={i === 0 ? "hidden" : ""} />
+                <Hairline dark className={i === 0 ? "hidden" : ""} />
                 <div
                   ref={(el) => {
                     itemRefs.current[i] = el;
@@ -100,7 +101,7 @@ export function Propositions({
                   data-index={i}
                   data-proposition
                   className="grid gap-4 py-9 transition-opacity duration-500 md:grid-cols-2 md:gap-10 lg:py-12"
-                  style={{ color: INK[i], opacity: active === i ? 1 : 0.4 }}
+                  style={{ color: INK, opacity: active === i ? 1 : 0.4 }}
                 >
                   <div>
                     <Eyebrow className="opacity-70">{item.kicker}</Eyebrow>
