@@ -37,6 +37,7 @@ export function HeroShrink({
   const wrapRef = React.useRef<HTMLDivElement>(null);
   const frameRef = React.useRef<HTMLDivElement>(null);
   const panelRef = React.useRef<HTMLDivElement>(null);
+  const revealRef = React.useRef<HTMLDivElement>(null);
   const [active, setActive] = React.useState(false);
 
   // Client-only decision; SSR and the first paint render the static layout.
@@ -62,6 +63,7 @@ export function HeroShrink({
       el.style.opacity = "";
       el.style.visibility = "";
     }
+    if (revealRef.current) revealRef.current.style.transform = "";
   }, [active]);
 
   useScrollFrame(({ scrollY, vh, vw }) => {
@@ -73,6 +75,18 @@ export function HeroShrink({
     const runway = wrap.offsetHeight - vh;
     if (runway < 1) return;
     const p = clamp01((scrollY - wrap.offsetTop) / runway);
+
+    // Pin the reveal section at (almost) its final position for the whole
+    // runway, instead of letting it slide in from the bottom — the shrink then
+    // plays out on one static screen, like the reference, and the fade
+    // uncovers the section already standing in place. It parks 40px low so
+    // its header-theme marker cannot cross the header line early, and settles
+    // that last 40px in the final few percent of the travel.
+    const lift = Math.max(0, (1 - p) * runway - 40);
+    if (revealRef.current) {
+      revealRef.current.style.transform =
+        lift > 0.5 ? `translate3d(0, ${-lift.toFixed(1)}px, 0)` : "";
+    }
 
     // Destination: the stat card's live rect (it rides up beneath the frame,
     // reaching its natural place exactly as p hits 1). Fall back to a centred
@@ -136,9 +150,14 @@ export function HeroShrink({
         </div>
       </div>
 
-      {/* The next section rides up UNDER the frame during the runway, so the
-          card is truly behind the shrinking panel when the mask lands on it. */}
-      <div className="relative" style={active ? { marginTop: "-100svh" } : undefined}>
+      {/* The next section sits UNDER the frame at its final position for the
+          whole runway (counter-translated against the scroll), so the mask
+          closes on the card exactly where it will stand when revealed. */}
+      <div
+        ref={revealRef}
+        className="relative will-change-transform"
+        style={active ? { marginTop: "-100svh" } : undefined}
+      >
         {reveal}
       </div>
     </>
