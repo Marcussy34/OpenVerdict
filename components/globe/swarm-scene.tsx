@@ -654,13 +654,15 @@ const ripple = (() => {
           a += exp(-pow((r - p) / 0.09, 2.0)) * (1.0 - p * 0.8);
         }
         a *= smoothstep(1.0, 0.82, r);
-        // Sit in the globe's own light: bright on the lit face, banked on the
-        // night side, never a flat sticker at constant brightness.
+        // Sit in the globe's own light, but only just: a strong day/night term
+        // across a patch straddling the terminator lights one flank and drops
+        // the other out of sight, which reads as a crescent, not a ring.
         float light = max(dot(vNormal, normalize(uLightDir)), 0.0);
-        a *= 0.4 + 0.6 * smoothstep(0.0, 0.7, light);
-        // And fade as the patch wraps out of sight rather than ending on a rim.
+        a *= 0.78 + 0.22 * smoothstep(0.0, 0.7, light);
+        // Fade only what is genuinely at the horizon, so the ring stays whole
+        // until the globe's own curve takes it.
         float facing = dot(vNormal, normalize(cameraPosition - vWorld));
-        a *= smoothstep(0.0, 0.34, facing);
+        a *= smoothstep(-0.02, 0.16, facing);
         gl_FragColor = vec4(uColor, a * uAmp * 0.85);
         #include <colorspace_fragment>
       }
