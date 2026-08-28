@@ -52,7 +52,8 @@ export function Hero({
             <br />
             Resolution
           </h1>
-          <div className="mt-6 flex flex-wrap items-center gap-[2px] gap-y-2 lg:mt-7">
+          {/* Stacked, not side by side — the second CTA sits under the first. */}
+          <div className="mt-6 flex flex-col items-start gap-[2px] lg:mt-7">
             <SplitButton href="#submit">Submit a claim</SplitButton>
             <SplitButton href="/claims" tone="dark" chip={false}>
               Watch live claims
@@ -79,7 +80,9 @@ export function Hero({
             </p>
           </div>
 
-          <p className="max-w-[430px] text-[15px] leading-[1.45] text-[#F3F3F3]/80 lg:col-span-5">
+          {/* The reference's hero blurb, measured off the live site:
+              Archivo 19px / 500 / lh 25.65px / #F3F3F3 / max-width 409px. */}
+          <p className="max-w-[409px] text-[19px] leading-[25.65px] font-medium text-[#F3F3F3] lg:col-span-5">
             Five AI jurors from distinct model families review frozen evidence under
             commit-reveal. Verdicts settle on Sui with a deterministic Truth Score and
             an immutable certificate — every step reproducible.
