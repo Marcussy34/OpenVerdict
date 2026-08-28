@@ -11,13 +11,14 @@ const COPY =
 const WORDS = COPY.split(" ");
 /** How many words are mid-fade at any moment — the width of the wipe. */
 const WINDOW = Math.max(4, Math.round(WORDS.length * 0.22));
-/** Arrival: each word has its own moment on the entrance clock, scattered but
- *  deterministic (a sin-hash, so server and client agree). */
-function wordThreshold(i: number) {
-  const x = Math.sin((i + 1) * 78.233) * 43758.5453;
-  return (x - Math.floor(x)) * 0.62;
+/** Arrival: every LETTER has its own moment on the entrance clock, scattered
+ *  but deterministic (a sin-hash, so server and client agree) — the same
+ *  materialising effect the "Pioneering Verifiability" headline uses. */
+function letterThreshold(i: number) {
+  const x = Math.sin((i + 1) * 12.9898) * 43758.5453;
+  return 0.04 + (x - Math.floor(x)) * 0.58;
 }
-const ARRIVAL_WINDOW = 0.34;
+const ARRIVAL_WINDOW = 0.16;
 
 /**
  * Section 6 — the manifesto, revealed word by word as the section crosses the
@@ -27,6 +28,8 @@ const ARRIVAL_WINDOW = 0.34;
  */
 export function Manifesto() {
   const paraRef = React.useRef<HTMLParagraphElement>(null);
+  const letters = React.useRef<HTMLElement[] | null>(null);
+  const lastArrival = React.useRef(-1);
   const reduce = useReducedMotion();
 
   useScrollFrame(
@@ -38,20 +41,29 @@ export function Manifesto() {
       // ON SCREEN before the wipe starts, or it plays out below the fold and
       // the paragraph just looks like it appeared normally.
       // Arrival: paragraph top from 98vh (barely peeking) to 55vh (the whole
-      // block sitting in the lower half); each word rises into the dim base at
-      // its own scattered moment.
+      // block sitting in the lower half); the copy materialises letter by
+      // letter in scattered order — pure opacity, nothing moves.
       const arrival = clamp01((vh * 0.98 - r.top) / (vh * 0.43));
       // Wipe: picks up where the arrival ends and reads left to right.
       const progress = clamp01((vh * 0.55 - r.top) / (vh * 0.4 + r.height));
+      // The wipe writes the word spans; the arrival writes the letters nested
+      // inside them, and CSS multiplies the two — no element carries both.
       const spans = para.children;
       for (let i = 0; i < spans.length; i++) {
         const t = clamp01((progress * (WORDS.length + WINDOW) - i) / WINDOW);
-        const a = clamp01((arrival - wordThreshold(i)) / ARRIVAL_WINDOW);
-        const el = spans[i] as HTMLElement;
-        el.style.opacity = String(a * (0.25 + 0.75 * t));
-        // A short rise with the fade, so a word arriving among already-settled
-        // neighbours is unmistakable.
-        el.style.transform = a < 1 ? `translate3d(0, ${((1 - a) * 14).toFixed(1)}px, 0)` : "";
+        (spans[i] as HTMLElement).style.opacity = String(0.25 + 0.75 * t);
+      }
+
+      if (!letters.current) {
+        letters.current = Array.from(para.querySelectorAll<HTMLElement>("[data-l]"));
+      }
+      // Hundreds of letters: only rewrite them while the arrival is actually
+      // moving, not on every frame for the rest of the page.
+      if (arrival !== lastArrival.current) {
+        lastArrival.current = arrival;
+        letters.current.forEach((el, i) => {
+          el.style.opacity = clamp01((arrival - letterThreshold(i)) / ARRIVAL_WINDOW).toFixed(3);
+        });
       }
     },
     !reduce,
@@ -78,12 +90,19 @@ export function Manifesto() {
           ref={paraRef}
           className="ov-display mt-5 max-w-[1000px] text-[clamp(1.5rem,3.1vw,2.75rem)] leading-[1.23] text-[#F3F3F3]"
         >
-          {/* One span per word (the only element children, so the scroll
-              effect can index them) with real whitespace between, which is
-              what lets the paragraph wrap normally. */}
+          {/* One span per word (the only element children, so the wipe can
+              index them) with real whitespace between, which is what lets the
+              paragraph wrap normally — and one span per letter inside, which
+              is what the arrival materialises. */}
           {WORDS.map((word, i) => (
             <React.Fragment key={`${word}-${i}`}>
-              <span className="inline-block">{word}</span>
+              <span className="inline-block">
+                {Array.from(word).map((ch, k) => (
+                  <span key={k} data-l className="inline-block">
+                    {ch}
+                  </span>
+                ))}
+              </span>
               {i < WORDS.length - 1 ? " " : null}
             </React.Fragment>
           ))}
