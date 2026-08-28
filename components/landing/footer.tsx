@@ -97,9 +97,6 @@ export function LandingFooter({
                 <GonkaMark className="size-[14px]" />
                 Juries by GonkaRouter
               </Eyebrow>
-              <p className="ov-micro ov-micro-sm mt-2 text-[#F3F3F3]/45">
-                MIT License · experimental software · unaudited Move contracts
-              </p>
             </div>
           </div>
 

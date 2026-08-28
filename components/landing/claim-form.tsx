@@ -65,10 +65,8 @@ export function ClaimForm() {
         </SplitButton>
       </div>
 
-      <div className="mt-2.5 flex flex-wrap items-center justify-between gap-2">
-        <p className="ov-micro ov-micro-sm text-[#F3F3F3]/55">
-          No wallet needed · the source is frozen to Walrus before the jury sits
-        </p>
+      {/* Just the counter now; the helper line came out at the user's request. */}
+      <div className="mt-2.5 flex flex-wrap items-center justify-end gap-2">
         <span
           className={`ov-micro ov-micro-sm tabular-nums ${
             tooLong ? "text-[#ffd479]" : "text-[#F3F3F3]/45"
