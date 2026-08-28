@@ -209,7 +209,7 @@ export function VerdictGauge({
       {!compact && (
         <div
           className={cn(
-            "ov-micro ov-micro-sm -mt-1 flex items-center gap-1.5 rounded-full border bg-card px-3 py-1",
+            "ov-micro ov-micro-sm -mt-1 flex items-center gap-1.5 border bg-card px-3 py-1",
             score === null ? "border-border text-muted-foreground" : tier?.chip,
           )}
         >

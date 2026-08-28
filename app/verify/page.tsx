@@ -327,7 +327,7 @@ export default function VerifyPage() {
                   {commitmentMatch !== null && (
                     <span
                       className={cn(
-                        "ov-micro ov-micro-sm inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5",
+                        "ov-micro ov-micro-sm inline-flex items-center gap-1.5 border px-2.5 py-0.5",
                         commitmentMatch
                           ? "border-yes/30 bg-yes/8 text-yes"
                           : "border-no/30 bg-no/8 text-no",

@@ -173,7 +173,7 @@ export default function ClaimsPage() {
                 aria-selected={active}
                 onClick={() => setActiveFilter(tab.key)}
                 className={cn(
-                  "flex min-h-[34px] shrink-0 items-center gap-1.5 rounded-full px-3 text-xs font-semibold whitespace-nowrap transition-colors",
+                  "flex min-h-[34px] shrink-0 items-center gap-1.5 px-3 text-xs font-semibold whitespace-nowrap transition-colors",
                   active
                     ? "bg-sea/12 text-primary"
                     : "text-muted-foreground hover:bg-surface hover:text-ocean",
@@ -182,7 +182,7 @@ export default function ClaimsPage() {
                 {tab.label}
                 <span
                   className={cn(
-                    "rounded-full px-1.5 text-[11px] tabular-nums",
+                    "px-1.5 text-[11px] tabular-nums",
                     active ? "bg-sea/15 text-primary" : "bg-surface-2 text-muted-foreground",
                   )}
                 >

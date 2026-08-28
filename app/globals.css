@@ -109,6 +109,7 @@
     --ov-paper: #f7f7f5; /* body background */
     --ov-ink: #000000;
     --ov-line: rgb(0 0 0 / 15%); /* hairlines on light */
+    --ov-line-strong: rgb(0 0 0 / 32%); /* the same hairline, under a pointer */
     --ov-line-dark: rgb(243 243 243 / 15%); /* hairlines on dark */
     --ov-fill: rgb(0 0 0 / 3%); /* faint row fills (FAQ) */
     --ov-navy: #04122b; /* deep section ground */
@@ -163,7 +164,10 @@
     --chart-4: #a56800;
     --chart-5: #ce2c2c;
 
-    --radius: 0.75rem;
+    /* Zero, so every rounded-* utility resolves square. The landing's sharp
+       rectangle is the whole product's language now, not a section's opt-in;
+       `rounded-full` still works, for things that are genuinely round. */
+    --radius: 0rem;
 
     --sidebar: #ffffff;
     --sidebar-foreground: #0b1b28;
@@ -254,22 +258,20 @@
 }
 
 /* Card elevation — paper on paper, never a glow. */
+/* Flat by design: the surface language is hairlines and ground colour, not
+   elevation. `ov-edge` stays as a hook so callers need no edit; it simply no
+   longer casts a shadow. `ov-lift` answers the pointer by firming its own
+   hairline instead of floating off the page. */
 .ov-edge {
-    box-shadow:
-        0 1px 2px 0 rgb(1 24 41 / 5%),
-        0 1px 3px -1px rgb(1 24 41 / 4%);
+    box-shadow: none;
 }
 .ov-lift {
     transition:
-        box-shadow 0.24s cubic-bezier(0.22, 1, 0.36, 1),
         border-color 0.24s ease,
-        transform 0.24s cubic-bezier(0.22, 1, 0.36, 1);
+        background-color 0.24s ease;
 }
 .ov-lift:hover {
-    box-shadow:
-        0 2px 4px -1px rgb(1 24 41 / 6%),
-        0 10px 24px -8px rgb(1 24 41 / 12%);
-    transform: translateY(-2px);
+    border-color: var(--ov-line-strong);
 }
 
 /* Thin scrollbar for dense stream panels. */
@@ -378,12 +380,14 @@
 }
 
 /* ===========================================================================
-   Landing v3 — the sharp-rectangle surface language.
+   The sharp-rectangle surface language — the whole product's, not the
+   landing's.
 
-   Zero border-radius, 28px gutters, dashed hairlines, 6px blue corner pins and
-   split buttons. Everything here is scoped to classes the landing opts into, so
-   the product pages keep their own (softer) card language while inheriting the
-   same fonts and palette.
+   Zero border-radius, dashed hairlines, 6px blue corner pins, uppercase
+   Archivo Narrow micro-labels and split buttons. This began as a landing-only
+   register while the product pages kept a softer card language; the two are
+   now one, so a visitor crossing from the landing into /claims or /verify
+   stays in the same room.
    ======================================================================== */
 
 
@@ -554,6 +558,27 @@
 .ov-vr--dark {
     background-image: repeating-linear-gradient(
         to bottom,
+        var(--ov-line-dark) 0 4px,
+        transparent 4px 9px
+    );
+}
+/* The same hairline drawn as a block's own bottom edge, for headers and rows
+   that close themselves. The block must be positioned. */
+.ov-hr-b::after {
+    content: "";
+    position: absolute;
+    inset-inline: 0;
+    bottom: 0;
+    height: 1px;
+    background-image: repeating-linear-gradient(
+        to right,
+        var(--ov-line) 0 4px,
+        transparent 4px 9px
+    );
+}
+.ov-on-dark .ov-hr-b::after {
+    background-image: repeating-linear-gradient(
+        to right,
         var(--ov-line-dark) 0 4px,
         transparent 4px 9px
     );

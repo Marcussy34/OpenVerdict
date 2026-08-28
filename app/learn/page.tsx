@@ -42,7 +42,7 @@ export default function LearnPage() {
           <a
             key={item.id}
             href={`#${item.id}`}
-            className="rounded-full border border-border bg-card px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:border-sea/40 hover:text-primary"
+            className="border border-border bg-card px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:border-sea/40 hover:text-primary"
           >
             {item.label}
           </a>

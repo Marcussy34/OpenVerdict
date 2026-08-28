@@ -72,7 +72,7 @@ export function TruthScore({
 
     return (
       <div className={cn("inline-flex items-center gap-2", className)}>
-        <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-surface px-2.5 py-1 text-xs font-medium text-muted-foreground">
+        <span className="inline-flex items-center gap-1.5 border border-border bg-surface px-2.5 py-1 text-xs font-medium text-muted-foreground">
           <InfoCircle size="13" variant="Bold" className="shrink-0" />
           Not independently reviewed
         </span>
@@ -88,7 +88,7 @@ export function TruthScore({
     return (
       <span
         className={cn(
-          "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 font-mono text-[11px] font-bold tabular-nums",
+          "inline-flex items-center gap-1 border px-2 py-0.5 font-mono text-[11px] font-bold tabular-nums",
           tier.chip,
           className,
         )}
@@ -115,7 +115,7 @@ export function TruthScore({
               <FieldLabel>Consensus verdict</FieldLabel>
               <div
                 className={cn(
-                  "inline-flex items-center gap-2 rounded-full border px-3 py-1 text-sm font-semibold",
+                  "inline-flex items-center gap-2 border px-3 py-1 text-sm font-semibold",
                   tier.chip,
                 )}
               >
@@ -162,7 +162,7 @@ export function TruthScore({
     <div className={cn("inline-flex items-center gap-2", className)}>
       <span
         className={cn(
-          "inline-flex items-center gap-1.5 rounded-full border px-3 py-1 font-mono text-sm font-bold tabular-nums",
+          "inline-flex items-center gap-1.5 border px-3 py-1 font-mono text-sm font-bold tabular-nums",
           tier.chip,
         )}
       >

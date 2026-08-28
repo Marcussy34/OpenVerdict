@@ -86,7 +86,7 @@ export function AgentCard({ agent, reportCard, showVoteDetails = false }: AgentC
               </span>
               <span
                 className={cn(
-                  "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 font-mono text-[11px] font-bold",
+                  "inline-flex items-center gap-1 border px-2 py-0.5 font-mono text-[11px] font-bold",
                   outcomeStyle.chip,
                 )}
               >

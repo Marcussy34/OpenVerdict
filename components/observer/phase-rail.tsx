@@ -73,7 +73,7 @@ export function PhaseRail({ currentPhase, className = "" }: PhaseRailProps) {
         <h2 className="ov-micro ov-micro-sm text-muted-foreground">
           Phase progression
         </h2>
-        <span className="ov-micro ov-micro-sm rounded-full border border-sea/30 bg-sea/10 px-2.5 py-0.5 text-primary">
+        <span className="ov-micro ov-micro-sm border border-sea/30 bg-sea/10 px-2.5 py-0.5 text-primary">
           Phase {activeIndex} of {PHASES.length} · {active.name}
         </span>
       </header>
@@ -107,7 +107,7 @@ export function PhaseRail({ currentPhase, className = "" }: PhaseRailProps) {
               <li key={phase.id} className="flex flex-col items-center text-center">
                 <span
                   className={cn(
-                    "relative grid size-11 place-items-center rounded-full border-2 bg-card transition-colors",
+                    "relative grid size-11 place-items-center border-2 bg-card transition-colors",
                     done
                       ? "border-yes/50 bg-yes/10 text-yes"
                       : current

@@ -192,7 +192,7 @@ export default function AgentsPage() {
             onClick={() => setActiveOnly((v) => !v)}
             aria-pressed={activeOnly}
             className={cn(
-              "flex min-h-[40px] items-center gap-1.5 rounded-full border px-3.5 text-xs font-semibold transition-colors",
+              "flex min-h-[40px] items-center gap-1.5 border px-3.5 text-xs font-semibold transition-colors",
               activeOnly
                 ? "border-yes/35 bg-yes/8 text-yes"
                 : "border-border bg-card text-muted-foreground hover:text-ocean",
@@ -275,7 +275,7 @@ function FamilyChip({
       onClick={onClick}
       aria-pressed={active}
       className={cn(
-        "flex min-h-[34px] shrink-0 items-center gap-1.5 rounded-full px-3 text-xs font-semibold whitespace-nowrap transition-colors",
+        "flex min-h-[34px] shrink-0 items-center gap-1.5 px-3 text-xs font-semibold whitespace-nowrap transition-colors",
         active ? "bg-sea/12 text-primary" : "text-muted-foreground hover:bg-surface hover:text-ocean",
       )}
     >
@@ -283,7 +283,7 @@ function FamilyChip({
       {label}
       <span
         className={cn(
-          "rounded-full px-1.5 text-[11px] tabular-nums",
+          "px-1.5 text-[11px] tabular-nums",
           active ? "bg-sea/15 text-primary" : "bg-surface-2 text-muted-foreground",
         )}
       >

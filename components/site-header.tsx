@@ -47,9 +47,11 @@ const THEME_VARS: Record<HeaderTheme, React.CSSProperties> = {
     ["--chip-border" as string]: "transparent",
   },
   dark: {
-    ["--chip-bg" as string]: "rgba(238,238,240,0.10)",
+    // A dark ground rather than a light film: over the hero's moving footage a
+    // 10%-white chip read as a smear, and the label lost its edge.
+    ["--chip-bg" as string]: "rgba(8,14,24,0.72)",
     ["--chip-fg" as string]: "#F3F3F3",
-    ["--chip-bg-hover" as string]: "rgba(238,238,240,0.20)",
+    ["--chip-bg-hover" as string]: "rgba(8,14,24,0.88)",
     ["--chip-border" as string]: "transparent",
   },
 };

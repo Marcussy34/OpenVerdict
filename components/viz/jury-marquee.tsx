@@ -23,7 +23,7 @@ function familyClass(modelId: string) {
 
 function MemberChip({ member }: { member: JuryMember }) {
   return (
-    <span className="flex shrink-0 items-center gap-2 rounded-full border border-border bg-card px-3 py-1.5 shadow-2xs">
+    <span className="flex shrink-0 items-center gap-2 border border-border bg-card px-3 py-1.5 shadow-2xs">
       <span
         className={cn(
           "size-1.5 shrink-0 rounded-full",

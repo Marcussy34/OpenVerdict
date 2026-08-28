@@ -35,14 +35,17 @@ export function PageHeader({
   children?: React.ReactNode;
 }) {
   return (
-    <div className={cn("relative isolate border-b border-border pb-6", className)}>
+    // The landing's register: a blue corner pin, an uppercase eyebrow, display
+    // type at 400 weight, and a dashed hairline closing the block.
+    <div className={cn("ov-hr-b relative isolate pb-7", className)}>
       {/* Faint globe echo, right-aligned behind the title block. */}
       <GlobeMotif className="top-1/2 right-2 -z-10 hidden size-[260px] -translate-y-1/2 opacity-[0.16] xl:block" />
+      <span aria-hidden className="absolute -top-3 left-0 size-1.5 bg-[var(--ov-accent)]" />
 
       {backHref && (
         <Link
           href={backHref}
-          className="mb-3 inline-flex items-center gap-1 rounded-md text-xs font-medium text-muted-foreground transition-colors hover:text-primary"
+          className="ov-micro ov-micro-sm mb-3 inline-flex items-center gap-1.5 text-muted-foreground transition-colors hover:text-primary"
         >
           <ArrowLeft2 size="13" variant="Bold" />
           {backLabel ?? "Back"}
@@ -50,27 +53,27 @@ export function PageHeader({
       )}
 
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <div className="min-w-0 space-y-2">
+        <div className="min-w-0">
           {eyebrow && (
             <span className="ov-micro ov-micro-sm block text-primary">
               {eyebrow}
             </span>
           )}
 
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="mt-2 flex flex-wrap items-center gap-3">
             {Icon && (
-              <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-sea/12 text-primary ring-1 ring-sea/20">
+              <span className="grid size-9 shrink-0 place-items-center bg-sea/12 text-primary">
                 <Icon size="19" variant="Bold" />
               </span>
             )}
-            <h1 className="text-2xl font-semibold tracking-tight text-ocean sm:text-3xl">
+            <h1 className="ov-display text-[clamp(1.9rem,3.4vw,2.75rem)] text-black">
               {title}
             </h1>
             {badges}
           </div>
 
           {description && (
-            <p className="max-w-2xl text-sm leading-relaxed text-muted-foreground">
+            <p className="mt-3 max-w-2xl text-[15px] leading-[1.5] text-black/65">
               {description}
             </p>
           )}
@@ -89,7 +92,7 @@ export function ExperimentalTag({ className }: { className?: string }) {
   return (
     <span
       className={cn(
-        "ov-micro ov-micro-sm inline-flex items-center gap-1.5 rounded-full border border-unsure/30 bg-unsure/8 px-2 py-0.5 text-unsure",
+        "ov-micro ov-micro-sm inline-flex items-center gap-1.5 border border-unsure/30 bg-unsure/8 px-2 py-0.5 text-unsure",
         className,
       )}
     >
@@ -119,7 +122,7 @@ export function MetaTag({
   return (
     <span
       className={cn(
-        "ov-micro ov-micro-sm inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5",
+        "ov-micro ov-micro-sm inline-flex items-center gap-1.5 border px-2 py-0.5",
         tones[tone],
         className,
       )}
