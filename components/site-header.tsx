@@ -29,8 +29,19 @@ export function BrandMark({ size = 30 }: { size?: number }) {
       fill="none"
       className="shrink-0"
     >
-      <rect x="1" y="1" width="30" height="30" stroke="currentColor" strokeWidth="1.5" />
-      <path d="M16 6.5 25.5 16 16 25.5 6.5 16 16 6.5Z" stroke="currentColor" strokeWidth="1.5" />
+      <rect
+        x="1"
+        y="1"
+        width="30"
+        height="30"
+        stroke="currentColor"
+        strokeWidth="1.5"
+      />
+      <path
+        d="M16 6.5 25.5 16 16 25.5 6.5 16 16 6.5Z"
+        stroke="currentColor"
+        strokeWidth="1.5"
+      />
       <rect x="12.5" y="12.5" width="7" height="7" fill="var(--ov-accent)" />
     </svg>
   );
@@ -47,11 +58,12 @@ const THEME_VARS: Record<HeaderTheme, React.CSSProperties> = {
     ["--chip-border" as string]: "transparent",
   },
   dark: {
-    // A dark ground rather than a light film: over the hero's moving footage a
-    // 10%-white chip read as a smear, and the label lost its edge.
-    ["--chip-bg" as string]: "rgba(8,14,24,0.72)",
+    // A light film, as the reference has it — it holds because the chip
+    // frosts what is behind it (blur(20px) in .ov-nav-chip) and the page
+    // itself ramps out of focus under the chrome (.ov-top-blur).
+    ["--chip-bg" as string]: "rgba(238,238,240,0.14)",
     ["--chip-fg" as string]: "#F3F3F3",
-    ["--chip-bg-hover" as string]: "rgba(8,14,24,0.88)",
+    ["--chip-bg-hover" as string]: "rgba(238,238,240,0.24)",
     ["--chip-border" as string]: "transparent",
   },
 };
@@ -96,118 +108,132 @@ export function SiteHeader() {
     return () => observer.disconnect();
   }, [isLanding, pathname]);
 
-  const isActive = (href: string) => pathname === href || pathname.startsWith(`${href}/`);
+  const isActive = (href: string) =>
+    pathname === href || pathname.startsWith(`${href}/`);
   const dark = theme === "dark";
 
   return (
-    <header
-      style={THEME_VARS[theme]}
-      className={cn(
-        "top-0 z-[999] w-full",
-        isLanding
-          ? "fixed"
-          : "sticky border-b border-[var(--ov-line)] bg-[var(--ov-paper)]/85 backdrop-blur-xl",
-      )}
-    >
-      <div className="flex h-[74px] items-center justify-between gap-4 px-5 md:px-7">
-        {/* Brand */}
-        <Link
-          href="/"
-          aria-label="OpenVerdict home"
-          className={cn(
-            "flex shrink-0 items-center gap-2.5 transition-colors",
-            dark ? "text-[#F3F3F3]" : "text-black",
-          )}
-        >
-          <BrandMark size={26} />
-          <span className="text-[19px] leading-none font-medium tracking-[-0.01em]">
-            OpenVerdict
-          </span>
-        </Link>
-
-        {/* Chip rail */}
-        <div className="hidden items-center gap-[2px] lg:flex">
-          {NAV_ITEMS.map((item) => (
-            <Link
-              key={item.href}
-              href={item.href}
-              data-active={isActive(item.href) ? "true" : undefined}
-              aria-current={isActive(item.href) ? "page" : undefined}
-              className="ov-nav-chip"
-            >
-              {item.label}
-            </Link>
-          ))}
-          <WalletConnectButton />
-          <Link
-            href={isLanding ? "#submit" : "/fact-check"}
-            aria-label="Submit a claim"
-            className="ov-nav-chip w-[34px] px-0"
-          >
-            <Arrow />
-          </Link>
+    <>
+      {/* The page ramps out of focus as it passes under the chrome. Only on the
+          landing, where the header itself is transparent — the product pages
+          already carry their own frosted bar. */}
+      {isLanding && (
+        <div aria-hidden className="ov-top-blur">
+          <span />
+          <span />
+          <span />
+          <span />
         </div>
-
-        {/* Compact rail */}
-        <div className="flex items-center gap-[2px] lg:hidden">
-          <WalletConnectButton />
-          <button
-            type="button"
-            className="ov-nav-chip w-[34px] px-0"
-            aria-expanded={menuOpen}
-            aria-label="Toggle navigation menu"
-            onClick={toggleMenu}
+      )}
+      <header
+        style={THEME_VARS[theme]}
+        className={cn(
+          "top-0 z-[999] w-full",
+          isLanding
+            ? "fixed"
+            : "sticky border-b border-[var(--ov-line)] bg-[var(--ov-paper)]/85 backdrop-blur-xl",
+        )}
+      >
+        <div className="flex h-[74px] items-center justify-between gap-4 px-5 md:px-7">
+          {/* Brand */}
+          <Link
+            href="/"
+            aria-label="OpenVerdict home"
+            className={cn(
+              "flex shrink-0 items-center gap-2.5 transition-colors",
+              dark ? "text-[#F3F3F3]" : "text-black",
+            )}
           >
-            <span className="flex w-4 flex-col gap-[3px]" aria-hidden>
-              <span
-                className={cn(
-                  "block h-[1.5px] w-full bg-current transition-transform duration-200",
-                  menuOpen && "translate-y-[4.5px] rotate-45",
-                )}
-              />
-              <span
-                className={cn(
-                  "block h-[1.5px] w-full bg-current transition-opacity duration-200",
-                  menuOpen && "opacity-0",
-                )}
-              />
-              <span
-                className={cn(
-                  "block h-[1.5px] w-full bg-current transition-transform duration-200",
-                  menuOpen && "-translate-y-[4.5px] -rotate-45",
-                )}
-              />
+            <BrandMark size={26} />
+            <span className="text-[19px] leading-none font-medium tracking-[-0.01em]">
+              OpenVerdict
             </span>
-          </button>
-        </div>
-      </div>
-
-      {menuOpen && (
-        <nav
-          className={cn(
-            "flex flex-col gap-[2px] px-5 pb-5 lg:hidden",
-            dark ? "bg-[#04122b]/95" : "bg-[var(--ov-paper)]/97",
-          )}
-        >
-          {NAV_ITEMS.map((item) => (
-            <Link
-              key={item.href}
-              href={item.href}
-              data-active={isActive(item.href) ? "true" : undefined}
-              className="ov-nav-chip !h-11 !justify-start"
-            >
-              {item.label}
-            </Link>
-          ))}
-          <Link
-            href={isLanding ? "#submit" : "/fact-check"}
-            className="ov-nav-chip !h-11 !justify-start"
-            onClick={toggleMenu}
-          >
-            Submit a claim
           </Link>
-        </nav>
-      )}
-    </header>
+
+          {/* Chip rail */}
+          <div className="hidden items-center gap-[2px] lg:flex">
+            {NAV_ITEMS.map((item) => (
+              <Link
+                key={item.href}
+                href={item.href}
+                data-active={isActive(item.href) ? "true" : undefined}
+                aria-current={isActive(item.href) ? "page" : undefined}
+                className="ov-nav-chip"
+              >
+                {item.label}
+              </Link>
+            ))}
+            <WalletConnectButton />
+            <Link
+              href={isLanding ? "#submit" : "/fact-check"}
+              aria-label="Submit a claim"
+              className="ov-nav-chip w-[34px] px-0"
+            >
+              <Arrow />
+            </Link>
+          </div>
+
+          {/* Compact rail */}
+          <div className="flex items-center gap-[2px] lg:hidden">
+            <WalletConnectButton />
+            <button
+              type="button"
+              className="ov-nav-chip w-[34px] px-0"
+              aria-expanded={menuOpen}
+              aria-label="Toggle navigation menu"
+              onClick={toggleMenu}
+            >
+              <span className="flex w-4 flex-col gap-[3px]" aria-hidden>
+                <span
+                  className={cn(
+                    "block h-[1.5px] w-full bg-current transition-transform duration-200",
+                    menuOpen && "translate-y-[4.5px] rotate-45",
+                  )}
+                />
+                <span
+                  className={cn(
+                    "block h-[1.5px] w-full bg-current transition-opacity duration-200",
+                    menuOpen && "opacity-0",
+                  )}
+                />
+                <span
+                  className={cn(
+                    "block h-[1.5px] w-full bg-current transition-transform duration-200",
+                    menuOpen && "-translate-y-[4.5px] -rotate-45",
+                  )}
+                />
+              </span>
+            </button>
+          </div>
+        </div>
+
+        {menuOpen && (
+          <nav
+            className={cn(
+              "flex flex-col gap-[2px] px-5 pb-5 lg:hidden",
+              dark ? "bg-[#04122b]/95" : "bg-[var(--ov-paper)]/97",
+            )}
+          >
+            {NAV_ITEMS.map((item) => (
+              <Link
+                key={item.href}
+                href={item.href}
+                data-active={isActive(item.href) ? "true" : undefined}
+                className="ov-nav-chip !h-11 !justify-start"
+              >
+                {item.label}
+              </Link>
+            ))}
+            <Link
+              href={isLanding ? "#submit" : "/fact-check"}
+              className="ov-nav-chip !h-11 !justify-start"
+              onClick={toggleMenu}
+            >
+              Submit a claim
+            </Link>
+          </nav>
+        )}
+      </header>
+    </>
   );
 }

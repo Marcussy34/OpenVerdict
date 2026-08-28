@@ -504,6 +504,10 @@
     border-radius: 0;
     box-shadow: none;
     background: var(--chip-bg, var(--ov-surface));
+    /* A translucent chip only works if it frosts what it covers; without this
+       a busy hero shows straight through and the label loses its edge. */
+    -webkit-backdrop-filter: blur(20px);
+    backdrop-filter: blur(20px);
     color: var(--chip-fg, #000);
     font-family: var(--font-narrow), ui-sans-serif, system-ui, sans-serif;
     font-size: 13px;
@@ -526,6 +530,73 @@
 .ov-nav-chip:focus-visible {
     outline: 2px solid var(--ov-accent);
     outline-offset: 2px;
+}
+
+/* --- Progressive blur under the fixed header ----------------------------- */
+/* Four stacked layers, each blurrier than the last and masked to a band
+   closer to the top edge, so whatever scrolls under the chrome ramps smoothly
+   out of focus instead of meeting it on a hard line. One flat pane of blur
+   reads as a smeared bar; this reads as depth. Masks are measured from the
+   reference. */
+.ov-top-blur {
+    position: fixed;
+    inset: 0 0 auto 0;
+    height: 132px;
+    z-index: 900;
+    pointer-events: none;
+}
+.ov-top-blur > span {
+    position: absolute;
+    inset: 0;
+    display: block;
+}
+.ov-top-blur > span:nth-child(1) {
+    -webkit-backdrop-filter: blur(1px);
+    backdrop-filter: blur(1px);
+    -webkit-mask-image: linear-gradient(
+        to top,
+        transparent 50%,
+        #000 62.5%,
+        #000 75%,
+        transparent 87.5%
+    );
+    mask-image: linear-gradient(
+        to top,
+        transparent 50%,
+        #000 62.5%,
+        #000 75%,
+        transparent 87.5%
+    );
+}
+.ov-top-blur > span:nth-child(2) {
+    -webkit-backdrop-filter: blur(2px);
+    backdrop-filter: blur(2px);
+    -webkit-mask-image: linear-gradient(
+        to top,
+        transparent 62.5%,
+        #000 75%,
+        #000 87.5%,
+        transparent 100%
+    );
+    mask-image: linear-gradient(
+        to top,
+        transparent 62.5%,
+        #000 75%,
+        #000 87.5%,
+        transparent 100%
+    );
+}
+.ov-top-blur > span:nth-child(3) {
+    -webkit-backdrop-filter: blur(4px);
+    backdrop-filter: blur(4px);
+    -webkit-mask-image: linear-gradient(to top, transparent 75%, #000 87.5%, #000 100%);
+    mask-image: linear-gradient(to top, transparent 75%, #000 87.5%, #000 100%);
+}
+.ov-top-blur > span:nth-child(4) {
+    -webkit-backdrop-filter: blur(8px);
+    backdrop-filter: blur(8px);
+    -webkit-mask-image: linear-gradient(to top, transparent 87.5%, #000 100%);
+    mask-image: linear-gradient(to top, transparent 87.5%, #000 100%);
 }
 
 /* --- Hairlines: dashed 1px guides, the page's structural furniture ------- */
