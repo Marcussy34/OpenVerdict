@@ -91,9 +91,9 @@ export function Hero({
           {/* The reference's hero blurb, measured off the live site:
               Archivo 19px / 500 / lh 25.65px / #F3F3F3 / max-width 409px. */}
           <p className="max-w-[409px] text-[19px] leading-[25.65px] font-medium text-[#F3F3F3] lg:col-span-5">
-            Five AI jurors from distinct model families review frozen evidence under
-            commit-reveal. Verdicts settle on Sui with a deterministic Truth Score and
-            an immutable certificate — every step reproducible.
+            Five AI jurors from distinct model families judge frozen evidence under
+            commit-reveal. Sui settles a recomputable Truth Score and an immutable
+            certificate.
           </p>
 
           <div className="lg:col-span-4">
