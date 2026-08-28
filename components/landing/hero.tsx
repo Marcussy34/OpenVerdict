@@ -44,8 +44,8 @@ export function Hero({
           {children}
         </div>
 
-        {/* Headline */}
-        <div className="mt-6 max-w-[520px] lg:mt-0">
+        {/* Headline — exits left as the shrink begins (data-hero-exit). */}
+        <div data-hero-exit="left" className="mt-6 max-w-[520px] lg:mt-0">
           <h1 className="ov-display text-[clamp(2.75rem,9vw,5.5rem)]">
             Agentic
             <br />
@@ -59,8 +59,11 @@ export function Hero({
           </div>
         </div>
 
-        {/* Ground row: provenance · blurb · the most recent settled claim */}
-        <div className="mt-10 grid gap-7 lg:mt-16 lg:grid-cols-12 lg:items-end lg:gap-5">
+        {/* Ground row: provenance · blurb · latest claim — fades down and out. */}
+        <div
+          data-hero-exit="ground"
+          className="mt-10 grid gap-7 lg:mt-16 lg:grid-cols-12 lg:items-end lg:gap-5"
+        >
           <div className="lg:col-span-3">
             <Eyebrow className="text-[#F3F3F3]/50">Settled on</Eyebrow>
             <p className="mt-1.5 text-[19px] leading-none font-medium tracking-[-0.01em]">

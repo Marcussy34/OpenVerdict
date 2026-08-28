@@ -19,9 +19,17 @@ import { GridGuides } from "./primitives";
  * Progress is linear in scroll (stop means stop). Narrow viewports and
  * reduced motion collapse the runway: hero and section render statically.
  */
-const RUNWAY_VH = 200; // shrink-handoff plays in the first ~55%, then the
-// revealed section HOLDS pinned while its rows arrive — more scroll to finish.
-const MASK_PORTION = 0.55;
+const RUNWAY_VH = 200;
+// Timeline (fractions of the runway), per the reference recording:
+// 0 → EXIT: hero type fades and slides out on its own (never cropped).
+// 0 → MASK: the background + globe shrink into the card, picking up a soft
+//           radius mid-flight and landing sharp on the card's rect.
+// MASK → +FADE: locked in, the visual dissolves into the live metric card.
+// then the pinned 3-column content staggers in; the tail is the hold.
+const EXIT_PORTION = 0.2;
+const MASK_PORTION = 0.4;
+const FADE_PORTION = 0.12;
+const RADIUS_MAX = 20;
 const LIGHT_TAIL_VH = 120;
 
 export function HeroShrink({
@@ -44,6 +52,7 @@ export function HeroShrink({
   const frameRef = React.useRef<HTMLDivElement>(null);
   const panelRef = React.useRef<HTMLDivElement>(null);
   const revealRef = React.useRef<HTMLDivElement>(null);
+  const exitEls = React.useRef<HTMLElement[] | null>(null);
   const [active, setActive] = React.useState(false);
 
   // Client-only decision; SSR and the first paint render the static layout.
@@ -70,6 +79,11 @@ export function HeroShrink({
       el.style.visibility = "";
     }
     if (revealRef.current) revealRef.current.style.transform = "";
+    exitEls.current?.forEach((el) => {
+      el.style.opacity = "";
+      el.style.transform = "";
+      el.style.visibility = "";
+    });
     if (entranceRef) entranceRef.current = -1;
   }, [active, entranceRef]);
 
@@ -82,9 +96,24 @@ export function HeroShrink({
     const runway = wrap.offsetHeight - vh;
     if (runway < 1) return;
     const p = clamp01((scrollY - wrap.offsetTop) / runway);
-    // The mask + dissolve complete inside the first portion of the runway;
-    // the rest is the hold, where the section's own entrances keep playing.
+    // The mask completes inside the first portion of the runway; the dissolve
+    // follows the landing; the rest is the pinned content and the hold.
     const m = clamp01(p / MASK_PORTION);
+
+    // Hero type exits on its own, ahead of the closing mask — headline and
+    // CTAs slide left, the ground row sinks — so text is never cropped.
+    if (!exitEls.current) {
+      exitEls.current = Array.from(panel.querySelectorAll<HTMLElement>("[data-hero-exit]"));
+    }
+    const exit = clamp01(p / EXIT_PORTION);
+    exitEls.current.forEach((el) => {
+      const left = el.dataset.heroExit === "left";
+      el.style.opacity = (1 - exit).toFixed(3);
+      el.style.transform = left
+        ? `translate3d(${(-40 * exit).toFixed(1)}px, 0, 0)`
+        : `translate3d(0, ${(16 * exit).toFixed(1)}px, 0)`;
+      el.style.visibility = exit >= 0.995 ? "hidden" : "";
+    });
 
     // Pin the reveal section at its exact final position for the whole
     // runway — the shrink plays out on one static screen and the fade
@@ -111,16 +140,19 @@ export function HeroShrink({
           }
         : { top: vh * 0.22, left: vw * 0.3, right: vw * 0.3, bottom: vh * 0.1 };
 
-    panel.style.clipPath = `inset(${lerp(0, target.top, m).toFixed(1)}px ${lerp(0, target.right, m).toFixed(1)}px ${lerp(0, target.bottom, m).toFixed(1)}px ${lerp(0, target.left, m).toFixed(1)}px)`;
+    // A soft radius appears mid-flight (reads as a travelling card) and
+    // returns to 0 so the landing on the sharp-cornered stat card is seamless.
+    const radius = (RADIUS_MAX * Math.sin(Math.PI * m)).toFixed(1);
+    panel.style.clipPath = `inset(${lerp(0, target.top, m).toFixed(1)}px ${lerp(0, target.right, m).toFixed(1)}px ${lerp(0, target.bottom, m).toFixed(1)}px ${lerp(0, target.left, m).toFixed(1)}px round ${radius}px)`;
 
     // Entrance clock for the revealed section. Deliberately UNCLAMPED above 1:
     // consumers clamp per element, and values past 1 are the hold phase where
     // the guarantee rows arrive one by one.
-    if (entranceRef) entranceRef.current = (p - 0.33) / 0.22;
+    if (entranceRef) entranceRef.current = (p - MASK_PORTION) / 0.25;
 
-    // The whole frame — masked hero AND wash — dissolves over the last
-    // stretch, revealing the real section (already in position underneath).
-    const fade = clamp01((m - 0.72) / 0.24);
+    // Locked in, the travelling visual dissolves into the live metric card —
+    // the crossfade starts exactly at the landing, not during the flight.
+    const fade = clamp01((p - MASK_PORTION) / FADE_PORTION);
     frame.style.opacity = (1 - fade).toFixed(3);
     frame.style.visibility = fade >= 0.995 ? "hidden" : "";
   }, active);
