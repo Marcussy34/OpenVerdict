@@ -54,9 +54,19 @@ const SEAL_HEX = "#4da2ff";
 /** Where the HUD can pin a chip on the globe. */
 export type AnchorId = "origin" | "agent";
 
+/**
+ * Hand-spin state. The stage owns it — pointer handlers and its own rAF write
+ * it, the scene only reads. `yaw` accumulates every radian the hand has asked
+ * for (coasting included), `vx` is the velocity it is carrying, `pitch` the
+ * tilt it has been dragged to.
+ */
+export type GlobeDrag = { active: boolean; yaw: number; vx: number; pitch: number };
+
 export type SwarmSceneProps = {
   /** Mutable start timestamp of the current cycle, owned by the HUD. */
   clock: React.RefObject<{ start: number }>;
+  /** Pointer-driven spin, owned by the stage. */
+  drag?: React.RefObject<GlobeDrag>;
   /** Which ingest point this cycle's claim arrived at. */
   originIndex: number;
   /** Which juror the HUD is currently spotlighting. */
@@ -646,6 +656,7 @@ const STILL_FRAME_MS = 9200;
 
 function SceneBody({
   clock,
+  drag,
   originIndex,
   spotlightIndex,
   reduced,
@@ -654,6 +665,8 @@ function SceneBody({
   const tiltRef = React.useRef<THREE.Group>(null);
   const spinRef = React.useRef<THREE.Group>(null);
   const rippleRef = React.useRef<THREE.Mesh>(null);
+  /** How much of the hand's yaw this scene has already applied. */
+  const appliedYaw = React.useRef(0);
 
   const { gl, camera, size, invalidate } = useThree();
 
@@ -685,13 +698,30 @@ function SceneBody({
 
     const spin = spinRef.current;
     const tilt = tiltRef.current;
-    if (spin && !reduced) spin.rotation.y += delta * 0.055;
+    // Hand-spin: apply however much yaw the hand has asked for since the last
+    // frame (its coast after release included) and pause the idle drift while
+    // the pointer is down. The stage owns that state; this only reads it.
+    const hand = drag?.current;
+    const dragging = hand?.active === true;
+    if (spin) {
+      const yaw = hand?.yaw ?? 0;
+      spin.rotation.y += yaw - appliedYaw.current;
+      appliedYaw.current = yaw;
+      if (!dragging && !reduced) spin.rotation.y += delta * 0.055;
+    }
     if (tilt) {
-      const px = reduced ? 0 : state.pointer.x;
-      const py = reduced ? 0 : state.pointer.y;
       const k = Math.min(1, delta * 2.4);
-      tilt.rotation.y += (px * 0.22 - tilt.rotation.y) * k;
-      tilt.rotation.x += (0.2 - py * 0.16 - tilt.rotation.x) * k;
+      const pitch = hand?.pitch ?? 0;
+      // The parallax lean freezes while dragging, so the two cannot fight over
+      // the same axis; the dragged pitch persists after release.
+      if (!dragging) {
+        const px = reduced ? 0 : state.pointer.x;
+        const py = reduced ? 0 : state.pointer.y;
+        tilt.rotation.y += (px * 0.22 - tilt.rotation.y) * k;
+        tilt.rotation.x += (0.2 - py * 0.16 + pitch - tilt.rotation.x) * k;
+      } else {
+        tilt.rotation.x += (0.2 + pitch - tilt.rotation.x) * k;
+      }
     }
 
     /* ---- arcs ---------------------------------------------------------- */
@@ -838,6 +868,7 @@ function SceneBody({
 
 export default function SwarmScene({
   clock,
+  drag,
   originIndex,
   spotlightIndex,
   paused = false,
@@ -855,6 +886,7 @@ export default function SwarmScene({
     >
       <SceneBody
         clock={clock}
+        drag={drag}
         originIndex={originIndex}
         spotlightIndex={spotlightIndex}
         reduced={reduced}
