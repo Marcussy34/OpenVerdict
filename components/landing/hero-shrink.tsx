@@ -7,7 +7,8 @@ import { GridGuides } from "./primitives";
 /**
  * The reference's opening move, seamless edition.
  *
- * The ENTIRE hero is one panel in a sticky 100svh frame on a ~120vh runway.
+ * The ENTIRE hero is one panel in a sticky 100svh frame on a runway sized to
+ * the choreography itself (see the vh timeline below).
  * While the runway plays, the section that follows (`reveal`, holding the
  * dark stat card) is pulled up UNDER the frame with a negative margin, so by
  * the end of the runway its card stands exactly at its natural position
@@ -19,22 +20,39 @@ import { GridGuides } from "./primitives";
  * Progress is linear in scroll (stop means stop). Narrow viewports and
  * reduced motion collapse the runway: hero and section render statically.
  */
-const RUNWAY_VH = 200;
-// Timeline (fractions of the runway), per the reference recording:
+// Timeline, written in vh of scroll — tune these, not the fractions below.
 // 0 → EXIT: hero type fades and slides out on its own (never cropped).
-// 0 → MASK: the background + globe shrink into the card, picking up a soft
-//           radius mid-flight and landing sharp on the card's rect.
+// 0 → MASK: the background + globe shrink into the card, landing sharp on
+//           the card's rect.
 // MASK → +FADE: locked in, the visual dissolves into the live metric card.
-// then the pinned 3-column content staggers in; the tail is the hold.
-const EXIT_PORTION = 0.2;
-const MASK_PORTION = 0.4;
-const FADE_PORTION = 0.12;
+// then the pinned 3-column content staggers in, on the entrance clock.
+const EXIT_VH = 40;
+const MASK_VH = 80;
+const FADE_VH = 24;
 // The PANEL itself ghosts against the (still opaque) wash while shrinking —
 // the section behind stays hidden until the frame's own dissolve at landing.
-const GHOST_START = 0.18;
-const GHOST_LENGTH = 0.22;
+const GHOST_START_VH = 36;
+const GHOST_VH = 44;
 const GHOST_FLOOR = 0.35;
-const LIGHT_TAIL_VH = 120;
+// One unit of the revealed section's entrance clock, and the clock value at
+// which it is finished — the last guarantee row in `productivity.tsx` lands at
+// 0.55 + 2 × 0.22 + 0.26. The runway is exactly that long, so the very next
+// scroll moves the page on instead of holding a screen that has nothing left
+// to play.
+const ENTRANCE_VH = 50;
+const ENTRANCE_END = 1.25;
+const RUNWAY_VH = MASK_VH + ENTRANCE_VH * ENTRANCE_END;
+
+// The same timeline as fractions of the runway, which is what the frame reads.
+const EXIT_PORTION = EXIT_VH / RUNWAY_VH;
+const MASK_PORTION = MASK_VH / RUNWAY_VH;
+const FADE_PORTION = FADE_VH / RUNWAY_VH;
+const GHOST_START = GHOST_START_VH / RUNWAY_VH;
+const GHOST_LENGTH = GHOST_VH / RUNWAY_VH;
+const ENTRANCE_PORTION = ENTRANCE_VH / RUNWAY_VH;
+// The header flips to its light chips the moment the dissolve completes and the
+// light section owns the screen — not a fixed guess at the end of the runway.
+const LIGHT_TAIL_VH = 100 + RUNWAY_VH - (MASK_VH + FADE_VH);
 
 export function HeroShrink({
   cardRef,
@@ -150,9 +168,9 @@ export function HeroShrink({
     panel.style.clipPath = `inset(${lerp(0, target.top, m).toFixed(1)}px ${lerp(0, target.right, m).toFixed(1)}px ${lerp(0, target.bottom, m).toFixed(1)}px ${lerp(0, target.left, m).toFixed(1)}px)`;
 
     // Entrance clock for the revealed section. Deliberately UNCLAMPED above 1:
-    // consumers clamp per element, and values past 1 are the hold phase where
-    // the guarantee rows arrive one by one.
-    if (entranceRef) entranceRef.current = (p - MASK_PORTION) / 0.25;
+    // consumers clamp per element, and the stretch past 1 is where the last
+    // guarantee rows arrive, one by one, at the end of the runway.
+    if (entranceRef) entranceRef.current = (p - MASK_PORTION) / ENTRANCE_PORTION;
 
     // The travelling panel thins out over the opaque wash while it shrinks…
     const ghost = clamp01((p - GHOST_START) / GHOST_LENGTH);
