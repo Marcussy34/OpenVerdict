@@ -118,7 +118,7 @@ export function StateBadge({ state, className = "", size = "md" }: StateBadgePro
   return (
     <span
       className={cn(
-        "ov-micro ov-micro-sm inline-flex w-fit items-center rounded-full border",
+        "ov-micro ov-micro-sm inline-flex w-fit items-center border",
         TONE_CLASS[config.tone],
         sizeClasses,
         className,

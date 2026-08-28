@@ -164,7 +164,7 @@ export default function ClaimDetailPage({ params }: ClaimDetailPageProps) {
 
   if (loading) {
     return (
-      <div className="mx-auto max-w-6xl space-y-6 px-4 py-16 sm:px-6 lg:px-8">
+      <div className="space-y-6 px-5 py-16 md:px-7">
         <div className="h-9 w-52 animate-pulse rounded-lg bg-surface-2" />
         <div className="h-56 animate-pulse rounded-2xl bg-surface" />
         <div className="h-72 animate-pulse rounded-2xl bg-surface" />
@@ -218,7 +218,7 @@ export default function ClaimDetailPage({ params }: ClaimDetailPageProps) {
   const verification = claim.verification;
 
   return (
-    <div className="mx-auto max-w-6xl space-y-8 px-4 py-10 sm:px-6 lg:px-8 lg:py-12">
+    <div className="space-y-8 px-5 py-10 md:px-7 lg:py-12">
       <PageHeader
         backHref="/claims"
         backLabel="All claims"

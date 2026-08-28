@@ -157,7 +157,7 @@ export default function ObservePage({ params }: ObservePageProps) {
           : status;
 
   return (
-    <div className="mx-auto max-w-7xl space-y-6 px-4 py-10 sm:px-6 lg:px-8 lg:py-12">
+    <div className="space-y-6 px-5 py-10 md:px-7 lg:py-12">
       <PageHeader
         backHref={`/claims/${encodeURIComponent(id)}`}
         backLabel="Claim report"

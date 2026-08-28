@@ -68,7 +68,7 @@ function FactCheckContent() {
   const claimTooLong = claim.length > MAX_CLAIM * 0.9;
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6 px-4 py-10 sm:px-6 lg:px-8 lg:py-12">
+    <div className="mx-auto max-w-5xl space-y-6 px-5 py-10 md:px-7 lg:py-12">
       <PageHeader
         eyebrow="Direct review"
         title="Submit a fact-check"
@@ -294,7 +294,7 @@ export default function FactCheckPage() {
   return (
     <Suspense
       fallback={
-        <div className="mx-auto max-w-5xl px-4 py-16">
+        <div className="mx-auto max-w-5xl px-5 py-16 md:px-7">
           <div className="h-72 animate-pulse rounded-2xl bg-surface" />
         </div>
       }

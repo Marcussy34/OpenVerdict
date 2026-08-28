@@ -158,7 +158,7 @@ export default function VerifyPage() {
   const n = jurorVotes.length;
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6 px-4 py-10 sm:px-6 lg:px-8 lg:py-12">
+    <div className="mx-auto max-w-5xl space-y-6 px-5 py-10 md:px-7 lg:py-12">
       <PageHeader
         eyebrow="Zero server trust"
         title="Independent verifier"

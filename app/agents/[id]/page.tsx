@@ -82,7 +82,7 @@ export default function AgentDetailPage({ params }: AgentDetailPageProps) {
 
   if (loading) {
     return (
-      <div className="mx-auto max-w-4xl space-y-6 px-4 py-16 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-4xl space-y-6 px-5 py-16 md:px-7">
         <div className="h-9 w-44 animate-pulse rounded-lg bg-surface-2" />
         <div className="h-48 animate-pulse rounded-2xl bg-surface" />
         <div className="h-64 animate-pulse rounded-2xl bg-surface" />
@@ -113,7 +113,7 @@ export default function AgentDetailPage({ params }: AgentDetailPageProps) {
   const reputationEntries = Object.entries(agent.reputation ?? {});
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6 px-4 py-10 sm:px-6 lg:px-8 lg:py-12">
+    <div className="mx-auto max-w-4xl space-y-6 px-5 py-10 md:px-7 lg:py-12">
       <PageHeader
         backHref="/agents"
         backLabel="Agent registry"

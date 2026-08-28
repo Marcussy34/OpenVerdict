@@ -53,7 +53,7 @@ export default function EvidenceDetailPage({ params }: EvidenceDetailPageProps) 
   ];
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6 px-4 py-10 sm:px-6 lg:px-8 lg:py-12">
+    <div className="mx-auto max-w-4xl space-y-6 px-5 py-10 md:px-7 lg:py-12">
       <PageHeader
         backHref="/claims"
         backLabel="All claims"

@@ -126,7 +126,7 @@ export default function ClaimsPage() {
   );
 
   return (
-    <div className="mx-auto max-w-7xl space-y-8 px-4 py-10 sm:px-6 lg:px-8 lg:py-12">
+    <div className="space-y-8 px-5 py-10 md:px-7 lg:py-12">
       <PageHeader
         eyebrow="Directory"
         title="Claims directory"
@@ -160,7 +160,7 @@ export default function ClaimsPage() {
         </div>
 
         <div
-          className="ov-scroll flex items-center gap-1 overflow-x-auto rounded-full border border-border bg-card p-1"
+          className="ov-scroll flex items-center gap-1 overflow-x-auto border border-border bg-card p-1"
           role="tablist"
           aria-label="Filter claims by lifecycle state"
         >

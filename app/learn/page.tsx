@@ -27,7 +27,7 @@ const CONTENTS = [
 
 export default function LearnPage() {
   return (
-    <div className="mx-auto max-w-5xl space-y-8 px-4 py-10 sm:px-6 lg:px-8 lg:py-12">
+    <div className="mx-auto max-w-5xl space-y-8 px-5 py-10 md:px-7 lg:py-12">
       <PageHeader
         eyebrow="Protocol concepts"
         title="How OpenVerdict works"
