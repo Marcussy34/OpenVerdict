@@ -602,14 +602,18 @@ const ripple = (() => {
   // A disc with real radial subdivision, not a 64-vertex fan: every vertex is
   // pushed onto the sphere, so the patch curves with the surface instead of
   // chording flat across it.
-  const geometry = new THREE.RingGeometry(0, 0.42, 96, 14);
+  // Wide enough that the ring itself is what the eye reads as the wave. The
+  // land dots pulse along with it, but they can only light where there is
+  // land, so leaving them to carry the shape gave a ragged, coastline-shaped
+  // blob rather than a circle.
+  const geometry = new THREE.RingGeometry(0, 0.95, 128, 22);
   const uniforms = {
     uT: { value: 0 },
     uAmp: { value: 0 },
     uColor: { value: new THREE.Color("#ffd479") },
     uRadius: { value: 1.004 },
-    /** Angular radius of the patch: atan(0.42) for a disc sitting at radius 1. */
-    uMaxAngle: { value: Math.atan(0.42) },
+    /** Angular radius of the patch: atan(R) for a disc sitting at radius 1. */
+    uMaxAngle: { value: Math.atan(0.95) },
     uLightDir: { value: LIGHT_DIR },
   };
   const material = new THREE.ShaderMaterial({
@@ -651,9 +655,9 @@ const ripple = (() => {
         float a = 0.0;
         for (int i = 0; i < 2; i++) {
           float p = fract(uT + float(i) * 0.5);
-          a += exp(-pow((r - p) / 0.09, 2.0)) * (1.0 - p * 0.8);
+          a += exp(-pow((r - p) / 0.07, 2.0)) * (1.0 - p * 0.75);
         }
-        a *= smoothstep(1.0, 0.82, r);
+        a *= smoothstep(1.0, 0.86, r);
         // Sit in the globe's own light, but only just: a strong day/night term
         // across a patch straddling the terminator lights one flank and drops
         // the other out of sight, which reads as a crescent, not a ring.
@@ -834,13 +838,16 @@ function SceneBody({
     const claimWave = envelope(cycleT, 250, 3400, 250, 1200);
     const settleWave = envelope(cycleT, 13900, CYCLE_MS, 220, 1400);
     const lu = land.uniforms;
+    // The dots pulse WITH the ring rather than instead of it: they can only
+    // light where there is land, so at full strength they were the loudest
+    // thing on screen and the wave took the shape of the coastline.
     if (settleWave > claimWave) {
       lu.uWaveR.value = 0.12 + ((cycleT - 13900) / 2600) * 2.1;
-      lu.uWaveAmp.value = settleWave * 1.1;
+      lu.uWaveAmp.value = settleWave * 0.62;
       lu.uWaveColor.value.set("#8dffc4");
     } else {
       lu.uWaveR.value = 0.12 + ((cycleT - 250) / 2900) * 2.1;
-      lu.uWaveAmp.value = claimWave * 1.1;
+      lu.uWaveAmp.value = claimWave * 0.62;
       lu.uWaveColor.value.set("#ffe9b0");
     }
 
