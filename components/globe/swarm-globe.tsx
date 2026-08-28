@@ -37,8 +37,9 @@ export function SwarmGlobe({ className }: { className?: string }) {
   // render stay identical — `useReducedMotion()` is null on the server.
   const line = reduce && mounted ? 8 : liveLine;
 
-  // Mount WebGL only once the stage is actually on screen, and stop rendering
-  // frames whenever it scrolls away.
+  // Mount WebGL as soon as the stage is on screen, and stop rendering frames
+  // whenever it scrolls away. The margin buys a screen of warning so the
+  // resume happens before the globe is actually looked at.
   React.useEffect(() => {
     const el = stageRef.current;
     if (!el || typeof IntersectionObserver === "undefined") {
@@ -52,11 +53,28 @@ export function SwarmGlobe({ className }: { className?: string }) {
         setVisible(entry.isIntersecting);
         if (entry.isIntersecting) setMounted(true);
       },
-      { rootMargin: "160px" },
+      { rootMargin: "600px" },
     );
     observer.observe(el);
     return () => observer.disconnect();
   }, []);
+
+  // …but do not wait for the scroll to boot. A globe further down the page
+  // would otherwise create its context and compile its shaders exactly as it
+  // arrives, which is the pause you see. Idle time after first paint is free,
+  // and `paused` keeps it at zero frames until it is actually on screen.
+  React.useEffect(() => {
+    if (mounted) return;
+    const idle = typeof window.requestIdleCallback === "function";
+    const warm = () => setMounted(true);
+    const id = idle
+      ? window.requestIdleCallback(warm, { timeout: 2500 })
+      : window.setTimeout(warm, 1200);
+    return () => {
+      if (idle) window.cancelIdleCallback(id);
+      else window.clearTimeout(id);
+    };
+  }, [mounted]);
 
   // One rAF clock drives the cycle; state only changes on a transition. The
   // transcript's timings survive the HUD's removal because they are what give
