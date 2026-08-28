@@ -105,9 +105,9 @@ export function Productivity({
 
     rowRefs.current.forEach((el, i) => {
       if (!el) return;
-      // The rows are the HOLD phase: they start after the handoff completes
-      // (q > 1) and arrive one by one across the extra scroll.
-      const rq = clamp01((q - (1.2 + i * 0.55)) / 0.5);
+      // One by one from the side, paced so the third row completes exactly
+      // as the last headline letters finish (letters end at q ~ 0.78).
+      const rq = clamp01((q - (0.08 + i * 0.22)) / 0.26);
       el.style.opacity = rq.toFixed(3);
       el.style.transform = `translate3d(${((1 - rq) * 64).toFixed(1)}px, 0, 0)`;
     });
