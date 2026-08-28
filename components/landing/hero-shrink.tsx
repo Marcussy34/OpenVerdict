@@ -126,17 +126,19 @@ export function HeroShrink({
         lift > 0.5 ? `translate3d(0, ${-lift.toFixed(1)}px, 0)` : "";
     }
 
-    // Destination: the stat card's live rect (it rides up beneath the frame,
-    // reaching its natural place exactly as p hits 1). Fall back to a centred
+    // Destination: the stat card's live rect, measured in the PANEL's own
+    // rect space — scrollbars, svh quirks and sticky offsets all cancel out,
+    // so the mask matches the card silhouette exactly. Fall back to a centred
     // panel if the card is not measurable.
+    const pr = panel.getBoundingClientRect();
     const c = cardRef.current?.getBoundingClientRect();
     const target =
       c && c.width > 1
         ? {
-            top: Math.max(0, c.top),
-            left: Math.max(0, c.left),
-            right: Math.max(0, vw - c.right),
-            bottom: Math.max(0, vh - c.bottom),
+            top: Math.max(0, c.top - pr.top),
+            left: Math.max(0, c.left - pr.left),
+            right: Math.max(0, pr.right - c.right),
+            bottom: Math.max(0, pr.bottom - c.bottom),
           }
         : { top: vh * 0.22, left: vw * 0.3, right: vw * 0.3, bottom: vh * 0.1 };
 
@@ -162,7 +164,7 @@ export function HeroShrink({
       <div
         ref={wrapRef}
         className="relative z-10"
-        style={active ? { height: `calc(100svh + ${RUNWAY_VH}vh)` } : undefined}
+        style={active ? { height: `${100 + RUNWAY_VH}vh` } : undefined}
       >
         {/* Header-theme markers: stacked, never overlapping. */}
         <div
@@ -180,7 +182,7 @@ export function HeroShrink({
 
         <div
           ref={frameRef}
-          className="pointer-events-none sticky top-0 h-[100svh] overflow-hidden"
+          className="pointer-events-none sticky top-0 h-[100svh] overflow-hidden lg:h-screen"
         >
           {active && (
             <div aria-hidden className="ov-light-wash absolute inset-0">
@@ -205,7 +207,7 @@ export function HeroShrink({
         // while the choreography runs, the wrapper's own stacked markers rule.
         {...(active ? {} : { "data-header-theme": "light" })}
         className="relative will-change-transform"
-        style={active ? { marginTop: "-100svh" } : undefined}
+        style={active ? { marginTop: "-100vh" } : undefined}
       >
         {reveal}
       </div>
