@@ -384,21 +384,6 @@
    same fonts and palette.
    ======================================================================== */
 
-/* Lenis smooth scroll — the library drives scroll, so the native one stands
-   down while it is mounted (landing only; destroyed on unmount). */
-html.lenis,
-html.lenis body {
-    height: auto;
-}
-.lenis.lenis-smooth {
-    scroll-behavior: auto !important;
-}
-.lenis.lenis-smooth [data-lenis-prevent] {
-    overscroll-behavior: contain;
-}
-.lenis.lenis-stopped {
-    overflow: hidden;
-}
 
 /* Uppercase micro-label: eyebrows, nav chips, buttons, number chips, legal. */
 .ov-micro {

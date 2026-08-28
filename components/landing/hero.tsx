@@ -46,13 +46,6 @@ export function Hero({
     >
       <GridGuides columns={3} dark className="hidden md:block" />
 
-      {/* Thin wireframe frames echoing the reference's overlay geometry. */}
-      <div aria-hidden className="pointer-events-none absolute inset-0 hidden lg:block">
-        <span className="absolute top-[18%] left-[46%] size-[17vw] max-h-[240px] max-w-[240px] border border-[#F3F3F3]/20" />
-        <span className="absolute top-[40%] left-[58%] size-[13vw] max-h-[190px] max-w-[190px] border border-[#F3F3F3]/12" />
-        <span className="absolute top-[56%] left-[44%] size-[15vw] max-h-[210px] max-w-[210px] border border-[#F3F3F3]/10" />
-      </div>
-
       <div className="relative z-30 flex min-h-[100svh] flex-col px-5 pt-[86px] pb-7 md:px-7 md:pb-8 lg:justify-between lg:pt-[104px]">
         {/* The globe's footprint. It stacks above the type on small screens and
             floats behind it, centre-right, from lg up. */}

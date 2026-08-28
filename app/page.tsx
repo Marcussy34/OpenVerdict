@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useMemo, useRef } from "react";
 import { SwarmGlobe, type SwarmClaim, type SwarmAgent } from "@/components/globe/swarm-globe";
-import { SmoothScroll } from "@/components/landing/smooth-scroll";
 import { DockLayer } from "@/components/landing/dock-layer";
 import { Hero } from "@/components/landing/hero";
 import { Productivity } from "@/components/landing/productivity";
@@ -116,7 +115,6 @@ export default function HomePage() {
 
   return (
     <>
-      <SmoothScroll />
 
       <Hero
         heroSlotRef={heroSlotRef}
