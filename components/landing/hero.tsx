@@ -3,6 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { SplitButton, Eyebrow, CornerPin, GridGuides, Arrow } from "./primitives";
+import { SuiMark } from "@/components/brand/logos";
 import type { ClaimInspection } from "@/lib/engine/contract";
 
 /** Terminal states carry a settled outcome; anything lower is still running. */
@@ -66,10 +67,14 @@ export function Hero({
         >
           <div className="lg:col-span-3">
             <Eyebrow className="text-[#F3F3F3]/50">Settled on</Eyebrow>
-            <p className="mt-1.5 text-[19px] leading-none font-medium tracking-[-0.01em]">
-              Sui{" "}
-              <span className="text-[#F3F3F3]/55">
-                {(network ?? "testnet").toUpperCase()}
+            <p className="mt-1.5 flex items-center gap-2 text-[19px] leading-none font-medium tracking-[-0.01em]">
+              {/* The official Sui mark, in Sui's own blue against the night stage. */}
+              <SuiMark brand className="size-[20px]" />
+              <span>
+                Sui{" "}
+                <span className="text-[#F3F3F3]/55">
+                  {(network ?? "testnet").toUpperCase()}
+                </span>
               </span>
             </p>
           </div>

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useReducedMotion } from "motion/react";
 import { CornerPin, GridGuides, Hairline, ArrowUp, Eyebrow } from "./primitives";
 import { ClaimForm } from "./claim-form";
+import { SuiMark, GonkaMark } from "@/components/brand/logos";
 import { useScrollFrame, clamp01, ease } from "./scroll-driver";
 
 const NAVIGATION = [
@@ -87,8 +88,14 @@ export function LandingFooter({
             </div>
 
             <div className="mt-12">
-              <Eyebrow className="text-[#F3F3F3]/60">
-                Settled on Sui {(network ?? "testnet").toUpperCase()} · Juries by GonkaRouter
+              {/* Both marks in the page's own ink — the provenance line reads as
+                  one sentence, not as two pasted logos. */}
+              <Eyebrow className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[#F3F3F3]/60">
+                <SuiMark className="size-[15px]" />
+                Settled on Sui {(network ?? "testnet").toUpperCase()}
+                <span aria-hidden className="text-[#F3F3F3]/30">·</span>
+                <GonkaMark className="size-[14px]" />
+                Juries by GonkaRouter
               </Eyebrow>
               <p className="ov-micro ov-micro-sm mt-2 text-[#F3F3F3]/45">
                 MIT License · experimental software · unaudited Move contracts
