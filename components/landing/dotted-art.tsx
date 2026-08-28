@@ -91,50 +91,93 @@ export function CertificateArt({ className, size }: { className?: string; size?:
   );
 }
 
-/** Opportunity-list marks: small, square, dashed. */
+/**
+ * Opportunity-list marks. Drawn on their own 96-unit grid rather than the
+ * 240 one above: these render at 64–88px, where a 1px stroke on a 240 box
+ * thins to a quarter of a pixel and the drawing goes wispy. Heavier stroke,
+ * fewer lines, each one saying its own sentence.
+ */
+const MARK_DASH = { strokeDasharray: "2 2.6" } as const;
+
+function MarkFrame({ children, className }: { children: React.ReactNode; className?: string }) {
+  return (
+    <svg
+      aria-hidden
+      viewBox="0 0 96 96"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.5}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={cn("shrink-0", className)}
+    >
+      {children}
+    </svg>
+  );
+}
+
+/** Five seats drawn onto a ring around one claim — circles and squares, so the
+ *  panel reads as mixed model families rather than five of the same thing. */
 export function JuryMark({ className }: { className?: string }) {
   return (
-    <Frame className={className} size={64}>
-      <path d="M40 40h160v160H40z" {...DASH} />
-      <circle cx="120" cy="120" r="30" />
-      <circle cx="70" cy="70" r="12" {...DASH} />
-      <circle cx="170" cy="70" r="12" {...DASH} />
-      <circle cx="70" cy="170" r="12" {...DASH} />
-      <circle cx="170" cy="170" r="12" {...DASH} />
-      <path d="M80 80 100 100M160 80 140 100M80 160 100 140M160 160 140 140" strokeWidth={0.9} />
-    </Frame>
+    <MarkFrame className={className}>
+      <circle cx="48" cy="48" r="30" {...MARK_DASH} />
+      {/* spokes: the draw binding each seat to the claim */}
+      <path
+        d="M48 48 48 18M48 48 76.5 38.7M48 48 65.6 72.3M48 48 30.4 72.3M48 48 19.5 38.7"
+        strokeWidth={0.8}
+        {...MARK_DASH}
+      />
+      {/* the claim under review */}
+      <path d="M48 40 56 48 48 56 40 48Z" />
+      {/* the five seats */}
+      <circle cx="48" cy="18" r="5" />
+      <path d="M72 34.7h9v8h-9z" />
+      <circle cx="65.6" cy="72.3" r="5" />
+      <path d="M25.9 68.3h9v8h-9z" />
+      <circle cx="19.5" cy="38.7" r="5" />
+    </MarkFrame>
   );
 }
 
+/** The evidence stack, frozen and stamped before anyone deliberates. */
 export function SealMark({ className }: { className?: string }) {
   return (
-    <Frame className={className} size={64}>
-      <path d="M50 110h140v90H50z" {...DASH} />
-      <path d="M85 110V78a35 35 0 0 1 70 0v32" />
-      <circle cx="120" cy="152" r="16" {...DASH} />
-      <path d="M120 152v22" />
-    </Frame>
+    <MarkFrame className={className}>
+      <path d="M18 74 48 88 78 74 48 60Z" {...MARK_DASH} />
+      <path d="M18 63 48 77 78 63 48 49Z" {...MARK_DASH} />
+      <path d="M18 52 48 66 78 52 48 38Z" />
+      <path d="M18 52v11M78 52v11M18 63v11M78 63v11" strokeWidth={0.8} />
+      {/* the seal pressed onto the top plate */}
+      <path d="M48 38V28" strokeWidth={0.8} />
+      <circle cx="48" cy="19" r="9" />
+      <path d="M44 15.5 52 22.5M52 15.5 44 22.5" strokeWidth={0.9} />
+    </MarkFrame>
   );
 }
 
+/** One identity resolving to exactly one seat — the allotment is the frame. */
 export function SeatMark({ className }: { className?: string }) {
   return (
-    <Frame className={className} size={64}>
-      <circle cx="120" cy="76" r="30" {...DASH} />
-      <path d="M56 196c0-35 29-64 64-64s64 29 64 64" />
-      <path d="M40 196h160" {...DASH} />
-      <path d="M120 132v64" strokeWidth={0.9} />
-    </Frame>
+    <MarkFrame className={className}>
+      <path d="M14 20h68v56H14z" {...MARK_DASH} />
+      <circle cx="48" cy="40" r="10" />
+      <path d="M30 68a18 18 0 0 1 36 0" />
+      {/* the single seat token this address holds */}
+      <path d="M74 12h12v12H74z" />
+      <path d="M77.5 18.5 79.5 21 83 16.5" strokeWidth={1.1} />
+    </MarkFrame>
   );
 }
 
+/** Run the numbers again, get the same verdict. */
 export function RecomputeMark({ className }: { className?: string }) {
   return (
-    <Frame className={className} size={64}>
-      <path d="M120 42a78 78 0 1 1-55 23" />
-      <path d="M62 40v28h28" />
-      <path d="M84 120h72M84 148h48" {...DASH} />
-      <circle cx="120" cy="120" r="52" {...DASH} />
-    </Frame>
+    <MarkFrame className={className}>
+      <path d="M48 14a34 34 0 1 1-25.5 11.5" />
+      <path d="M40 7.5 47.5 14 40 20.5" />
+      <path d="M32 42h32M32 52h22" {...MARK_DASH} />
+      <path d="M36 66 44 74 60 56" strokeWidth={1.6} />
+    </MarkFrame>
   );
 }
