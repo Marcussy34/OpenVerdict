@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { SplitButton, Eyebrow, CornerPin, GridGuides, Arrow } from "./primitives";
+import { SplitButton, Eyebrow, CornerPin, Arrow } from "./primitives";
 import { HeroVideo } from "./hero-video";
 import { SuiMark, GonkaMark } from "@/components/brand/logos";
 import type { ClaimInspection } from "@/lib/engine/contract";
@@ -32,8 +32,10 @@ export function Hero({
       id="top"
       className="ov-navy-ground ov-on-dark relative min-h-[100svh] overflow-hidden text-[#F3F3F3]"
     >
+      {/* No column guides over the hero: the footage is the composition here,
+          and a dashed vertical cutting through it reads as a stray line. The
+          guides start with the section below. */}
       <HeroVideo />
-      <GridGuides columns={3} dark className="hidden md:block" />
 
       <div className="relative z-30 flex min-h-[100svh] flex-col px-5 pt-[86px] pb-7 md:px-7 md:pb-8 lg:justify-between lg:pt-[104px]">
         {/* Headline — exits left as the shrink begins (data-hero-exit). */}
