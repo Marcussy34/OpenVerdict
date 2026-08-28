@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { SwarmGlobe, type SwarmClaim, type SwarmAgent } from "@/components/globe/swarm-globe";
 import { Hero } from "@/components/landing/hero";
+import { HeroShrink } from "@/components/landing/hero-shrink";
 import { Productivity } from "@/components/landing/productivity";
 import { Propositions } from "@/components/landing/propositions";
 import { Banner } from "@/components/landing/banner";
@@ -87,9 +88,11 @@ export default function HomePage() {
   return (
     <>
 
-      <Hero latest={latest} network={network}>
-        {globe}
-      </Hero>
+      <HeroShrink>
+        <Hero latest={latest} network={network}>
+          {globe}
+        </Hero>
+      </HeroShrink>
 
       <Productivity claims={claims} />
 

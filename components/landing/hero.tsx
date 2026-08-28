@@ -32,7 +32,6 @@ export function Hero({
 }) {
   return (
     <section
-      data-header-theme="dark"
       id="top"
       className="ov-navy-ground ov-on-dark relative min-h-[100svh] overflow-hidden text-[#F3F3F3]"
     >
