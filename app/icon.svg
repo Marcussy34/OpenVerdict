@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="OpenVerdict">
+  <!-- The brand mark, redrawn for the tab strip. The header's version outlines
+       both the frame and the seal at 1.5, which turns to grey mush at 16px, so
+       here the frame becomes the tile itself and the seal is filled. The token
+       values are inlined because an icon file cannot read the app's CSS custom
+       properties: #000000 is ov-ink, #f7f7f5 is ov-paper, #0e76ff is ov-accent.
+       Keep this comment free of double hyphens, which XML forbids. -->
+  <rect width="32" height="32" fill="#000000"/>
+  <path d="M16 3 29 16 16 29 3 16Z" fill="#f7f7f5"/>
+  <rect x="13" y="13" width="6" height="6" fill="#0e76ff"/>
+</svg>
