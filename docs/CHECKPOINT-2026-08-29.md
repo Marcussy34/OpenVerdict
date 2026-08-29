@@ -368,8 +368,24 @@ then submit a fast test claim and time it.
     Chain: ee2fa1c (ladder +240 s) deployed first, then e4579e4, then fast
     claim #12.
 
+40. Claim #12 `0xd6f14b4bfa434b6e605b071a91dfbd423ae9a9781742d8ec7f5b479ef794cea2`
+    (ladder +240 s, gas pinning): DeepSeek 3.6 s, MiniMax 5.9 s and Kimi
+    39 s valid and committed by t+161 s (three commits at the acceptance
+    floor); one DeepSeek and one MiniMax still lost to operator gas-coin
+    rejections during their Walrus writes, before this process had built
+    any gateway transaction (empty gas cache), i.e. inside the SDK's own
+    register -> certify sequence, whose certify selects gas from the lagging
+    owned-object index. Fix (commit "execute register and certify through
+    the pinned-gas executor"): the real store drives the SDK's step-wise
+    flow (encode, register, upload, certify, getBlob) and executes both
+    transactions via executeAndWait (getObject-pinned gas, repin on stale
+    rejection); waitForGasIndex learns the sender's coin from the index
+    when the process has not built a transaction yet. Tests: fake flow
+    funnels writes into writeBlobMock; executor mocked. Gate 356 tests,
+    lint, build. Chain deploys after claim #12 (or 07:22), then claim #13.
+
 ### Next steps
-- Measure claim #12 (ladder +240 s, gas pinning, funded jurors); then
+- Measure claim #13 (flow-driven Walrus writes with pinned gas); then
   STATUS.md/runbook with the numbers and the demo claim ids.
 - Then deploy `c55949a` (clean worktree checkout, `railway up -s app -d`),
   submit a fast claim, time it, and record timings here and in STATUS.md.
