@@ -17,10 +17,18 @@ export class ClaimNotFoundError extends EngineError {
 }
 
 export class EngineStateError extends EngineError {
-  override readonly name = "EngineStateError";
+  override readonly name: string = "EngineStateError";
 
   constructor(message: string) {
     super("INVALID_CLAIM_STATE", message);
+  }
+}
+
+export class EngineNoEvidenceError extends EngineStateError {
+  override readonly name = "EngineNoEvidenceError";
+
+  constructor() {
+    super("evidence cannot be frozen without an accepted artifact");
   }
 }
 

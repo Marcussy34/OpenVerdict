@@ -102,6 +102,7 @@ import type {
 import type { EngineAgentConfig, EngineConfig } from "./config";
 import {
   ClaimNotFoundError,
+  EngineNoEvidenceError,
   EngineStateError,
   EngineValidationError,
   ZkLoginVerificationError,
@@ -128,7 +129,9 @@ const ZERO_OBJECT_ID = `0x${"00".repeat(32)}` as const;
 const MAX_LOCAL_WALRUS_EPOCH = Number.MAX_SAFE_INTEGER;
 const SUI_ADDRESS_PATTERN = /^0x[0-9a-f]{64}$/;
 const MAX_ZKLOGIN_SIGNATURE_LENGTH = 16_384;
+const MAX_FACT_CHECK_TEXT_LENGTH = 20_000;
 const ZKLOGIN_VERIFICATION_PROVIDER = "zklogin:enoki";
+const CLAIM_STATEMENT_SOURCE_URL = "urn:openverdict:claim-statement";
 
 class ResearchLoopError extends GonkaRunError {
   readonly status: ResearchLoopFailureStatus;
@@ -505,9 +508,9 @@ class OpenVerdictEngine implements Engine {
     if (phase === 2 && artifacts.length === 0) {
       artifacts = await this.#repository.listEvidenceArtifacts(claimId, 1);
     }
-    artifacts = uniqueEvidenceArtifacts(artifacts);
+    artifacts = uniqueEvidenceArtifacts(statementArtifactFirst(artifacts));
     if (artifacts.length === 0) {
-      throw new EngineStateError("evidence cannot be frozen without an accepted artifact");
+      throw new EngineNoEvidenceError();
     }
     const manifestItems = artifacts.map(toEvidenceManifestItem);
     const built = buildEvidenceManifest(manifestItems);
@@ -1438,6 +1441,10 @@ class OpenVerdictEngine implements Engine {
     claim: ClaimRecord,
     request: FactCheckRequest,
   ): Promise<void> {
+    await this.ingestText(claim, claim.statement, 1, {
+      evidenceLabel: `statement:${claim.claimId}:1`,
+      sourceUrl: CLAIM_STATEMENT_SOURCE_URL,
+    });
     const tasks: Promise<void>[] = request.urls.map((url, index) =>
       this.ingestUrl(claim, url, 1, `url-${index + 1}`),
     );
@@ -1451,8 +1458,12 @@ class OpenVerdictEngine implements Engine {
     claim: ClaimRecord,
     text: string,
     phase: 1 | 2,
+    options: { evidenceLabel?: string; sourceUrl?: string } = {},
   ): Promise<void> {
-    const evidenceId = deterministicId(`text:${claim.claimId}:${phase}`);
+    const evidenceId = deterministicId(
+      options.evidenceLabel ?? `text:${claim.claimId}:${phase}`,
+    );
+    const sourceUrl = options.sourceUrl ?? "urn:openverdict:submitted-text";
     const timestamp = this.isoNow();
     const submission: EvidenceSubmissionRecord = {
       submissionId: deterministicId(`submission:${evidenceId}`),
@@ -1478,8 +1489,9 @@ class OpenVerdictEngine implements Engine {
       submissionId: submission.submissionId,
       claimId: claim.claimId,
       phase,
-      sourceUrl: "urn:openverdict:submitted-text",
-      finalUrl: "urn:openverdict:submitted-text",
+      sourceUrl,
+      finalUrl: sourceUrl,
+      sourceClass: "USER_SUBMITTED",
       mimeType: "text/plain",
       byteLength: bytes.byteLength,
       contentHash: toHex(blake2b256(bytes)),
@@ -2608,9 +2620,11 @@ class OpenVerdictEngine implements Engine {
   ): Promise<EvidenceArtifactRecord[]> {
     const artifacts = await this.#repository.listEvidenceArtifacts(claimId, phase);
     if (phase === 2 && artifacts.length === 0) {
-      return this.#repository.listEvidenceArtifacts(claimId, 1);
+      return statementArtifactFirst(
+        await this.#repository.listEvidenceArtifacts(claimId, 1),
+      );
     }
-    return artifacts;
+    return statementArtifactFirst(artifacts);
   }
 
   private async evidenceManifests(claimId: string): Promise<EvidenceManifestRecord[]> {
@@ -2790,8 +2804,13 @@ function validateFactCheckRequest(request: FactCheckRequest): void {
   if (request.claim.trim().length === 0 || request.claim.length > 32_000) {
     throw new EngineValidationError("claim must contain 1 to 32000 characters");
   }
-  if (!request.text?.trim() && request.urls.length === 0) {
-    throw new EngineValidationError("fact check requires submitted text, an HTTPS URL, or both");
+  if (
+    request.text !== undefined &&
+    request.text.length > MAX_FACT_CHECK_TEXT_LENGTH
+  ) {
+    throw new EngineValidationError(
+      `text exceeds maximum length of ${MAX_FACT_CHECK_TEXT_LENGTH} characters`,
+    );
   }
   validateHttpsUrls(request.urls);
 }
@@ -2901,6 +2920,19 @@ function uniqueEvidenceArtifacts(
     canonicalHashes.add(artifact.canonicalHash);
     return true;
   });
+}
+
+function statementArtifactFirst(
+  artifacts: EvidenceArtifactRecord[],
+): EvidenceArtifactRecord[] {
+  return [
+    ...artifacts.filter(
+      (artifact) => artifact.sourceUrl === CLAIM_STATEMENT_SOURCE_URL,
+    ),
+    ...artifacts.filter(
+      (artifact) => artifact.sourceUrl !== CLAIM_STATEMENT_SOURCE_URL,
+    ),
+  ];
 }
 
 function canonicalArtifact(artifact: RetrievedArtifact): {

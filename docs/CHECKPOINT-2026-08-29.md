@@ -230,8 +230,74 @@ Execution state:
   that jurors research), (b) stop retrying a claim whose evidence cutoff
   passed with no artifact (mark it failed once), (c) longer term a separate
   signer per host so coins are never shared across processes.
-- Next: land the hotfix, gate, commit, push, redeploy both hosts, submit a
-  fresh hosted claim and watch it advance, then fast mode.
+- Hotfix LANDED 02:16 (worker `codex-walrus-retry`, reviewed): `put()`
+  retries `writeBlob` up to 3 times on "unavailable for consumption",
+  "needs to be rebuilt", "ObjectVersionUnavailableForConsumption" (cause
+  chain searched), delay 750 ms x attempt, injectable sleep; 29/29 walrus
+  tests, typecheck and lint clean. Committed and pushed right after.
+- HOSTING DECISION (owner, 02:10): consolidate everything on Railway; Vercel
+  only until then. Facts gathered: `openverdict.info` uses Vercel
+  nameservers (ns1/ns2.vercel-dns.com), so the move is DNS records in Vercel
+  DNS (ALIAS apex + CNAME www to the Railway service), reversible, CLI-able,
+  needs the owner's go for the switch itself. Railway passes service
+  variables into Dockerfile builds only through `ARG` lines, so the build
+  stage must declare `ARG NEXT_PUBLIC_ENOKI_API_KEY`,
+  `ARG NEXT_PUBLIC_GOOGLE_CLIENT_ID`, `ARG NEXT_PUBLIC_SUI_NETWORK` and
+  export them before `pnpm build`. Plan: prove the hosted flow on the split
+  first, then run the full app (role unset) on Railway with a Railway
+  domain, verify, then switch DNS, then retire Vercel.
+- 02:20 hotfix commit `202be80` pushed; Vercel rebuilding; Railway redeploy
+  `075d69fd` from the clean worktree. Codex worker `codex-statement-only`
+  dispatched 02:22 for follow-ups (a) statement-only claims (the statement
+  becomes the guaranteed first artifact, `statement:<claimId>:<phase>`,
+  `urn:openverdict:claim-statement`) and (b) the evidence worker skips a
+  claim once its cutoff passed with no accepted artifact (in-memory set,
+  logs once, `EngineNoEvidenceError`).
+- Both hosts green on `202be80` (Vercel `open-verdict-wk18lrm3m`, Railway
+  `075d69fd` SUCCESS). HOSTED SUBMISSION SUCCEEDED (fourth attempt): the
+  live site returned claim
+  `0xdb9c7baef74326b379535ef38b478697955fb37cf487e8fb7538312644efb71d`
+  (state 3 REVIEW_REQUESTED, evidence cutoff +5 min, default hosted ladder
+  commit +30 / reveal +45, so resolution takes about 45 minutes). A monitor
+  polls `/api/claims/<id>` for state changes; the Railway workers must
+  freeze evidence, select the committee, run the research loop, commit,
+  reveal, finalize.
+- CONSOLIDATION STARTED 02:35 (owner: "move everything to railway"):
+  Dockerfile build stage declares ARG/ENV for NEXT_PUBLIC_ENOKI_API_KEY,
+  NEXT_PUBLIC_GOOGLE_CLIENT_ID, NEXT_PUBLIC_SUI_NETWORK; railway.json
+  health-checks /api/status. Railway service `app` created in project
+  `openverdict-workers` with 21 variables (the workers' set plus
+  OPENVERDICT_PUBLIC_WRITES=enabled, OPENVERDICT_TRUST_PROXY=1,
+  OPENVERDICT_OPERATOR_TOKEN, NEXT_PUBLIC_ENOKI_API_KEY,
+  NEXT_PUBLIC_GOOGLE_CLIENT_ID, NEXT_PUBLIC_SUI_NETWORK=testnet,
+  SUI_NETWORK=testnet; no OPENVERDICT_ROLE, so it runs web + 3 workers).
+  Plan: deploy `app` from the clean worktree, give it a Railway domain,
+  verify site/API/claim there, retire service `workers`, then on the
+  owner's "go" add openverdict.info + www as Railway custom domains and
+  switch Vercel DNS (ALIAS apex, CNAME www); keep the Vercel PROJECT (it
+  owns the Neon integration), only remove the domain from it.
+- 02:07 Railway `app` deployment `69a8d82b` SUCCESS from `197cb7c` (web +
+  evidence/inference/resolution workers in one container, "Ready in 138ms");
+  Railway domain generated: https://app-production-b800.up.railway.app
+  (domain id `62a1ca5c-a5f4-415a-900e-87242e26fcdd`, port 3000). Service
+  `workers` DELETED (only `app` runs workers now).
+- Hosted claim `0xdb9c7bae…`: committee `0xd1daa5b7…` drawn 18:05:53Z with
+  5 ACCEPTED seats, state COMMIT_1 at 02:06 local; phase-1 artifacts: 1
+  (`urn:openverdict:submitted-text`). Processing continues on the `app`
+  workers (the `workers` container was retired mid-flight; the advisory
+  lock releases on disconnect).
+- 02:12 HOSTED RESEARCH RUNS DONE: claim `0xdb9c7bae…` shows 5 commitments
+  at COMMIT_1, meaning five research seats ran on Railway against REAL
+  Walrus (relay + stale retry, five seats in parallel on one signer) and
+  committed. The resolution worker's `advance_phase` abort code 7
+  (E_DEADLINE_NOT_REACHED) every tick is expected until the commit floor
+  (created + 30 min, about 02:27 local); reveal floor at +45 (about 02:42).
+- Railway URL returned 502: the domain was created for port 3000 but Railway
+  injects its own PORT; fixed by setting service variable PORT=3000 on
+  `app` (redeploy in progress). Verify https://app-production-b800.up.railway.app after it.
+- Next: verify the Railway URL, ask the owner for the DNS go (Vercel DNS
+  ALIAS apex + CNAME www to the Railway custom-domain target), land the
+  statement-only follow-up; fast mode; per-host signer.
   (engine, storage, server, scripts, engine tests) to one Codex worker; then
   Task 7 rollout by the manager (publish v3 manifests, seed, live probe,
   canary).

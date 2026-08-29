@@ -13,6 +13,7 @@ import {
   type FakeFailure,
 } from "../gonka";
 import {
+  CLAIM_MODE,
   blake2b256,
   fromHex,
   toHex,
@@ -46,6 +47,7 @@ import { openSealedRunBundle } from "./runBundle";
 import {
   buildZkLoginBackingMessage,
   createEngine,
+  EngineNoEvidenceError,
   EngineValidationError,
   type EngineAgentConfig,
 } from "./index";
@@ -113,6 +115,91 @@ describe("evidence artifact storage", () => {
 });
 
 describe("headless engine", () => {
+  it("runs a statement-only fact check through the full lifecycle", async () => {
+    const statement = "The claim statement is sufficient to begin juror research.";
+    const setup = await engineSetup(new FakeSuiGateway(), 5);
+    const { claimId } = await setup.engine.factCheckStart({
+      claim: statement,
+      urls: [],
+    });
+    const repository = createRepository(setup.db);
+    const artifacts = await repository.listEvidenceArtifacts(claimId, 1);
+    const expectedEvidenceId = toHex(
+      blake2b256(
+        new TextEncoder().encode(`statement:${claimId}:1`),
+      ),
+    );
+
+    expect(artifacts).toHaveLength(1);
+    expect(artifacts[0]).toMatchObject({
+      evidenceId: expectedEvidenceId,
+      sourceUrl: "urn:openverdict:claim-statement",
+      finalUrl: "urn:openverdict:claim-statement",
+      mimeType: "text/plain",
+      parserVersion: "utf8-text-v1",
+      excerpt: statement,
+      sourceClass: "USER_SUBMITTED",
+    });
+
+    await setup.engine.selectCommittee(claimId);
+    await setup.engine.evidenceFreeze(claimId, 1);
+    const manifest = await repository.getEvidenceManifest(claimId, 1);
+    if (!manifest) throw new Error("expected a frozen evidence manifest");
+    const frozenManifest = JSON.parse(
+      new TextDecoder().decode(await setup.walrus.get(manifest.manifestBlobId)),
+    ) as { items: Array<{ evidenceId: string; sourceUrl: string }> };
+    expect(frozenManifest.items).toEqual([
+      expect.objectContaining({
+        evidenceId: expectedEvidenceId,
+        sourceUrl: "urn:openverdict:claim-statement",
+      }),
+    ]);
+
+    const jury = await setup.engine.juryRun(claimId, 1);
+    expect(jury.runs).toHaveLength(5);
+    expect(jury.runs.every((run) => run.status === "SCHEMA_VALID")).toBe(true);
+    const firstRequest = setup.gonkaComplete.mock.calls[0]?.[0];
+    if (!firstRequest) throw new Error("expected a model request");
+    expect(firstRequest.input.evidenceManifest.items[0]?.excerpt).toBe(statement);
+
+    expect(await setup.engine.votesCommit(claimId, 1)).toHaveLength(5);
+    await setup.engine.advance(claimId);
+    expect(await setup.engine.votesReveal(claimId, 1)).toHaveLength(5);
+    await expect(setup.engine.finalize(claimId)).resolves.toMatchObject({
+      claimId,
+      result: "YES",
+    });
+  });
+
+  it("uses a typed error when evidence freeze has no accepted artifact", async () => {
+    const setup = await engineSetup(new FakeSuiGateway(), 5);
+    const start = Date.parse("2026-08-27T00:00:00.000Z");
+    const { claimId } = await setup.engine.claimCreate({
+      statement: "A claim created without evidence cannot freeze yet.",
+      resolutionCriteria: "Resolve from accepted evidence.",
+      mode: CLAIM_MODE.DIRECT_REVIEW,
+      deadlines: {
+        evidenceCutoffMs: start + 1,
+        proposalDeadlineMs: start + 2,
+        challengeDeadlineMs: start + 3,
+        firstCommitDeadlineMs: start + 4,
+        firstRevealDeadlineMs: start + 5,
+        discussionDeadlineMs: start + 6,
+        secondCommitDeadlineMs: start + 7,
+        secondRevealDeadlineMs: start + 8,
+      },
+      committeeBudget: "1",
+      evidenceBudget: "0",
+    });
+
+    await expect(
+      setup.engine.evidenceFreeze(claimId, 1),
+    ).rejects.toBeInstanceOf(EngineNoEvidenceError);
+    await expect(
+      setup.engine.evidenceFreeze(claimId, 1),
+    ).rejects.toThrow("evidence cannot be frozen without an accepted artifact");
+  });
+
   it("fails closed before provider calls when a manifest prompt hash differs", async () => {
     const setup = await engineSetup(new FakeSuiGateway(), 5, {
       promptHash: `0x${"ab".repeat(32)}`,
