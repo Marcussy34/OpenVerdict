@@ -4,6 +4,7 @@ export * from "./audit";
 export * from "./canonical";
 export * from "./fake";
 export * from "./logger";
+export * from "./promptSpec";
 export * from "./retry";
 export * from "./schemas";
 export * from "./types";

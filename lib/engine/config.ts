@@ -5,6 +5,7 @@ import type {
   RetrievedArtifact,
 } from "../evidence";
 import type { AgentManifest } from "../protocol";
+import type { ResearchProvider } from "../research";
 import type { DbHandle } from "../storage";
 import type { OpenVerdictSuiClient, SignerRegistry, SuiGateway } from "../sui";
 import type { WalrusStore } from "../walrus";
@@ -24,6 +25,7 @@ export interface EngineConfig {
   db: DbHandle;
   walrus: WalrusStore;
   gonka: GonkaRouterAdapter;
+  research?: ResearchProvider;
   /** Required for real-chain operation; tests can inject suiGateway instead. */
   suiClient?: OpenVerdictSuiClient;
   /** Required for real-chain operation; tests can inject suiGateway instead. */

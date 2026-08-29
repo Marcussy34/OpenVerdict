@@ -14,7 +14,9 @@ import { HashChip } from "@/components/viz/hash-chip";
 import { SeatSeal, outcomeLabel, seatStateOf } from "@/components/viz/seat-seal";
 import { ModelBadge } from "@/components/viz/model-badge";
 import { Reveal } from "@/components/viz/reveal";
+import { RunProof } from "@/components/claim/run-proof";
 import { cn } from "@/lib/utils";
+import { deriveRunId } from "@/lib/verify/run-proof";
 import type { ClaimInspection, FactCheckReport } from "@/lib/engine/contract";
 import {
   DocumentText,
@@ -74,7 +76,7 @@ export default function ClaimDetailPage({ params }: ClaimDetailPageProps) {
           const reportRes = await fetch(`/api/claims/${encodeURIComponent(id)}/report`);
           if (reportRes.ok) setReport(await reportRes.json());
         } catch {
-          /* report is optional — the inspection view stands on its own */
+          /* report is optional; the inspection view stands on its own */
         }
       }
     } catch {
@@ -134,8 +136,12 @@ export default function ClaimDetailPage({ params }: ClaimDetailPageProps) {
     if (!claim) return [];
     return (claim.commitments ?? []).map((c, i) => {
       const card = report?.agents.find((a) => a.agentProfileId === c.agentProfileId);
+      // The engine stores five ordered seats per phase.
+      const phase = i < 5 ? 1 : 2;
       return {
         index: i + 1,
+        phase,
+        runId: deriveRunId(claim.claimId, c.jurySeatId, phase),
         state: seatStateOf(c),
         outcome: outcomeLabel(c.outcome ?? card?.outcome),
         confidenceBps: c.confidenceBps ?? card?.confidenceBps,
@@ -288,7 +294,7 @@ export default function ClaimDetailPage({ params }: ClaimDetailPageProps) {
               <div className="space-y-1">
                 <FieldLabel>Proposed outcome</FieldLabel>
                 <p className="text-sm font-semibold text-ocean">
-                  {claim.proposedOutcome ?? "— none recorded"}
+                  {claim.proposedOutcome ?? "None recorded"}
                 </p>
               </div>
               <div className="space-y-1">
@@ -338,7 +344,7 @@ export default function ClaimDetailPage({ params }: ClaimDetailPageProps) {
             <VerdictGauge
               scoreBps={claim.result?.truthScoreBps ?? null}
               size={208}
-              emptyTitle={sealedCount > 0 ? "•••" : "——"}
+              emptyTitle={sealedCount > 0 ? "•••" : "N/A"}
               emptyLabel={
                 sealedCount > 0
                   ? "Sealed until\nthe reveal phase"
@@ -349,7 +355,7 @@ export default function ClaimDetailPage({ params }: ClaimDetailPageProps) {
             <div className="w-full space-y-2 border-t border-border pt-3">
               <p className="text-center text-[11px] leading-relaxed text-muted-foreground">
                 Computed by deterministic integer arithmetic over the terminal valid jury
-                round — never by asking a model to rate the result.
+                round. A model never rates the result.
               </p>
               <Link
                 href="/learn"
@@ -490,23 +496,37 @@ export default function ClaimDetailPage({ params }: ClaimDetailPageProps) {
             Awaiting committee selection through Sui native randomness.
           </div>
         ) : (
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
-            {seats.map((seat) => (
-              <SeatSeal
-                key={seat.jurySeatId}
-                seatIndex={seat.index}
-                state={seat.state}
-                outcome={seat.outcome}
-                confidenceBps={seat.confidenceBps}
-                agentProfileId={seat.agentProfileId}
-                jurySeatId={seat.jurySeatId}
-                modelId={seat.modelId}
-                role={seat.role}
-                reasoning={seat.reasoning}
-                gonkaRequestId={seat.gonkaRequestId}
-              />
-            ))}
-          </div>
+          <>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
+              {seats.map((seat) => (
+                <SeatSeal
+                  key={seat.jurySeatId}
+                  seatIndex={seat.index}
+                  state={seat.state}
+                  outcome={seat.outcome}
+                  confidenceBps={seat.confidenceBps}
+                  agentProfileId={seat.agentProfileId}
+                  jurySeatId={seat.jurySeatId}
+                  modelId={seat.modelId}
+                  role={seat.role}
+                  reasoning={seat.reasoning}
+                  gonkaRequestId={seat.gonkaRequestId}
+                />
+              ))}
+            </div>
+
+            <div className="mt-5 space-y-2 border-t border-border pt-4">
+              <FieldLabel>Juror run proofs</FieldLabel>
+              {seats.map((seat) => (
+                <RunProof
+                  key={`proof-${seat.jurySeatId}`}
+                  claimId={claim.claimId}
+                  runId={seat.runId}
+                  seatLabel={`Seat ${seat.index}, phase ${seat.phase}`}
+                />
+              ))}
+            </div>
+          </>
         )}
       </Panel>
 
@@ -543,7 +563,7 @@ export default function ClaimDetailPage({ params }: ClaimDetailPageProps) {
                 <div className="rounded-xl border border-border bg-surface p-3">
                   <FieldLabel className="mb-1">Truth score</FieldLabel>
                   <p className="text-xl font-semibold text-ocean tabular-nums">
-                    {report.truthScore === null ? "——" : report.truthScore}
+                    {report.truthScore === null ? "N/A" : report.truthScore}
                     <span className="ml-1 text-xs text-muted-foreground">/100</span>
                   </p>
                 </div>
@@ -576,7 +596,7 @@ export default function ClaimDetailPage({ params }: ClaimDetailPageProps) {
                 </p>
               </Well>
 
-              {/* Public reasoning traces — every check the jurors published. */}
+              {/* Public reasoning traces: every check the jurors published. */}
               <div className="space-y-2">
                 <FieldLabel>Public reasoning traces</FieldLabel>
                 {report.agents.map((agent) => (

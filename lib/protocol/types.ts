@@ -84,6 +84,7 @@ export type InferenceRunStatus =
   | "RECEIVED"
   | "SCHEMA_VALID"
   | "INVALID_SCHEMA"
+  | "CITATION_INVALID"
   | "TIMEOUT"
   | "PROVIDER_ERROR";
 
@@ -112,6 +113,9 @@ export type InferenceRunAudit = {
   latencyMs: number;
   inputTokens?: number;
   outputTokens?: number;
+  gatewayRequestId?: string;
+  devshardId?: string;
+  systemFingerprint?: string;
   status: InferenceRunStatus;
 };
 
@@ -119,7 +123,7 @@ export type OracleInferenceInput = {
   protocolVersion: "1.0";
   runId: string;
   agentRole: string;
-  promptVersion: string;
+  promptVersion: "1" | "2";
   submission: {
     kind: "TEXT" | "URL" | "TEXT_AND_URL";
     submittedTextHash?: string;
@@ -163,4 +167,275 @@ export type OracleInferenceOutput = {
     assessment: "SUPPORTS" | "CONTRADICTS" | "MIXED" | "INSUFFICIENT";
     finding: string;
   }>;
+  citations?: Citation[];
 };
+
+export type PromptSpecV1 = {
+  version: "1";
+  providerId: "gonkarouter";
+  systemPrompt: string;
+  jsonFallbackSuffix: string;
+  repairSystemPrompt: string;
+  temperature: 0;
+  maxOutputTokens: 4096;
+  responseFormat: "json_object";
+};
+
+export type AgentBackingKind = "TESTNET_DEMO_ALLOWLIST" | "ZKLOGIN_BACKED";
+
+export type AgentManifestDocumentV2 = {
+  version: "2";
+  network: "localnet" | "testnet" | "mainnet";
+  backingKind: AgentBackingKind;
+  humanBackingHash: HexString;
+  humanVerificationProvider: string;
+  operationalOwner: HexString;
+  role: string;
+  modelId: string;
+  providerId: "gonkarouter";
+  promptSpec: PromptSpecV1;
+  promptHash: HexString;
+  toolPolicy: { version: "1"; tools: [] };
+  toolPolicyHash: HexString;
+  evidencePolicyId: string;
+  evidencePolicyHash: HexString;
+};
+
+export type GatewayResponseMeta = {
+  gatewayRequestId?: string;
+  devshardId?: string;
+  systemFingerprint?: string;
+};
+
+export type ProviderRequestRecord = {
+  model: string;
+  temperature: 0;
+  maxTokens: 4096;
+  responseFormat: "json_object" | "none";
+  attemptKind: "PRIMARY" | "RETRY" | "JSON_PROMPT_FALLBACK" | "REPAIR";
+  messages: Array<{
+    role: "system" | "user" | "assistant";
+    content: string;
+  }>;
+};
+
+export type PublicRunBundleCoreV2 = {
+  version: 2;
+  kind: "run-bundle";
+  runId: HexString;
+  claimId: HexString;
+  phase: 1 | 2;
+  agentProfileId: HexString;
+  jurySeatId: HexString;
+  promptSpec: PromptSpecV1;
+  promptHash: HexString;
+  input: OracleInferenceInput;
+  inputHash: HexString;
+  request: ProviderRequestRecord;
+  attempts: unknown[];
+  rawResponse: unknown;
+  gateway: GatewayResponseMeta;
+  validatedOutput: OracleInferenceOutput;
+  outputHash: HexString;
+  audit: InferenceRunAudit;
+  runHash: HexString;
+  verify: {
+    promptHash: "blake2b256(canonicalJson(promptSpec))";
+    inputHash: "blake2b256(canonicalJson(input))";
+    outputHash: "blake2b256(canonicalJson(validatedOutput))";
+    runHash: "blake2b256(BCS(RunRecordV1))";
+    commitment: "blake2b256(BCS(VotePreimageV1))";
+  };
+};
+
+export type RunBundleSeal = {
+  algorithm: "AES-256-GCM";
+  keyHex: HexString;
+  ivHex: HexString;
+  aad: string;
+  sealedBlobId: string;
+  coreHash: HexString;
+};
+
+export type PublicRunBundleV2 = PublicRunBundleCoreV2 & { seal: RunBundleSeal };
+
+export type SealedRunBundleV2 = {
+  version: 2;
+  kind: "sealed-run-bundle";
+  runId: HexString;
+  algorithm: "AES-256-GCM";
+  ivHex: HexString;
+  aad: string;
+  coreHash: HexString;
+  ciphertextBase64: string;
+};
+
+/** A page quote a juror cites; evidenceId must be a page opened in the same run. */
+export type Citation = { evidenceId: string; url: string; quote: string };
+
+export type PromptSpecV2 = {
+  version: "2";
+  providerId: "gonkarouter";
+  systemPrompt: string;
+  jsonFallbackSuffix: string;
+  repairSystemPrompt: string;
+  temperature: 0;
+  maxOutputTokens: 4096;
+  responseFormat: "json_object";
+};
+export type PromptSpec = PromptSpecV1 | PromptSpecV2;
+
+export type ToolPolicyV1 = { version: "1"; tools: [] };
+/** Research budgets; every value is hashed into the manifest's toolPolicyHash. */
+export type ToolPolicyV2 = {
+  version: "2";
+  tools: ["search", "open"];
+  provider: "firecrawl";
+  maxSearches: number;
+  maxOpens: number;
+  maxTurns: number;
+  resultsPerSearch: number;
+  snippetChars: number;
+  pageSliceChars: number;
+  maxPageChars: number;
+  maxLoopMs: number;
+};
+export type ToolPolicy = ToolPolicyV1 | ToolPolicyV2;
+
+export type AgentManifestDocumentV3 = Omit<
+  AgentManifestDocumentV2,
+  "version" | "promptSpec" | "toolPolicy"
+> & { version: "3"; promptSpec: PromptSpecV2; toolPolicy: ToolPolicyV2 };
+export type AgentManifestDocument =
+  | AgentManifestDocumentV2
+  | AgentManifestDocumentV3;
+
+export type ResearchSearchResult = {
+  rank: number;
+  url: string;
+  title: string;
+  snippet: string;
+  publishedAt?: string;
+};
+
+export type ResearchPageOrigin = "SEARCH" | "SUBMITTED";
+
+export type ResearchOpenedPage = {
+  evidenceId: string;
+  ref: string;
+  url: string;
+  finalUrl: string;
+  origin: ResearchPageOrigin;
+  title?: string;
+  contentHash: HexString;
+  canonicalHash: HexString;
+  canonicalWalrusBlobId: string;
+  totalChars: number;
+  truncated: boolean;
+};
+
+export type ResearchAction =
+  | { action: "search"; query: string }
+  | { action: "open"; url: string; from?: number }
+  | { action: "answer"; output: OracleInferenceOutput };
+
+export type ResearchToolErrorCode =
+  | "BUDGET_SEARCHES"
+  | "BUDGET_OPENS"
+  | "BUDGET_TURNS"
+  | "URL_NOT_SEEN"
+  | "OPEN_FAILED"
+  | "SEARCH_FAILED"
+  | "INVALID_ACTION"
+  | "INVALID_ANSWER";
+
+export type ResearchToolResult =
+  | {
+      tool: "search";
+      query: string;
+      results: Array<{
+        n: number;
+        title: string;
+        url: string;
+        snippet: string;
+        publishedAt?: string;
+      }>;
+    }
+  | {
+      tool: "open";
+      url: string;
+      evidenceId: string;
+      ref: string;
+      from: number;
+      chars: number;
+      totalChars: number;
+      truncated: boolean;
+      text: string;
+    }
+  | {
+      tool: "error";
+      code: ResearchToolErrorCode;
+      message: string;
+      errors?: string[];
+    };
+
+export type ResearchTranscriptStep = {
+  index: number;
+  turn: number;
+  startedAtMs: number;
+  completedAtMs: number;
+  modelRequestId: string;
+  action: ResearchAction | { action: "invalid"; content: string };
+  result:
+    | {
+        tool: "search";
+        cached: boolean;
+        resultsHash: HexString;
+        results: ResearchSearchResult[];
+      }
+    | {
+        tool: "open";
+        cached: boolean;
+        evidenceId: string;
+        origin: ResearchPageOrigin;
+        from: number;
+        chars: number;
+        totalChars: number;
+        contentHash: HexString;
+        canonicalWalrusBlobId: string;
+      }
+    | { tool: "error"; code: ResearchToolErrorCode; message: string }
+    | { tool: "answer"; valid: boolean; errors: string[] };
+};
+
+export type ResearchTranscriptV1 = {
+  version: 1;
+  runId: HexString;
+  provider: { name: string; mode: string };
+  policyHash: HexString;
+  steps: ResearchTranscriptStep[];
+  opened: ResearchOpenedPage[];
+  citations: Array<Citation & { found: boolean }>;
+  counts: { searches: number; opens: number; turns: number };
+};
+
+export type PublicRunBundleCoreV3 = Omit<
+  PublicRunBundleCoreV2,
+  "version" | "promptSpec" | "verify"
+> & {
+  version: 3;
+  promptSpec: PromptSpecV2;
+  toolPolicy: ToolPolicyV2;
+  toolPolicyHash: HexString;
+  transcript: ResearchTranscriptV1;
+  verify: PublicRunBundleCoreV2["verify"] & {
+    toolPolicyHash: "blake2b256(canonicalJson(toolPolicy))";
+    toolTranscriptHash: "blake2b256(canonicalJson(transcript))";
+    systemPrompt: "promptSpec.systemPrompt + '\\n' + canonicalJson({budgets: toolPolicy})";
+  };
+};
+export type PublicRunBundleV3 = PublicRunBundleCoreV3 & {
+  seal: RunBundleSeal;
+};
+export type PublicRunBundleCore = PublicRunBundleCoreV2 | PublicRunBundleCoreV3;
+export type PublicRunBundle = PublicRunBundleV2 | PublicRunBundleV3;

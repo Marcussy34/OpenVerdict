@@ -1,6 +1,7 @@
 import { blake2b256, toHex } from "../protocol/hash";
 import type {
   AgentManifest,
+  GatewayResponseMeta,
   HexString,
   InferenceRunAudit,
   InferenceRunStatus,
@@ -39,6 +40,7 @@ export interface AttemptAuditOptions {
   responseModelId?: string;
   outputValue?: unknown;
   usage?: TokenUsage;
+  gateway?: GatewayResponseMeta;
   engineContext?: Partial<EngineAuditContext>;
 }
 
@@ -88,6 +90,7 @@ export function createAttemptAudit(options: AttemptAuditOptions): InferenceRunAu
     completedAtMs: options.completedAtMs,
     latencyMs: Math.max(0, options.completedAtMs - options.requestedAtMs),
     ...options.usage,
+    ...options.gateway,
     status: options.status,
   };
 }

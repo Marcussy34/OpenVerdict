@@ -50,7 +50,7 @@ CREATE TABLE IF NOT EXISTS evidence_submissions (
 
 CREATE TABLE IF NOT EXISTS evidence_artifacts (
   evidence_id TEXT PRIMARY KEY, submission_id TEXT NOT NULL, claim_id TEXT NOT NULL,
-  phase INTEGER NOT NULL, source_url TEXT NOT NULL, final_url TEXT NOT NULL,
+  phase INTEGER NOT NULL, source_class TEXT, source_url TEXT NOT NULL, final_url TEXT NOT NULL,
   mime_type TEXT NOT NULL, byte_length INTEGER NOT NULL, content_hash TEXT NOT NULL,
   canonical_hash TEXT NOT NULL, raw_walrus_blob_id TEXT NOT NULL, raw_walrus_object_id TEXT,
   canonical_walrus_blob_id TEXT NOT NULL, canonical_walrus_object_id TEXT,
@@ -150,6 +150,15 @@ CREATE TABLE IF NOT EXISTS payout_tickets (
 );
 
 ALTER TABLE inference_runs ADD COLUMN IF NOT EXISTS walrus_end_epoch BIGINT;
+/* Same trust boundary as vote_packages.salt_hex. Encrypt at rest before production. */
+ALTER TABLE inference_runs ADD COLUMN IF NOT EXISTS seal_key_hex TEXT;
+ALTER TABLE inference_runs ADD COLUMN IF NOT EXISTS seal_iv_hex TEXT;
+ALTER TABLE inference_runs ADD COLUMN IF NOT EXISTS core_hash TEXT;
+ALTER TABLE inference_runs ADD COLUMN IF NOT EXISTS sealed_blob_id TEXT;
+ALTER TABLE inference_runs ADD COLUMN IF NOT EXISTS sealed_object_id TEXT;
+ALTER TABLE inference_runs ADD COLUMN IF NOT EXISTS revealed_blob_id TEXT;
+ALTER TABLE inference_runs ADD COLUMN IF NOT EXISTS revealed_object_id TEXT;
+ALTER TABLE evidence_artifacts ADD COLUMN IF NOT EXISTS source_class TEXT;
 
 CREATE INDEX IF NOT EXISTS claims_state_idx ON claims (state);
 CREATE INDEX IF NOT EXISTS jury_seats_claim_phase_idx ON jury_seats (claim_id, phase);

@@ -9,6 +9,7 @@ import type {
   ProposeOutcomeTransactionInput,
   RegisterAgentTransactionInput,
   RevealVoteTransactionInput,
+  UpdateAgentManifestTransactionInput,
 } from "./builders";
 
 export interface SuiAgentIdentity {
@@ -100,6 +101,9 @@ export interface SuiGateway {
   registerAgent(
     input: RegisterAgentTransactionInput & { agentIndex: number },
   ): Promise<SuiAgentIdentity & TxResult>;
+  updateAgentManifest(
+    input: UpdateAgentManifestTransactionInput & { agentIndex: number },
+  ): Promise<TxResult & { version?: number }>;
   createClaim(input: GatewayCreateClaimInput): Promise<ClaimCreationResult>;
   startDirectReview(claimId: string): Promise<TxResult>;
   startChallengedReview(claimId: string): Promise<TxResult>;

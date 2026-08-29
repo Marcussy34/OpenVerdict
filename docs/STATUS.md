@@ -16,12 +16,12 @@ operational proof and public deployments in flight.
 | --- | --- | --- | --- |
 | Protocol (Move) | `move/openverdict` — 8 modules: agent_registry, claim, evidence, jury, settlement, demo_fact_checker, demo_binary_pool, display_meta | ✅ | 66/66 `sui move test`; commit–reveal enforced on-chain; immutable certificates; one-time payout tickets; Object Display metadata |
 | Cross-language contract | `lib/protocol` + `tests/integration/parity.test.ts` + `tests/parity_tests.move` | ✅ | 6 blake2b256/BCS vectors asserted byte-identical in BOTH suites |
-| Inference adapter | `lib/gonka` | ✅ | Live-verified GonkaRouter API (4096-token cap, `msg_…` ids, visible retries, redaction); deterministic fake for offline juries |
-| Evidence pipeline | `lib/evidence`, `lib/walrus` | ✅ | SSRF suite (DNS-first, per-hop revalidation, streaming caps); Merkle manifests; local + SDK Walrus stores + retention |
-| Engine | `lib/engine` (contract.ts seam), `lib/sui` (builders per entry point, SuiGateway + fake), `lib/storage` (drizzle/pglite/pg), `lib/events` (phase-gated serializer) | ✅ | Full lifecycle: direct review + optimistic; 234/234 vitest incl. engine lifecycle + zkLogin registration tests over FakeSuiGateway |
+| Inference adapter | `lib/gonka` | ✅ | Live-verified GonkaRouter API (4096-token cap, `devshard-…` ids, visible retries, redaction); prompt spec v1 (`promptSpec.ts`) hashed over canonical JSON and bound into every juror manifest; gateway ids (`x-request-id`, `x-devshard-id`, `system_fingerprint`) kept as audit pointers; deterministic fake for offline juries |
+| Evidence pipeline | `lib/evidence`, `lib/walrus` | ✅ | SSRF suite (DNS-first, per-hop revalidation, streaming caps); Merkle manifests; local + SDK Walrus stores + retention; SDK store writes raw blobs (`writeBlob`/`readBlob`, no quilts) so every blob id on chain is a content address a verifier can fetch |
+| Engine | `lib/engine` (contract.ts seam), `lib/sui` (builders per entry point, SuiGateway + fake), `lib/storage` (drizzle/pglite/pg), `lib/events` (phase-gated serializer) | ✅ | Full lifecycle: direct review + optimistic; `juryRun` fails closed unless every seat's manifest `promptHash` equals the live prompt spec hash; each run's bundle (exact prompt, input, raw response, validated output, audit) is sealed with AES-256-GCM before `approve_run` and the commit, and the plaintext bundle plus key is published as the reveal argument blob; `runProof` / `agentManifestDocument` seams; 261/261 vitest incl. lifecycle, seal-then-reveal and zkLogin registration tests over FakeSuiGateway |
 | CLI | `cli/` (`openverdict`, PRD §27.3 surface) | ✅ | `--json` NDJSON, preflight prints, stable exit codes |
 | Workers | `workers/` | ✅ | evidence / inference / resolution loops, graceful shutdown |
-| Observer + fact-check UI | `app/`, `components/` — 23 routes | ✅ | Builds/typechecks/lints; SSE with resume; strict pre-reveal redaction; client-side `/verify` |
+| Observer + fact-check UI | `app/`, `components/` — 26 routes | ✅ | Builds/typechecks/lints; SSE with resume; strict pre-reveal redaction; client-side `/verify` incl. a Run proof tab that recomputes prompt/input/output/run hashes and decrypts the sealed blob with WebCrypto; `GET /api/claims/[id]/runs/[runId]/proof`, `GET /api/agents/[id]/manifest`; manifest panel on `/agents/[id]` |
 | API guards | `app/api/_lib/guard.ts` | ✅ | Operator bearer token, public-write flag, trusted-proxy-gated rate limits |
 | Wallet + zkLogin onboarding | `components/wallet`, `components/agents` | ✅ | dapp-kit v2 + Enoki (env-gated); zkLogin-backed agent registration (T7b): SDK signature verification, blake2b backing hash, one-social-account-one-seat, guarded POST /api/agents/register |
 | Localnet E2E + sponsorship | `scripts/localnet-e2e.ts`, `scripts/cockpit-demo.ts` | ✅ | `pnpm e2e:localnet` exits 0 (3 lifecycle paths, sponsored deposit, CLI parity, recomputed Truth Score); cockpit harness leaves a finalized + a sealed claim live for the observer |
@@ -43,7 +43,29 @@ operational proof and public deployments in flight.
   gonkaMode live, walrusMode testnet, dbHealthy. Seven jurors bound and
   verified 7/7 against chain. Railway abandoned in favour of Vercel. Five
   stacked deploy faults fixed to get there: see docs/CHECKPOINT-2026-08-29.md.
-  Not yet proven: a claim run end-to-end through the HOSTED app.
+  Not yet proven: a claim run end-to-end through the HOSTED app, and it
+  CANNOT complete today: Vercel runs no workers, so a submitted claim stops at
+  REVIEW_REQUESTED (see CHECKPOINT-2026-08-29.md, "no worker host").
+- PROOF CHAIN V2 PROVEN ON TESTNET 2026-08-29 late: the seven juror manifests
+  on chain are real v2 documents on Walrus (prompt spec embedded, hashes
+  match, `scripts/publish-agent-manifests.ts`), and a live canary ran under
+  the sealed-bundle flow: 4 of 5 seats `SCHEMA_VALID` (one transient provider
+  error, fail closed), 4 commits, 4 reveals, YES at 9625 bps recomputed ==
+  on-chain, certificate `0x464d397a…5e82`; every sealed blob decrypted with
+  its revealed key and matched the revealed core. Not yet deployed (commit +
+  push pending owner approval).
+- JUROR RESEARCH V1 BUILT 2026-08-30 (spec
+  `docs/superpowers/specs/2026-08-29-juror-research-design.md`, plan
+  `docs/superpowers/plans/2026-08-29-juror-research.md`): jurors search and
+  open pages through the engine (Firecrawl v2 REST), cite only pages they
+  opened (refs `p1..pN`, exact quotes with tolerant normalisation), the
+  transcript is hashed into the on-chain run hash and sealed until reveal.
+  Gate: typecheck clean, 332 vitest tests, build exit 0. Live single-seat
+  probe: DeepSeek, MiniMax, and Kimi each returned a valid cited verdict. The
+  seven v3 manifests (prompt spec v2 + tool policy v2) are live on testnet.
+  Canary under the loop (2026-08-30 01:22): 5 of 5 live seats SCHEMA_VALID
+  with real searches and opened pages, 5 commits, 5 reveals, YES at 9460 bps
+  recomputed == on-chain, certificate `0x742e47c1…4cae`.
 - Landing redesign v3 SHIPPED 2026-08-28 (Sharplink-style: Archivo type,
   #0E76FF/#F3F3F3, globe hero docking into a live stat card, sticky protocol
   stack, FAQ, footer claim form + rising wordmark; commit 83322e1).
@@ -61,6 +83,14 @@ operational proof and public deployments in flight.
 
 `docs/diagrams/` — architecture, claim lifecycle, jury round, onboarding tiers.
 All black-and-white with paired light/dark exports; sources are `.excalidraw`.
+
+Colour series added 2026-08-29 (verified against the code, one topic each):
+`01-architecture-overview`, `02-user-flow`, `03-runtime-swimlane` (one claim
+through browser, workers, GonkaRouter, Sui, Walrus, Postgres with the deadline
+floors), `04-engine-and-workers`, `05-data-placement`, `06-protocol-artifacts`
+(commitment, output contract, Truth Score, wire codes, clock),
+`07-production-topology`, plus `00-end-to-end-poster` (everything on one
+canvas). Each has a `.png` next to its `.excalidraw` source.
 
 ## Plan of record
 

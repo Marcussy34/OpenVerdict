@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { blake2b256, toHex } from "../protocol/hash";
 import {
+  createGonkaAdapter as createConfiguredGonkaAdapter,
   createGonkaAdapterWithDependencies as createGonkaAdapter,
   extractJsonObject,
   type GonkaAdapterDependencies,
@@ -10,6 +11,7 @@ import { createRedactingLogger } from "./logger";
 import {
   GonkaRunError,
   isGonkaRunResult,
+  type GonkaAttemptRecord,
   type GonkaRunResult,
 } from "./types";
 import {
@@ -18,18 +20,37 @@ import {
   makeManifest,
   makeOutput,
 } from "./fixtures.test-utils";
+import {
+  DEFAULT_PROMPT_SPEC_V1,
+  DEFAULT_PROMPT_SPEC_V2,
+  DEFAULT_TOOL_POLICY_V2,
+  promptSpecHash,
+  toolPolicyHash,
+} from "./promptSpec";
 
-type FetchStep = Error | { body: unknown; status?: number };
+type FetchStep = Error | {
+  body: unknown;
+  status?: number;
+  headers?: Record<string, string>;
+};
 
 function queuedFetch(...steps: FetchStep[]): {
   fetch: typeof fetch;
   bodies: Array<Record<string, unknown>>;
   calls: () => number;
+  timeoutHeaders: () => Array<string | null>;
 } {
   const bodies: Array<Record<string, unknown>> = [];
+  const timeoutHeaders: Array<string | null> = [];
   let callCount = 0;
-  const fetchImpl: typeof fetch = async (_input, init) => {
+  const fetchImpl: typeof fetch = async (input, init) => {
     callCount += 1;
+    const headers = input instanceof Request
+      ? input.headers
+      : new Headers(init?.headers);
+    timeoutHeaders.push(
+      headers.get("x-stainless-timeout"),
+    );
     if (typeof init?.body === "string") {
       bodies.push(JSON.parse(init.body) as Record<string, unknown>);
     }
@@ -39,11 +60,16 @@ function queuedFetch(...steps: FetchStep[]): {
 
     return new Response(JSON.stringify(step.body), {
       status: step.status ?? 200,
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", ...step.headers },
     });
   };
 
-  return { fetch: fetchImpl, bodies, calls: () => callCount };
+  return {
+    fetch: fetchImpl,
+    bodies,
+    calls: () => callCount,
+    timeoutHeaders: () => timeoutHeaders,
+  };
 }
 
 function dependencies(fetchImpl: typeof fetch): GonkaAdapterDependencies {
@@ -70,8 +96,215 @@ async function expectRunError(promise: Promise<unknown>): Promise<GonkaRunError>
 }
 
 describe("createGonkaAdapter", () => {
+  it("complete() records one attempt per call and returns the assistant content", async () => {
+    const content = '{"action":"search","query":"sui"}';
+    const network = queuedFetch({
+      body: completionBody(content, { id: "devshard-1-1" }),
+    });
+    const adapter = createGonkaAdapter(
+      { apiKey: "test-key" },
+      dependencies(network.fetch),
+    );
+    const attempts: GonkaAttemptRecord[] = [];
+
+    const result = await adapter.complete({
+      manifest: makeManifest(),
+      messages: [
+        { role: "system", content: "s" },
+        { role: "user", content: "u" },
+      ],
+      kind: "PRIMARY",
+      jsonMode: true,
+      input: makeInput({ promptVersion: "2" }),
+      attempts,
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("expected ok");
+    expect(result.content).toBe(content);
+    expect(result.gonkaRequestId).toBe("devshard-1-1");
+    expect(result.request.messages).toHaveLength(2);
+    expect(attempts).toHaveLength(1);
+    expect(attempts[0]?.audit.status).toBe("RECEIVED");
+    expect(result.attempt).toBe(attempts[0]);
+  });
+
+  it("uses the dedicated research timeout for complete()", async () => {
+    const network = queuedFetch({
+      body: completionBody('{"action":"answer"}', { id: "devshard-timeout" }),
+    });
+    const adapter = createGonkaAdapter(
+      { apiKey: "test-key" },
+      dependencies(network.fetch),
+    );
+
+    await adapter.complete({
+      manifest: makeManifest(),
+      messages: [{ role: "user", content: "u" }],
+      kind: "PRIMARY",
+      jsonMode: true,
+      input: makeInput({ promptVersion: "2" }),
+      attempts: [],
+    });
+
+    expect(network.timeoutHeaders()).toEqual(["240"]);
+  });
+
+  it("rejects a non-positive research timeout", () => {
+    expect(() =>
+      createConfiguredGonkaAdapter({
+        apiKey: "test-key",
+        researchTimeoutMs: 0,
+      }),
+    ).toThrowError(RangeError);
+  });
+
+  it("complete() reports unsupported response_format and duplicate request ids", async () => {
+    const duplicate = completionBody('{"action":"answer"}', {
+      id: "devshard-duplicate",
+    });
+    const network = queuedFetch(
+      {
+        status: 400,
+        body: {
+          error: { message: "response_format json_object is unsupported" },
+        },
+      },
+      { body: duplicate },
+      { body: duplicate },
+    );
+    const adapter = createGonkaAdapter(
+      { apiKey: "test-key", maxRetries: 0 },
+      dependencies(network.fetch),
+    );
+    const attempts: GonkaAttemptRecord[] = [];
+    const request = {
+      manifest: makeManifest(),
+      messages: [
+        { role: "system" as const, content: "s" },
+        { role: "user" as const, content: "u" },
+      ],
+      kind: "PRIMARY" as const,
+      jsonMode: true,
+      input: makeInput({ promptVersion: "2" }),
+      attempts,
+    };
+
+    const unsupported = await adapter.complete(request);
+    expect(unsupported).toMatchObject({
+      ok: false,
+      status: "PROVIDER_ERROR",
+      responseFormatUnsupported: true,
+    });
+
+    const first = await adapter.complete(request);
+    expect(first.ok).toBe(true);
+    const repeated = await adapter.complete(request);
+    expect(repeated).toMatchObject({
+      ok: false,
+      status: "PROVIDER_ERROR",
+      responseFormatUnsupported: false,
+    });
+    expect(attempts.at(-1)).toMatchObject({
+      audit: { status: "PROVIDER_ERROR" },
+      investigationFlags: ["DUPLICATE_GONKA_REQUEST_ID"],
+    });
+  });
+
+  it.each([
+    [
+      "missing request id",
+      { id: undefined },
+      "MISSING_GONKA_REQUEST_ID",
+    ],
+    [
+      "model mismatch",
+      { id: "devshard-model-mismatch", model: "vendor/model-b" },
+      "RESPONSE_MODEL_MISMATCH",
+    ],
+  ] as const)("complete() records %s as a provider error", async (_name, overrides, flag) => {
+    const network = queuedFetch({
+      body: completionBody('{"action":"search","query":"sui"}', overrides),
+    });
+    const adapter = createGonkaAdapter(
+      { apiKey: "test-key", maxRetries: 0 },
+      dependencies(network.fetch),
+    );
+    const attempts: GonkaAttemptRecord[] = [];
+
+    const result = await adapter.complete({
+      manifest: makeManifest(),
+      messages: [{ role: "user", content: "u" }],
+      kind: "PRIMARY",
+      jsonMode: true,
+      input: makeInput({ promptVersion: "2" }),
+      attempts,
+    });
+
+    expect(result).toMatchObject({
+      ok: false,
+      status: "PROVIDER_ERROR",
+      responseFormatUnsupported: false,
+    });
+    expect(attempts).toHaveLength(1);
+    expect(attempts[0]).toMatchObject({
+      audit: { status: "PROVIDER_ERROR" },
+      investigationFlags: [flag],
+    });
+  });
+
+  it("complete() returns TIMEOUT when the provider times out", async () => {
+    const timeout = Object.assign(new Error("timed out"), {
+      name: "TimeoutError",
+    });
+    const network = queuedFetch(timeout);
+    const adapter = createGonkaAdapter(
+      { apiKey: "test-key", maxRetries: 0 },
+      dependencies(network.fetch),
+    );
+    const attempts: GonkaAttemptRecord[] = [];
+
+    const result = await adapter.complete({
+      manifest: makeManifest(),
+      messages: [{ role: "user", content: "u" }],
+      kind: "PRIMARY",
+      jsonMode: true,
+      input: makeInput({ promptVersion: "2" }),
+      attempts,
+    });
+
+    expect(result).toMatchObject({
+      ok: false,
+      status: "TIMEOUT",
+      responseFormatUnsupported: false,
+    });
+    expect(attempts[0]?.audit.status).toBe("TIMEOUT");
+  });
+
+  it("exposes the v2 research spec and tool policy hashes", () => {
+    const adapter = createConfiguredGonkaAdapter({ apiKey: "test-key" });
+
+    expect(adapter.promptSpec().version).toBe("2");
+    expect(adapter.promptSpecHash()).toBe(
+      promptSpecHash(DEFAULT_PROMPT_SPEC_V2),
+    );
+    expect(adapter.toolPolicy()).toEqual(DEFAULT_TOOL_POLICY_V2);
+    expect(adapter.toolPolicyHash()).toBe(
+      toolPolicyHash(DEFAULT_TOOL_POLICY_V2),
+    );
+    expect(adapter.legacyPromptSpec().version).toBe("1");
+  });
+
   it("sends the documented deterministic Chat Completions request", async () => {
-    const network = queuedFetch({ body: completionBody() });
+    const network = queuedFetch({
+      body: completionBody(makeOutput(), {
+        system_fingerprint: "gonka-fingerprint-1",
+      }),
+      headers: {
+        "x-request-id": "gateway-request-1",
+        "x-devshard-id": "devshard-65702",
+      },
+    });
     const adapter = createGonkaAdapter(
       { apiKey: "test-key", timeoutMs: 120_000, maxRetries: 1 },
       dependencies(network.fetch),
@@ -88,6 +321,32 @@ describe("createGonkaAdapter", () => {
       max_tokens: 4_096,
       response_format: { type: "json_object" },
     });
+    expect(adapter.legacyPromptSpec()).toEqual(DEFAULT_PROMPT_SPEC_V1);
+    expect(promptSpecHash(adapter.legacyPromptSpec())).toBe(
+      promptSpecHash(DEFAULT_PROMPT_SPEC_V1),
+    );
+    expect(result.request).toEqual({
+      model: "vendor/model-a",
+      temperature: 0,
+      maxTokens: 4_096,
+      responseFormat: "json_object",
+      attemptKind: "PRIMARY",
+      messages: [
+        {
+          role: "system",
+          content: DEFAULT_PROMPT_SPEC_V1.systemPrompt,
+        },
+        {
+          role: "user",
+          content: new TextDecoder().decode(canonicalJsonBytes(makeInput())),
+        },
+      ],
+    });
+    expect(result.gateway).toEqual({
+      gatewayRequestId: "gateway-request-1",
+      devshardId: "devshard-65702",
+      systemFingerprint: "gonka-fingerprint-1",
+    });
     expect(normalized).toEqual({
       gonkaRequestId: "msg_valid_1",
       modelId: "vendor/model-a",
@@ -100,6 +359,9 @@ describe("createGonkaAdapter", () => {
       status: "SCHEMA_VALID",
       inputTokens: 100,
       outputTokens: 50,
+      gatewayRequestId: "gateway-request-1",
+      devshardId: "devshard-65702",
+      systemFingerprint: "gonka-fingerprint-1",
     });
     expect(audit.inputHash).toBe(toHex(blake2b256(canonicalJsonBytes(makeInput()))));
     expect(audit.outputHash).toBe(toHex(blake2b256(canonicalJsonBytes(makeOutput()))));
@@ -125,6 +387,7 @@ describe("createGonkaAdapter", () => {
       "PRIMARY",
       "REPAIR",
     ]);
+    expect(result.request.attemptKind).toBe("REPAIR");
     expect(result.attempts[0]?.audit.runId).not.toBe(result.attempts[1]?.audit.runId);
     expect(JSON.stringify(network.bodies[1]?.messages)).toMatch(/repair/i);
   });
@@ -240,6 +503,8 @@ describe("createGonkaAdapter", () => {
       "PRIMARY",
       "JSON_PROMPT_FALLBACK",
     ]);
+    expect(result.request.responseFormat).toBe("none");
+    expect(result.request.attemptKind).toBe("JSON_PROMPT_FALLBACK");
     expect(network.bodies[1]).not.toHaveProperty("response_format");
     expect(JSON.stringify(network.bodies[1]?.messages)).toMatch(/JSON only/i);
   });

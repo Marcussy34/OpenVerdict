@@ -1,6 +1,5 @@
 import {
   NotFoundError as WalrusSdkNotFoundError,
-  WalrusFile,
   walrus,
   type StorageNodeClientOptions,
   type UploadRelayConfig,
@@ -8,7 +7,6 @@ import {
 } from "@mysten/walrus";
 import type { Signer } from "@mysten/sui/cryptography";
 import { SuiGrpcClient } from "@mysten/sui/grpc";
-import { blake2b256 } from "../protocol/hash";
 import {
   assertValidWalrusEpoch,
   assertValidWalrusObjectId,
@@ -17,7 +15,6 @@ import {
 import {
   WalrusNotFoundError,
   assertValidWalrusBlobId,
-  type WalrusPutResult,
 } from "./store";
 
 export interface RealWalrusStoreConfig {
@@ -56,30 +53,32 @@ export function createRealWalrusStore(
       const stableBytes = Uint8Array.from(bytes);
       const epochs = options?.epochs ?? config.epochs;
       validateEpochs(epochs);
-      const file = WalrusFile.from({
-        contents: stableBytes,
-        identifier: options?.identifier ?? defaultIdentifier(stableBytes),
-        tags: options?.tags,
-      });
-      const results = await client.walrus.writeFiles({
-        files: [file],
+      // Raw blobs carry no file metadata, so identifier/tags are accepted
+      // (for interface parity with the local store and every caller) but
+      // ignored here. Raw blobs are required, not quilts: writeFiles wraps
+      // its input in a quilt container whose blobId addresses the container,
+      // not the artifact, so a verifier hashing "the blob" would get a hash
+      // that matches nothing on chain. writeBlob's blobId is derived from
+      // the content itself, which is what content addressing needs.
+      const result = await client.walrus.writeBlob({
+        blob: stableBytes,
         epochs,
         deletable: options?.deletable ?? config.deletable ?? false,
         owner: options?.owner,
         signer: config.signer,
       });
-      return singleWriteResult(results);
+      return {
+        blobId: result.blobId,
+        objectId: result.blobObject.id,
+        endEpoch: result.blobObject.storage.end_epoch,
+      };
     },
 
     async get(blobId) {
       assertValidWalrusBlobId(blobId);
       try {
-        const files = await client.walrus.getFiles({ ids: [blobId] });
-        const file = files[0];
-        if (file === undefined) throw new WalrusNotFoundError(blobId);
-        return Uint8Array.from(await file.bytes());
+        return Uint8Array.from(await client.walrus.readBlob({ blobId }));
       } catch (error) {
-        if (error instanceof WalrusNotFoundError) throw error;
         if (error instanceof WalrusSdkNotFoundError) {
           throw new WalrusNotFoundError(blobId, { cause: error });
         }
@@ -109,35 +108,6 @@ export function createRealWalrusStore(
       };
     },
   };
-}
-
-interface WalrusFileWriteResult {
-  blobId: string;
-  blobObject: {
-    id: string;
-    storage: { end_epoch: number };
-  };
-}
-
-function singleWriteResult(
-  results: readonly WalrusFileWriteResult[],
-): WalrusPutResult {
-  if (results.length !== 1) {
-    throw new Error("Walrus writeFiles returned an unexpected result count");
-  }
-  const result = results[0];
-  if (result === undefined) {
-    throw new Error("Walrus writeFiles returned no file result");
-  }
-  return {
-    blobId: result.blobId,
-    objectId: result.blobObject.id,
-    endEpoch: result.blobObject.storage.end_epoch,
-  };
-}
-
-function defaultIdentifier(bytes: Uint8Array): string {
-  return `${Buffer.from(blake2b256(bytes)).toString("base64url")}.bin`;
 }
 
 function validateBaseUrl(baseUrl: string): void {

@@ -28,8 +28,10 @@ pnpm e2e:localnet  # full localnet lifecycle (spawns `sui start`)
 - ESM everywhere; `@noble/hashes` v2 subpaths need `.js` suffixes.
 - `@mysten/sui` is v2 (`SuiGrpcClient`, `$kind` result unions, `getObject`
   throws when missing) — do not write v1 (`SuiClient`) API calls.
-- Models never receive URLs, keys, or transaction authority; salts never leave
-  the engine; malformed model output must never become a vote (fail closed).
+- Models never fetch, never hold keys or transaction authority; every URL they
+  see or open is engine-executed and recorded in the sealed run transcript;
+  salts and seal keys never leave the engine; malformed model output or an
+  unverifiable citation must never become a vote (fail closed).
 - The observer has NO signer and no mutation endpoints beyond the two guarded
   public POSTs; keep it that way.
 - zkLogin is authentication / one-account-one-seat backing — never describe it

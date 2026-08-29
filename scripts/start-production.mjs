@@ -35,7 +35,11 @@ function shutdown(code) {
 process.on("SIGTERM", () => shutdown(0));
 process.on("SIGINT", () => shutdown(0));
 
-launch("web", "node", ["node_modules/next/dist/bin/next", "start", "-p", process.env.PORT ?? "3000"]);
+// OPENVERDICT_ROLE=workers runs only the three engine workers (Railway), the
+// website stays on Vercel; any other value keeps the original all-in-one shape.
+if (process.env.OPENVERDICT_ROLE !== "workers") {
+  launch("web", "node", ["node_modules/next/dist/bin/next", "start", "-p", process.env.PORT ?? "3000"]);
+}
 launch("evidence-worker", "node", ["node_modules/tsx/dist/cli.mjs", "workers/evidence-worker.ts"]);
 launch("inference-worker", "node", ["node_modules/tsx/dist/cli.mjs", "workers/inference-worker.ts"]);
 launch("resolution-worker", "node", ["node_modules/tsx/dist/cli.mjs", "workers/resolution-worker.ts"]);

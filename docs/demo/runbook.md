@@ -47,23 +47,45 @@ Operator address (generated 2026-08-27, key held in local .env only):
 2. `pnpm tsx scripts/deploy-testnet.ts` (adapts the localnet deploy; writes
    packageId/registryObjectId into config/release.testnet.json).
 3. Canary: one full direct-review lifecycle against testnet, fake adapter
-   unless `GONKA_ROUTER_API_KEY` is set.
-4. Record explorer links below.
+   unless `GONKA_ROUTER_API_KEY` is set. First run registers the 7 agents;
+   later runs reuse them.
+4. Publish the real juror manifests (proof chain v2, 2026-08-29). Each
+   agent's on-chain `manifest_hash` must be the blake2b256 of a v2 manifest
+   document on Walrus that embeds the exact prompt spec, otherwise `juryRun`
+   fails closed ("does not match the engine prompt spec"):
+   `pnpm tsx scripts/publish-agent-manifests.ts --dry-run`, then without the
+   flag (7 `update_agent_manifest` txs signed by the agent keys, 7 Walrus
+   blobs paid by the operator's WAL). Re-running is idempotent: profiles
+   whose hash already matches are skipped.
+5. Bind the hosted engine: `pnpm tsx scripts/seed-testnet-agents.ts`
+   (with the production `DATABASE_URL`) rebuilds the agent rows from the
+   chain + Walrus documents and refuses placeholder manifests.
+6. Record explorer links below.
 
 ## 3. Live URL (T8)
 
-Railway (CLI already authenticated): persistent service running Next.js +
-engine + workers with managed Postgres. `DATABASE_URL` from the Railway
-Postgres plugin; env per `.env.example` (operator key, manifest=testnet,
-`OPENVERDICT_PUBLIC_WRITES=enabled`, operator token, optional Gonka/Enoki keys).
-The cloud reaches Mysten endpoints normally — the local TLS interference does
-not apply there.
+Split hosting (2026-08-30): the website and its request-side API run on
+Vercel (https://openverdict.info, Neon Postgres attached); the three engine
+workers run on Railway as service `workers` in project `openverdict`
+(Dockerfile build, `OPENVERDICT_ROLE=workers` so the container skips the
+web, same `DATABASE_URL` and keys as Vercel plus `FIRECRAWL_API_KEY`). Env
+per `.env.example` (operator key, agent seed, manifest=testnet, Gonka key,
+Firecrawl key, operator token; `OPENVERDICT_PUBLIC_WRITES=enabled` on Vercel
+only). Both clouds reach Mysten endpoints normally; the local TLS
+interference does not apply there. Deploy: push to `main` (Vercel builds),
+then `railway up --service workers` from the same commit.
 
 ## 4. Live inference (T8b — needs user key)
 
 Set `GONKA_ROUTER_API_KEY` (free credit for new accounts at
 gonkarouter.io/dashboard) and flip the manifest `gonka.mode` to `live`.
-Run one jury round; verify five real `msg_…` ids across ≥3 model families.
+Also set `FIRECRAWL_API_KEY` (dedicated Firecrawl account) so jurors can
+research: every seat searches and opens pages through the engine and must cite
+a page it found itself (juror research v1, 2026-08-29).
+Run one jury round; verify five real `devshard-…` ids across ≥3 model families.
+Every run's proof is at `GET /api/claims/<id>/runs/<runId>/proof` (sealed
+blob before reveal, plaintext bundle plus key after) and can be recomputed in
+the browser on `/verify` (Run proof tab).
 
 ## 5. Human end-to-end walkthrough (the user's test)
 

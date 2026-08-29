@@ -14,6 +14,15 @@ export interface RegisterAgentTransactionInput {
   humanBackingHash: Uint8Array;
 }
 
+export interface UpdateAgentManifestTransactionInput {
+  agentProfileId: string;
+  agentCapId: string;
+  manifestHash: Uint8Array;
+  manifestBlobId: string;
+  modelHash: Uint8Array;
+  roleHash: Uint8Array;
+}
+
 export interface CreateClaimTransactionInput extends ClaimCreateRequest {
   creationBudget?: string;
   contentHash: Uint8Array;
@@ -162,6 +171,28 @@ export function buildRegisterAgentTransaction(
       bytes(tx, input.modelHash),
       bytes(tx, input.roleHash),
       bytes(tx, input.humanBackingHash),
+      tx.object(manifest.clockObjectId),
+    ],
+  });
+  return tx;
+}
+
+/** Updates an existing agent's on-chain manifest pointers. */
+export function buildUpdateAgentManifestTransaction(
+  manifest: ReleaseManifest,
+  input: UpdateAgentManifestTransactionInput,
+): Transaction {
+  const tx = transactionFor(manifest);
+  tx.moveCall({
+    target: target(manifest, "agent_registry", "update_agent_manifest"),
+    arguments: [
+      tx.object(manifest.registryObjectId),
+      tx.object(input.agentProfileId),
+      tx.object(input.agentCapId),
+      bytes(tx, input.manifestHash),
+      bytes(tx, input.manifestBlobId),
+      bytes(tx, input.modelHash),
+      bytes(tx, input.roleHash),
       tx.object(manifest.clockObjectId),
     ],
   });

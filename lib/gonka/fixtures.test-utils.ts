@@ -34,7 +34,8 @@ export function makeInput(
     protocolVersion: "1.0",
     runId: `0x${"21".repeat(32)}`,
     agentRole: "independent-verifier",
-    promptVersion: "prompt-v1",
+    // Prompt spec versions are "1" (single-shot) or "2" (research loop).
+    promptVersion: "1",
     submission: {
       kind: "TEXT",
       submittedTextHash: `0x${"22".repeat(32)}`,

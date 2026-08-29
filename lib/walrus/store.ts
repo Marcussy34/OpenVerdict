@@ -1,4 +1,9 @@
 export interface WalrusPutOptions {
+  /**
+   * Honored only by backends that store per-file metadata. The real,
+   * raw-blob-backed store and the local store carry no file metadata, so
+   * they accept these for interface parity with callers but ignore them.
+   */
   identifier?: string;
   tags?: Record<string, string>;
   epochs?: number;

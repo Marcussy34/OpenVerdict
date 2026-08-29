@@ -7,6 +7,7 @@ import type {
   InferenceRunAudit,
   OracleInferenceOutput,
 } from "../protocol/types";
+import type { EvidenceSourceClass } from "../evidence/types";
 import type { ClaimMode, ClaimState, VoteOutcome } from "../protocol/constants";
 
 export type Network = "localnet" | "testnet" | "mainnet";
@@ -121,6 +122,8 @@ export interface EvidenceArtifactRecord {
   submissionId: string;
   claimId: string;
   phase: 1 | 2;
+  sourceClass?: EvidenceSourceClass;
+  discoveredByRunId?: string;
   sourceUrl: string;
   finalUrl: string;
   mimeType: string;
@@ -173,6 +176,13 @@ export interface InferenceRunRecord {
   runHash?: `0x${string}`;
   runWalrusBlobId?: string;
   runWalrusObjectId?: string;
+  sealKeyHex?: `0x${string}`;
+  sealIvHex?: `0x${string}`;
+  coreHash?: `0x${string}`;
+  sealedBlobId?: string;
+  sealedObjectId?: string;
+  revealedBlobId?: string;
+  revealedObjectId?: string;
   toolTranscriptHash: `0x${string}`;
   toolTranscriptWalrusBlobId?: string;
   toolTranscriptWalrusObjectId?: string;
@@ -183,7 +193,7 @@ export interface InferenceRunRecord {
   inputTokens?: number;
   outputTokens?: number;
   output?: OracleInferenceOutput;
-  audit: InferenceRunAudit;
+  audit: InferenceRunAudit & { bundleCore?: string };
   requestedAt: string;
   completedAt: string;
   createdAt: string;

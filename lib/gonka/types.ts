@@ -1,13 +1,25 @@
 import type {
   AgentManifest,
+  GatewayResponseMeta,
+  HexString,
   InferenceRunAudit,
   OracleInferenceInput,
   OracleInferenceOutput,
+  PromptSpecV1,
+  PromptSpecV2,
+  ProviderRequestRecord,
+  ToolPolicyV2,
 } from "../protocol/types";
 
 /** Narrow application boundary from PRD section 20.8. */
 export interface GonkaRouterAdapter {
+  promptSpec(): PromptSpecV2;
+  promptSpecHash(): HexString;
+  toolPolicy(): ToolPolicyV2;
+  toolPolicyHash(): HexString;
+  legacyPromptSpec(): PromptSpecV1;
   run(input: OracleInferenceInput, manifest: AgentManifest): Promise<unknown>;
+  complete(request: GonkaCompletionRequest): Promise<GonkaCompletionResult>;
   normalizeResponse(response: unknown): Promise<{
     gonkaRequestId: string;
     modelId: string;
@@ -16,6 +28,7 @@ export interface GonkaRouterAdapter {
   validateOutput(
     output: OracleInferenceOutput,
     evidenceManifest: OracleInferenceInput["evidenceManifest"],
+    extraAllowedIds?: ReadonlySet<string>,
   ): Promise<void>;
   buildRunAudit(response: unknown): Promise<InferenceRunAudit>;
 }
@@ -45,10 +58,48 @@ export type GonkaAttemptRecord = {
   investigationFlags: GonkaInvestigationFlag[];
 };
 
+export type PromptMessage = {
+  role: "system" | "user" | "assistant";
+  content: string;
+};
+
+export type GonkaCompletionRequest = {
+  manifest: AgentManifest;
+  messages: PromptMessage[];
+  kind: GonkaAttemptKind;
+  jsonMode: boolean;
+  input: OracleInferenceInput;
+  /** Shared across the whole run; complete() appends one record per model call. */
+  attempts: GonkaAttemptRecord[];
+};
+
+export type GonkaCompletionResult =
+  | {
+      ok: true;
+      response: unknown;
+      request: ProviderRequestRecord;
+      gateway: GatewayResponseMeta;
+      content: string;
+      gonkaRequestId: string;
+      attempt: GonkaAttemptRecord;
+    }
+  | {
+      ok: false;
+      error: unknown;
+      responseFormatUnsupported: boolean;
+      status: "PROVIDER_ERROR" | "TIMEOUT";
+    };
+
+export type GonkaCompletion = (
+  request: GonkaCompletionRequest,
+) => Promise<GonkaCompletionResult>;
+
 export type GonkaRunResult = {
   type: "gonka-run-result";
   attempts: GonkaAttemptRecord[];
   response: unknown;
+  request: ProviderRequestRecord;
+  gateway: GatewayResponseMeta;
 };
 
 export type GonkaRunFailureResult = {
@@ -79,6 +130,8 @@ export function isGonkaRunResult(value: unknown): value is GonkaRunResult {
     isRecord(value) &&
     value.type === "gonka-run-result" &&
     Array.isArray(value.attempts) &&
-    "response" in value
+    "response" in value &&
+    "request" in value &&
+    "gateway" in value
   );
 }

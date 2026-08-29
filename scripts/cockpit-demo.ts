@@ -12,9 +12,25 @@ import { spawn } from "node:child_process";
 import { join } from "node:path";
 import { rm } from "node:fs/promises";
 import { Ed25519Keypair } from "@mysten/sui/keypairs/ed25519";
-import { createEngine, type Engine, type EngineAgentConfig } from "../lib/engine";
-import { createFakeGonkaAdapter, type GonkaRouterAdapter } from "../lib/gonka";
-import { blake2b256, toHex, type AgentManifest, type HexString } from "../lib/protocol";
+import {
+  buildAgentManifestDocument,
+  createEngine,
+  type Engine,
+  type EngineAgentConfig,
+} from "../lib/engine";
+import {
+  DEFAULT_PROMPT_SPEC_V2,
+  DEFAULT_TOOL_POLICY_V2,
+  createFakeGonkaAdapter,
+  type GonkaRouterAdapter,
+} from "../lib/gonka";
+import {
+  blake2b256,
+  fromHex,
+  toHex,
+  type AgentManifest,
+  type HexString,
+} from "../lib/protocol";
 import { closeDb, createDb } from "../lib/storage";
 import {
   SignerRegistry,
@@ -23,7 +39,7 @@ import {
   type OpenVerdictSuiClient,
   type ReleaseManifest,
 } from "../lib/sui";
-import { createLocalWalrusStore } from "../lib/walrus";
+import { createLocalWalrusStore, type WalrusStore } from "../lib/walrus";
 import {
   createLocalnetRpcClient,
   deployLocalnet,
@@ -40,15 +56,12 @@ import {
 } from "./localnet-e2e";
 
 const AGENT_COUNT = 7;
+const EVIDENCE_POLICY_ID = "OPENVERDICT_EVIDENCE_POLICY_V1";
 const runtimeManifestPath = join(repositoryRoot, ".localnet/release.runtime.json");
 
 // Fixed demo credentials so `pnpm dev` (reading .env.demo values) rebinds cleanly.
 const DEMO_OPERATOR = new Ed25519Keypair();
 const DEMO_SEED = "cockpit-demo-fixed-seed";
-
-function hexHash(label: string): HexString {
-  return toHex(blake2b256(new TextEncoder().encode(label)));
-}
 
 async function waitForRpc(timeoutMs: number): Promise<void> {
   const deadline = Date.now() + timeoutMs;
@@ -74,6 +87,7 @@ async function registerAgents(
   client: OpenVerdictSuiClient,
   manifest: ReleaseManifest,
   signers: SignerRegistry,
+  walrus: WalrusStore,
 ): Promise<EngineAgentConfig[]> {
   const gateway = createSuiGateway({ client, manifest, signers });
   const configs: EngineAgentConfig[] = [];
@@ -82,12 +96,27 @@ async function registerAgents(
     const role = sourceRole ? "SOURCE_AUTHENTICITY" : "SKEPTIC";
     const modelId = manifest.gonka.models[sourceRole ? 0 : index < 5 ? 1 : 2]!;
     const humanHash = blake2b256(new TextEncoder().encode(`cockpit-human-${index}`));
-    const manifestHash = blake2b256(new TextEncoder().encode(`cockpit-manifest-${index}`));
+    const owner = signers.getAgentAt(index).address as HexString;
+    const built = buildAgentManifestDocument({
+      network: "localnet",
+      backingKind: "TESTNET_DEMO_ALLOWLIST",
+      humanBackingHash: toHex(humanHash),
+      humanVerificationProvider: "cockpit-demo-allowlist",
+      operationalOwner: owner,
+      role,
+      modelId,
+      promptSpec: DEFAULT_PROMPT_SPEC_V2,
+      toolPolicy: DEFAULT_TOOL_POLICY_V2,
+      evidencePolicyId: EVIDENCE_POLICY_ID,
+    });
+    const manifestUpload = await walrus.put(built.bytes, {
+      identifier: `cockpit-agent-${index}-manifest-v3.json`,
+    });
     const result = await gateway.registerAgent({
       agentIndex: index,
       bondAmount: 1,
-      manifestHash,
-      manifestBlobId: `cockpit-manifest-${index}`,
+      manifestHash: fromHex(built.manifestHash),
+      manifestBlobId: manifestUpload.blobId,
       modelHash: blake2b256(new TextEncoder().encode(modelId)),
       roleHash: blake2b256(new TextEncoder().encode(`OPENVERDICT_ROLE_${role}`)),
       humanBackingHash: humanHash,
@@ -97,18 +126,18 @@ async function registerAgents(
       agentCapId: result.agentCapId!,
       manifest: {
         agentProfileId: result.agentProfileId as HexString,
-        owner: signers.getAgentAt(index).address as HexString,
+        owner,
         humanAttestationHash: toHex(humanHash),
         humanVerificationProvider: "cockpit-demo-allowlist",
-        version: "1",
-        manifestBlobId: `cockpit-manifest-${index}`,
-        manifestHash: toHex(manifestHash),
-        promptHash: hexHash(`prompt-${index}`),
+        version: "3",
+        manifestBlobId: manifestUpload.blobId,
+        manifestHash: built.manifestHash,
+        promptHash: built.promptHash,
         modelId,
         providerId: "gonkarouter",
-        toolPolicyHash: hexHash(`tools-${index}`),
-        evidencePolicyHash: hexHash("OPENVERDICT_EVIDENCE_POLICY_V1"),
-        publicKey: signers.getAgentAt(index).address,
+        toolPolicyHash: built.toolPolicyHash,
+        evidencePolicyHash: built.document.evidencePolicyHash,
+        publicKey: owner,
         registeredAtMs: Date.now(),
         registeredCheckpoint: 0,
       } satisfies AgentManifest,
@@ -154,7 +183,7 @@ async function main(): Promise<void> {
     env: { ...process.env, SUI_CONFIG_DIR: join(repositoryRoot, ".localnet/sui-config") },
   });
   child.unref();
-  console.log(`localnet spawned (pid ${child.pid}) — left RUNNING for pnpm dev`);
+  console.log(`localnet spawned (pid ${child.pid}), left RUNNING for pnpm dev`);
   await waitForRpc(120_000);
   // Faucet (9123) comes up after the RPC; probe until it answers HTTP.
   const faucetDeadline = Date.now() + 60_000;
@@ -188,7 +217,10 @@ async function main(): Promise<void> {
   for (const address of signers.listAgentAddresses()) {
     await fundAddress({ client, address, faucetUrl: localnetFaucetUrl });
   }
-  const agents = await registerAgents(client, manifest, signers);
+  const walrus = createLocalWalrusStore(
+    join(repositoryRoot, ".localnet/walrus-local"),
+  );
+  const agents = await registerAgents(client, manifest, signers, walrus);
   const profileIds = agents.map((agent) => agent.manifest.agentProfileId);
 
   const db = createDb();
@@ -197,7 +229,7 @@ async function main(): Promise<void> {
       network: "localnet",
       manifestPath: runtimeManifestPath,
       db,
-      walrus: createLocalWalrusStore(join(repositoryRoot, ".localnet/walrus-local")),
+      walrus,
       gonka: adapter,
       suiGateway: rebaseDeadlinesForLocalLifecycle(
         serializeRunApprovals(createSuiGateway({ client, manifest, signers })),
@@ -216,7 +248,7 @@ async function main(): Promise<void> {
   await engine1.evidenceFreeze(claim1.claimId, 1);
   await engine1.selectCommittee(claim1.claimId);
   // Idempotent re-freeze AFTER selection binds seats to the evidence root
-  // (jury::commit_vote aborts 21 E_EVIDENCE_NOT_BOUND otherwise) — E2E pattern.
+  // (jury::commit_vote aborts 21 E_EVIDENCE_NOT_BOUND otherwise), per the E2E pattern.
   await engine1.evidenceFreeze(claim1.claimId, 1);
   // Acceptance window: lock requires now >= selection + (commit - selection)/2.
   await new Promise((resolve) => setTimeout(resolve, 10_000));
@@ -247,7 +279,7 @@ async function main(): Promise<void> {
   console.log("claim #2 left SEALED (committed, unrevealed)");
 
   await closeDb(db);
-  console.log("\nSTATE READY — run the observer:");
+  console.log("\nSTATE READY: run the observer:");
   console.log(`  SUI_OPERATOR_SECRET_KEY=${DEMO_OPERATOR.getSecretKey()}`);
   console.log(`  OPENVERDICT_AGENT_SEED=${DEMO_SEED}`);
   console.log(`  OPENVERDICT_RELEASE_MANIFEST=${runtimeManifestPath}`);

@@ -1,6 +1,11 @@
 import type {
+  AgentManifestDocument,
+  GatewayResponseMeta,
+  HexString,
   InferenceRunAudit,
   OracleInferenceOutput,
+  PublicRunBundle,
+  SealedRunBundleV2,
 } from "../protocol/types";
 import type { ClaimMode, ClaimState, VoteOutcome } from "../protocol/constants";
 
@@ -116,6 +121,24 @@ export type JuryRunReport = {
   runs: AgentRunSummary[];
 };
 
+export type RunProof = {
+  runId: string;
+  claimId: string;
+  phase: 1 | 2;
+  agentProfileId: string;
+  jurySeatId: string;
+  promptHash: HexString;
+  inputHash: HexString;
+  outputHash: HexString;
+  runHash: HexString;
+  gateway: GatewayResponseMeta;
+  sealedBlobId: string | null;
+  sealed: SealedRunBundleV2 | null;
+  revealedBlobId: string | null;
+  revealed: boolean;
+  bundle: PublicRunBundle | null;
+};
+
 export type FinalizeReport = {
   claimId: string;
   result: "YES" | "NO" | "UNSURE" | "UNRESOLVED";
@@ -226,7 +249,7 @@ export type AgentDirectoryEntry = {
  * zkLogin (social-login) address; under one OAuth aud with a fixed salt
  * service, one social account = one address = one backing hash, and the Move
  * rule "one committee seat per human_backing_hash" makes it one seat.
- * Authentication + Sybil-cost raise only — NEVER proof of personhood.
+ * Authentication + Sybil-cost raise only. NEVER proof of personhood.
  */
 export type ZkBackedRegistrationRequest = {
   /** The zkLogin address that owns/backs this agent. */
@@ -266,6 +289,10 @@ export interface Engine {
   report(claimId: string): Promise<FactCheckReport>;
   listClaims(filter?: { state?: ClaimState }): Promise<ClaimInspection[]>;
   listAgents(): Promise<AgentDirectoryEntry[]>;
+  runProof(claimId: string, runId: string): Promise<RunProof>;
+  agentManifestDocument(
+    agentProfileId: string,
+  ): Promise<AgentManifestDocument | null>;
   status(): Promise<EngineStatus>;
   events(claimId: string, fromSequence?: number): AsyncIterable<ResolutionEvent>;
 }

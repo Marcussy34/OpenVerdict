@@ -15,7 +15,8 @@ function traceWithEvidenceIds(evidenceIds: string[]) {
 
 describe("oracleInferenceInputSchema", () => {
   it("accepts the canonical strict input", () => {
-    expect(oracleInferenceInputSchema.parse(makeInput())).toEqual(makeInput());
+    const input = makeInput({ promptVersion: "1" });
+    expect(oracleInferenceInputSchema.parse(input)).toEqual(input);
   });
 
   it("rejects unknown keys at the top level and in nested records", () => {
@@ -123,5 +124,49 @@ describe("validateOutputAgainstManifest", () => {
     expect(() =>
       validateOutputAgainstManifest(makeOutput(override), makeInput().evidenceManifest),
     ).toThrow(/invented/);
+  });
+});
+
+describe("oracle schemas with research fields", () => {
+  it("accepts promptVersion 2 and optional citations", () => {
+    expect(() =>
+      oracleInferenceInputSchema.parse({ ...makeInput(), promptVersion: "2" }),
+    ).not.toThrow();
+    const output = {
+      ...makeOutput(),
+      citations: [
+        {
+          evidenceId: "e1",
+          url: "https://example.com/a",
+          quote: "a".repeat(20),
+        },
+      ],
+    };
+    expect(() => oracleInferenceOutputSchema.parse(output)).not.toThrow();
+    expect(() =>
+      oracleInferenceOutputSchema.parse({
+        ...output,
+        citations: [{ evidenceId: "e1", url: "nope", quote: "short" }],
+      }),
+    ).toThrow();
+  });
+
+  it("allows ids from the extra allowed set (pages opened in the run)", () => {
+    const input = makeInput();
+    const output = {
+      ...makeOutput(),
+      evidenceFor: ["opened-1"],
+      decisiveEvidence: ["opened-1"],
+    };
+    expect(() =>
+      validateOutputAgainstManifest(output, input.evidenceManifest),
+    ).toThrow(/absent/);
+    expect(() =>
+      validateOutputAgainstManifest(
+        output,
+        input.evidenceManifest,
+        new Set(["opened-1"]),
+      ),
+    ).not.toThrow();
   });
 });

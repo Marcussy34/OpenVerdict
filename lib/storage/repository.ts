@@ -221,6 +221,7 @@ export class Repository {
       submission_id: record.submissionId,
       claim_id: record.claimId,
       phase: record.phase,
+      source_class: record.sourceClass ?? null,
       source_url: record.sourceUrl,
       final_url: record.finalUrl,
       mime_type: record.mimeType,
@@ -242,11 +243,29 @@ export class Repository {
     });
   }
 
-  async listEvidenceArtifacts(claimId: string, phase?: 1 | 2): Promise<EvidenceArtifactRecord[]> {
+  async listEvidenceArtifacts(
+    claimId: string,
+    phase?: 1 | 2,
+    options: { includeDiscovered?: boolean } = {},
+  ): Promise<EvidenceArtifactRecord[]> {
+    const discoveredFilter = options.includeDiscovered
+      ? ""
+      : " AND (source_class IS NULL OR source_class <> 'DISCOVERED')";
     return listRecords<EvidenceArtifactRecord>(
       this.db,
-      `SELECT record_json FROM evidence_artifacts WHERE claim_id = $1${phase === undefined ? "" : " AND phase = $2"} ORDER BY evidence_id`,
+      `SELECT record_json FROM evidence_artifacts WHERE claim_id = $1${phase === undefined ? "" : " AND phase = $2"}${discoveredFilter} ORDER BY evidence_id`,
       phase === undefined ? [claimId] : [claimId, phase],
+    );
+  }
+
+  async getEvidenceArtifact(
+    evidenceId: string,
+  ): Promise<EvidenceArtifactRecord | undefined> {
+    return getRecord<EvidenceArtifactRecord>(
+      this.db,
+      "evidence_artifacts",
+      "evidence_id = $1",
+      [evidenceId],
     );
   }
 
@@ -299,6 +318,13 @@ export class Repository {
       run_hash: record.runHash,
       run_walrus_blob_id: record.runWalrusBlobId,
       run_walrus_object_id: record.runWalrusObjectId,
+      seal_key_hex: record.sealKeyHex,
+      seal_iv_hex: record.sealIvHex,
+      core_hash: record.coreHash,
+      sealed_blob_id: record.sealedBlobId,
+      sealed_object_id: record.sealedObjectId,
+      revealed_blob_id: record.revealedBlobId,
+      revealed_object_id: record.revealedObjectId,
       tool_transcript_hash: record.toolTranscriptHash,
       tool_transcript_walrus_blob_id: record.toolTranscriptWalrusBlobId,
       tool_transcript_walrus_object_id: record.toolTranscriptWalrusObjectId,

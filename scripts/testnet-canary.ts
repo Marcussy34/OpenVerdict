@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * Sui TESTNET canary (plan T8a/T8b): one complete direct-review lifecycle on
- * the deployed public package with the LIVE GonkaRouter jury — five real
+ * the deployed public package with the LIVE GonkaRouter jury: five real
  * inference calls across three model families, commit-reveal on testnet, an
  * immutable ResolutionCertificate, and a recomputed-vs-on-chain Truth Score.
  *
@@ -15,9 +15,26 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { Ed25519Keypair } from "@mysten/sui/keypairs/ed25519";
 import { Transaction } from "@mysten/sui/transactions";
-import { createEngine, type Engine, type EngineAgentConfig } from "../lib/engine";
-import { createGonkaAdapter } from "../lib/gonka";
-import { blake2b256, computeTruthScoreBps, toHex, type AgentManifest, type HexString } from "../lib/protocol";
+import {
+  buildAgentManifestDocument,
+  createEngine,
+  type Engine,
+  type EngineAgentConfig,
+} from "../lib/engine";
+import {
+  DEFAULT_PROMPT_SPEC_V2,
+  DEFAULT_TOOL_POLICY_V2,
+  createGonkaAdapter,
+} from "../lib/gonka";
+import { createFirecrawlProvider } from "../lib/research";
+import {
+  blake2b256,
+  computeTruthScoreBps,
+  fromHex,
+  toHex,
+  type AgentManifest,
+  type HexString,
+} from "../lib/protocol";
 import { closeDb, createDb } from "../lib/storage";
 import {
   SignerRegistry,
@@ -28,12 +45,13 @@ import {
   type OpenVerdictSuiClient,
   type ReleaseManifest,
 } from "../lib/sui";
-import { createLocalWalrusStore } from "../lib/walrus";
+import { createLocalWalrusStore, type WalrusStore } from "../lib/walrus";
 import { repositoryRoot, writeEngineCompatibleManifest } from "./deploy-localnet";
 import { serializeRunApprovals } from "./localnet-e2e";
 
 const AGENT_COUNT = 7;
 const AGENT_FUND_MIST = 20_000_000n; // 0.02 SUI top-up per underfunded agent
+const EVIDENCE_POLICY_ID = "OPENVERDICT_EVIDENCE_POLICY_V1";
 const MINUTE = 60_000;
 
 function env(name: string): string {
@@ -47,10 +65,6 @@ function env(name: string): string {
     // fall through
   }
   throw new Error(`${name} is required (env or .env)`);
-}
-
-function hexHash(label: string): HexString {
-  return toHex(blake2b256(new TextEncoder().encode(label)));
 }
 
 async function fundAgents(
@@ -122,6 +136,7 @@ async function registerAgents(
   client: OpenVerdictSuiClient,
   manifest: ReleaseManifest,
   signers: SignerRegistry,
+  walrus: WalrusStore,
 ): Promise<Array<{ config: EngineAgentConfig; profileId: string; modelId: string }>> {
   const gateway = createSuiGateway({ client, manifest, signers });
   const models = manifest.gonka.models;
@@ -131,18 +146,25 @@ async function registerAgents(
     const role = sourceRole ? "SOURCE_AUTHENTICITY" : "SKEPTIC";
     const modelId = models[sourceRole ? 0 : index < 5 ? 1 : 2]!;
     const humanHash = blake2b256(new TextEncoder().encode(`testnet-human-${index}`));
-    const manifestHash = blake2b256(new TextEncoder().encode(`testnet-manifest-${index}`));
+    const owner = signers.getAgentAt(index).address as HexString;
+    const published = await publishAgentManifest({
+      walrus,
+      index,
+      owner,
+      role,
+      modelId,
+      humanBackingHash: toHex(humanHash),
+    });
     const result = await gateway.registerAgent({
       agentIndex: index,
       bondAmount: 1,
-      manifestHash,
-      manifestBlobId: `testnet-manifest-${index}`,
+      manifestHash: fromHex(published.manifestHash),
+      manifestBlobId: published.manifestBlobId,
       modelHash: blake2b256(new TextEncoder().encode(modelId)),
       roleHash: blake2b256(new TextEncoder().encode(`OPENVERDICT_ROLE_${role}`)),
       humanBackingHash: humanHash,
     });
     assert.ok(result.agentCapId, `agent ${index} missing AgentCap`);
-    const owner = signers.getAgentAt(index).address;
     registered.push({
       profileId: result.agentProfileId,
       modelId,
@@ -154,14 +176,14 @@ async function registerAgents(
           owner: owner as HexString,
           humanAttestationHash: toHex(humanHash),
           humanVerificationProvider: "testnet-demo-allowlist",
-          version: "1",
-          manifestBlobId: `testnet-manifest-${index}`,
-          manifestHash: toHex(manifestHash),
-          promptHash: hexHash(`prompt-${index}`),
+          version: "3",
+          manifestBlobId: published.manifestBlobId,
+          manifestHash: published.manifestHash,
+          promptHash: published.promptHash,
           modelId,
           providerId: "gonkarouter",
-          toolPolicyHash: hexHash(`tools-${index}`),
-          evidencePolicyHash: hexHash("OPENVERDICT_EVIDENCE_POLICY_V1"),
+          toolPolicyHash: published.toolPolicyHash,
+          evidencePolicyHash: published.evidencePolicyHash,
           publicKey: owner,
           registeredAtMs: Date.now(),
           registeredCheckpoint: 0,
@@ -171,6 +193,44 @@ async function registerAgents(
     console.log(`registered agent ${index} (${role}, ${modelId}) -> ${result.agentProfileId}`);
   }
   return registered;
+}
+
+async function publishAgentManifest(input: {
+  walrus: WalrusStore;
+  index: number;
+  owner: HexString;
+  role: string;
+  modelId: string;
+  humanBackingHash: HexString;
+}): Promise<{
+  manifestHash: HexString;
+  manifestBlobId: string;
+  promptHash: HexString;
+  toolPolicyHash: HexString;
+  evidencePolicyHash: HexString;
+}> {
+  const built = buildAgentManifestDocument({
+    network: "testnet",
+    backingKind: "TESTNET_DEMO_ALLOWLIST",
+    humanBackingHash: input.humanBackingHash,
+    humanVerificationProvider: "testnet-demo-allowlist",
+    operationalOwner: input.owner,
+    role: input.role,
+    modelId: input.modelId,
+    promptSpec: DEFAULT_PROMPT_SPEC_V2,
+    toolPolicy: DEFAULT_TOOL_POLICY_V2,
+    evidencePolicyId: EVIDENCE_POLICY_ID,
+  });
+  const upload = await input.walrus.put(built.bytes, {
+    identifier: `testnet-agent-${input.index}-manifest-v3.json`,
+  });
+  return {
+    manifestHash: built.manifestHash,
+    manifestBlobId: upload.blobId,
+    promptHash: built.promptHash,
+    toolPolicyHash: built.toolPolicyHash,
+    evidencePolicyHash: built.document.evidencePolicyHash,
+  };
 }
 
 async function waitUntil(label: string, deadlineMs: number): Promise<void> {
@@ -201,6 +261,9 @@ async function main(): Promise<void> {
     },
     AGENT_COUNT,
   );
+  const walrus = createLocalWalrusStore(
+    join(repositoryRoot, ".testnet/walrus-local"),
+  );
 
   const underfunded: string[] = [];
   for (const address of signers.listAgentAddresses()) {
@@ -218,41 +281,52 @@ async function main(): Promise<void> {
   const discovered = await discoverAgents(client, manifest, signers);
   if (discovered) {
     console.log(`reusing ${discovered.length} previously registered agents`);
-    agents = discovered.map(({ index, owner, profileId, capId }) => {
-      signers.bindAgentProfile({ agentProfileId: profileId, agentCapId: capId, owner });
-      const sourceRole = index < 3;
-      const role = sourceRole ? "SOURCE_AUTHENTICITY" : "SKEPTIC";
-      const modelId = manifest.gonka.models[sourceRole ? 0 : index < 5 ? 1 : 2]!;
-      const humanHash = blake2b256(new TextEncoder().encode(`testnet-human-${index}`));
-      const manifestHash = blake2b256(new TextEncoder().encode(`testnet-manifest-${index}`));
-      return {
-        profileId,
-        modelId,
-        config: {
+    agents = await Promise.all(
+      discovered.map(async ({ index, owner, profileId, capId }) => {
+        signers.bindAgentProfile({ agentProfileId: profileId, agentCapId: capId, owner });
+        const sourceRole = index < 3;
+        const role = sourceRole ? "SOURCE_AUTHENTICITY" : "SKEPTIC";
+        const modelId = manifest.gonka.models[sourceRole ? 0 : index < 5 ? 1 : 2]!;
+        const humanHash = blake2b256(
+          new TextEncoder().encode(`testnet-human-${index}`),
+        );
+        const published = await publishAgentManifest({
+          walrus,
+          index,
+          owner: owner as HexString,
           role,
-          agentCapId: capId,
-          manifest: {
-            agentProfileId: profileId as HexString,
-            owner: owner as HexString,
-            humanAttestationHash: toHex(humanHash),
-            humanVerificationProvider: "testnet-demo-allowlist",
-            version: "1",
-            manifestBlobId: `testnet-manifest-${index}`,
-            manifestHash: toHex(manifestHash),
-            promptHash: hexHash(`prompt-${index}`),
-            modelId,
-            providerId: "gonkarouter",
-            toolPolicyHash: hexHash(`tools-${index}`),
-            evidencePolicyHash: hexHash("OPENVERDICT_EVIDENCE_POLICY_V1"),
-            publicKey: owner,
-            registeredAtMs: Date.now(),
-            registeredCheckpoint: 0,
-          } satisfies AgentManifest,
-        },
-      };
-    });
+          modelId,
+          humanBackingHash: toHex(humanHash),
+        });
+        return {
+          profileId,
+          modelId,
+          config: {
+            role,
+            agentCapId: capId,
+            manifest: {
+              agentProfileId: profileId as HexString,
+              owner: owner as HexString,
+              humanAttestationHash: toHex(humanHash),
+              humanVerificationProvider: "testnet-demo-allowlist",
+              version: "3",
+              manifestBlobId: published.manifestBlobId,
+              manifestHash: published.manifestHash,
+              promptHash: published.promptHash,
+              modelId,
+              providerId: "gonkarouter",
+              toolPolicyHash: published.toolPolicyHash,
+              evidencePolicyHash: published.evidencePolicyHash,
+              publicKey: owner,
+              registeredAtMs: Date.now(),
+              registeredCheckpoint: 0,
+            } satisfies AgentManifest,
+          },
+        };
+      }),
+    );
   } else {
-    agents = await registerAgents(client, manifest, signers);
+    agents = await registerAgents(client, manifest, signers, walrus);
   }
 
   const gonka = createGonkaAdapter({
@@ -261,13 +335,20 @@ async function main(): Promise<void> {
     timeoutMs: 240_000,
     maxRetries: 1,
   });
+  const research = createFirecrawlProvider({
+    apiKey: env("FIRECRAWL_API_KEY"),
+    ...(process.env.FIRECRAWL_API_URL?.trim()
+      ? { baseUrl: process.env.FIRECRAWL_API_URL.trim() }
+      : {}),
+  });
   const db = createDb({ dataDir: join(repositoryRoot, ".testnet/pglite") });
   const engine: Engine = await createEngine({
     network: "testnet",
     manifestPath: runtimeManifestPath,
     db,
-    walrus: createLocalWalrusStore(join(repositoryRoot, ".testnet/walrus-local")),
+    walrus,
     gonka,
+    research,
     suiGateway: serializeRunApprovals(
       createSuiGateway({ client, manifest, signers }),
     ),
@@ -323,7 +404,7 @@ async function main(): Promise<void> {
       );
     }
     // jury::lock_committee opens at selection + (commit − selection) / 2
-    // (E_DEADLINE_NOT_REACHED = 20 before that) — wait the window out.
+    // (E_DEADLINE_NOT_REACHED = 20 before that), so wait the window out.
     const preCommit = await engine.inspect(claimId);
     const acceptanceMs =
       selectedAtMs +
@@ -340,7 +421,7 @@ async function main(): Promise<void> {
           const message = error instanceof Error ? error.message : String(error);
           const transient = /fetch failed|ECONNRESET|ETIMEDOUT|socket|network|terminated/i.test(message);
           if (!transient || attempt >= 4) throw error;
-          console.log(`${label}: transient RPC failure (attempt ${attempt}) — retrying in 5s`);
+          console.log(`${label}: transient RPC failure (attempt ${attempt}), retrying in 5s`);
           await new Promise((resolve) => setTimeout(resolve, 5_000));
         }
       }

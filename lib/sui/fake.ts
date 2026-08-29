@@ -22,6 +22,7 @@ import type {
   FreezeEvidenceTransactionInput,
   ProposeOutcomeTransactionInput,
   RegisterAgentTransactionInput,
+  UpdateAgentManifestTransactionInput,
 } from "./builders";
 import type { TxResult } from "../engine/contract";
 
@@ -29,6 +30,11 @@ export interface FakeSuiAgent extends SuiAgentIdentity {
   agentCapId: string;
   modelId: string;
   role: string;
+  manifestHash?: Uint8Array;
+  manifestBlobId?: string;
+  modelHash?: Uint8Array;
+  roleHash?: Uint8Array;
+  version?: number;
 }
 
 /** Deterministic chain seam for lifecycle unit tests. */
@@ -48,6 +54,19 @@ export class FakeSuiGateway implements SuiGateway {
     const agent = this.agents[input.agentIndex];
     if (!agent) throw new Error(`fake agent ${input.agentIndex} does not exist`);
     return { ...agent, ...this.tx("register_agent") };
+  }
+
+  async updateAgentManifest(
+    input: UpdateAgentManifestTransactionInput & { agentIndex: number },
+  ): Promise<TxResult & { version?: number }> {
+    const agent = this.agents[input.agentIndex];
+    if (!agent) throw new Error(`fake agent ${input.agentIndex} does not exist`);
+    agent.manifestHash = input.manifestHash;
+    agent.manifestBlobId = input.manifestBlobId;
+    agent.modelHash = input.modelHash;
+    agent.roleHash = input.roleHash;
+    agent.version = (agent.version ?? 1) + 1;
+    return { ...this.tx("update_agent_manifest"), version: agent.version };
   }
 
   async createClaim(input: GatewayCreateClaimInput) {

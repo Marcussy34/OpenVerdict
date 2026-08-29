@@ -7,6 +7,7 @@ import { Ed25519Keypair } from "@mysten/sui/keypairs/ed25519";
 import { SuiGrpcClient } from "@mysten/sui/grpc";
 import { SuiJsonRpcClient } from "@mysten/sui/jsonRpc";
 import {
+  FakeSuiGateway,
   SignerRegistry,
   buildAcceptJurySeatTransaction,
   buildAdvancePhaseTransaction,
@@ -25,6 +26,7 @@ import {
   buildSelectCommitteeTransaction,
   buildSettleDemoPoolTransaction,
   buildStartDirectReviewTransaction,
+  buildUpdateAgentManifestTransaction,
   buildWithdrawPayoutTransaction,
   createFallbackClient,
   createSuiClients,
@@ -172,6 +174,33 @@ describe("transaction builders", () => {
   );
 });
 
+describe("FakeSuiGateway", () => {
+  it("updates an agent manifest and increments its version", async () => {
+    const gateway = new FakeSuiGateway();
+    const agent = gateway.agents[0];
+    if (!agent) throw new Error("missing default fake agent");
+    const manifestHash = new Uint8Array(32).fill(1);
+    const modelHash = new Uint8Array(32).fill(2);
+    const roleHash = new Uint8Array(32).fill(3);
+
+    const result = await gateway.updateAgentManifest({
+      agentIndex: 0,
+      agentProfileId: agent.agentProfileId,
+      agentCapId: agent.agentCapId,
+      manifestHash,
+      manifestBlobId: "updated-manifest",
+      modelHash,
+      roleHash,
+    });
+
+    expect(result.version).toBeGreaterThan(1);
+    expect(gateway.agents[0]?.manifestHash).toEqual(manifestHash);
+    expect(gateway.agents[0]?.manifestBlobId).toBe("updated-manifest");
+    expect(gateway.agents[0]?.modelHash).toEqual(modelHash);
+    expect(gateway.agents[0]?.roleHash).toEqual(roleHash);
+  });
+});
+
 describe("SignerRegistry", () => {
   it("derives the test-only demo allowlist deterministically", () => {
     const first = SignerRegistry.fromEnv({
@@ -229,6 +258,18 @@ function transactionCases(): Array<{
         modelHash: hash,
         roleHash: hash,
         humanBackingHash: hash,
+      }),
+    },
+    {
+      functionName: "update_agent_manifest",
+      argumentCount: 8,
+      transaction: buildUpdateAgentManifestTransaction(manifest, {
+        agentProfileId: id("3"),
+        agentCapId: id("5"),
+        manifestHash: hash,
+        manifestBlobId: "manifest",
+        modelHash: hash,
+        roleHash: hash,
       }),
     },
     {

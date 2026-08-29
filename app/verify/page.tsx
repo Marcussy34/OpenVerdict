@@ -3,7 +3,9 @@
 import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { RunProofDetails } from "@/components/claim/run-proof";
 import { PageHeader, ExperimentalTag, MetaTag } from "@/components/viz/page-header";
 import { Panel, FieldLabel, Well } from "@/components/viz/panel";
 import { VerdictGauge } from "@/components/viz/verdict-gauge";
@@ -12,7 +14,11 @@ import { computeVoteCommitment } from "@/lib/protocol/commitment";
 import { computeTruthScoreBps, agentProbabilityBps } from "@/lib/protocol/truthScore";
 import { toHex, fromHex } from "@/lib/protocol/hash";
 import { OUTCOME, type VoteOutcome } from "@/lib/protocol/constants";
-import type { VotePreimageV1 } from "@/lib/protocol/types";
+import type { PublicRunBundle, VotePreimageV1 } from "@/lib/protocol/types";
+import {
+  proofFromBundle,
+  type BrowserRunProof,
+} from "@/lib/verify/run-proof";
 import {
   ShieldTick,
   Award,
@@ -22,6 +28,7 @@ import {
   Add,
   Trash,
   Code1,
+  Refresh,
   Warning2,
 } from "@/components/icons";
 
@@ -34,6 +41,34 @@ const SAMPLE = {
   runHash: "0x3333333333333333333333333333333333333333333333333333333333333333",
   salt: "0x4444444444444444444444444444444444444444444444444444444444444444",
 };
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function isPublicRunBundle(value: unknown): value is PublicRunBundle {
+  return (
+    isRecord(value) &&
+    (value.version === 2 || value.version === 3) &&
+    value.kind === "run-bundle" &&
+    typeof value.runId === "string" &&
+    isRecord(value.audit) &&
+    isRecord(value.seal)
+  );
+}
+
+function parseRunProofJson(value: string): BrowserRunProof {
+  const parsed = JSON.parse(value) as unknown;
+  if (isPublicRunBundle(parsed)) return proofFromBundle(parsed);
+  if (
+    isRecord(parsed) &&
+    typeof parsed.runId === "string" &&
+    isPublicRunBundle(parsed.bundle)
+  ) {
+    return parsed as unknown as BrowserRunProof;
+  }
+  throw new Error("Paste a public run bundle or a run proof JSON object");
+}
 
 /** Labelled hex/text field used across both verifier tabs. */
 function Field({
@@ -157,19 +192,63 @@ export default function VerifyPage() {
   const sumProbabilities = probabilities.reduce((a, b) => a + b, 0);
   const n = jurorVotes.length;
 
+  const [proofClaimId, setProofClaimId] = useState("");
+  const [proofRunId, setProofRunId] = useState("");
+  const [bundleJson, setBundleJson] = useState("");
+  const [runProof, setRunProof] = useState<BrowserRunProof | null>(null);
+  const [runProofError, setRunProofError] = useState<string | null>(null);
+  const [fetchingRunProof, setFetchingRunProof] = useState(false);
+
+  const fetchRunProof = async () => {
+    const nextClaimId = proofClaimId.trim();
+    const nextRunId = proofRunId.trim();
+    if (!nextClaimId || !nextRunId) {
+      setRunProofError("Enter both the claim id and run id");
+      return;
+    }
+
+    setFetchingRunProof(true);
+    setRunProofError(null);
+    try {
+      const response = await fetch(
+        `/api/claims/${encodeURIComponent(nextClaimId)}/runs/${encodeURIComponent(nextRunId)}/proof`,
+        { cache: "no-store" },
+      );
+      if (response.status === 404) throw new Error("Run proof not found");
+      if (response.status === 503) throw new Error("The verification engine is not available");
+      if (!response.ok) throw new Error("The run proof could not be loaded");
+      setRunProof((await response.json()) as BrowserRunProof);
+    } catch (error) {
+      setRunProof(null);
+      setRunProofError(error instanceof Error ? error.message : "The run proof could not be loaded");
+    } finally {
+      setFetchingRunProof(false);
+    }
+  };
+
+  const loadBundleJson = () => {
+    setRunProofError(null);
+    try {
+      setRunProof(parseRunProofJson(bundleJson));
+    } catch (error) {
+      setRunProof(null);
+      setRunProofError(error instanceof Error ? error.message : "The bundle JSON is invalid");
+    }
+  };
+
   return (
     <div className="mx-auto max-w-5xl space-y-6 px-5 py-10 md:px-7 lg:py-12">
       <PageHeader
         eyebrow="Zero server trust"
         title="Independent verifier"
-        description="Recompute cryptographic vote commitments (BCS + Blake2b-256) and consensus Truth Scores entirely inside your own browser. Nothing here calls the engine."
+        description="Recompute vote commitments, run hashes, sealed bundles, and consensus Truth Scores inside your browser. Only run proof fetching calls the engine."
         icon={ShieldTick}
         badges={<ExperimentalTag />}
         actions={<MetaTag tone="chain">Runs client-side</MetaTag>}
       />
 
       <Tabs defaultValue="commitment" className="space-y-5">
-        <TabsList className="grid max-w-md grid-cols-2">
+        <TabsList className="grid max-w-2xl grid-cols-3">
           <TabsTrigger value="commitment" className="gap-1.5 text-xs font-semibold">
             <Lock size="14" variant="Bold" />
             Vote commitment
@@ -177,6 +256,10 @@ export default function VerifyPage() {
           <TabsTrigger value="truthscore" className="gap-1.5 text-xs font-semibold">
             <Award size="14" variant="Bold" />
             Truth Score
+          </TabsTrigger>
+          <TabsTrigger value="runproof" className="gap-1.5 text-xs font-semibold">
+            <ShieldTick size="14" variant="Bold" />
+            Run proof
           </TabsTrigger>
         </TabsList>
 
@@ -230,8 +313,8 @@ export default function VerifyPage() {
                   className="h-9 w-full rounded-lg border border-input bg-card px-3 text-xs font-semibold text-ocean outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
                   aria-label="Phase"
                 >
-                  <option value={1}>Phase 1 — initial deliberation</option>
-                  <option value={2}>Phase 2 — discussion round</option>
+                  <option value={1}>Phase 1: initial deliberation</option>
+                  <option value={2}>Phase 2: discussion round</option>
                 </select>
               </Field>
 
@@ -470,6 +553,108 @@ export default function VerifyPage() {
               </div>
             </Panel>
           </div>
+        </TabsContent>
+
+        <TabsContent value="runproof" className="space-y-5">
+          <Panel label="Load a run proof" icon={ShieldTick} tone="chain">
+            <div className="space-y-5">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field label="Claim id">
+                  <Input
+                    className="h-9 font-mono text-xs"
+                    placeholder="0x..."
+                    value={proofClaimId}
+                    onChange={(event) => setProofClaimId(event.target.value)}
+                    aria-label="Claim id for run proof"
+                    autoComplete="off"
+                    spellCheck={false}
+                  />
+                </Field>
+                <Field label="Run id">
+                  <Input
+                    className="h-9 font-mono text-xs"
+                    placeholder="0x..."
+                    value={proofRunId}
+                    onChange={(event) => setProofRunId(event.target.value)}
+                    aria-label="Run id for proof"
+                    autoComplete="off"
+                    spellCheck={false}
+                  />
+                </Field>
+                <Button
+                  type="button"
+                  onClick={() => void fetchRunProof()}
+                  disabled={fetchingRunProof}
+                  aria-busy={fetchingRunProof}
+                  className="min-h-[40px] font-semibold sm:col-span-2"
+                >
+                  {fetchingRunProof ? (
+                    <Refresh size="15" variant="Bold" className="motion-safe:animate-spin" />
+                  ) : (
+                    <ShieldTick size="15" variant="Bold" />
+                  )}
+                  {fetchingRunProof ? "Fetching proof" : "Fetch proof"}
+                </Button>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <span className="h-px flex-1 bg-border" />
+                <span className="text-[10px] font-semibold tracking-wide text-muted-foreground uppercase">
+                  Or paste JSON
+                </span>
+                <span className="h-px flex-1 bg-border" />
+              </div>
+
+              <Field
+                label="Public run bundle JSON"
+                hint="A full proof JSON object is also accepted. Include its sealed field to verify decryption."
+              >
+                <Textarea
+                  value={bundleJson}
+                  onChange={(event) => setBundleJson(event.target.value)}
+                  placeholder='{"version":3,"kind":"run-bundle"}'
+                  className="min-h-56 resize-y font-mono text-xs"
+                  aria-label="Public run bundle JSON"
+                  autoComplete="off"
+                  spellCheck={false}
+                />
+              </Field>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={loadBundleJson}
+                className="min-h-[40px] w-full font-semibold"
+              >
+                <Code1 size="15" variant="Bold" />
+                Load pasted JSON
+              </Button>
+            </div>
+          </Panel>
+
+          {runProofError && (
+            <div
+              role="alert"
+              className="flex items-start gap-2 rounded-xl border border-destructive/30 bg-destructive/5 p-3 text-xs text-destructive"
+            >
+              <Warning2 size="15" variant="Bold" className="mt-px shrink-0" />
+              {runProofError}
+            </div>
+          )}
+
+          {runProof && (
+            <Panel
+              label="Browser run verification"
+              icon={ShieldTick}
+              tone={runProof.bundle ? "yes" : "sealed"}
+              action={
+                <MetaTag tone={runProof.bundle ? "yes" : "sealed"}>
+                  {runProof.bundle ? "Bundle revealed" : "Bundle sealed"}
+                </MetaTag>
+              }
+            >
+              <RunProofDetails key={runProof.runId} proof={runProof} />
+            </Panel>
+          )}
         </TabsContent>
       </Tabs>
     </div>

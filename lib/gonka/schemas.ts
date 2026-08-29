@@ -30,7 +30,7 @@ export const oracleInferenceInputSchema: z.ZodType<OracleInferenceInput> = z
     protocolVersion: z.literal("1.0"),
     runId: z.string().min(1).max(256),
     agentRole: z.string().min(1).max(256),
-    promptVersion: z.string().min(1).max(256),
+    promptVersion: z.enum(["1", "2"]),
     submission: z
       .object({
         kind: z.enum(["TEXT", "URL", "TEXT_AND_URL"]),
@@ -77,6 +77,14 @@ const reasoningTraceSchema = z
   })
   .strict();
 
+export const citationSchema = z
+  .object({
+    evidenceId: z.string().min(1),
+    url: z.string().url(),
+    quote: z.string().min(20).max(300),
+  })
+  .strict();
+
 export const oracleInferenceOutputSchema: z.ZodType<OracleInferenceOutput> = z
   .object({
     outcome: z.enum(["YES", "NO", "UNSURE"]),
@@ -92,22 +100,28 @@ export const oracleInferenceOutputSchema: z.ZodType<OracleInferenceOutput> = z
       .array(reasoningTraceSchema)
       .min(1)
       .max(MAX_TRACE_ENTRIES),
+    citations: z.array(citationSchema).max(16).optional(),
   })
   .strict();
 
-/** Reject citations that were not present in the frozen evidence manifest. */
+/** Reject citations outside the frozen manifest and opened-page allowance. */
 export function validateOutputAgainstManifest(
   output: OracleInferenceOutput,
   evidenceManifest: OracleInferenceInput["evidenceManifest"],
+  extraAllowedIds: ReadonlySet<string> = new Set(),
 ): void {
   const parsed = oracleInferenceOutputSchema.parse(output);
-  const allowedIds = new Set(evidenceManifest.items.map((item) => item.evidenceId));
+  const allowedIds = new Set([
+    ...evidenceManifest.items.map((item) => item.evidenceId),
+    ...extraAllowedIds,
+  ]);
   const citedIds = [
     ...parsed.evidenceFor,
     ...parsed.evidenceAgainst,
     ...parsed.unsupportedClaims,
     ...parsed.decisiveEvidence,
     ...parsed.publicReasoningTrace.flatMap((entry) => entry.evidenceIds),
+    ...(parsed.citations?.map((citation) => citation.evidenceId) ?? []),
   ];
 
   for (const evidenceId of citedIds) {

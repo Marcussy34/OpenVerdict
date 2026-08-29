@@ -1,11 +1,18 @@
 import type {
   AgentManifest,
+  Citation,
   HexString,
   OracleInferenceInput,
   OracleInferenceOutput,
 } from "../protocol/types";
 import { createGonkaAdapterWithDependencies } from "./adapter";
-import type { GonkaRouterAdapter } from "./types";
+import type {
+  GonkaAttemptRecord,
+  GonkaCompletionRequest,
+  GonkaCompletionResult,
+  GonkaRouterAdapter,
+  PromptMessage,
+} from "./types";
 
 export type FakeFailure =
   | "timeout"
@@ -14,7 +21,14 @@ export type FakeFailure =
   | "invented_evidence_id"
   | "http_429"
   | "provider_5xx"
-  | "unknown_model";
+  | "unknown_model"
+  | "bad_citation"
+  | "no_independent_citation";
+
+export type FakeAction =
+  | { search: string }
+  | { openResult: number }
+  | { openUrl: string };
 
 export type FakeFixture = {
   agentProfileId: HexString;
@@ -31,6 +45,8 @@ export type FakeFixture = {
   inputTokens?: number;
   outputTokens?: number;
   failure?: FakeFailure;
+  actions?: FakeAction[];
+  citations?: Citation[];
 };
 
 type ActiveFixture = {
@@ -39,6 +55,12 @@ type ActiveFixture = {
   requestCall: number;
   input: OracleInferenceInput;
   manifest: AgentManifest;
+  clock: number;
+  opened?: {
+    evidenceId: string;
+    url: string;
+    text: string;
+  };
 };
 
 function completionResponse(
@@ -57,6 +79,7 @@ function completionResponse(
       object: "chat.completion",
       created: active.fixtureIndex + 1,
       model: active.fixture.responseModelId ?? active.manifest.modelId,
+      system_fingerprint: "fake-system-fingerprint",
       choices: [
         {
           index: 0,
@@ -72,7 +95,14 @@ function completionResponse(
           (active.fixture.outputTokens ?? 50),
       },
     }),
-    { status: 200, headers: { "content-type": "application/json" } },
+    {
+      status: 200,
+      headers: {
+        "content-type": "application/json",
+        "x-request-id": `request_${requestId}`,
+        "x-devshard-id": `devshard-fake-${active.fixture.agentProfileId.slice(2, 10)}`,
+      },
+    },
   );
 }
 
@@ -83,17 +113,25 @@ function providerError(status: number, message: string): Response {
   });
 }
 
-function fixtureOutput(active: ActiveFixture): OracleInferenceOutput {
+function fixtureOutput(
+  active: ActiveFixture,
+  openedEvidenceId?: string,
+): OracleInferenceOutput {
   const firstEvidenceId = active.input.evidenceManifest.items[0]?.evidenceId;
-  const evidenceFor = active.fixture.evidenceFor ??
-    (firstEvidenceId === undefined ? [] : [firstEvidenceId]);
+  const defaultEvidence = [firstEvidenceId, openedEvidenceId].filter(
+    (evidenceId): evidenceId is string => evidenceId !== undefined,
+  );
+  const evidenceFor = active.fixture.evidenceFor ?? [...new Set(defaultEvidence)];
+  const decisiveEvidence = active.fixture.decisiveEvidence ?? [
+    ...new Set([...evidenceFor, ...(openedEvidenceId ? [openedEvidenceId] : [])]),
+  ];
   return {
     outcome: active.fixture.outcome ?? "YES",
     confidenceBps: active.fixture.confidenceBps ?? 8_000,
     evidenceFor,
     evidenceAgainst: active.fixture.evidenceAgainst ?? [],
     unsupportedClaims: active.fixture.unsupportedClaims ?? [],
-    decisiveEvidence: active.fixture.decisiveEvidence ?? evidenceFor,
+    decisiveEvidence,
     reasoning:
       active.fixture.reasoning ?? "Deterministic fake inference fixture.",
     publicReasoningTrace:
@@ -108,8 +146,119 @@ function fixtureOutput(active: ActiveFixture): OracleInferenceOutput {
   };
 }
 
-function createFixtureAdapter(active: ActiveFixture): GonkaRouterAdapter {
-  let clock = active.fixtureIndex * 100;
+function lastUserPayload(messages: PromptMessage[]): Record<string, unknown> | undefined {
+  const content = messages.findLast((message) => message.role === "user")?.content;
+  if (content === undefined) return undefined;
+  try {
+    const parsed = JSON.parse(content) as unknown;
+    return typeof parsed === "object" && parsed !== null
+      ? parsed as Record<string, unknown>
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function rememberOpenedPage(
+  active: ActiveFixture,
+  payload: Record<string, unknown> | undefined,
+): void {
+  if (
+    payload?.tool === "open" &&
+    typeof payload.evidenceId === "string" &&
+    typeof payload.url === "string" &&
+    typeof payload.text === "string"
+  ) {
+    active.opened = {
+      evidenceId: payload.evidenceId,
+      url: payload.url,
+      text: payload.text,
+    };
+  }
+}
+
+function scriptedActions(active: ActiveFixture): FakeAction[] {
+  if (active.fixture.failure === "no_independent_citation") return [];
+  return active.fixture.actions ?? [
+    { search: active.input.claim.statement.slice(0, 200) },
+    { openResult: 0 },
+  ];
+}
+
+function openedCitations(active: ActiveFixture): Citation[] {
+  if (active.fixture.failure === "no_independent_citation") return [];
+  if (active.fixture.failure === "bad_citation" && active.opened) {
+    return [{
+      evidenceId: active.opened.evidenceId,
+      url: active.opened.url,
+      quote: "this sentence is not in the page",
+    }];
+  }
+  if (active.fixture.citations !== undefined) return active.fixture.citations;
+  if (!active.opened) return [];
+  return [{
+    evidenceId: active.opened.evidenceId,
+    url: active.opened.url,
+    quote: active.opened.text.replace(/\s+/g, " ").trim().slice(0, 60),
+  }];
+}
+
+function scriptedContent(
+  active: ActiveFixture,
+  messages: PromptMessage[],
+): string {
+  if (active.fixture.failure === "malformed_json") return "{malformed-json";
+
+  const payload = lastUserPayload(messages);
+  rememberOpenedPage(active, payload);
+  const turn = messages.filter((message) => message.role === "assistant").length;
+  const action = scriptedActions(active)[turn];
+  if (action && "search" in action) {
+    return JSON.stringify({ action: "search", query: action.search });
+  }
+  if (action && "openUrl" in action) {
+    return JSON.stringify({ action: "open", url: action.openUrl, from: 0 });
+  }
+  if (action && "openResult" in action) {
+    if (payload?.tool !== "search" || !Array.isArray(payload.results)) {
+      throw new Error("fake openResult action requires a prior search tool result");
+    }
+    const result = payload.results[action.openResult];
+    if (
+      typeof result !== "object" ||
+      result === null ||
+      typeof (result as Record<string, unknown>).url !== "string"
+    ) {
+      throw new Error(`fake search result ${action.openResult} has no URL`);
+    }
+    return JSON.stringify({
+      action: "open",
+      url: (result as Record<string, unknown>).url,
+      from: 0,
+    });
+  }
+
+  const output = fixtureOutput(active, active.opened?.evidenceId);
+  const answerOutput: Record<string, unknown> = {
+    ...output,
+    citations: openedCitations(active),
+  };
+  if (active.fixture.failure === "unknown_outcome") {
+    answerOutput.outcome = "MAYBE";
+  }
+  if (active.fixture.failure === "invented_evidence_id") {
+    answerOutput.evidenceFor = ["invented-evidence-id"];
+  }
+  if (active.fixture.failure === "no_independent_citation") {
+    answerOutput.outcome = "YES";
+  }
+  return JSON.stringify({ action: "answer", output: answerOutput });
+}
+
+function createFixtureAdapter(
+  active: ActiveFixture,
+  completionContent?: string,
+): GonkaRouterAdapter {
   const fakeFetch: typeof fetch = async () => {
     const failure = active.fixture.failure;
     if (failure === "timeout") {
@@ -120,6 +269,9 @@ function createFixtureAdapter(active: ActiveFixture): GonkaRouterAdapter {
     if (failure === "http_429") return providerError(429, "fake rate limit");
     if (failure === "provider_5xx") return providerError(503, "fake provider outage");
     if (failure === "unknown_model") return providerError(400, "unknown model");
+    if (completionContent !== undefined) {
+      return completionResponse(active, completionContent);
+    }
 
     const output = fixtureOutput(active);
     if (failure === "malformed_json") {
@@ -147,8 +299,8 @@ function createFixtureAdapter(active: ActiveFixture): GonkaRouterAdapter {
     {
       fetch: fakeFetch,
       now: () => {
-        const current = clock;
-        clock += 1;
+        const current = active.clock;
+        active.clock += 1;
         return current;
       },
       random: () => 0,
@@ -167,6 +319,7 @@ export function createFakeGonkaAdapter(fixtures: FakeFixture[]): GonkaRouterAdap
   }
 
   const cursors = new Map<string, number>();
+  const activeByAttempts = new WeakMap<GonkaAttemptRecord[], ActiveFixture>();
   const utilityAdapter = createGonkaAdapterWithDependencies(
     {
       baseUrl: "https://fake.gonka.invalid/v1",
@@ -182,10 +335,10 @@ export function createFakeGonkaAdapter(fixtures: FakeFixture[]): GonkaRouterAdap
     },
   );
 
-  async function run(
+  const nextActive = (
     input: OracleInferenceInput,
     manifest: AgentManifest,
-  ): Promise<unknown> {
+  ): ActiveFixture => {
     const queue = fixturesByAgent.get(manifest.agentProfileId);
     if (!queue || queue.length === 0) {
       throw new Error(`no fake Gonka fixture for agent ${manifest.agentProfileId}`);
@@ -195,12 +348,46 @@ export function createFakeGonkaAdapter(fixtures: FakeFixture[]): GonkaRouterAdap
     const fixture = queue[fixtureIndex];
     if (!fixture) throw new Error("fake fixture queue is unexpectedly empty");
     cursors.set(manifest.agentProfileId, cursor + 1);
-    const active = { fixture, fixtureIndex, requestCall: 0, input, manifest };
+    return {
+      fixture,
+      fixtureIndex,
+      requestCall: 0,
+      input,
+      manifest,
+      clock: fixtureIndex * 100,
+    };
+  };
+
+  async function run(
+    input: OracleInferenceInput,
+    manifest: AgentManifest,
+  ): Promise<unknown> {
+    const active = nextActive(input, manifest);
     return createFixtureAdapter(active).run(input, manifest);
   }
 
+  async function complete(
+    request: GonkaCompletionRequest,
+  ): Promise<GonkaCompletionResult> {
+    let active = activeByAttempts.get(request.attempts);
+    if (!active) {
+      active = nextActive(request.input, request.manifest);
+      activeByAttempts.set(request.attempts, active);
+    }
+    return createFixtureAdapter(
+      active,
+      scriptedContent(active, request.messages),
+    ).complete(request);
+  }
+
   return {
+    promptSpec: utilityAdapter.promptSpec,
+    promptSpecHash: utilityAdapter.promptSpecHash,
+    toolPolicy: utilityAdapter.toolPolicy,
+    toolPolicyHash: utilityAdapter.toolPolicyHash,
+    legacyPromptSpec: utilityAdapter.legacyPromptSpec,
     run,
+    complete,
     normalizeResponse: utilityAdapter.normalizeResponse,
     validateOutput: utilityAdapter.validateOutput,
     buildRunAudit: utilityAdapter.buildRunAudit,

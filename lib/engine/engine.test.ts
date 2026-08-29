@@ -4,9 +4,29 @@ import { join } from "node:path";
 import { PGlite } from "@electric-sql/pglite";
 import { Ed25519Keypair } from "@mysten/sui/keypairs/ed25519";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createFakeGonkaAdapter } from "../gonka";
-import { blake2b256, fromHex, toHex, type AgentManifest } from "../protocol";
-import { createDb, createRepository } from "../storage";
+import {
+  DEFAULT_PROMPT_SPEC_V2,
+  DEFAULT_TOOL_POLICY_V2,
+  createFakeGonkaAdapter,
+  promptSpecHash,
+  toolPolicyHash,
+  type FakeFailure,
+} from "../gonka";
+import {
+  blake2b256,
+  fromHex,
+  toHex,
+  type AgentManifest,
+  type PublicRunBundleCoreV3,
+  type SealedRunBundleV2,
+} from "../protocol";
+import { transcriptHash } from "../research";
+import {
+  createDb,
+  createRepository,
+  migrate,
+  type EvidenceArtifactRecord,
+} from "../storage";
 import {
   FakeSuiGateway,
   SignerRegistry,
@@ -18,6 +38,11 @@ import {
   type ReleaseManifest,
 } from "../sui";
 import { createLocalWalrusStore } from "../walrus";
+import {
+  EVIDENCE_POLICY_V1_LABEL,
+  parseAgentManifestDocument,
+} from "./agentManifestDocument";
+import { openSealedRunBundle } from "./runBundle";
 import {
   buildZkLoginBackingMessage,
   createEngine,
@@ -31,7 +56,352 @@ afterEach(async () => {
   await Promise.all(databases.splice(0).map((database) => database.close()));
 });
 
+describe("evidence artifact storage", () => {
+  it("hides discovered artifacts from listings but retrieves them by id", async () => {
+    const db = createDb({ dataDir: "memory://" });
+    if (!(db instanceof PGlite)) throw new Error("expected pglite");
+    databases.push(db);
+    await migrate(db);
+    const repository = createRepository(db);
+    const submitted: EvidenceArtifactRecord = {
+      evidenceId: "evidence-submitted",
+      submissionId: "submission-submitted",
+      claimId: "claim-storage",
+      phase: 1,
+      sourceUrl: "https://example.com/submitted",
+      finalUrl: "https://example.com/submitted",
+      mimeType: "text/markdown",
+      byteLength: 16,
+      contentHash: `0x${"11".repeat(32)}`,
+      canonicalHash: `0x${"11".repeat(32)}`,
+      rawWalrusBlobId: "raw-submitted",
+      canonicalWalrusBlobId: "canonical-submitted",
+      parserVersion: "test-v1",
+      excerpt: "Submitted page",
+      retrievedAt: "2026-08-29T00:00:00.000Z",
+      createdAt: "2026-08-29T00:00:00.000Z",
+      updatedAt: "2026-08-29T00:00:00.000Z",
+      sourceClass: "USER_SUBMITTED",
+    };
+    const discovered: EvidenceArtifactRecord = {
+      ...submitted,
+      evidenceId: "evidence-discovered",
+      submissionId: "submission-discovered",
+      sourceUrl: "https://example.com/discovered",
+      finalUrl: "https://example.com/discovered",
+      rawWalrusBlobId: "raw-discovered",
+      canonicalWalrusBlobId: "canonical-discovered",
+      sourceClass: "DISCOVERED",
+      discoveredByRunId: `0x${"22".repeat(32)}`,
+    };
+
+    await repository.saveEvidenceArtifact(submitted);
+    await repository.saveEvidenceArtifact(discovered);
+
+    await expect(repository.listEvidenceArtifacts("claim-storage", 1)).resolves.toEqual([
+      submitted,
+    ]);
+    await expect(
+      repository.listEvidenceArtifacts("claim-storage", 1, {
+        includeDiscovered: true,
+      }),
+    ).resolves.toEqual([discovered, submitted]);
+    await expect(
+      repository.getEvidenceArtifact(discovered.evidenceId),
+    ).resolves.toEqual(discovered);
+  });
+});
+
 describe("headless engine", () => {
+  it("fails closed before provider calls when a manifest prompt hash differs", async () => {
+    const setup = await engineSetup(new FakeSuiGateway(), 5, {
+      promptHash: `0x${"ab".repeat(32)}`,
+    });
+    const { claimId } = await setup.engine.factCheckStart({
+      claim: "Prompt binding must fail closed.",
+      text: "Local evidence.",
+      urls: [],
+    });
+    await setup.engine.selectCommittee(claimId);
+    await setup.engine.evidenceFreeze(claimId, 1);
+
+    let thrown: unknown;
+    try {
+      await setup.engine.juryRun(claimId, 1);
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect(thrown).toBeInstanceOf(EngineValidationError);
+    expect((thrown as Error).message).toContain("prompt hash");
+    expect((thrown as Error).message).toContain("publish-agent-manifests");
+    expect(setup.gonkaComplete).not.toHaveBeenCalled();
+  });
+
+  it("fails closed when a manifest tool policy hash differs", async () => {
+    const setup = await engineSetup(new FakeSuiGateway(), 5, {
+      toolPolicyHash: `0x${"cd".repeat(32)}`,
+    });
+    const { claimId } = await setup.engine.factCheckStart({
+      claim: "Tool policy binding must fail closed.",
+      text: "Local evidence.",
+      urls: [],
+    });
+    await setup.engine.selectCommittee(claimId);
+    await setup.engine.evidenceFreeze(claimId, 1);
+
+    await expect(setup.engine.juryRun(claimId, 1)).rejects.toThrow(
+      /manifest tool policy hash.*engine tool policy/,
+    );
+    expect(setup.gonkaComplete).not.toHaveBeenCalled();
+  });
+
+  it("runs when every manifest binds the live prompt spec", async () => {
+    const setup = await engineSetup(new FakeSuiGateway(), 5);
+    const { claimId } = await setup.engine.factCheckStart({
+      claim: "Prompt binding matches the live spec.",
+      text: "Local evidence.",
+      urls: [],
+    });
+    await setup.engine.selectCommittee(claimId);
+    await setup.engine.evidenceFreeze(claimId, 1);
+
+    await expect(setup.engine.juryRun(claimId, 1)).resolves.toMatchObject({
+      runs: expect.arrayContaining([
+        expect.objectContaining({ status: "SCHEMA_VALID" }),
+      ]),
+    });
+    expect(setup.gonkaComplete).toHaveBeenCalledTimes(15);
+  });
+
+  it("records a research transcript inside the sealed core and cites the sealed blob as the tool blob", async () => {
+    const gateway = new FakeSuiGateway();
+    const approve = vi.spyOn(gateway, "approveRun");
+    const setup = await engineSetup(gateway, 5);
+    const { claimId } = await setup.engine.factCheckStart({
+      claim: "Research transcripts bind every opened source.",
+      text: "Local evidence.",
+      urls: [],
+    });
+    await setup.engine.selectCommittee(claimId);
+    await setup.engine.evidenceFreeze(claimId, 1);
+    const jury = await setup.engine.juryRun(claimId, 1);
+    const summary = jury.runs[0];
+    if (!summary) throw new Error("expected a jury run");
+
+    const repository = createRepository(setup.db);
+    const record = (await repository.listInferenceRuns(claimId, 1)).find(
+      (candidate) => candidate.runId === summary.runId,
+    );
+    if (!record?.audit.bundleCore || !record.sealedBlobId) {
+      throw new Error("expected a sealed run with a persisted core");
+    }
+    const core = JSON.parse(record.audit.bundleCore) as PublicRunBundleCoreV3;
+    const opened = core.transcript.opened[0];
+    if (!opened) throw new Error("expected one opened research page");
+
+    expect(core.version).toBe(3);
+    expect(record.audit.toolCallCount).toBe(2);
+    expect(record.toolTranscriptHash).toBe(transcriptHash(core.transcript));
+    expect(opened.evidenceId).toMatch(/^0x/);
+    expect(approve).toHaveBeenCalledWith(
+      expect.objectContaining({
+        jurySeatId: record.jurySeatId,
+        runBlobId: record.sealedBlobId,
+        toolBlobId: record.sealedBlobId,
+      }),
+    );
+    await expect(
+      repository.getEvidenceArtifact(opened.evidenceId),
+    ).resolves.toMatchObject({ sourceClass: "DISCOVERED" });
+    expect(
+      await repository.listEvidenceArtifacts(claimId, 1),
+    ).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ evidenceId: opened.evidenceId }),
+      ]),
+    );
+    const requestsForRun = setup.gonkaComplete.mock.calls
+      .map(([request]) => request)
+      .filter((request) => request.input.runId === summary.runId);
+    expect(requestsForRun).toHaveLength(3);
+    expect(
+      requestsForRun.every((request) =>
+        request.input.evidenceManifest.items.every(
+          (item) => item.sourceClass === "USER_SUBMITTED",
+        ),
+      ),
+    ).toBe(true);
+  });
+
+  it("seals each run before commit and publishes plaintext only at reveal", async () => {
+    const gateway = new FakeSuiGateway();
+    const approve = vi.spyOn(gateway, "approveRun");
+    const reveal = vi.spyOn(gateway, "revealVote");
+    const setup = await engineSetup(gateway, 5);
+    const put = vi.spyOn(setup.walrus, "put");
+    const { claimId } = await setup.engine.factCheckStart({
+      claim: "The run proof exposes every bound hash.",
+      text: "Local evidence.",
+      urls: [],
+    });
+    await setup.engine.selectCommittee(claimId);
+    await setup.engine.evidenceFreeze(claimId, 1);
+    const jury = await setup.engine.juryRun(claimId, 1);
+    const run = jury.runs[0];
+    if (!run) throw new Error("expected a jury run");
+
+    const record = (await createRepository(setup.db).listInferenceRuns(claimId, 1))
+      .find((candidate) => candidate.runId === run.runId);
+    if (
+      !record?.sealedBlobId ||
+      !record.sealKeyHex ||
+      !record.sealIvHex ||
+      !record.coreHash ||
+      !record.audit.bundleCore ||
+      !record.toolTranscriptWalrusBlobId ||
+      !record.output
+    ) {
+      throw new Error("expected persisted run seal metadata");
+    }
+    const storedCore = JSON.parse(
+      record.audit.bundleCore,
+    ) as PublicRunBundleCoreV3;
+    const openedPage = storedCore.transcript.opened[0];
+    if (!openedPage) throw new Error("expected an opened research page");
+    const runWrites = put.mock.calls.filter(([, options]) =>
+      options?.identifier === `${run.runId}-sealed-run-bundle.json` ||
+      options?.identifier === `${openedPage.evidenceId}-discovered.md`,
+    );
+    expect(runWrites).toHaveLength(2);
+    expect(
+      runWrites.map(([, options]) => options?.identifier).sort(),
+    ).toEqual(
+      [
+        `${run.runId}-sealed-run-bundle.json`,
+        `${openedPage.evidenceId}-discovered.md`,
+      ].sort(),
+    );
+    expect(approve).toHaveBeenCalledWith(
+      expect.objectContaining({
+        jurySeatId: record.jurySeatId,
+        runBlobId: record.sealedBlobId,
+        toolBlobId: record.sealedBlobId,
+      }),
+    );
+    const validatedOutcomeText = record.output.reasoning;
+    for (const [bytes] of put.mock.calls) {
+      expect(new TextDecoder().decode(bytes)).not.toContain(validatedOutcomeText);
+    }
+
+    const proofBeforeReveal = await setup.engine.runProof(claimId, run.runId);
+    expect(proofBeforeReveal).toMatchObject({
+      runId: run.runId,
+      claimId,
+      phase: 1,
+      promptHash: promptSpecHash(DEFAULT_PROMPT_SPEC_V2),
+      sealedBlobId: record.sealedBlobId,
+      revealedBlobId: null,
+      revealed: false,
+      bundle: null,
+      sealed: {
+        version: 2,
+        kind: "sealed-run-bundle",
+        runId: run.runId,
+      },
+      gateway: {
+        gatewayRequestId: expect.stringMatching(/^request_/),
+        devshardId: expect.stringMatching(/^devshard-fake-/),
+        systemFingerprint: "fake-system-fingerprint",
+      },
+    });
+    const sealed = JSON.parse(
+      new TextDecoder().decode(await setup.walrus.get(record.sealedBlobId)),
+    ) as SealedRunBundleV2;
+    expect(sealed).toMatchObject({
+      version: 2,
+      kind: "sealed-run-bundle",
+      runId: run.runId,
+      coreHash: record.coreHash,
+    });
+    expect(
+      openSealedRunBundle(sealed, {
+        keyHex: record.sealKeyHex,
+        ivHex: record.sealIvHex,
+        aad: run.runId,
+      }),
+    ).toEqual(storedCore);
+
+    await setup.engine.votesCommit(claimId, 1);
+    await setup.engine.advance(claimId);
+    expect(await setup.engine.votesReveal(claimId, 1)).toHaveLength(5);
+
+    const proofAfterReveal = await setup.engine.runProof(claimId, run.runId);
+    expect(proofAfterReveal).toMatchObject({
+      sealedBlobId: record.sealedBlobId,
+      revealedBlobId: expect.stringMatching(/^[A-Za-z0-9_-]{43}$/),
+      revealed: true,
+      sealed,
+      bundle: {
+        version: 3,
+        kind: "run-bundle",
+        runId: run.runId,
+        validatedOutput: record.output,
+        seal: {
+          algorithm: "AES-256-GCM",
+          keyHex: record.sealKeyHex,
+          ivHex: record.sealIvHex,
+          aad: run.runId,
+          sealedBlobId: record.sealedBlobId,
+          coreHash: record.coreHash,
+        },
+      },
+    });
+    if (!proofAfterReveal.bundle || !proofAfterReveal.revealedBlobId) {
+      throw new Error("expected a revealed plaintext run bundle");
+    }
+    expect(reveal).toHaveBeenCalledWith(
+      expect.objectContaining({
+        jurySeatId: record.jurySeatId,
+        argumentBlobId: proofAfterReveal.revealedBlobId,
+      }),
+    );
+    const { seal, ...revealedCore } = proofAfterReveal.bundle;
+    expect(seal.sealedBlobId).toBe(record.sealedBlobId);
+    expect(openSealedRunBundle(sealed, seal)).toEqual(revealedCore);
+    expect(
+      JSON.parse(
+        new TextDecoder().decode(
+          await setup.walrus.get(proofAfterReveal.revealedBlobId),
+        ),
+      ),
+    ).toEqual(proofAfterReveal.bundle);
+  });
+
+  it("leaves a seat retryable when plaintext publication fails", async () => {
+    const gateway = new FakeSuiGateway();
+    const setup = await engineSetup(gateway, 5);
+    const { claimId } = await setup.engine.factCheckStart({
+      claim: "A transient reveal upload failure remains retryable.",
+      text: "Local evidence.",
+      urls: [],
+    });
+    await setup.engine.selectCommittee(claimId);
+    await setup.engine.evidenceFreeze(claimId, 1);
+    await setup.engine.juryRun(claimId, 1);
+    await setup.engine.votesCommit(claimId, 1);
+    await setup.engine.advance(claimId);
+
+    vi.spyOn(setup.walrus, "put").mockRejectedValueOnce(
+      new Error("transient plaintext upload failure"),
+    );
+    const reveal = vi.spyOn(gateway, "revealVote");
+    await expect(setup.engine.votesReveal(claimId, 1)).resolves.toHaveLength(4);
+    expect(reveal).toHaveBeenCalledTimes(4);
+    await expect(setup.engine.votesReveal(claimId, 1)).resolves.toHaveLength(1);
+    expect(reveal).toHaveBeenCalledTimes(5);
+  });
+
   it("runs a direct review and excludes NO_VALID_INFERENCE from voting", async () => {
     const gateway = new FakeSuiGateway();
     const setup = await engineSetup(gateway, 4);
@@ -76,6 +446,31 @@ describe("headless engine", () => {
     expect(publicEvents.some((event) => event.kind === "claim_finalized")).toBe(true);
     expect(publicEvents.filter((event) => event.kind === "inference_completed")).toHaveLength(4);
     expect(JSON.stringify(publicEvents)).not.toContain("saltHex");
+  });
+
+  it("a CITATION_INVALID seat casts no vote and the round still settles", async () => {
+    const setup = await engineSetup(new FakeSuiGateway(), 5, {
+      failures: { 0: "no_independent_citation" },
+    });
+    const { claimId } = await setup.engine.factCheckStart({
+      claim: "Independent citations are required for a decisive answer.",
+      text: "Local evidence.",
+      urls: [],
+    });
+    await setup.engine.selectCommittee(claimId);
+    await setup.engine.evidenceFreeze(claimId, 1);
+    await setup.engine.juryRun(claimId, 1);
+
+    const runs = await createRepository(setup.db).listInferenceRuns(claimId, 1);
+    expect(
+      runs.filter((run) => run.validationStatus === "CITATION_INVALID"),
+    ).toHaveLength(1);
+    expect(await setup.engine.votesCommit(claimId, 1)).toHaveLength(4);
+    await setup.engine.advance(claimId);
+    expect(await setup.engine.votesReveal(claimId, 1)).toHaveLength(4);
+    await expect(setup.engine.finalize(claimId)).resolves.toMatchObject({
+      result: "YES",
+    });
   });
 
   it("does not expose agent outputs in a report before reveal", async () => {
@@ -167,7 +562,11 @@ describe("headless engine", () => {
     await setup.engine.evidenceFreeze(claimId, 2);
     await setup.engine.advance(claimId);
 
+    const callsBeforeSecondRound = setup.gonkaComplete.mock.calls.length;
     await setup.engine.juryRun(claimId, 2);
+    expect(
+      setup.gonkaComplete.mock.calls.length - callsBeforeSecondRound,
+    ).toBeGreaterThanOrEqual(15);
     await setup.engine.votesCommit(claimId, 2);
     await setup.engine.advance(claimId);
     await setup.engine.votesReveal(claimId, 2);
@@ -238,10 +637,56 @@ describe("zkLogin-backed agent registration", () => {
         owner: setup.gateway.agents[1]!.owner,
         humanAttestationHash: expectedBackingHash,
         humanVerificationProvider: "zklogin:enoki",
+        version: "3",
+        promptHash: promptSpecHash(DEFAULT_PROMPT_SPEC_V2),
+        toolPolicyHash: toolPolicyHash(DEFAULT_TOOL_POLICY_V2),
         modelId: "model-b",
         providerId: "gonkarouter",
       },
     });
+    if (!saved) throw new Error("expected the registered manifest");
+    const document = parseAgentManifestDocument(
+      await setup.walrus.get(saved.manifest.manifestBlobId),
+    );
+    expect(document).toMatchObject({
+      version: "3",
+      backingKind: "ZKLOGIN_BACKED",
+      promptHash: promptSpecHash(DEFAULT_PROMPT_SPEC_V2),
+      toolPolicyHash: toolPolicyHash(DEFAULT_TOOL_POLICY_V2),
+    });
+    // The document carries the policy label; its hash is the policy id the
+    // engine records at evidence freeze, and the saved manifest must agree.
+    const expectedPolicyHash = toHex(
+      blake2b256(new TextEncoder().encode(EVIDENCE_POLICY_V1_LABEL)),
+    );
+    expect(document.evidencePolicyId).toBe(EVIDENCE_POLICY_V1_LABEL);
+    expect(document.evidencePolicyHash).toBe(expectedPolicyHash);
+    expect(saved.manifest.evidencePolicyHash).toBe(expectedPolicyHash);
+    await expect(
+      setup.engine.agentManifestDocument(result.agentProfileId),
+    ).resolves.toEqual(document);
+    await expect(
+      setup.engine.agentManifestDocument(setup.gateway.agents[0]!.agentProfileId),
+    ).resolves.toBeNull();
+  });
+
+  it("fails closed when the release manifest overrides the evidence policy id", async () => {
+    // A document label always hashes to the default policy id, so a manifest
+    // that points at a different policy must be rejected before any upload.
+    const setup = await registrationSetup({
+      verifierResult: true,
+      evidencePolicyId: `0x${"cd".repeat(32)}`,
+    });
+
+    await expect(
+      setup.engine.registerZkBackedAgent({
+        zkLoginAddress,
+        signature,
+        modelId: "model-b",
+        role: "INVESTIGATOR",
+      }),
+    ).rejects.toThrow("does not match the engine evidence policy id");
+    expect(setup.gateway.registrations).toHaveLength(0);
   });
 
   it("rejects a bad zkLogin signature before registration", async () => {
@@ -345,9 +790,22 @@ async function registrationSetup(options: {
   verifierResult: boolean;
   signerCount?: number;
   initialAgentCount?: number;
+  /** Overrides the release manifest's evidence policy id (fail-closed test). */
+  evidencePolicyId?: `0x${string}`;
 }) {
   const directory = await mkdtemp(join(tmpdir(), "openverdict-registration-"));
-  const manifest = testManifest();
+  const manifest: ReleaseManifest = options.evidencePolicyId
+    ? {
+        ...testManifest(),
+        evidencePolicy: {
+          id: options.evidencePolicyId,
+          maxBytes: 1_000_000,
+          maxRedirects: 3,
+          timeoutMs: 10_000,
+          allowedMime: ["text/html"],
+        },
+      }
+    : testManifest();
   const manifestPath = join(directory, "release.json");
   await writeFile(manifestPath, JSON.stringify(manifest));
   const db = createDb({ dataDir: "memory://" });
@@ -365,19 +823,22 @@ async function registrationSetup(options: {
   const gateway = new RecordingFakeSuiGateway(agents);
   const verify = vi.fn(async () => options.verifierResult);
   const initialAgentCount = options.initialAgentCount ?? 1;
+  const walrus = createLocalWalrusStore(join(directory, "walrus"));
   const engine = await createEngine({
     network: "localnet",
     manifestPath,
     db,
-    walrus: createLocalWalrusStore(join(directory, "walrus")),
+    walrus,
     gonka: createFakeGonkaAdapter([]),
     suiGateway: gateway,
     signers,
-    initialAgents: agents.slice(0, initialAgentCount).map(toEngineAgent),
+    initialAgents: agents
+      .slice(0, initialAgentCount)
+      .map((agent, index) => toEngineAgent(agent, index)),
     zkLoginVerifier: { verify },
     now: () => Date.parse("2026-08-27T00:00:00.000Z"),
   });
-  return { engine, db, gateway, verify };
+  return { engine, db, gateway, verify, walrus };
 }
 
 function testSignerRegistry(count: number): SignerRegistry {
@@ -393,6 +854,11 @@ function testSignerRegistry(count: number): SignerRegistry {
 async function engineSetup(
   gateway: FakeSuiGateway,
   runPlan: number | Array<Array<"YES" | "NO" | "UNSURE">>,
+  options: {
+    promptHash?: `0x${string}`;
+    toolPolicyHash?: `0x${string}`;
+    failures?: Partial<Record<number, FakeFailure>>;
+  } = {},
 ) {
   const directory = await mkdtemp(join(tmpdir(), "openverdict-engine-"));
   const manifest = testManifest();
@@ -401,13 +867,18 @@ async function engineSetup(
   const db = createDb({ dataDir: "memory://" });
   if (!(db instanceof PGlite)) throw new Error("expected pglite");
   databases.push(db);
-  const initialAgents = gateway.agents.map(toEngineAgent);
+  const initialAgents = gateway.agents.map((agent, index) =>
+    toEngineAgent(agent, index, options),
+  );
   const fixtures =
     typeof runPlan === "number"
       ? gateway.agents.map((agent, index) => ({
           agentProfileId: agent.agentProfileId as `0x${string}`,
           outcome: "YES" as const,
           confidenceBps: 8_000,
+          ...(options.failures?.[index] === undefined
+            ? {}
+            : { failure: options.failures[index] }),
           ...(index < runPlan ? {} : { failure: "provider_5xx" as const }),
         }))
       : gateway.agents.flatMap((agent, index) =>
@@ -417,18 +888,21 @@ async function engineSetup(
             confidenceBps: 8_000,
           })),
         );
+  const gonka = createFakeGonkaAdapter(fixtures);
+  const gonkaComplete = vi.spyOn(gonka, "complete");
+  const walrus = createLocalWalrusStore(join(directory, "walrus"));
   const engine = await createEngine({
     network: "localnet",
     manifestPath,
     db,
-    walrus: createLocalWalrusStore(join(directory, "walrus")),
-    gonka: createFakeGonkaAdapter(fixtures),
+    walrus,
+    gonka,
     suiGateway: gateway,
     initialAgents,
     now: () => Date.parse("2026-08-27T00:00:00.000Z"),
     eventPollIntervalMs: 5,
   });
-  return { engine, db };
+  return { engine, db, gonkaComplete, walrus };
 }
 
 async function collectEvents(
@@ -443,7 +917,14 @@ async function collectEvents(
   return events;
 }
 
-function toEngineAgent(agent: FakeSuiAgent, index: number): EngineAgentConfig {
+function toEngineAgent(
+  agent: FakeSuiAgent,
+  index: number,
+  options: {
+    promptHash?: `0x${string}`;
+    toolPolicyHash?: `0x${string}`;
+  } = {},
+): EngineAgentConfig {
   const hash = (label: string) =>
     toHex(blake2b256(new TextEncoder().encode(`${label}:${index}`)));
   const manifest: AgentManifest = {
@@ -454,10 +935,11 @@ function toEngineAgent(agent: FakeSuiAgent, index: number): EngineAgentConfig {
     version: "1",
     manifestBlobId: `manifest-${index}`,
     manifestHash: hash("manifest"),
-    promptHash: hash("prompt"),
+    promptHash: options.promptHash ?? promptSpecHash(DEFAULT_PROMPT_SPEC_V2),
     modelId: agent.modelId,
     providerId: "gonkarouter",
-    toolPolicyHash: hash("tools"),
+    toolPolicyHash:
+      options.toolPolicyHash ?? toolPolicyHash(DEFAULT_TOOL_POLICY_V2),
     evidencePolicyHash: hash("evidence"),
     publicKey: agent.owner,
     registeredAtMs: 0,

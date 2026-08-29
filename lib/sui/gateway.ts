@@ -20,11 +20,13 @@ import {
   buildStartDirectReviewTransaction,
   buildStartChallengedReviewTransaction,
   buildStartFactCheckTransaction,
+  buildUpdateAgentManifestTransaction,
   buildWithdrawPayoutTransaction,
   type ChallengeOutcomeTransactionInput,
   type FreezeEvidenceTransactionInput,
   type ProposeOutcomeTransactionInput,
   type RegisterAgentTransactionInput,
+  type UpdateAgentManifestTransactionInput,
 } from "./builders";
 import { executeAndWait, type ExecutedMoveEvent } from "./execute";
 import type {
@@ -90,6 +92,20 @@ export class RealSuiGateway implements SuiGateway {
       owner: agent.address,
       agentCapId: capId,
     };
+  }
+
+  async updateAgentManifest(
+    input: UpdateAgentManifestTransactionInput & { agentIndex: number },
+  ): Promise<TxResult & { version?: number }> {
+    const agent = this.#signers.getAgentAt(input.agentIndex);
+    const result = await executeAndWait(
+      this.#client,
+      agent.keypair,
+      () => buildUpdateAgentManifestTransaction(this.#manifest, input),
+    );
+    const event = findEvent(result.moveEvents, "AgentManifestUpdated");
+    const version = integerValue(event?.json?.version);
+    return { ...txResult(result), ...(version === undefined ? {} : { version }) };
   }
 
   async createClaim(input: GatewayCreateClaimInput): Promise<ClaimCreationResult> {

@@ -16,6 +16,7 @@ import {
   canonicalJsonBytes,
   hashCanonicalJson,
   type GonkaRouterAdapter,
+  type GonkaRunResult,
 } from "../gonka";
 import {
   CLAIM_MODE,
@@ -29,11 +30,26 @@ import {
   fromHex,
   toHex,
   type AgentManifest,
+  type AgentManifestDocument,
   type InferenceRunAudit,
   type OracleInferenceInput,
   type OracleInferenceOutput,
+  type PublicRunBundle,
+  type PublicRunBundleCore,
+  type SealedRunBundleV2,
   type VoteOutcome,
 } from "../protocol";
+import {
+  createFakeResearchProvider,
+  createSearchCache,
+  runResearchLoop,
+  transcriptHash,
+  type PageStore,
+  type ResearchLoopFailureStatus,
+  type ResearchProvider,
+  type SearchCache,
+  type PageStorePage,
+} from "../research";
 import {
   createRepository,
   migrate,
@@ -78,6 +94,7 @@ import type {
   ResolutionEvent,
   ResolutionEventSource,
   ResolutionEventVisibility,
+  RunProof,
   TxResult,
   ZkBackedRegistrationRequest,
   ZkBackedRegistrationResult,
@@ -89,6 +106,16 @@ import {
   EngineValidationError,
   ZkLoginVerificationError,
 } from "./errors";
+import {
+  EVIDENCE_POLICY_V1_LABEL,
+  buildAgentManifestDocument,
+  parseAgentManifestDocument,
+} from "./agentManifestDocument";
+import {
+  buildRunBundleCore,
+  canonicalCoreBytes,
+  sealRunBundle,
+} from "./runBundle";
 import {
   buildZkLoginBackingMessage,
   ZKLOGIN_AGENT_ROLES,
@@ -102,6 +129,19 @@ const MAX_LOCAL_WALRUS_EPOCH = Number.MAX_SAFE_INTEGER;
 const SUI_ADDRESS_PATTERN = /^0x[0-9a-f]{64}$/;
 const MAX_ZKLOGIN_SIGNATURE_LENGTH = 16_384;
 const ZKLOGIN_VERIFICATION_PROVIDER = "zklogin:enoki";
+
+class ResearchLoopError extends GonkaRunError {
+  readonly status: ResearchLoopFailureStatus;
+
+  constructor(
+    status: ResearchLoopFailureStatus,
+    message: string,
+  ) {
+    super(message, []);
+    this.name = "ResearchLoopError";
+    this.status = status;
+  }
+}
 const DEFAULT_EVIDENCE_POLICY: RetrievalPolicy = {
   maxBytes: 5_000_000,
   maxRedirects: 3,
@@ -120,6 +160,7 @@ interface EngineDependencies {
   gateway: SuiGateway;
   walrus: WalrusStore;
   gonka: GonkaRouterAdapter;
+  research: ResearchProvider | undefined;
   now: () => number;
   retrieve: NonNullable<EngineConfig["retrieve"]>;
   retrievalPolicy: RetrievalPolicy;
@@ -146,6 +187,9 @@ export async function createEngine(config: EngineConfig): Promise<Engine> {
     gateway,
     walrus: config.walrus,
     gonka: config.gonka,
+    research:
+      config.research ??
+      (manifest.gonka.mode === "fake" ? createFakeResearchProvider() : undefined),
     now: config.now ?? Date.now,
     retrieve: config.retrieve ?? retrieveEvidence,
     retrievalPolicy: config.retrievalPolicy ?? manifestEvidencePolicy(manifest),
@@ -163,6 +207,7 @@ class OpenVerdictEngine implements Engine {
   readonly #gateway: SuiGateway;
   readonly #walrus: WalrusStore;
   readonly #gonka: GonkaRouterAdapter;
+  readonly #research: ResearchProvider | undefined;
   readonly #now: () => number;
   readonly #retrieve: NonNullable<EngineConfig["retrieve"]>;
   readonly #retrievalPolicy: RetrievalPolicy;
@@ -177,6 +222,7 @@ class OpenVerdictEngine implements Engine {
     this.#gateway = dependencies.gateway;
     this.#walrus = dependencies.walrus;
     this.#gonka = dependencies.gonka;
+    this.#research = dependencies.research;
     this.#now = dependencies.now;
     this.#retrieve = dependencies.retrieve;
     this.#retrievalPolicy = dependencies.retrievalPolicy;
@@ -535,7 +581,30 @@ class OpenVerdictEngine implements Engine {
     const committee = await this.requiredCommittee(claimId);
     const seats = await this.#repository.listJurySeats(claimId, phase);
     if (seats.length !== 5) throw new EngineStateError("jury run requires five selected seats");
+    const liveHash = this.#gonka.promptSpecHash();
+    const liveToolPolicyHash = this.#gonka.toolPolicyHash();
+    for (const seat of seats) {
+      const agent = await this.requiredAgent(seat.agentProfileId);
+      const manifestHash = agent.manifest.promptHash;
+      if (manifestHash !== liveHash) {
+        throw new EngineValidationError(
+          `agent ${seat.agentProfileId} manifest prompt hash ${manifestHash} does not match the engine prompt spec ${liveHash}; run pnpm tsx scripts/publish-agent-manifests.ts`,
+        );
+      }
+      const manifestToolPolicyHash = agent.manifest.toolPolicyHash;
+      if (manifestToolPolicyHash !== liveToolPolicyHash) {
+        throw new EngineValidationError(
+          `agent ${seat.agentProfileId} manifest tool policy hash ${manifestToolPolicyHash} does not match the engine tool policy ${liveToolPolicyHash}; run pnpm tsx scripts/publish-agent-manifests.ts`,
+        );
+      }
+    }
+    const research = this.#research;
+    if (!research) {
+      throw new EngineValidationError("research provider not configured");
+    }
     const artifacts = await this.artifactsForPhase(claimId, phase);
+    const searchCache = createSearchCache();
+    const storedPageCache = new Map<string, Promise<PageStorePage>>();
 
     await Promise.all(
       seats.map(async (seat) => {
@@ -543,7 +612,16 @@ class OpenVerdictEngine implements Engine {
           (run) => run.jurySeatId === seat.jurySeatId,
         );
         if (existing !== undefined) return;
-        await this.runSeat(claim, committee, seat, evidence, artifacts);
+        await this.runSeat(
+          claim,
+          committee,
+          seat,
+          evidence,
+          artifacts,
+          research,
+          searchCache,
+          storedPageCache,
+        );
       }),
     );
     const runs = await this.#repository.listInferenceRuns(claimId, phase);
@@ -675,7 +753,40 @@ class OpenVerdictEngine implements Engine {
     for (const votePackage of packages) {
       if (!votePackage.committed || votePackage.revealed) continue;
       const run = runById.get(votePackage.runId);
-      if (!run?.output || !run.runHash || !run.runWalrusBlobId) continue;
+      if (
+        !run?.output ||
+        !run.runHash ||
+        !run.sealKeyHex ||
+        !run.sealIvHex ||
+        !run.coreHash ||
+        !run.sealedBlobId ||
+        !run.audit.bundleCore
+      ) {
+        continue;
+      }
+      const core = JSON.parse(
+        run.audit.bundleCore,
+      ) as PublicRunBundleCore;
+      const bundle: PublicRunBundle = {
+        ...core,
+        seal: {
+          algorithm: "AES-256-GCM",
+          keyHex: run.sealKeyHex,
+          ivHex: run.sealIvHex,
+          aad: run.runId,
+          sealedBlobId: run.sealedBlobId,
+          coreHash: run.coreHash,
+        },
+      };
+      let argumentUpload: WalrusPutResult;
+      try {
+        argumentUpload = await this.#walrus.put(canonicalJsonBytes(bundle), {
+          identifier: `${run.runId}-run-bundle.json`,
+        });
+      } catch {
+        // A failed publication must not consume the on-chain reveal opportunity.
+        continue;
+      }
       const result = await this.#gateway.revealVote({
         jurySeatId: votePackage.jurySeatId,
         roundTallyId: tally.roundTallyId,
@@ -685,11 +796,20 @@ class OpenVerdictEngine implements Engine {
         outputHash: fromHex(votePackage.outputHash),
         runHash: fromHex(votePackage.runHash),
         salt: fromHex(votePackage.saltHex),
-        argumentBlobId: run.runWalrusBlobId,
-        argumentBlobObjectId: run.runWalrusObjectId ?? ZERO_OBJECT_ID,
-        argumentWalrusEndEpoch: run.walrusEndEpoch ?? MAX_LOCAL_WALRUS_EPOCH,
+        argumentBlobId: argumentUpload.blobId,
+        argumentBlobObjectId: argumentUpload.objectId ?? ZERO_OBJECT_ID,
+        argumentWalrusEndEpoch:
+          argumentUpload.endEpoch ?? MAX_LOCAL_WALRUS_EPOCH,
       });
       const timestamp = this.isoNow();
+      await this.#repository.saveInferenceRun({
+        ...run,
+        revealedBlobId: argumentUpload.blobId,
+        ...(argumentUpload.objectId === undefined
+          ? {}
+          : { revealedObjectId: argumentUpload.objectId }),
+        updatedAt: timestamp,
+      });
       const reveal: RevealRecord = {
         revealedVoteId: result.revealedVoteId,
         votePackageId: votePackage.votePackageId,
@@ -1113,6 +1233,81 @@ class OpenVerdictEngine implements Engine {
     }));
   }
 
+  async runProof(claimId: string, runId: string): Promise<RunProof> {
+    const run = (await this.#repository.listInferenceRuns(claimId)).find(
+      (candidate) => candidate.runId === runId,
+    );
+    if (!run) {
+      throw new EngineValidationError(
+        `inference run ${runId} was not found for claim ${claimId}`,
+      );
+    }
+    if (!run.runHash) {
+      throw new EngineValidationError(
+        `inference run ${runId} has no validated run hash`,
+      );
+    }
+    const sealedBlobId = run.sealedBlobId ?? null;
+    const revealedBlobId = run.revealedBlobId ?? null;
+    const sealed =
+      sealedBlobId === null
+        ? null
+        : JSON.parse(
+            new TextDecoder().decode(await this.#walrus.get(sealedBlobId)),
+          ) as SealedRunBundleV2;
+    const bundle =
+      revealedBlobId === null
+          ? null
+          : JSON.parse(
+              new TextDecoder().decode(await this.#walrus.get(revealedBlobId)),
+            ) as PublicRunBundle;
+    return {
+      runId: run.runId,
+      claimId: run.claimId,
+      phase: run.phase,
+      agentProfileId: run.agentProfileId,
+      jurySeatId: run.jurySeatId,
+      promptHash: run.promptHash,
+      inputHash: run.inputHash,
+      outputHash: run.outputHash,
+      runHash: run.runHash,
+      gateway: {
+        ...(run.audit.gatewayRequestId === undefined
+          ? {}
+          : { gatewayRequestId: run.audit.gatewayRequestId }),
+        ...(run.audit.devshardId === undefined
+          ? {}
+          : { devshardId: run.audit.devshardId }),
+        ...(run.audit.systemFingerprint === undefined
+          ? {}
+          : { systemFingerprint: run.audit.systemFingerprint }),
+      },
+      sealedBlobId,
+      sealed,
+      revealedBlobId,
+      revealed: revealedBlobId !== null,
+      bundle,
+    };
+  }
+
+  async agentManifestDocument(
+    agentProfileId: string,
+  ): Promise<AgentManifestDocument | null> {
+    const record = await this.#repository.getAgentManifest(agentProfileId);
+    if (
+      !record ||
+      (record.manifest.version !== "2" && record.manifest.version !== "3")
+    ) {
+      return null;
+    }
+    const bytes = await this.#walrus.get(record.manifest.manifestBlobId);
+    try {
+      return parseAgentManifestDocument(bytes);
+    } catch {
+      return null;
+    }
+  }
+
   async status(): Promise<EngineStatus> {
     const [sui, dbHealthy] = await Promise.all([
       this.#gateway.health(),
@@ -1419,6 +1614,9 @@ class OpenVerdictEngine implements Engine {
     seat: JurySeatRecord,
     evidence: EvidenceManifestRecord,
     artifacts: EvidenceArtifactRecord[],
+    research: ResearchProvider,
+    searchCache: SearchCache,
+    storedPageCache: Map<string, Promise<PageStorePage>>,
   ): Promise<void> {
     const agent = await this.requiredAgent(seat.agentProfileId);
     const baseRunId = deterministicId(`run:${claim.claimId}:${seat.jurySeatId}:${seat.phase}`);
@@ -1451,20 +1649,147 @@ class OpenVerdictEngine implements Engine {
     });
 
     try {
-      const response = await this.#gonka.run(input, agent.manifest);
-      const normalized = await this.#gonka.normalizeResponse(response);
-      await this.#gonka.validateOutput(normalized.output, input.evidenceManifest);
-      const adapterAudit = await this.#gonka.buildRunAudit(response);
-      const rawUpload = await this.#walrus.put(
-        new TextEncoder().encode(JSON.stringify(response)),
-        { identifier: `${baseRunId}-gonka-response.json` },
-      );
-      const toolUpload = await this.#walrus.put(new TextEncoder().encode("[]"), {
-        identifier: `${baseRunId}-tool-transcript.json`,
+      const pages: PageStore = {
+        lookup: async (evidenceId) => {
+          const pending = storedPageCache.get(evidenceId);
+          if (pending) return pending;
+          const record = await this.#repository.getEvidenceArtifact(evidenceId);
+          if (!record || record.sourceClass !== "DISCOVERED") return undefined;
+          const text = new TextDecoder().decode(
+            await this.#walrus.get(record.canonicalWalrusBlobId),
+          );
+          const stored: PageStorePage = {
+            evidenceId,
+            url: record.sourceUrl,
+            finalUrl: record.finalUrl,
+            ...(record.title === undefined ? {} : { title: record.title }),
+            text,
+            totalChars: text.length,
+            truncated: record.byteLength > text.length,
+            contentHash: record.contentHash,
+            canonicalHash: record.canonicalHash,
+            canonicalWalrusBlobId: record.canonicalWalrusBlobId,
+          };
+          storedPageCache.set(evidenceId, Promise.resolve(stored));
+          return stored;
+        },
+        store: async (page, meta) => {
+          const existing = storedPageCache.get(meta.evidenceId);
+          if (existing) return existing;
+          const pending = (async (): Promise<PageStorePage> => {
+            const truncated = page.markdown.length > meta.maxPageChars;
+            const text = truncated
+              ? page.markdown.slice(0, meta.maxPageChars)
+              : page.markdown;
+            const bytes = new TextEncoder().encode(text);
+            const hash = toHex(blake2b256(bytes));
+            const upload = await this.#walrus.put(bytes, {
+              identifier: `${meta.evidenceId}-discovered.md`,
+            });
+            const timestamp = this.isoNow();
+            const submissionId = deterministicId(`submission:${meta.evidenceId}`);
+            await this.#repository.saveEvidenceSubmission({
+              submissionId,
+              evidenceId: meta.evidenceId,
+              claimId: claim.claimId,
+              phase: seat.phase,
+              sourceUrl: meta.normalizedUrl,
+              sourceClass: "DISCOVERED",
+              retrievalStatus: "ACCEPTED",
+              createdAt: timestamp,
+              updatedAt: timestamp,
+            });
+            await this.#repository.saveEvidenceArtifact({
+              evidenceId: meta.evidenceId,
+              submissionId,
+              claimId: claim.claimId,
+              phase: seat.phase,
+              sourceUrl: meta.normalizedUrl,
+              finalUrl: page.finalUrl,
+              mimeType: "text/markdown",
+              byteLength: new TextEncoder().encode(page.markdown).byteLength,
+              contentHash: hash,
+              canonicalHash: hash,
+              rawWalrusBlobId: upload.blobId,
+              canonicalWalrusBlobId: upload.blobId,
+              ...(upload.objectId === undefined
+                ? {}
+                : {
+                    rawWalrusObjectId: upload.objectId,
+                    canonicalWalrusObjectId: upload.objectId,
+                  }),
+              ...(upload.endEpoch === undefined
+                ? {}
+                : { walrusEndEpoch: upload.endEpoch }),
+              parserVersion: "firecrawl-markdown-v1",
+              ...(page.title === undefined ? {} : { title: page.title }),
+              excerpt: text.slice(0, 500),
+              retrievedAt: new Date(page.fetchedAtMs).toISOString(),
+              createdAt: timestamp,
+              updatedAt: timestamp,
+              sourceClass: "DISCOVERED",
+              discoveredByRunId: input.runId,
+            });
+            return {
+              evidenceId: meta.evidenceId,
+              url: meta.normalizedUrl,
+              finalUrl: page.finalUrl,
+              ...(page.title === undefined ? {} : { title: page.title }),
+              text,
+              totalChars: text.length,
+              truncated,
+              contentHash: hash,
+              canonicalHash: hash,
+              canonicalWalrusBlobId: upload.blobId,
+            };
+          })();
+          storedPageCache.set(meta.evidenceId, pending);
+          try {
+            return await pending;
+          } catch (error) {
+            if (storedPageCache.get(meta.evidenceId) === pending) {
+              storedPageCache.delete(meta.evidenceId);
+            }
+            throw error;
+          }
+        },
+      };
+      const loop = await runResearchLoop({
+        complete: (request) => this.#gonka.complete(request),
+        provider: research,
+        policy: this.#gonka.toolPolicy(),
+        spec: this.#gonka.promptSpec(),
+        input,
+        manifest: agent.manifest,
+        claimId: claim.claimId,
+        phase: seat.phase,
+        pages,
+        searchCache,
+        now: this.#now,
       });
+      if (!loop.ok) {
+        if (loop.attempts.length === 0) {
+          throw new ResearchLoopError(loop.status, loop.message);
+        }
+        throw new GonkaRunError(loop.message, loop.attempts);
+      }
+      const response: GonkaRunResult = {
+        type: "gonka-run-result",
+        attempts: loop.attempts,
+        response: loop.response,
+        request: loop.request,
+        gateway: loop.gateway,
+      };
+      const adapterAudit = await this.#gonka.buildRunAudit(response);
+      const normalized = {
+        gonkaRequestId: adapterAudit.gonkaRequestId,
+        modelId: adapterAudit.responseModelId ?? adapterAudit.modelId,
+        output: loop.output,
+      };
       // One canonical run ID spans visible retry attempts for this jury seat.
       const runId = baseRunId;
       const outputHash = toHex(blake2b256(canonicalJsonBytes(normalized.output)));
+      const toolTranscriptHash = transcriptHash(loop.transcript);
       const audit: InferenceRunAudit = {
         ...adapterAudit,
         runId: runId as `0x${string}`,
@@ -1477,10 +1802,14 @@ class OpenVerdictEngine implements Engine {
         gonkaRequestId: normalized.gonkaRequestId,
         inputHash: hashCanonicalJson(input),
         outputHash,
-        runWalrusBlobId: rawUpload.blobId,
-        toolTranscriptHash: EMPTY_TOOL_TRANSCRIPT_HASH,
-        toolTranscriptWalrusBlobId: toolUpload.blobId,
+        // The sealed blob ID is known only after this core is encrypted and uploaded.
+        runWalrusBlobId: "",
+        toolTranscriptHash,
+        toolTranscriptWalrusBlobId: "",
+        toolCallCount:
+          loop.transcript.counts.searches + loop.transcript.counts.opens,
         evidenceRoot: evidence.root,
+        ...response.gateway,
         status: "SCHEMA_VALID",
       };
       const runHash = toHex(
@@ -1503,20 +1832,24 @@ class OpenVerdictEngine implements Engine {
           completed_at_ms: audit.completedAtMs,
         }),
       );
-      const runBundleUpload = await this.#walrus.put(
-        new TextEncoder().encode(
-          JSON.stringify({
-            version: 1,
-            rawResponse: response,
-            validatedOutput: normalized.output,
-            audit,
-            runHash,
-          }),
-        ),
-        { identifier: `${baseRunId}-public-run-bundle.json` },
+      const core = buildRunBundleCore({
+        promptSpec: this.#gonka.promptSpec(),
+        toolPolicy: this.#gonka.toolPolicy(),
+        input,
+        runResult: response,
+        validatedOutput: normalized.output,
+        audit,
+        runHash,
+        transcript: loop.transcript,
+      });
+      const bundleCore = new TextDecoder().decode(canonicalCoreBytes(core));
+      const { sealed, seal } = sealRunBundle(core, { runId: audit.runId });
+      const sealedUpload = await this.#walrus.put(
+        canonicalJsonBytes(sealed),
+        { identifier: `${baseRunId}-sealed-run-bundle.json` },
       );
       const retainedUntil =
-        endEpoch(runBundleUpload, toolUpload) ?? MAX_LOCAL_WALRUS_EPOCH;
+        endEpoch(sealedUpload) ?? MAX_LOCAL_WALRUS_EPOCH;
       const approval = await this.#gateway.approveRun({
         claimId: claim.claimId,
         committeeId: committee.committeeId,
@@ -1525,13 +1858,19 @@ class OpenVerdictEngine implements Engine {
         agentOwner: seat.agentOwner,
         phase: seat.phase,
         runHash: fromHex(runHash),
-        runBlobId: runBundleUpload.blobId,
-        runBlobObjectId: runBundleUpload.objectId ?? ZERO_OBJECT_ID,
-        toolBlobId: toolUpload.blobId,
-        toolBlobObjectId: toolUpload.objectId ?? ZERO_OBJECT_ID,
+        runBlobId: sealedUpload.blobId,
+        runBlobObjectId: sealedUpload.objectId ?? ZERO_OBJECT_ID,
+        toolBlobId: sealedUpload.blobId,
+        toolBlobObjectId: sealedUpload.objectId ?? ZERO_OBJECT_ID,
         walrusEndEpoch: retainedUntil,
       });
       const timestamp = this.isoNow();
+      const storedAudit: InferenceRunRecord["audit"] = {
+        ...audit,
+        runWalrusBlobId: sealedUpload.blobId,
+        toolTranscriptWalrusBlobId: sealedUpload.blobId,
+        bundleCore,
+      };
       const run: InferenceRunRecord = {
         runId: audit.runId,
         claimId: claim.claimId,
@@ -1546,15 +1885,22 @@ class OpenVerdictEngine implements Engine {
         inputHash: audit.inputHash,
         outputHash,
         runHash,
-        runWalrusBlobId: runBundleUpload.blobId,
-        ...(runBundleUpload.objectId === undefined
+        runWalrusBlobId: sealedUpload.blobId,
+        ...(sealedUpload.objectId === undefined
           ? {}
-          : { runWalrusObjectId: runBundleUpload.objectId }),
+          : { runWalrusObjectId: sealedUpload.objectId }),
+        sealKeyHex: seal.keyHex,
+        sealIvHex: seal.ivHex,
+        coreHash: seal.coreHash,
+        sealedBlobId: sealedUpload.blobId,
+        ...(sealedUpload.objectId === undefined
+          ? {}
+          : { sealedObjectId: sealedUpload.objectId }),
         toolTranscriptHash: audit.toolTranscriptHash,
-        toolTranscriptWalrusBlobId: toolUpload.blobId,
-        ...(toolUpload.objectId === undefined
+        toolTranscriptWalrusBlobId: sealedUpload.blobId,
+        ...(sealedUpload.objectId === undefined
           ? {}
-          : { toolTranscriptWalrusObjectId: toolUpload.objectId }),
+          : { toolTranscriptWalrusObjectId: sealedUpload.objectId }),
         walrusEndEpoch: retainedUntil,
         evidenceRoot: evidence.root,
         validationStatus: "SCHEMA_VALID",
@@ -1562,7 +1908,7 @@ class OpenVerdictEngine implements Engine {
         ...(audit.inputTokens === undefined ? {} : { inputTokens: audit.inputTokens }),
         ...(audit.outputTokens === undefined ? {} : { outputTokens: audit.outputTokens }),
         output: normalized.output,
-        audit,
+        audit: storedAudit,
         requestedAt: new Date(audit.requestedAtMs).toISOString(),
         completedAt: new Date(audit.completedAtMs).toISOString(),
         createdAt: timestamp,
@@ -1609,7 +1955,8 @@ class OpenVerdictEngine implements Engine {
     const failedAudit = terminalFailureAudit(error);
     const timestampMs = this.#now();
     const runId = failedAudit?.runId ?? deterministicId(`failed:${input.runId}`);
-    const status = failedAudit?.status ?? "PROVIDER_ERROR";
+    const status =
+      failedAudit?.status ?? terminalFailureStatus(error) ?? "PROVIDER_ERROR";
     const timestamp = new Date(timestampMs).toISOString();
     const zeroHash = hashCanonicalJson(null);
     const audit: InferenceRunAudit = {
@@ -1652,7 +1999,7 @@ class OpenVerdictEngine implements Engine {
       outputHash: audit.outputHash,
       toolTranscriptHash: audit.toolTranscriptHash,
       evidenceRoot: input.evidenceManifest.root as `0x${string}`,
-      validationStatus: "NO_VALID_INFERENCE",
+      validationStatus: status,
       latencyMs: audit.latencyMs,
       audit,
       requestedAt: new Date(audit.requestedAtMs).toISOString(),
@@ -1911,24 +2258,35 @@ class OpenVerdictEngine implements Engine {
 
     // Persist only the pseudonymous backing hash; the social address and its
     // signature are used for authentication and deliberately not stored.
-    const manifestBytes = canonicalJsonBytes({
+    const built = buildAgentManifestDocument({
+      network: this.#manifest.network,
       backingKind: "ZKLOGIN_BACKED",
       humanBackingHash,
       humanVerificationProvider: ZKLOGIN_VERIFICATION_PROVIDER,
-      modelId: req.modelId,
-      network: this.#manifest.network,
-      operationalOwner: slot.address,
+      operationalOwner: slot.address as `0x${string}`,
       role: req.role,
-      version: "1",
+      modelId: req.modelId,
+      promptSpec: this.#gonka.promptSpec(),
+      toolPolicy: this.#gonka.toolPolicy(),
+      // The document carries the human-readable label; verifiers hash it.
+      evidencePolicyId: EVIDENCE_POLICY_V1_LABEL,
     });
-    const manifestHashBytes = blake2b256(manifestBytes);
-    const manifestUpload = await this.#walrus.put(manifestBytes, {
+    // Fail closed if the document's policy hash and the id the engine records
+    // at evidence freeze ever diverge (a release manifest that overrides
+    // evidencePolicy.id needs a matching document label first).
+    const enginePolicyId = evidencePolicyId(this.#manifest);
+    if (built.document.evidencePolicyHash !== enginePolicyId) {
+      throw new EngineValidationError(
+        `manifest document evidence policy hash ${built.document.evidencePolicyHash} does not match the engine evidence policy id ${enginePolicyId}`,
+      );
+    }
+    const manifestUpload = await this.#walrus.put(built.bytes, {
       identifier: `agent-${humanBackingHash.slice(2, 18)}.json`,
     });
     const result = await this.#gateway.registerAgent({
       agentIndex: slot.index,
       bondAmount: 1,
-      manifestHash: manifestHashBytes,
+      manifestHash: fromHex(built.manifestHash),
       manifestBlobId: manifestUpload.blobId,
       modelHash: blake2b256(new TextEncoder().encode(req.modelId)),
       roleHash: blake2b256(
@@ -1943,14 +2301,14 @@ class OpenVerdictEngine implements Engine {
       owner: result.owner as `0x${string}`,
       humanAttestationHash: humanBackingHash,
       humanVerificationProvider: ZKLOGIN_VERIFICATION_PROVIDER,
-      version: "1",
+      version: "3",
       manifestBlobId: manifestUpload.blobId,
-      manifestHash: toHex(manifestHashBytes),
-      promptHash: deterministicId(`prompt:v1:${req.role}`),
+      manifestHash: built.manifestHash,
+      promptHash: built.promptHash,
       modelId: req.modelId,
       providerId: "gonkarouter",
-      toolPolicyHash: deterministicId("tools:v1"),
-      evidencePolicyHash: evidencePolicyId(this.#manifest),
+      toolPolicyHash: built.toolPolicyHash,
+      evidencePolicyHash: built.document.evidencePolicyHash,
       publicKey: result.owner,
       registeredAtMs: this.#now(),
       registeredCheckpoint: result.checkpoint ?? 0,
@@ -2026,27 +2384,52 @@ class OpenVerdictEngine implements Engine {
     // Fake mode may synthesize display metadata for a freshly deployed demo registry.
     const hash = (label: string) =>
       toHex(blake2b256(new TextEncoder().encode(`${label}:${agentProfileId}`)));
+    const role =
+      index === 0
+        ? "SKEPTIC"
+        : index === 1
+          ? "SOURCE_AUTHENTICITY"
+          : "ANALYST";
+    const humanBackingHash = hash("human");
+    const modelId =
+      this.#manifest.gonka.models[index % this.#manifest.gonka.models.length] ??
+      "unknown";
+    const built = buildAgentManifestDocument({
+      network: this.#manifest.network,
+      backingKind: "TESTNET_DEMO_ALLOWLIST",
+      humanBackingHash,
+      humanVerificationProvider: "demo-allowlist",
+      operationalOwner: owner as `0x${string}`,
+      role,
+      modelId,
+      promptSpec: this.#gonka.promptSpec(),
+      toolPolicy: this.#gonka.toolPolicy(),
+      evidencePolicyId: EVIDENCE_POLICY_V1_LABEL,
+    });
+    const manifestUpload = await this.#walrus.put(built.bytes, {
+      identifier: `agent-demo-${agentProfileId.slice(2, 18)}.json`,
+    });
     const timestamp = this.isoNow();
     const manifest: AgentManifest = {
       agentProfileId: agentProfileId as `0x${string}`,
       owner: owner as `0x${string}`,
-      humanAttestationHash: hash("human"),
+      humanAttestationHash: humanBackingHash,
       humanVerificationProvider: "demo-allowlist",
-      version: "1",
-      manifestBlobId: `unindexed-${agentProfileId}`,
-      manifestHash: hash("manifest"),
-      promptHash: hash("prompt"),
-      modelId: this.#manifest.gonka.models[index % this.#manifest.gonka.models.length] ?? "unknown",
+      version: "3",
+      manifestBlobId: manifestUpload.blobId,
+      manifestHash: built.manifestHash,
+      promptHash: built.promptHash,
+      modelId,
       providerId: "gonkarouter",
-      toolPolicyHash: hash("tools"),
-      evidencePolicyHash: evidencePolicyId(this.#manifest),
+      toolPolicyHash: built.toolPolicyHash,
+      evidencePolicyHash: built.document.evidencePolicyHash,
       publicKey: owner,
       registeredAtMs: this.#now(),
       registeredCheckpoint: 0,
     };
     await this.#repository.saveAgentManifest({
       manifest,
-      role: index === 0 ? "SKEPTIC" : index === 1 ? "SOURCE_AUTHENTICITY" : "ANALYST",
+      role,
       ...(agentCapId === undefined ? {} : { agentCapId }),
       active: true,
       reputation: {},
@@ -2363,7 +2746,7 @@ function manifestEvidencePolicy(manifest: ReleaseManifest): RetrievalPolicy {
 function evidencePolicyId(manifest: ReleaseManifest): `0x${string}` {
   return (
     manifest.evidencePolicy?.id ??
-    toHex(blake2b256(new TextEncoder().encode("OPENVERDICT_EVIDENCE_POLICY_V1")))
+    toHex(blake2b256(new TextEncoder().encode(EVIDENCE_POLICY_V1_LABEL)))
   ) as `0x${string}`;
 }
 
@@ -2556,7 +2939,7 @@ function oracleInput(
     protocolVersion: "1.0",
     runId,
     agentRole: role,
-    promptVersion: "1",
+    promptVersion: "2",
     submission: {
       kind:
         claim.submittedText && claim.submittedUrls.length > 0
@@ -2617,6 +3000,12 @@ function toAgentRunSummary(run: InferenceRunRecord): AgentRunSummary {
 function terminalFailureAudit(error: unknown): InferenceRunAudit | undefined {
   if (!(error instanceof GonkaRunError)) return undefined;
   return error.result.attempts.at(-1)?.audit;
+}
+
+function terminalFailureStatus(
+  error: unknown,
+): InferenceRunAudit["status"] | undefined {
+  return error instanceof ResearchLoopError ? error.status : undefined;
 }
 
 function outcomeCode(outcome: OracleInferenceOutput["outcome"]): VoteOutcome {

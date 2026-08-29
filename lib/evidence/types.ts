@@ -57,7 +57,8 @@ export type EvidenceSourceClass =
   | "PRIMARY"
   | "OFFICIAL_RECORD"
   | "INDEPENDENT"
-  | "USER_SUBMITTED";
+  | "USER_SUBMITTED"
+  | "DISCOVERED";
 
 export type EvidenceRetrievalStatus = "PENDING" | "ACCEPTED" | "REJECTED";
 

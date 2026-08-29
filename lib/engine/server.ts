@@ -1,8 +1,12 @@
 import { existsSync } from "node:fs";
 import type { Signer } from "@mysten/sui/cryptography";
-import { SuiGrpcClient } from "@mysten/sui/grpc";
-import { createFakeGonkaAdapter, createGonkaAdapter, type GonkaRouterAdapter } from "../gonka";
+import {
+  createFakeGonkaAdapter,
+  createGonkaAdapter,
+  type GonkaRouterAdapter,
+} from "../gonka";
 import { blake2b256, toHex, type AgentManifest, type OracleInferenceInput } from "../protocol";
+import { createFirecrawlProvider } from "../research";
 import { createDb } from "../storage";
 import {
   SignerRegistry,
@@ -77,6 +81,10 @@ async function buildServerEngine(): Promise<Engine> {
   if (manifest.gonka.mode === "live" && !process.env.GONKA_ROUTER_API_KEY?.trim()) {
     throw new EngineNotWiredError("GONKA_ROUTER_API_KEY is required in live mode");
   }
+  const firecrawlApiKey = process.env.FIRECRAWL_API_KEY?.trim();
+  if (manifest.gonka.mode === "live" && !firecrawlApiKey) {
+    throw new Error("FIRECRAWL_API_KEY is required for live juror research");
+  }
 
   const signers = SignerRegistry.fromEnv(process.env, 7);
   const suiClient = createSuiClients(manifest);
@@ -102,8 +110,18 @@ async function buildServerEngine(): Promise<Engine> {
           baseUrl: readEnv(process.env.GONKA_ROUTER_BASE_URL, manifest.gonka.baseUrl),
           apiKey: process.env.GONKA_ROUTER_API_KEY ?? "",
           timeoutMs: numberEnv("GONKA_REQUEST_TIMEOUT_MS", 120_000),
+          // Research turns carry a growing conversation; give them longer.
+          researchTimeoutMs: numberEnv("GONKA_RESEARCH_TIMEOUT_MS", 240_000),
           maxRetries: numberEnv("GONKA_MAX_RETRIES", 1),
         });
+  const research = manifest.gonka.mode === "live"
+    ? createFirecrawlProvider({
+        apiKey: firecrawlApiKey ?? "",
+        ...(process.env.FIRECRAWL_API_URL?.trim()
+          ? { baseUrl: process.env.FIRECRAWL_API_URL.trim() }
+          : {}),
+      })
+    : undefined;
 
   return createEngine({
     network: manifest.network,
@@ -111,6 +129,7 @@ async function buildServerEngine(): Promise<Engine> {
     db,
     walrus,
     gonka,
+    ...(research === undefined ? {} : { research }),
     suiClient,
     signers,
     ...(process.env.OPENVERDICT_ZKLOGIN_GRAPHQL_URL?.trim()
@@ -132,66 +151,60 @@ async function createRuntimeRealWalrusStore(
   // every request died with "Cannot find package '@mysten/walrus'". The
   // package is listed in serverExternalPackages instead, which keeps the wasm
   // out of the route bundle AND lets the tracer follow it.
-  const { WalrusFile, walrus } = await import("@mysten/walrus");
-  const client = new SuiGrpcClient({
+  const { createRealWalrusStore } = await import("../walrus/real");
+  return createRealWalrusStore({
     network: manifest.walrus.mode,
-    baseUrl: manifest.suiRpcUrl,
-  }).$extend(walrus());
-  const epochs = manifest.walrus.epochs ?? 10;
-  return {
-    async put(bytes, options) {
-      const stableBytes = Uint8Array.from(bytes);
-      const file = WalrusFile.from({
-        contents: stableBytes,
-        identifier:
-          options?.identifier ??
-          `${Buffer.from(blake2b256(stableBytes)).toString("base64url")}.bin`,
-        tags: options?.tags,
-      });
-      const results = await client.walrus.writeFiles({
-        files: [file],
-        epochs: options?.epochs ?? epochs,
-        deletable: options?.deletable ?? false,
-        owner: options?.owner,
-        signer,
-      });
-      const result = results[0];
-      if (!result) throw new Error("Walrus write returned no file result");
-      return {
-        blobId: result.blobId,
-        objectId: result.blobObject.id,
-        endEpoch: result.blobObject.storage.end_epoch,
-      };
-    },
-    async get(blobId) {
-      const files = await client.walrus.getFiles({ ids: [blobId] });
-      const file = files[0];
-      if (!file) throw new Error(`Walrus blob not found: ${blobId}`);
-      return Uint8Array.from(await file.bytes());
-    },
-  };
+    // Some networks (this developer machine among them) cannot complete TLS
+    // to *.sui.io; https://public-rpc.sui-testnet.mystenlabs.com is the same
+    // fullnode under its CNAME target, so it is an override, not a fallback.
+    baseUrl: readEnv(process.env.OPENVERDICT_SUI_GRPC_URL, manifest.suiRpcUrl),
+    signer,
+    epochs: manifest.walrus.epochs ?? 10,
+  });
 }
 
 function createDynamicFakeAdapter(): GonkaRouterAdapter {
   const utilityAgentId = `0x${"00".repeat(32)}` as const;
   const utility = createFakeGonkaAdapter([{ agentProfileId: utilityAgentId }]);
+  const completionAdapters = new WeakMap<object, GonkaRouterAdapter>();
+  const adapterFor = (
+    input: OracleInferenceInput,
+    manifest: AgentManifest,
+  ): GonkaRouterAdapter => {
+    const confidenceOffset = blake2b256(
+      new TextEncoder().encode(manifest.agentProfileId),
+    )[0] ?? 0;
+    return createFakeGonkaAdapter([
+      {
+        agentProfileId: manifest.agentProfileId,
+        outcome: "YES",
+        confidenceBps: 7_800 + (confidenceOffset % 5) * 100,
+        gonkaRequestId: `msg_fake_${toHex(blake2b256(new TextEncoder().encode(input.runId))).slice(2, 18)}`,
+      },
+    ]);
+  };
   return {
     async run(input: OracleInferenceInput, manifest: AgentManifest): Promise<unknown> {
-      const confidenceOffset = blake2b256(
-        new TextEncoder().encode(manifest.agentProfileId),
-      )[0] ?? 0;
-      return createFakeGonkaAdapter([
-        {
-          agentProfileId: manifest.agentProfileId,
-          outcome: "YES",
-          confidenceBps: 7_800 + (confidenceOffset % 5) * 100,
-          gonkaRequestId: `msg_fake_${toHex(blake2b256(new TextEncoder().encode(input.runId))).slice(2, 18)}`,
-        },
-      ]).run(input, manifest);
+      return adapterFor(input, manifest).run(input, manifest);
+    },
+    async complete(request) {
+      let adapter = completionAdapters.get(request.attempts);
+      if (!adapter) {
+        adapter = adapterFor(request.input, request.manifest);
+        completionAdapters.set(request.attempts, adapter);
+      }
+      return adapter.complete(request);
     },
     normalizeResponse: utility.normalizeResponse,
     validateOutput: utility.validateOutput,
     buildRunAudit: utility.buildRunAudit,
+    // The fake jury must bind to the same prompt spec as the live adapter, or
+    // the engine's fail-closed manifest check would reject every seat.
+    promptSpec: utility.promptSpec,
+    promptSpecHash: utility.promptSpecHash,
+    toolPolicy: utility.toolPolicy,
+    toolPolicyHash: utility.toolPolicyHash,
+    legacyPromptSpec: utility.legacyPromptSpec,
   };
 }
 

@@ -9,6 +9,7 @@ import { HashChip } from "@/components/viz/hash-chip";
 import { ModelBadge, modelFamily } from "@/components/viz/model-badge";
 import { cn } from "@/lib/utils";
 import type { AgentDirectoryEntry } from "@/lib/engine/contract";
+import type { AgentManifestDocument } from "@/lib/protocol/types";
 import {
   Profile2User,
   Cpu,
@@ -16,12 +17,17 @@ import {
   Activity,
   TickCircle,
   CloseCircle,
+  DocumentCode,
   KeySquare,
 } from "@/components/icons";
 
 interface AgentDetailPageProps {
   params: Promise<{ id: string }>;
 }
+
+type ManifestResponse = AgentManifestDocument & {
+  manifestBlobId?: string;
+};
 
 /** The reputation dimensions the Move registry maintains, in display order. */
 const DIMENSIONS = [
@@ -52,6 +58,9 @@ export default function AgentDetailPage({ params }: AgentDetailPageProps) {
 
   const [agent, setAgent] = useState<AgentDirectoryEntry | null>(null);
   const [loading, setLoading] = useState(true);
+  const [manifest, setManifest] = useState<ManifestResponse | null>(null);
+  const [manifestLoading, setManifestLoading] = useState(true);
+  const [manifestError, setManifestError] = useState<string | null>(null);
 
   useEffect(() => {
     let ignore = false;
@@ -79,6 +88,43 @@ export default function AgentDetailPage({ params }: AgentDetailPageProps) {
       ignore = true;
     };
   }, [id]);
+
+  useEffect(() => {
+    if (!agent) return;
+    // Captured outside the closure: TypeScript does not carry the null guard into it.
+    const agentProfileId = agent.agentProfileId;
+    let ignore = false;
+    async function loadManifest() {
+      try {
+        const response = await fetch(
+          `/api/agents/${encodeURIComponent(agentProfileId)}/manifest`,
+          { cache: "no-store" },
+        );
+        if (ignore) return;
+        if (response.status === 404) {
+          setManifestError("No published manifest document was found");
+          return;
+        }
+        if (response.status === 503) {
+          setManifestError("The verification engine is not available");
+          return;
+        }
+        if (!response.ok) {
+          setManifestError("The manifest document could not be loaded");
+          return;
+        }
+        setManifest((await response.json()) as ManifestResponse);
+      } catch {
+        if (!ignore) setManifestError("The manifest document could not be loaded");
+      } finally {
+        if (!ignore) setManifestLoading(false);
+      }
+    }
+    void loadManifest();
+    return () => {
+      ignore = true;
+    };
+  }, [agent]);
 
   if (loading) {
     return (
@@ -111,6 +157,9 @@ export default function AgentDetailPage({ params }: AgentDetailPageProps) {
 
   const family = modelFamily(agent.modelId);
   const reputationEntries = Object.entries(agent.reputation ?? {});
+  const manifestBlobId =
+    manifest?.manifestBlobId ??
+    (agent as AgentDirectoryEntry & { manifestBlobId?: string }).manifestBlobId;
 
   return (
     <div className="mx-auto max-w-4xl space-y-6 px-5 py-10 md:px-7 lg:py-12">
@@ -181,6 +230,104 @@ export default function AgentDetailPage({ params }: AgentDetailPageProps) {
         </div>
       </Panel>
 
+      <Panel label="Published manifest document" icon={DocumentCode} tone="sealed">
+        {manifestLoading ? (
+          <div className="space-y-2">
+            <div className="h-9 animate-pulse rounded-lg bg-surface-2" />
+            <div className="h-44 animate-pulse rounded-lg bg-surface-2" />
+          </div>
+        ) : manifest ? (
+          <div className="space-y-5">
+            <div className="grid gap-3 sm:grid-cols-3">
+              <div className="rounded-lg border border-border bg-surface p-3">
+                <FieldLabel className="mb-1">Version</FieldLabel>
+                <p className="text-sm font-semibold text-ocean">{manifest.version}</p>
+              </div>
+              <div className="rounded-lg border border-border bg-surface p-3">
+                <FieldLabel className="mb-1">Network</FieldLabel>
+                <p className="text-sm font-semibold text-ocean">{manifest.network}</p>
+              </div>
+              <div className="rounded-lg border border-border bg-surface p-3">
+                <FieldLabel className="mb-1">Backing kind</FieldLabel>
+                <p className="text-xs font-semibold break-words text-ocean">
+                  {manifest.backingKind}
+                </p>
+              </div>
+            </div>
+
+            <div className="grid gap-2 sm:grid-cols-2">
+              {[
+                ["Manifest hash", agent.manifestHash, "sealed"],
+                ["Prompt hash", manifest.promptHash, "chain"],
+                ["Tool policy hash", manifest.toolPolicyHash, "default"],
+                ["Evidence policy hash", manifest.evidencePolicyHash, "default"],
+                ["Human backing hash", manifest.humanBackingHash, "sealed"],
+                ["Operational owner", manifest.operationalOwner, "chain"],
+              ].map(([label, value, tone]) => (
+                <div key={label} className="space-y-1.5 rounded-lg border border-border bg-card p-2.5">
+                  <FieldLabel>{label}</FieldLabel>
+                  <HashChip
+                    value={value}
+                    tone={tone as "default" | "chain" | "sealed"}
+                    head={12}
+                    tail={10}
+                  />
+                </div>
+              ))}
+            </div>
+
+            <div className="space-y-1.5">
+              <FieldLabel>Manifest blob id</FieldLabel>
+              {manifestBlobId ? (
+                <HashChip value={manifestBlobId} tone="sealed" head={14} tail={10} />
+              ) : (
+                <p className="text-[11px] text-muted-foreground">
+                  The current agent directory response does not expose this blob id.
+                </p>
+              )}
+            </div>
+
+            <div className={cn("grid gap-4", manifest.version === "3" && "lg:grid-cols-2")}>
+              {manifest.version === "3" && (
+                <div className="space-y-1.5">
+                  <FieldLabel>Tool policy budgets</FieldLabel>
+                  <dl className="grid gap-2 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
+                    {[
+                      ["Provider", manifest.toolPolicy.provider],
+                      ["Searches", String(manifest.toolPolicy.maxSearches)],
+                      ["Opens", String(manifest.toolPolicy.maxOpens)],
+                      ["Turns", String(manifest.toolPolicy.maxTurns)],
+                      ["Results per search", String(manifest.toolPolicy.resultsPerSearch)],
+                      ["Page slice chars", String(manifest.toolPolicy.pageSliceChars)],
+                      ["Max page chars", String(manifest.toolPolicy.maxPageChars)],
+                    ].map(([label, value]) => (
+                      <div key={label} className="rounded-lg border border-border bg-surface p-2.5">
+                        <dt className="text-[10px] font-semibold tracking-wide text-muted-foreground uppercase">
+                          {label}
+                        </dt>
+                        <dd className="mt-1 font-mono text-xs font-semibold text-ocean">
+                          {value}
+                        </dd>
+                      </div>
+                    ))}
+                  </dl>
+                </div>
+              )}
+              <div className="space-y-1.5">
+                <FieldLabel>Prompt spec text</FieldLabel>
+                <pre className="max-h-96 overflow-auto rounded-lg border border-border bg-surface p-3 font-mono text-[11px] leading-relaxed whitespace-pre-wrap break-words text-foreground/85">
+                  {JSON.stringify(manifest.promptSpec, null, 2)}
+                </pre>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="rounded-xl border border-dashed border-border bg-surface px-4 py-6 text-center text-xs text-muted-foreground">
+            {manifestError ?? "The manifest document is not available"}
+          </div>
+        )}
+      </Panel>
+
       {/* Reputation */}
       <Panel label="Multi-dimensional reputation" icon={ShieldTick} tone="yes">
         <p className="mb-4 text-xs leading-relaxed text-muted-foreground">
@@ -190,7 +337,7 @@ export default function AgentDetailPage({ params }: AgentDetailPageProps) {
 
         {reputationEntries.length === 0 ? (
           <div className="rounded-xl border border-dashed border-border bg-surface px-4 py-6 text-center text-xs text-muted-foreground">
-            No reputation dimensions recorded yet — this agent has not completed a scored jury
+            No reputation dimensions recorded yet. This agent has not completed a scored jury
             run on this deployment.
           </div>
         ) : (
@@ -203,7 +350,7 @@ export default function AgentDetailPage({ params }: AgentDetailPageProps) {
                   <div className="flex items-baseline justify-between gap-2">
                     <span className="text-xs font-semibold text-ocean">{dim.label}</span>
                     <span className="text-xs text-muted-foreground tabular-nums">
-                      {typeof bps === "number" ? `${bps} bps · ${pct}%` : "—"}
+                      {typeof bps === "number" ? `${bps} bps · ${pct}%` : "Not recorded"}
                     </span>
                   </div>
                   <div className="h-2 w-full overflow-hidden rounded-full bg-surface-2">
@@ -252,7 +399,7 @@ export default function AgentDetailPage({ params }: AgentDetailPageProps) {
           its Google zkLogin address signs the canonical backing message. With a fixed salt
           policy one social account maps to one backing hash, and the Move rule
           &ldquo;one committee seat per human backing hash&rdquo; makes that one seat. This
-          raises Sybil cost — it is authentication, never proof of personhood.
+          raises Sybil cost. It is authentication, never proof of personhood.
         </p>
       </Panel>
 

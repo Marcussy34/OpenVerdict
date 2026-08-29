@@ -81,6 +81,11 @@ function fakeEngine(): Engine {
     juryRun: async (claimId, phase) => ({ claimId, phase, runs: [] }),
     votesCommit: async () => [],
     votesReveal: async () => [],
+    // Proof reads are not exercised by the CLI tests; fail loudly if they ever are.
+    runProof: async () => {
+      throw new Error("fake engine: runProof is not implemented");
+    },
+    agentManifestDocument: async () => null,
     advance: async () => null,
     finalize: async (claimId) => ({
       claimId,

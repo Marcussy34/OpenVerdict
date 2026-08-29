@@ -7,6 +7,7 @@ import { join } from "node:path";
 import { Ed25519Keypair } from "@mysten/sui/keypairs/ed25519";
 import { Transaction } from "@mysten/sui/transactions";
 import {
+  buildAgentManifestDocument,
   createEngine,
   type ClaimInspection,
   type Engine,
@@ -14,6 +15,8 @@ import {
   type FinalizeReport,
 } from "../lib/engine";
 import {
+  DEFAULT_PROMPT_SPEC_V2,
+  DEFAULT_TOOL_POLICY_V2,
   createFakeGonkaAdapter,
   type GonkaRouterAdapter,
 } from "../lib/gonka";
@@ -22,6 +25,7 @@ import {
   OUTCOME,
   blake2b256,
   computeTruthScoreBps,
+  fromHex,
   toHex,
   type AgentManifest,
   type HexString,
@@ -42,7 +46,7 @@ import {
   type ReleaseManifest,
   type SuiGateway,
 } from "../lib/sui";
-import { createLocalWalrusStore } from "../lib/walrus";
+import { createLocalWalrusStore, type WalrusStore } from "../lib/walrus";
 import {
   deployLocalnet,
   createLocalnetRpcClient,
@@ -61,6 +65,7 @@ const runtimeManifestPath = join(localnetDir, "release.runtime.json");
 const localnetPorts = [9000, 9123] as const;
 const agentCount = 7;
 const poolStake = 100_000_000n;
+const evidencePolicyId = "OPENVERDICT_EVIDENCE_POLICY_V1";
 
 const directStatement = "OpenVerdict localnet direct-review proof is operational.";
 const splitStatement = "OpenVerdict localnet split-vote proof reaches discussion.";
@@ -203,7 +208,8 @@ async function main(): Promise<void> {
       ]);
       assert.equal(addresses.size, agentCount + 2, "all funded actors must be distinct");
     });
-    const agents = await registerAgents(client, manifest, signerRegistry);
+    const walrus = createLocalWalrusStore(join(localnetDir, "walrus-local"));
+    const agents = await registerAgents(client, manifest, signerRegistry, walrus);
     assert.equal(agents.length, agentCount);
     assert.ok(new Set(agents.map((agent) => agent.owner)).size === agentCount);
     assert.ok(new Set(agents.map((agent) => agent.manifest.humanAttestationHash)).size === agentCount);
@@ -221,7 +227,7 @@ async function main(): Promise<void> {
       network: "localnet",
       manifestPath: runtimeManifestPath,
       db,
-      walrus: createLocalWalrusStore(join(localnetDir, "walrus-local")),
+      walrus,
       gonka: controller.adapter,
       suiGateway: engineGateway,
       initialAgents: agents.map<EngineAgentConfig>((agent) => ({
@@ -346,7 +352,7 @@ export function serializeRunApprovals(gateway: SuiGateway): SuiGateway {
  * Localnet-lifecycle deadline rebase: at createClaim time, replace whatever
  * deadlines the caller computed with a fixed fast ladder anchored to NOW, so
  * long harness setup cannot drift claims into already-passed windows.
- * LOCAL HARNESSES ONLY (E2E + cockpit) — this silently overrode the testnet
+ * LOCAL HARNESSES ONLY (E2E + cockpit). This silently overrode the testnet
  * canary's wide deadlines for four runs when it lived inside
  * serializeRunApprovals; never compose it into a live-network gateway.
  */
@@ -379,6 +385,7 @@ async function registerAgents(
   client: OpenVerdictSuiClient,
   manifest: ReleaseManifest,
   signers: SignerRegistry,
+  walrus: WalrusStore,
 ): Promise<RegisteredAgent[]> {
   const gateway = createSuiGateway({ client, manifest, signers });
   const models = manifest.gonka.models;
@@ -396,18 +403,32 @@ async function registerAgents(
       ? "OPENVERDICT_ROLE_SOURCE_AUTHENTICITY"
       : "OPENVERDICT_ROLE_SKEPTIC";
     const humanHash = blake2b256(encoder.encode(`localnet-human-${index}`));
-    const manifestHash = blake2b256(encoder.encode(`localnet-manifest-${index}`));
+    const owner = signers.getAgentAt(index).address;
+    const built = buildAgentManifestDocument({
+      network: "localnet",
+      backingKind: "TESTNET_DEMO_ALLOWLIST",
+      humanBackingHash: toHex(humanHash),
+      humanVerificationProvider: "localnet-demo-allowlist",
+      operationalOwner: asHex(owner),
+      role,
+      modelId,
+      promptSpec: DEFAULT_PROMPT_SPEC_V2,
+      toolPolicy: DEFAULT_TOOL_POLICY_V2,
+      evidencePolicyId,
+    });
+    const manifestUpload = await walrus.put(built.bytes, {
+      identifier: `localnet-agent-${index}-manifest-v3.json`,
+    });
     const result = await gateway.registerAgent({
       agentIndex: index,
       bondAmount: 1,
-      manifestHash,
-      manifestBlobId: `localnet-manifest-${index}`,
+      manifestHash: fromHex(built.manifestHash),
+      manifestBlobId: manifestUpload.blobId,
       modelHash: blake2b256(encoder.encode(modelId)),
       roleHash: blake2b256(encoder.encode(roleLabel)),
       humanBackingHash: humanHash,
     });
     assert.ok(result.agentCapId, `agent ${index} registration omitted AgentCap`);
-    const owner = signers.getAgentAt(index).address;
     const profileId = result.agentProfileId;
     registered.push({
       profileId,
@@ -420,14 +441,14 @@ async function registerAgents(
         owner: asHex(owner),
         humanAttestationHash: toHex(humanHash),
         humanVerificationProvider: "localnet-demo-allowlist",
-        version: "1",
-        manifestBlobId: `localnet-manifest-${index}`,
-        manifestHash: toHex(manifestHash),
-        promptHash: hashLabel(`prompt-${index}`),
+        version: "3",
+        manifestBlobId: manifestUpload.blobId,
+        manifestHash: built.manifestHash,
+        promptHash: built.promptHash,
         modelId,
         providerId: "gonkarouter",
-        toolPolicyHash: hashLabel(`tools-${index}`),
-        evidencePolicyHash: hashLabel("OPENVERDICT_EVIDENCE_POLICY_V1"),
+        toolPolicyHash: built.toolPolicyHash,
+        evidencePolicyHash: built.document.evidencePolicyHash,
         publicKey: owner,
         registeredAtMs: Date.now(),
         registeredCheckpoint: result.checkpoint ?? 0,
@@ -772,6 +793,29 @@ function createFakeController(): FakeController {
   const cursors = new Map<string, number>();
   const utilityId = asHex(`0x${"00".repeat(32)}`);
   const utility = createFakeGonkaAdapter([{ agentProfileId: utilityId }]);
+  const completionAdapters = new WeakMap<object, GonkaRouterAdapter>();
+  const adapterFor = (
+    input: OracleInferenceInput,
+    manifest: AgentManifest,
+  ): GonkaRouterAdapter => {
+    const queue = plans.get(input.claim.statement)?.get(manifest.agentProfileId);
+    if (!queue) {
+      throw new Error(`no lifecycle fixture for ${manifest.agentProfileId}`);
+    }
+    const key = `${input.claim.statement}:${manifest.agentProfileId}`;
+    const cursor = cursors.get(key) ?? 0;
+    const vote = queue[cursor];
+    if (!vote) throw new Error(`fixture queue exhausted for ${manifest.agentProfileId}`);
+    cursors.set(key, cursor + 1);
+    return createFakeGonkaAdapter([
+      {
+        agentProfileId: manifest.agentProfileId,
+        outcome: vote.outcome,
+        confidenceBps: vote.confidenceBps,
+        gonkaRequestId: `msg_e2e_${toHex(blake2b256(new TextEncoder().encode(key))).slice(2, 18)}_${cursor + 1}`,
+      },
+    ]);
+  };
 
   return {
     configure(statement, profileIds, rounds) {
@@ -789,24 +833,21 @@ function createFakeController(): FakeController {
       plans.set(statement, byProfile);
     },
     adapter: {
+      promptSpec: utility.promptSpec,
+      promptSpecHash: utility.promptSpecHash,
+      toolPolicy: utility.toolPolicy,
+      toolPolicyHash: utility.toolPolicyHash,
+      legacyPromptSpec: utility.legacyPromptSpec,
       async run(input: OracleInferenceInput, manifest: AgentManifest): Promise<unknown> {
-        const queue = plans.get(input.claim.statement)?.get(manifest.agentProfileId);
-        if (!queue) {
-          throw new Error(`no lifecycle fixture for ${manifest.agentProfileId}`);
+        return adapterFor(input, manifest).run(input, manifest);
+      },
+      async complete(request) {
+        let adapter = completionAdapters.get(request.attempts);
+        if (!adapter) {
+          adapter = adapterFor(request.input, request.manifest);
+          completionAdapters.set(request.attempts, adapter);
         }
-        const key = `${input.claim.statement}:${manifest.agentProfileId}`;
-        const cursor = cursors.get(key) ?? 0;
-        const vote = queue[cursor];
-        if (!vote) throw new Error(`fixture queue exhausted for ${manifest.agentProfileId}`);
-        cursors.set(key, cursor + 1);
-        return createFakeGonkaAdapter([
-          {
-            agentProfileId: manifest.agentProfileId,
-            outcome: vote.outcome,
-            confidenceBps: vote.confidenceBps,
-            gonkaRequestId: `msg_e2e_${toHex(blake2b256(new TextEncoder().encode(key))).slice(2, 18)}_${cursor + 1}`,
-          },
-        ]).run(input, manifest);
+        return adapter.complete(request);
       },
       normalizeResponse: utility.normalizeResponse,
       validateOutput: utility.validateOutput,
@@ -1258,10 +1299,6 @@ function moveBigInt(value: unknown): bigint {
     }
   }
   throw new Error(`could not decode Move integer from ${JSON.stringify(value)}`);
-}
-
-function hashLabel(label: string): HexString {
-  return toHex(blake2b256(new TextEncoder().encode(label)));
 }
 
 function asHex(value: string): HexString {
