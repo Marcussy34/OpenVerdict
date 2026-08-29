@@ -136,10 +136,26 @@ then submit a fast test claim and time it.
     setting is gone from .env.example (the Railway variable is ignored).
     Background chains must stay under the Bash tool's 10-minute cap; the
     03:36 chain was killed at 03:45 before it could submit.
-14. Next: once that deploy is SUCCESS, POST the fast claim ("The Ethereum
-    Dencun upgrade activated on mainnet in March 2024.") on
-    app.openverdict.info, write scratchpad/fast-claim.json ({claimId,
-    startMs}) so monitor b3flanuz2 (armed until ~04:10) prints its timeline.
+14. `4a1b7e8` deployed 03:49 (deployment 9a6da52a). Fast claim #2
+    `0xa3da18a20428fde03292e557ae7901223c91cd01390e2becdba59ee71de3672b`
+    was accepted first try (create_claim no longer trips on the stale gas
+    wording) and reached COMMIT_1 with 5 seats at t+45 s, then DIED:
+    "evidence-worker: skipped: cutoff passed with no accepted artifact".
+    Cause: the ladder was computed at the START of the request, the
+    request spends ~35 s on the statement/criteria Walrus writes before
+    create_claim, and the statement artifact is ingested (another write)
+    only after the claim exists, so the 20 s cutoff had passed before the
+    workers saw the claim and the first freeze found no artifact. Residue
+    #4 (COMMIT_1 forever; the worker's window gate keeps it quiet).
+15. Fix (commit "measure the hosted ladder from the create_claim
+    transaction"): createClaimRecord computes the default ladder right
+    before create_claim (explicit deadlines from claimCreate unchanged);
+    cutoff +60 s, commit +180 s, reveal +240 s, discussion +300 s, second
+    round +450 / +510 s; the evidence worker waits 60 s past the cutoff
+    before giving up on a claim without artifacts. Gate 353 tests, lint,
+    build. Deploy in flight (03:54); then POST fast claim #3 and write
+    scratchpad/fast-claim.json; monitor b2kw3jihu only accepts a file
+    newer than its start.
 
 ### Next steps
 - Watch claim `0xddd66882…` to a certificate (expected ~03:27 local); the
