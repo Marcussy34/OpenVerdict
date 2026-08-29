@@ -12,12 +12,14 @@ const {
   writeFilesMock,
   getFilesMock,
   stakingStateMock,
+  resetMock,
 } = vi.hoisted(() => ({
     writeBlobMock: vi.fn(),
     readBlobMock: vi.fn(),
     writeFilesMock: vi.fn(),
     getFilesMock: vi.fn(),
     stakingStateMock: vi.fn(),
+    resetMock: vi.fn(),
   }));
 
 // Replace the walrus client extension with an in-memory fake: no real network
@@ -34,6 +36,7 @@ vi.mock("@mysten/walrus", async (importOriginal) => {
         writeFiles: writeFilesMock,
         getFiles: getFilesMock,
         stakingState: stakingStateMock,
+        reset: resetMock,
       }),
     }),
   };
@@ -83,6 +86,7 @@ describe("createRealWalrusStore", () => {
   });
 
   it("reports and caches Walrus epoch information for 60 seconds", async () => {
+    resetMock.mockReset();
     stakingStateMock
       .mockReset()
       .mockResolvedValueOnce({ epoch: 240, epoch_duration: "86400000" })
@@ -100,11 +104,13 @@ describe("createRealWalrusStore", () => {
         currentEpoch: 240,
         epochDurationMs: 86_400_000,
       });
+      expect(resetMock).toHaveBeenCalledTimes(1);
       now.mockReturnValue(60_999);
       await expect(epochInfo()).resolves.toEqual({
         currentEpoch: 240,
         epochDurationMs: 86_400_000,
       });
+      expect(resetMock).toHaveBeenCalledTimes(1);
       expect(stakingStateMock).toHaveBeenCalledTimes(1);
 
       now.mockReturnValue(61_000);
@@ -112,6 +118,7 @@ describe("createRealWalrusStore", () => {
         currentEpoch: 241,
         epochDurationMs: 86_400_000,
       });
+      expect(resetMock).toHaveBeenCalledTimes(2);
       expect(stakingStateMock).toHaveBeenCalledTimes(2);
     } finally {
       now.mockRestore();

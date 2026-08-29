@@ -754,8 +754,11 @@ class OpenVerdictEngine implements Engine {
     const results: TxResult[] = [];
     let updatedTally = tally;
 
-    for (const votePackage of packages) {
-      if (!votePackage.committed || votePackage.revealed) continue;
+    // Publish every bundle first, in parallel (each Walrus write takes seconds
+    // and the reveal window is short), then reveal on chain one seat at a
+    // time because all reveals share the operator signer.
+    const pending = packages.flatMap((votePackage) => {
+      if (!votePackage.committed || votePackage.revealed) return [];
       const run = runById.get(votePackage.runId);
       if (
         !run?.output ||
@@ -766,7 +769,7 @@ class OpenVerdictEngine implements Engine {
         !run.sealedBlobId ||
         !run.audit.bundleCore
       ) {
-        continue;
+        return [];
       }
       const core = JSON.parse(
         run.audit.bundleCore,
@@ -782,15 +785,24 @@ class OpenVerdictEngine implements Engine {
           coreHash: run.coreHash,
         },
       };
-      let argumentUpload: WalrusPutResult;
-      try {
-        argumentUpload = await this.#walrus.put(canonicalJsonBytes(bundle), {
-          identifier: `${run.runId}-run-bundle.json`,
-        });
-      } catch {
-        // A failed publication must not consume the on-chain reveal opportunity.
-        continue;
-      }
+      return [{ votePackage, run, output: run.output, bundle }];
+    });
+    const uploads = await Promise.all(
+      pending.map(async ({ run, bundle }): Promise<WalrusPutResult | undefined> => {
+        try {
+          return await this.#walrus.put(canonicalJsonBytes(bundle), {
+            identifier: `${run.runId}-run-bundle.json`,
+          });
+        } catch {
+          // A failed publication must not consume the on-chain reveal opportunity.
+          return undefined;
+        }
+      }),
+    );
+
+    for (const [index, { votePackage, run, output }] of pending.entries()) {
+      const argumentUpload = uploads[index];
+      if (!argumentUpload) continue;
       const result = await this.#gateway.revealVote({
         jurySeatId: votePackage.jurySeatId,
         roundTallyId: tally.roundTallyId,
@@ -902,10 +914,10 @@ class OpenVerdictEngine implements Engine {
           agent_id: votePackage.agentProfileId,
           gonka_request_id: run.gonkaRequestId,
           argument_hash: run.outputHash,
-          reasoning_trace_hash: hashCanonicalJson(run.output.publicReasoningTrace),
-          evidence_ids: citedEvidenceIds(run.output),
-          reasoning: run.output.reasoning,
-          public_reasoning_trace: run.output.publicReasoningTrace,
+          reasoning_trace_hash: hashCanonicalJson(output.publicReasoningTrace),
+          evidence_ids: citedEvidenceIds(output),
+          reasoning: output.reasoning,
+          public_reasoning_trace: output.publicReasoningTrace,
         },
       });
       results.push(result);
@@ -2815,16 +2827,21 @@ function defaultDeadlines(
       secondRevealDeadlineMs: now + 840_000,
     };
   }
-  const minute = 60_000;
+  // Fast ladder (hosted): a certificate can land only after the reveal
+  // deadline (settlement.move) and the committee locks only after the
+  // midpoint of the commit window (jury.move), so these windows, not the
+  // models, set the time to resolution. Canary seats took 25 to 146 s;
+  // a seat that misses the commit window fails closed and 4 of 5 still settle.
+  const second = 1_000;
   return {
-    evidenceCutoffMs: now + 5 * minute,
-    proposalDeadlineMs: now + 10 * minute,
-    challengeDeadlineMs: now + 15 * minute,
-    firstCommitDeadlineMs: now + 30 * minute,
-    firstRevealDeadlineMs: now + 45 * minute,
-    discussionDeadlineMs: now + 60 * minute,
-    secondCommitDeadlineMs: now + 75 * minute,
-    secondRevealDeadlineMs: now + 90 * minute,
+    evidenceCutoffMs: now + 20 * second,
+    proposalDeadlineMs: now + 25 * second,
+    challengeDeadlineMs: now + 30 * second,
+    firstCommitDeadlineMs: now + 210 * second,
+    firstRevealDeadlineMs: now + 270 * second,
+    discussionDeadlineMs: now + 330 * second,
+    secondCommitDeadlineMs: now + 480 * second,
+    secondRevealDeadlineMs: now + 540 * second,
   };
 }
 

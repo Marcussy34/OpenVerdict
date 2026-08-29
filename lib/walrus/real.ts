@@ -106,6 +106,8 @@ export function createRealWalrusStore(
       if (epochCache && now - epochCache.fetchedAtMs < EPOCH_CACHE_MS) {
         return epochCache.value;
       }
+      // The SDK object loader has no TTL, so clear it whenever our cache misses.
+      client.walrus.reset();
       const staking = await client.walrus.stakingState();
       const value = {
         currentEpoch: Number(staking.epoch),
