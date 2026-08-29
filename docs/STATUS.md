@@ -51,12 +51,24 @@ operational proof and public deployments in flight.
   advisory lock that Neon's transaction pooler stranded (workers silent;
   now `pg_advisory_xact_lock` inside a transaction). Hosted end-to-end run:
   see docs/CHECKPOINT-2026-08-29.md for the latest claim ids and results.
-- FAST MODE 2026-08-30: hosted ladder evidence +20 s / commit +3.5 min /
-  reveal +4.5 min (second round +8 / +9 min), reveal bundles published in
-  parallel, and the resolution worker waits for each Move deadline floor
-  instead of submitting aborting transactions every tick. Target: a
-  certificate about 4.6 minutes after submission (Move needs the reveal
-  deadline before `finalize_claim`).
+- FAST MODE 2026-08-30 (measured through eleven hosted claims overnight):
+  the hosted ladder is measured from the `create_claim` transaction
+  (evidence cutoff +60 s, commit +240 s, reveal +300 s, discussion +360 s,
+  second round +540 / +600 s). Seats commit as they finish (a per-claim
+  commit pump from the chain's acceptance floor), reveal bundles publish in
+  parallel, research page writes run off the model's critical path, every
+  operator-signed operation of a process runs on one lane, and the
+  resolution worker waits for each Move deadline floor instead of sending
+  aborting transactions. Observed: POST returns after ~45 s, freeze ~t+65 s,
+  research 4 to 40 s per seat (Kimi-K2.6 up to 100 s), commits from ~t+140 s,
+  reveals within ~30 s, certificate at the reveal floor. Hosted certificates
+  so far: `0xfb68f1ff…`, `0x677ec538…`, `0x82684a50…`, `0xb554098e…`,
+  `0xef4383de…` (all UNRESOLVED: three agreeing YES reveals per round, one
+  short of the on-chain rule). Two chain rules shape the outcome:
+  `REQUIRED_MATCHING = 4` (four matching reveals of five resolve a round)
+  and committee diversity (three model families, so the slowest family is
+  always seated). Operational: agent wallets pay for seat transactions and
+  must stay funded (see the runbook checklist).
 - PROOF CHAIN V2 PROVEN ON TESTNET 2026-08-29 late: the seven juror manifests
   on chain are real v2 documents on Walrus (prompt spec embedded, hashes
   match, `scripts/publish-agent-manifests.ts`), and a live canary ran under
