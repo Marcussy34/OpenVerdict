@@ -77,6 +77,8 @@ export interface JurySeatRecord {
   phase: 1 | 2;
   status: JurySeatStatus;
   evidenceRoot?: `0x${string}`;
+  /** True once bind_jury_seat_evidence landed on chain (agent-signed; retried until it does). */
+  evidenceBound?: boolean;
   commitment?: `0x${string}`;
   runHash?: `0x${string}`;
   createdAt: string;

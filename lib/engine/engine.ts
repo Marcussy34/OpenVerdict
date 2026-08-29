@@ -619,6 +619,28 @@ class OpenVerdictEngine implements Engine {
     if (!research) {
       throw new EngineValidationError("research provider not configured");
     }
+    // approve_run and commit_vote need the seat bound to the frozen evidence
+    // (jury.move E_EVIDENCE_NOT_BOUND). Binds are agent-signed and can fail;
+    // retry them here every tick and let an unbound seat wait for the next
+    // tick instead of failing it closed.
+    if (evidence.evidenceBundleId) {
+      const tally = await this.requiredTally(claimId, phase);
+      await this.bindSeatsToEvidence(
+        claimId,
+        phase,
+        tally.roundTallyId,
+        evidence.evidenceBundleId,
+        evidence.root,
+      );
+    }
+    const boundSeats = (await this.#repository.listJurySeats(claimId, phase)).filter(
+      (seat) => seat.evidenceBound,
+    );
+    if (boundSeats.length < seats.length) {
+      process.stderr.write(
+        `jury run: claim ${claimId.slice(0, 10)}…: ${seats.length - boundSeats.length} seat(s) not yet bound, running the rest\n`,
+      );
+    }
     const artifacts = await this.artifactsForPhase(claimId, phase);
     const searchCache = createSearchCache();
     const storedPageCache = new Map<string, Promise<PageStorePage>>();
@@ -655,7 +677,7 @@ class OpenVerdictEngine implements Engine {
 
     try {
       await Promise.all(
-        seats.map(async (seat) => {
+        boundSeats.map(async (seat) => {
           const existing = (await this.#repository.listInferenceRuns(claimId, phase)).find(
             (run) => run.jurySeatId === seat.jurySeatId,
           );
@@ -1049,6 +1071,11 @@ class OpenVerdictEngine implements Engine {
           updatedAt: timestamp,
         });
       }
+      // The chain is in COMMIT_2 as soon as the transaction lands; record
+      // that before the agent-signed binds, which may fail and are retried
+      // by juryRun. Otherwise a failed bind left the database in DISCUSSION
+      // and every later advance aborted with E_INVALID_CLAIM_STATE.
+      await this.changePhase(claim, CLAIM_STATE.COMMIT_2, result);
       await this.bindSeatsToEvidence(
         claimId,
         2,
@@ -1056,7 +1083,6 @@ class OpenVerdictEngine implements Engine {
         evidenceBundleId,
         evidence.root,
       );
-      await this.changePhase(claim, CLAIM_STATE.COMMIT_2, result);
       return result;
     }
     return null;
@@ -2635,17 +2661,31 @@ class OpenVerdictEngine implements Engine {
     evidenceBundleId: string,
     root: `0x${string}`,
   ): Promise<void> {
+    // Idempotent and never fatal: each bind is signed by the seat's agent
+    // (its own gas), so one failure must not take the whole round down. A
+    // seat that stays unbound is retried by the next juryRun tick.
     const seats = await this.#repository.listJurySeats(claimId, phase);
     for (const seat of seats) {
-      await this.#gateway.bindJurySeatEvidence({
-        jurySeatId: seat.jurySeatId,
-        agentProfileId: seat.agentProfileId,
-        roundTallyId,
-        evidenceBundleId,
-      });
+      if (seat.evidenceBound) continue;
+      try {
+        await this.#gateway.bindJurySeatEvidence({
+          jurySeatId: seat.jurySeatId,
+          agentProfileId: seat.agentProfileId,
+          roundTallyId,
+          evidenceBundleId,
+        });
+      } catch (error) {
+        process.stderr.write(
+          `bind seat: claim ${claimId.slice(0, 10)}… seat ${seat.jurySeatId.slice(0, 10)}…: ${
+            error instanceof Error ? error.message : String(error)
+          }\n`,
+        );
+        continue;
+      }
       await this.#repository.saveJurySeat({
         ...seat,
         evidenceRoot: root,
+        evidenceBound: true,
         updatedAt: this.isoNow(),
       });
     }

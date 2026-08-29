@@ -777,12 +777,21 @@ describe("headless engine", () => {
     await expect(setup.engine.selectCommittee(claimId)).resolves.toMatchObject({
       objectIds: { committee: expect.any(String) },
     });
-    await expect(setup.engine.evidenceFreeze(claimId, 1)).rejects.toThrow(
-      "transient bind failure",
-    );
+    // A transient bind failure no longer fails the freeze (binds are
+    // agent-signed and retried): the seat stays unbound and the next bind
+    // attempt, here a second freeze call and in production the next
+    // juryRun tick, completes it.
     await expect(setup.engine.evidenceFreeze(claimId, 1)).resolves.toMatchObject({
       objectIds: { evidenceBundle: expect.any(String) },
     });
+    const repository = createRepository(setup.db);
+    const boundSeats = async () =>
+      (await repository.listJurySeats(claimId, 1)).filter((seat) => seat.evidenceBound).length;
+    expect(await boundSeats()).toBe(4);
+    await expect(setup.engine.evidenceFreeze(claimId, 1)).resolves.toMatchObject({
+      objectIds: { evidenceBundle: expect.any(String) },
+    });
+    expect(await boundSeats()).toBe(5);
     expect((await setup.engine.inspect(claimId)).commitments).toHaveLength(5);
   });
 
