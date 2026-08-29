@@ -77,6 +77,8 @@ describe("executeAndWait", () => {
   it.each([
     "Transaction is rejected as invalid by more than 1/3 of validators by stake (non-retriable). Non-retriable errors: [Transaction needs to be rebuilt because object 0xdba0339f14877799f829e0b07e262c47d77122d41b884cd3cd273b8fef77cfa8 version 0x3b6310bb (C3ZC4SJWvjCeeAtAFYQSGXknKRS2enYjQv5gtZKmkgoe) is unavailable for consumption with 6942 stake].",
     "provided version doesn't match for object 0x21305b77ebe47c29007b063029986ce0b75b8e7e4b35743b8c04235a96e9791d, provided: 996347965 actual: 0x3b631165",
+    // The gRPC transport percent-encodes validator rejections.
+    "Transaction%20is%20rejected%20as%20invalid%20by%20more%20than%201/3%20of%20validators%20by%20stake%20(non-retriable).%20Non-retriable%20errors:%20[Object%20(0xdba0339f14877799f829e0b07e262c47d77122d41b884cd3cd273b8fef77cfa8,%20SequenceNumber(996543668),%20o%235GbQg7Fpwqicy3uoNa13UyUPM7v2Tn4FdVjVNLGYQTCf)%20already%20locked%20by%20a%20different%20transaction:%20TransactionDigest(HoApeRJReKXUfF43BxKwXz6KtuiK69JtuC4DmfsUVWRs)]",
   ])("rebuilds and retries the stale-object wording: %s", async (message) => {
     const client = new SuiJsonRpcClient({
       network: "testnet",

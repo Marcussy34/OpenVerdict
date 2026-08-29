@@ -271,8 +271,13 @@ function isStaleWalrusWriteError(error: unknown): boolean {
 }
 
 function errorMessage(error: unknown): string {
-  if (error instanceof Error) return error.message;
-  return typeof error === "string" ? error : "";
+  const raw = error instanceof Error ? error.message : typeof error === "string" ? error : "";
+  // gRPC status messages arrive percent-encoded; decode before matching.
+  try {
+    return decodeURIComponent(raw);
+  } catch {
+    return raw;
+  }
 }
 
 function defaultSleep(milliseconds: number): Promise<void> {

@@ -46,7 +46,15 @@ const RESERVED_OBJECT_PATTERN =
   /reserved for another transaction|already locked by a different transaction/i;
 
 function errorText(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
+  const raw = error instanceof Error ? error.message : String(error);
+  // The gRPC transport delivers validator rejections percent-encoded
+  // ("already%20locked%20by%20a%20different%20transaction"), which no
+  // pattern above matched, so those never retried.
+  try {
+    return decodeURIComponent(raw);
+  } catch {
+    return raw;
+  }
 }
 
 function staleObjectId(error: unknown): string | undefined {
