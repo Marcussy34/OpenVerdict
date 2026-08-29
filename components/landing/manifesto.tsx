@@ -90,6 +90,12 @@ export function Manifesto() {
 
         <p
           ref={paraRef}
+          // 225 spans (33 words, 192 letters) have their opacity rewritten every
+          // scroll frame, at display size. Without its own layer that repaint
+          // dirties the section's full-bleed gradient behind it, which is what
+          // made this the jankiest section on the page. The hint costs one layer
+          // for the paragraph and changes nothing visually.
+          style={{ willChange: "opacity" }}
           className="ov-display mt-5 max-w-[1000px] text-[clamp(1.5rem,3.1vw,2.75rem)] leading-[1.23] text-[#F3F3F3]"
         >
           {/* One span per word (the only element children, so the wipe can

@@ -10,35 +10,49 @@ import { BrandMark } from "@/components/site-header";
  */
 export function Banner() {
   return (
-    <section data-header-theme="dark" className="ov-on-dark relative z-30 bg-black px-5 py-6 md:px-7 md:py-7">
-      <div className="relative border border-dashed border-[#F3F3F3]/12 px-6 py-12 md:px-12 md:py-16">
-        <CornerPin className="-top-[3px] -left-[3px]" />
-        <CornerPin className="-top-[3px] -right-[3px]" />
-        <CornerPin className="-bottom-[3px] -left-[3px]" />
-        <CornerPin className="-right-[3px] -bottom-[3px]" />
+    <section
+      data-header-theme="dark"
+      // The band is an inset block now rather than a full-bleed ground, so the
+      // page's own dark runs down both sides of it. That ground has to be
+      // painted here: the body behind is paper, and a light strip between two
+      // near-black sections would read as a hole. These two stops are exactly
+      // what the sections above and below end and start on, so the joins stay
+      // seamless and only the sides of the black block show a change.
+      className="ov-on-dark relative z-30"
+      style={{ background: "linear-gradient(180deg,#020c1c 0%,#010a18 100%)" }}
+    >
+      {/* The black block itself. Its horizontal margin is the gap; the padding
+          is what the section used to carry. */}
+      <div className="mx-4 bg-black px-5 py-6 md:mx-12 md:px-7 md:py-7 lg:mx-20">
+        <div className="relative border border-dashed border-[#F3F3F3]/12 px-6 py-12 md:px-12 md:py-16">
+          <CornerPin className="-top-[3px] -left-[3px]" />
+          <CornerPin className="-top-[3px] -right-[3px]" />
+          <CornerPin className="-bottom-[3px] -left-[3px]" />
+          <CornerPin className="-right-[3px] -bottom-[3px]" />
 
-        <div className="grid items-center gap-12 lg:grid-cols-2">
-          <div className="flex min-h-[380px] flex-col justify-between lg:min-h-[440px]">
-            <span className="text-[#F3F3F3]">
-              <BrandMark size={72} />
-            </span>
+          <div className="grid items-center gap-12 lg:grid-cols-2">
+            <div className="flex min-h-[380px] flex-col justify-between lg:min-h-[440px]">
+              <span className="text-[#F3F3F3]">
+                <BrandMark size={72} />
+              </span>
 
-            <h2 className="ov-display my-10 max-w-[560px] text-[clamp(1.9rem,3.4vw,2.75rem)] leading-[1.23] text-[#F3F3F3]">
-              Truth for everyone,
-              <br />
-              <span className="text-[#F3F3F3]/50">engineered to verify.</span>
-            </h2>
+              <h2 className="ov-display my-10 max-w-[560px] text-[clamp(1.9rem,3.4vw,2.75rem)] leading-[1.23] text-[#F3F3F3]">
+                Truth for everyone,
+                <br />
+                <span className="text-[#F3F3F3]/50">engineered to verify.</span>
+              </h2>
 
-            <div className="flex flex-wrap items-center gap-[2px] gap-y-2">
-              <SplitButton href="/fact-check">Submit a claim</SplitButton>
-              <SplitButton href="/learn" tone="dark" chip={false}>
-                How it works
-              </SplitButton>
+              <div className="flex flex-wrap items-center gap-[2px] gap-y-2">
+                <SplitButton href="/fact-check">Submit a claim</SplitButton>
+                <SplitButton href="/learn" tone="dark" chip={false}>
+                  How it works
+                </SplitButton>
+              </div>
             </div>
-          </div>
 
-          <div className="flex justify-center lg:justify-end">
-            <WireGlobe />
+            <div className="flex justify-center lg:justify-end">
+              <WireGlobe />
+            </div>
           </div>
         </div>
       </div>
