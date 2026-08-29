@@ -213,6 +213,8 @@ class OpenVerdictEngine implements Engine {
   readonly #gonka: GonkaRouterAdapter;
   readonly #research: ResearchProvider | undefined;
   readonly #now: () => number;
+  /** Per-claim chain of votesCommit calls so seats commit as they finish, never concurrently. */
+  readonly #commitQueues = new Map<string, Promise<void>>();
   readonly #retrieve: NonNullable<EngineConfig["retrieve"]>;
   readonly #retrievalPolicy: RetrievalPolicy;
   readonly #eventPollIntervalMs: number;
@@ -654,6 +656,7 @@ class OpenVerdictEngine implements Engine {
     // Let background page uploads finish inside this tick; failures were
     // already attributed to the seats that cited those pages.
     await Promise.allSettled([...pageUploads.values()]);
+    await this.#commitQueues.get(claimId);
     const runs = await this.#repository.listInferenceRuns(claimId, phase);
     return {
       claimId,
@@ -2060,7 +2063,36 @@ class OpenVerdictEngine implements Engine {
       await this.emitRunApproval(claim.claimId, run, approvalRecord);
     } catch (error) {
       await this.persistInferenceFailure(claim, seat, agent, input, error);
+      return;
     }
+    // Commit this seat now instead of after the slowest seat: one seat that
+    // overruns must not push every commit past the commit deadline.
+    await this.queueCommit(claim.claimId, seat.phase);
+  }
+
+  /**
+   * Runs votesCommit for a claim after any earlier queued commit finished, so
+   * seats finishing together never race on the lock or double-commit. A
+   * failure (for example the committee's acceptance window still open on
+   * chain) is logged; the next seat, or the worker's final votesCommit,
+   * tries again.
+   */
+  private queueCommit(claimId: string, phase: 1 | 2): Promise<void> {
+    const previous = this.#commitQueues.get(claimId) ?? Promise.resolve();
+    const next = previous
+      .then(() => this.votesCommit(claimId, phase))
+      .then(
+        () => undefined,
+        (error: unknown) => {
+          process.stderr.write(
+            `commit after seat: claim ${claimId.slice(0, 10)}…: ${
+              error instanceof Error ? error.message : String(error)
+            }\n`,
+          );
+        },
+      );
+    this.#commitQueues.set(claimId, next);
+    return next;
   }
 
   private async persistInferenceFailure(
