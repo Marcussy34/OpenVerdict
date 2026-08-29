@@ -201,10 +201,24 @@ then submit a fast test claim and time it.
     the sealed-upload + approve_run tail of each seat would remove the
     burst instead of riding it out.
 
+20. Claim #4 FINALIZED on chain at t+537 s: result UNRESOLVED, certificate
+    `0xfb68f1ff810438542eaadc501ae97ae225368f4eed90f715239e03e6fdf14d5c`
+    (digest GUbtLdmK…). First hosted end-to-end certificate through the
+    full state machine (both freezes, both rounds, reveals, finalize).
+    Round two lost three seats to the start-of-round write burst (old
+    retry budgets) and its one valid MiniMax seat (5.8 s) committed too
+    late (commit_vote E_DEADLINE_PASSED) because the worker waited for
+    Kimi, whose provider retries ran past the seat deadline.
+21. `bb557d3` deployed 04:19:28. Then commit-as-you-go (commit "commit
+    each seat as soon as its run is approved"): runSeat queues votesCommit
+    right after approve_run (per-claim promise chain, failures logged,
+    juryRun drains the queue); gate 354 tests, lint, build; deploying
+    04:20, then fast claim #5.
+
 ### Next steps
-- When claim #4 finishes (round two: commit floor ~04:16:20, reveal floor
-  ~04:17:20) the background chain deploys `bb557d3`; then POST fast claim
-  #5 and measure; record the time-to-certificate in STATUS.md/runbook.
+- Deploy is live: POST fast claim #5 and measure to the certificate; then
+  record the time-to-certificate and the demo claim ids in STATUS.md and
+  the runbook.
 - Then deploy `c55949a` (clean worktree checkout, `railway up -s app -d`),
   submit a fast claim, time it, and record timings here and in STATUS.md.
 - Residue on testnet: `0x1936ddd3…` (orphan), `0xdb9c7bae…` (REVEAL_1 with
