@@ -18,6 +18,19 @@ import { createEngine } from "./engine";
 
 let singleton: Promise<Engine> | undefined;
 
+/**
+ * Read an env var, treating blank as unset.
+ *
+ * Deployment dashboards (Vercel among them) persist a variable created without
+ * a value as an empty string rather than omitting it, and `??` only falls back
+ * on null/undefined. A blank OPENVERDICT_RELEASE_MANIFEST therefore survived as
+ * "" and reached existsSync(""), taking the whole engine down with the useless
+ * message "release manifest is missing: ".
+ */
+export function readEnv(value: string | undefined, fallback: string): string {
+  return value?.trim() || fallback;
+}
+
 /** Missing runtime configuration is exposed as a stable 503-compatible error. */
 export class EngineNotWiredError extends Error {
   override readonly name = "EngineNotWiredError";
@@ -38,8 +51,10 @@ export async function getServerEngine(): Promise<Engine> {
 }
 
 async function buildServerEngine(): Promise<Engine> {
-  const manifestPath =
-    process.env.OPENVERDICT_RELEASE_MANIFEST ?? "config/release.localnet.json";
+  const manifestPath = readEnv(
+    process.env.OPENVERDICT_RELEASE_MANIFEST,
+    "config/release.localnet.json",
+  );
   if (!existsSync(/* turbopackIgnore: true */ manifestPath)) {
     throw new EngineNotWiredError(`release manifest is missing: ${manifestPath}`);
   }
@@ -74,7 +89,9 @@ async function buildServerEngine(): Promise<Engine> {
     manifest.gonka.mode === "fake"
       ? createDynamicFakeAdapter()
       : createGonkaAdapter({
-          baseUrl: process.env.GONKA_ROUTER_BASE_URL ?? manifest.gonka.baseUrl,
+          // Same blank-vs-absent hazard: a blank override must not erase the
+          // manifest's own base URL.
+          baseUrl: readEnv(process.env.GONKA_ROUTER_BASE_URL, manifest.gonka.baseUrl),
           apiKey: process.env.GONKA_ROUTER_API_KEY ?? "",
           timeoutMs: numberEnv("GONKA_REQUEST_TIMEOUT_MS", 120_000),
           maxRetries: numberEnv("GONKA_MAX_RETRIES", 1),
