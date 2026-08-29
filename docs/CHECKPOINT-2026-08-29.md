@@ -183,10 +183,28 @@ then submit a fast test claim and time it.
     flight (04:07). Uncommitted: resolution worker now logs why round two
     did not open before trying finalize.
 
+18. `f794117` deployed 04:08 (deployment 1231e5f5). Fast claim #4
+    `0xeb1d898f6fd7f279cf922338cbea1627451a34db40ec86ebd8c7370ca656f226`
+    ("Bitcoin completed its fourth halving in April 2024."): POST 42 s,
+    freeze t+65 s, DeepSeek x2 valid (13 s, 30 s) and COMMITTED at t+155 s
+    (first hosted fast-ladder commits), advance at t+210 s, both reveals by
+    t+246 s, discussion at t+270 s, phase-two freeze t+283 s, round two
+    opened t+337 s (10 seats). Lost seats: both MiniMax on gas-coin
+    rejections during the end-of-seat burst (five sealed-bundle writes +
+    five approve_run txs on one gas coin; retry budgets of 4 s / 11 s too
+    short), Kimi hit the new seat deadline at 87 s (budget ~80 s).
+19. `bb557d3` (commit + push, deploy waits for claim #4 to finish): ladder
+    commit +210 s, reveal +270 s, discussion +330 s, second round +480 /
+    +540 s (seat budget ~110 s); gateway retry 8 attempts x 1 s step;
+    Walrus write retry 8 attempts x 1.5 s step. Gate 354 tests, lint,
+    build. Structural follow-up (not tonight): a gas pool or a mutex around
+    the sealed-upload + approve_run tail of each seat would remove the
+    burst instead of riding it out.
+
 ### Next steps
-- Deploy is live: POST fast claim #4, record scratchpad/fast-claim.json,
-  watch monitor b2kw3jihu (or re-arm) to a certificate; then record the
-  measured time-to-certificate in STATUS.md and the runbook.
+- When claim #4 finishes (round two: commit floor ~04:16:20, reveal floor
+  ~04:17:20) the background chain deploys `bb557d3`; then POST fast claim
+  #5 and measure; record the time-to-certificate in STATUS.md/runbook.
 - Then deploy `c55949a` (clean worktree checkout, `railway up -s app -d`),
   submit a fast claim, time it, and record timings here and in STATUS.md.
 - Residue on testnet: `0x1936ddd3…` (orphan), `0xdb9c7bae…` (REVEAL_1 with
