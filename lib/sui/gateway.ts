@@ -48,6 +48,7 @@ import type {
   ChainEpochInfo,
 } from "./gateway-types";
 import type { OpenVerdictSuiClient } from "./client";
+import { runOnOperatorLane } from "./operator-lane";
 import type { ReleaseManifest } from "./manifest";
 import { SignerRegistry, SignerRegistryError } from "./signers";
 
@@ -66,8 +67,6 @@ export class RealSuiGateway implements SuiGateway {
   readonly #manifest: ReleaseManifest;
   readonly #signers: SignerRegistry;
   #epochCache: { value: ChainEpochInfo; fetchedAtMs: number } | undefined;
-  /** Tail of the operator transaction queue (see executeOperator). */
-  #operatorChain: Promise<void> = Promise.resolve();
 
   constructor(config: SuiGatewayConfig) {
     this.#client = config.client;
@@ -383,17 +382,15 @@ export class RealSuiGateway implements SuiGateway {
   }
 
   private async executeOperator(transaction: Parameters<typeof executeAndWait>[2]): Promise<TxResult> {
-    // Operator transactions from this process run one at a time: they all
-    // spend from the same gas coin, and five seats approving their runs
-    // together made the validators reject each other's transactions.
-    const run = this.#operatorChain.then(() =>
-      executeAndWait(this.#client, this.#signers.getOperator(), transaction),
+    // Operator transactions from this process run one at a time, on the
+    // lane shared with Walrus writes: they all spend from the same gas coin,
+    // and five seats approving and writing together made the validators
+    // reject each other's transactions.
+    return txResult(
+      await runOnOperatorLane(() =>
+        executeAndWait(this.#client, this.#signers.getOperator(), transaction),
+      ),
     );
-    this.#operatorChain = run.then(
-      () => undefined,
-      () => undefined,
-    );
-    return txResult(await run);
   }
 
   private async selectionResult(

@@ -7,6 +7,7 @@ import {
 } from "@mysten/walrus";
 import type { Signer } from "@mysten/sui/cryptography";
 import { SuiGrpcClient } from "@mysten/sui/grpc";
+import { runOnOperatorLane } from "../sui/operator-lane";
 import {
   assertValidWalrusEpoch,
   assertValidWalrusObjectId,
@@ -54,8 +55,6 @@ export function createRealWalrusStore(
   let epochCache:
     | { value: { currentEpoch: number; epochDurationMs: number }; fetchedAtMs: number }
     | undefined;
-  // Tail of the write queue; every put chains behind it (see put).
-  let writeChain: Promise<void> = Promise.resolve();
 
   return {
     async put(bytes, options) {
@@ -71,11 +70,12 @@ export function createRealWalrusStore(
       // the content itself, which is what content addressing needs.
       // Hosts share the operator signer. This SDK path bypasses the gateway
       // retry, so each writeBlob retry rebuilds with fresh object versions.
-      // One write at a time per store: every write spends from the same gas
-      // and WAL coins, and five seats writing together made the validators
-      // reject each other's register and certify transactions. Uploads that
-      // wait here are already off the model's critical path.
-      const write = writeChain.then(() =>
+      // One operator-signed operation at a time per process (shared with the
+      // Sui gateway): every write spends from the same gas and WAL coins,
+      // and five seats writing and approving together made the validators
+      // reject each other's transactions. Uploads that wait here are
+      // already off the model's critical path.
+      const result = await runOnOperatorLane(() =>
         retryStaleWalrusWrite(
           () =>
             client.walrus.writeBlob({
@@ -90,11 +90,6 @@ export function createRealWalrusStore(
           () => client.walrus.reset(),
         ),
       );
-      writeChain = write.then(
-        () => undefined,
-        () => undefined,
-      );
-      const result = await write;
       return {
         blobId: result.blobId,
         objectId: result.blobObject.id,
