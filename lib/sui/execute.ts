@@ -26,11 +26,16 @@ export class SuiTransactionExecutionError extends Error {
   }
 }
 
-// Validator rejection for a transaction built against an outdated owned-object
-// version (usually a gas coin another process just spent from). The message
-// names the exact object, so recovery can refetch it authoritatively.
-const STALE_OBJECT_PATTERN =
-  /Object ID (0x[0-9a-f]+) Version \S+ Digest \S+ is not available for consumption/i;
+// Rejections for a transaction built against an outdated owned-object version
+// (usually a gas coin another transaction just spent from). Fullnodes and
+// validators phrase it differently across releases; every wording names the
+// object, so recovery can refetch it authoritatively.
+const STALE_OBJECT_PATTERNS = [
+  /Object ID (0x[0-9a-f]+) Version \S+ Digest \S+ is not available for consumption/i,
+  /object (0x[0-9a-f]+) version \S+ \(\S+\) is unavailable for consumption/i,
+  /needs to be rebuilt because object (0x[0-9a-f]+)/i,
+  /provided version doesn't match for object (0x[0-9a-f]+)/i,
+];
 // Equivocation: another transaction from the same sender holds the object
 // lock (usually the shared gas coin). "reserved" is the fullnode's wording
 // while that tx is in flight; "already locked by a different transaction" is
@@ -45,7 +50,12 @@ function errorText(error: unknown): string {
 }
 
 function staleObjectId(error: unknown): string | undefined {
-  return STALE_OBJECT_PATTERN.exec(errorText(error))?.[1];
+  const text = errorText(error);
+  for (const pattern of STALE_OBJECT_PATTERNS) {
+    const match = pattern.exec(text);
+    if (match?.[1]) return match[1];
+  }
+  return undefined;
 }
 
 /** Sign, execute, wait for indexing, and normalize the Sui v2 result union.

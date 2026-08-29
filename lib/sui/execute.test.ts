@@ -73,4 +73,36 @@ describe("executeAndWait", () => {
     // The second attempt signs a freshly built transaction, not the rejected one.
     expect(builds).toBe(2);
   });
+
+  it.each([
+    "Transaction is rejected as invalid by more than 1/3 of validators by stake (non-retriable). Non-retriable errors: [Transaction needs to be rebuilt because object 0xdba0339f14877799f829e0b07e262c47d77122d41b884cd3cd273b8fef77cfa8 version 0x3b6310bb (C3ZC4SJWvjCeeAtAFYQSGXknKRS2enYjQv5gtZKmkgoe) is unavailable for consumption with 6942 stake].",
+    "provided version doesn't match for object 0x21305b77ebe47c29007b063029986ce0b75b8e7e4b35743b8c04235a96e9791d, provided: 996347965 actual: 0x3b631165",
+  ])("rebuilds and retries the stale-object wording: %s", async (message) => {
+    const client = new SuiJsonRpcClient({
+      network: "testnet",
+      url: "http://127.0.0.1:9000",
+    });
+    const signer = new Ed25519Keypair();
+    const execute = vi
+      .spyOn(signer, "signAndExecuteTransaction")
+      .mockRejectedValueOnce(new Error(message))
+      .mockResolvedValue({
+        $kind: "Transaction",
+        Transaction: { digest: "submitted" },
+      } as never);
+    vi.spyOn(client.core, "waitForTransaction").mockResolvedValue({
+      $kind: "Transaction",
+      Transaction: {
+        digest: "settled",
+        effects: { changedObjects: [] },
+        objectTypes: {},
+        events: [],
+      },
+    } as never);
+
+    const result = await executeAndWait(client, signer, () => new Transaction());
+
+    expect(result.digest).toBe("settled");
+    expect(execute).toHaveBeenCalledTimes(2);
+  });
 });

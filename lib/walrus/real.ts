@@ -176,7 +176,7 @@ function validateEpochs(epochs: number): void {
 }
 
 const STALE_WALRUS_WRITE_PATTERN =
-  /unavailable for consumption|needs to be rebuilt|ObjectVersionUnavailableForConsumption/i;
+  /unavailable for consumption|needs to be rebuilt|ObjectVersionUnavailableForConsumption|provided version doesn't match/i;
 const WALRUS_WRITE_ATTEMPTS = 3;
 const WALRUS_WRITE_RETRY_DELAY_MS = 750;
 

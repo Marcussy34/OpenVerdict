@@ -486,7 +486,19 @@ class OpenVerdictEngine implements Engine {
   }
 
   async evidenceFreeze(claimId: string, phase: 1 | 2): Promise<TxResult> {
-    await this.claim(claimId);
+    const claim = await this.claim(claimId);
+    // Move rejects a freeze after the phase window (commit deadline for
+    // phase one, discussion deadline for phase two); refuse here, before
+    // the manifest upload, so a closed window costs no Walrus write.
+    const windowEndMs =
+      phase === 1
+        ? claim.deadlines.firstCommitDeadlineMs
+        : claim.deadlines.discussionDeadlineMs;
+    if (this.#now() > windowEndMs) {
+      throw new EngineStateError(
+        `evidence freeze window for phase ${phase} closed at ${new Date(windowEndMs).toISOString()}`,
+      );
+    }
     const existing = await this.#repository.getEvidenceManifest(claimId, phase);
     if (existing?.evidenceBundleId) {
       const tally = await this.#repository.getRoundTally(claimId, phase);

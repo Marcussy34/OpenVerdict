@@ -18,15 +18,23 @@ export async function evidenceWorkerTick(): Promise<void> {
   await forEachClaim("evidence-worker", claims, async (claim) => {
     if (skippedNoEvidenceClaims.has(claim.claimId)) return;
     try {
+      // Move accepts a freeze only inside its window (phase one until the
+      // commit deadline, phase two until the discussion deadline). Trying
+      // afterwards uploads a manifest to Walrus (two transactions) every
+      // tick before the freeze aborts, which churned the operator's coins
+      // and made unrelated transactions fail on stale versions.
+      const now = Date.now();
       if (
         claim.state === CLAIM_STATE.COMMIT_1 &&
+        now <= claim.deadlines.firstCommitDeadlineMs &&
         !claim.evidenceRoots.some((root) => root.phase === 1)
       ) {
         await engine.evidenceFreeze(claim.claimId, 1);
       }
       if (
         claim.state === CLAIM_STATE.DISCUSSION &&
-        Date.now() >= claim.deadlines.discussionDeadlineMs - discussionFreezeLeadMs &&
+        now >= claim.deadlines.discussionDeadlineMs - discussionFreezeLeadMs &&
+        now < claim.deadlines.discussionDeadlineMs &&
         !claim.evidenceRoots.some((root) => root.phase === 2)
       ) {
         await engine.evidenceFreeze(claim.claimId, 2);
