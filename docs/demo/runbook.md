@@ -64,16 +64,26 @@ Operator address (generated 2026-08-27, key held in local .env only):
 
 ## 3. Live URL (T8)
 
-Split hosting (2026-08-30): the website and its request-side API run on
-Vercel (https://openverdict.info, Neon Postgres attached); the three engine
-workers run on Railway as service `workers` in project `openverdict`
-(Dockerfile build, `OPENVERDICT_ROLE=workers` so the container skips the
-web, same `DATABASE_URL` and keys as Vercel plus `FIRECRAWL_API_KEY`). Env
-per `.env.example` (operator key, agent seed, manifest=testnet, Gonka key,
-Firecrawl key, operator token; `OPENVERDICT_PUBLIC_WRITES=enabled` on Vercel
-only). Both clouds reach Mysten endpoints normally; the local TLS
-interference does not apply there. Deploy: push to `main` (Vercel builds),
-then `railway up --service workers` from the same commit.
+Single host (2026-08-30): the website, its API and the three engine workers
+run together on Railway, project `openverdict-workers`, service `app`
+(Dockerfile build, `scripts/start-production.mjs` launches the web plus the
+evidence, inference and resolution workers; Neon Postgres via the pooled
+`DATABASE_URL`). Hosts: https://openverdict.info (landing, plus www) and
+https://app.openverdict.info (dashboard; `proxy.ts` rewrites the root of
+`app.` hosts to `/app`). DNS: the zone stays on Vercel nameservers; apex
+ALIAS, www CNAME and app CNAME point at the Railway domain targets, and
+Railway ownership is proven by `_railway-verify` TXT records. The Vercel
+project keeps only the Neon integration (no domains). Env per
+`.env.example` (operator key, agent seed, manifest=testnet, Gonka key,
+Firecrawl key, operator token, `PORT=3000`, `OPENVERDICT_PUBLIC_WRITES=
+enabled`, `OPENVERDICT_TRUST_PROXY=1`, `WALRUS_UPLOAD_RELAY_URL`,
+`NEXT_PUBLIC_*` baked at build time through Dockerfile ARGs). Railway
+reaches Mysten endpoints normally; the local TLS interference does not
+apply there. Deploy: from a clean checkout of the commit
+(`git checkout --detach <sha>` in a worktree) run `railway up -s app -d`,
+then wait for SUCCESS in `railway deployment list -s app`. Worker ticks are
+serialized with a transaction-level advisory lock; never switch it back to
+a session lock, the pooler strands those.
 
 ## 4. Live inference (T8b — needs user key)
 

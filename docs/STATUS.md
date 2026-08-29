@@ -38,14 +38,25 @@ operational proof and public deployments in flight.
   profile→signer self-healing, stale-gas retry, per-claim worker error
   isolation, in-gateway approveRun serialization (previously only the E2E
   harness proxy had it), and factory-rebuilt transaction retries.
-- PUBLIC AND LIVE 2026-08-29 on Vercel at https://openverdict.info (apex and
-  www both serve; Neon Postgres attached). `/api/status` reports suiHealthy,
-  gonkaMode live, walrusMode testnet, dbHealthy. Seven jurors bound and
-  verified 7/7 against chain. Railway abandoned in favour of Vercel. Five
-  stacked deploy faults fixed to get there: see docs/CHECKPOINT-2026-08-29.md.
-  Not yet proven: a claim run end-to-end through the HOSTED app, and it
-  CANNOT complete today: Vercel runs no workers, so a submitted claim stops at
-  REVIEW_REQUESTED (see CHECKPOINT-2026-08-29.md, "no worker host").
+- HOSTED ON RAILWAY 2026-08-30 (single host, web + the three engine
+  workers in one service `app`): https://openverdict.info is the landing,
+  https://app.openverdict.info opens the dashboard directly (`proxy.ts`
+  rewrites the root of `app.` hosts to `/app`). The DNS zone stays on Vercel
+  nameservers (apex ALIAS and www CNAME point at Railway; the Vercel project
+  keeps only the Neon integration). `/api/status` reports suiHealthy,
+  gonkaMode live, walrusMode testnet, dbHealthy. Two hosted-only bugs found
+  and fixed the same night: retention epochs were sent to Move as Walrus
+  epochs (E_RETENTION_EXPIRED on every freeze; now converted to Sui epochs,
+  `lib/sui/retention-epoch.ts`), and the worker tick lock was a session
+  advisory lock that Neon's transaction pooler stranded (workers silent;
+  now `pg_advisory_xact_lock` inside a transaction). Hosted end-to-end run:
+  see docs/CHECKPOINT-2026-08-29.md for the latest claim ids and results.
+- FAST MODE 2026-08-30: hosted ladder evidence +20 s / commit +3.5 min /
+  reveal +4.5 min (second round +8 / +9 min), reveal bundles published in
+  parallel, and the resolution worker waits for each Move deadline floor
+  instead of submitting aborting transactions every tick. Target: a
+  certificate about 4.6 minutes after submission (Move needs the reveal
+  deadline before `finalize_claim`).
 - PROOF CHAIN V2 PROVEN ON TESTNET 2026-08-29 late: the seven juror manifests
   on chain are real v2 documents on Walrus (prompt spec embedded, hashes
   match, `scripts/publish-agent-manifests.ts`), and a live canary ran under

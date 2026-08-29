@@ -24,7 +24,7 @@ evidence and agent work preserved on Walrus.
 > | Observer + fact-check UI (light + Sui blue redesign) | ✅ 14 routes; builds, typechecks, lints |
 > | Sui testnet package | ✅ published — ids in `config/release.testnet.json` |
 > | Live-model testnet canary (T8a) | ✅ YES @ 9700 bps, 5/5 live juries, certificate `0x8efdabe0…1a8634` |
-> | Railway public URL | 🚧 dashboard builder flip pending |
+> | Hosted on Railway (web + workers) | ✅ https://openverdict.info · app at https://app.openverdict.info |
 >
 > Full specification: [PRD.md](./PRD.md) · Live status: [docs/STATUS.md](./docs/STATUS.md) · Build plan: [docs/superpowers/plans/2026-08-26-openverdict-build.md](./docs/superpowers/plans/2026-08-26-openverdict-build.md)
 

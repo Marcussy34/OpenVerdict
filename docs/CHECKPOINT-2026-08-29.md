@@ -9,6 +9,78 @@
 > stay on the table. Do not treat the current build as settled.
 > Companions: docs/STATUS.md, docs/demo/runbook.md, CHECKPOINT-08-27/08-28.
 
+## STATE AT 03:00 local (2026-08-30): Railway is the only host, two hosted bugs fixed, fast mode built
+
+**Read this first; it supersedes the #6 section below.** Commits tonight,
+all on main and pushed: `ba1262e` (epoch conversion + app-host proxy),
+`5e5f6d6` (pooler-safe worker tick lock + deadline gating), `c55949a`
+(fast ladder + parallel reveal publication + Walrus SDK reset). Railway
+`app` runs `5e5f6d6` (deployed 02:55). `c55949a` is NOT deployed yet: deploy
+it only when no claim is mid-phase (a restart during a jury run loses seats),
+then submit a fast test claim and time it.
+
+### What happened after compaction #6 (in order)
+1. Gate + commit `ba1262e`, deployed 02:39 (deployment `0a4ed9bd…`).
+   A Codex worker that had gone idle was still writing to the same files;
+   its late additions (a 60 s cache test for the Walrus clock, a lower-bound
+   assertion, and later `client.walrus.reset()` before `stakingState()`)
+   were reviewed and kept. Lesson: `pgrep -f "codex-companion.mjs task"`
+   AND the app-server keep running after the client is killed; cancel via
+   the registry (`codex-companion.mjs cancel <job>`) when the job is listed.
+2. Railway custom domains needed ownership TXT records because the trashed
+   old project still claimed the hostnames: `_railway-verify`,
+   `_railway-verify.www`, `_railway-verify.app` (Vercel DNS ids
+   rec_8c3046fa…, rec_527f2750…, rec_f7c93ede…). All three verified.
+3. DNS switch done (owner said "go"): apex ALIAS `jp12gpeh.up.railway.app`
+   (rec_c61852b5…), www CNAME `fx4ky0p1.up.railway.app` (rec_c1e23cec…),
+   app CNAME `2g3sfc2h.up.railway.app` (rec_ffc66959…). Both Vercel
+   nameservers answer Railway. Domains removed from the Vercel project via
+   `DELETE /v9/projects/open-verdict/domains/<domain>` (NOT `vercel domains
+   rm`, which would drop the zone); the project stays for the Neon
+   integration. app.openverdict.info has a valid certificate; apex/www
+   certificates were still VALIDATING at 02:45 (re-check with
+   `railway domain status <domain> -s app --json`).
+4. Hosted statement-only claim `0xddd66882d2cedf7b22c3568b54feb99b978c46d61c578b3fe4f6588990bc6ab4`
+   ("The Sui mainnet launched in May 2023.", old 30/45 min ladder, commit
+   deadline 03:11, reveal 03:26 local) exposed HOSTED BUG #2: the worker
+   tick serializer used `pg_advisory_lock` (session lock) through Neon's
+   transaction-mode pooler (`DATABASE_URL` host `…-pooler…`). The pooler
+   moves the server connection holding the lock to other clients and routes
+   the unlock elsewhere, so the lock strands and all three workers block
+   silently (proof: pg_stat_activity showed the granted holder idle with a
+   foreign query and three waiters for 7 minutes). Fix in `5e5f6d6`:
+   `BEGIN; pg_advisory_xact_lock; ...; COMMIT` (verified through the pooler
+   with two clients). A stranded session lock SURVIVES an app restart (it
+   lives on the pooler's server connection): terminate it once with
+   `pg_terminate_backend(<holder pid>)` (holder = granted row in pg_locks
+   for objid 1869640753). Done at 02:58; scratch loop `claim-state.py` in the
+   scratchpad prints one state line for a claim URL.
+5. Fast mode (`c55949a`): hosted ladder evidence +20 s, proposal +25 s,
+   challenge +30 s, commit +210 s, reveal +270 s, discussion +330 s, second
+   commit +480 s, second reveal +540 s. Floors from Move: `finalize_claim`
+   needs now > first_reveal_deadline (settlement.move), `lock_committee`
+   needs now >= selection + (commit - selection)/2 (jury.move:812),
+   `advance_phase` needs now > commit deadline (claim.move:323). Resolution
+   worker now waits for each floor (2 s margin) instead of submitting
+   aborting txs each tick (those aborts fail at dry-run, so they cost no
+   gas, only RPC noise). Reveal bundles upload in parallel, then reveal txs
+   run sequentially. NOT done (follow-ups): page uploads still block each
+   research open (~14 s each, up to 4 per seat); the inference worker still
+   calls lockCommittee before the acceptance floor (dry-run abort, harmless);
+   per-turn max_tokens is bound into the prompt spec hash, so changing it
+   means a spec v3 + manifest republish.
+6. Docs updated: STATUS.md (hosting + fast mode bullets), runbook §3
+   (Railway single host, deploy procedure, pooler warning), README table row.
+
+### Next steps
+- Watch claim `0xddd66882…` to a certificate (expected ~03:27 local); the
+  freeze proves the epoch fix, commits prove five seats with real Walrus.
+- Then deploy `c55949a` (clean worktree checkout, `railway up -s app -d`),
+  submit a fast claim, time it, and record timings here and in STATUS.md.
+- Residue on testnet: `0x1936ddd3…` (orphan), `0xdb9c7bae…` (REVEAL_1 with
+  no roots, will settle UNRESOLVED after its reveal deadline).
+- Memory: add the pooler lock lesson and the DNS layout.
+
 ## STATE AT COMPACTION #6 (2026-08-30 ~03:05 local): epoch fix + Railway cutover mid-flight
 
 **Read this first; it supersedes everything below for "what to do next".**
