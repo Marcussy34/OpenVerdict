@@ -11,6 +11,14 @@ WORKDIR /app
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 RUN pnpm install --frozen-lockfile
 COPY . .
+# Next.js bakes NEXT_PUBLIC_* values at build time; Railway only exposes
+# service variables to a Dockerfile build through ARG, so declare them here.
+ARG NEXT_PUBLIC_ENOKI_API_KEY
+ARG NEXT_PUBLIC_GOOGLE_CLIENT_ID
+ARG NEXT_PUBLIC_SUI_NETWORK=testnet
+ENV NEXT_PUBLIC_ENOKI_API_KEY=$NEXT_PUBLIC_ENOKI_API_KEY \
+    NEXT_PUBLIC_GOOGLE_CLIENT_ID=$NEXT_PUBLIC_GOOGLE_CLIENT_ID \
+    NEXT_PUBLIC_SUI_NETWORK=$NEXT_PUBLIC_SUI_NETWORK
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN pnpm build
 
