@@ -33,12 +33,20 @@ class TickSerializer {
 
   async run<T>(fn: () => Promise<T>): Promise<T> {
     const client = await this.connected();
-    await client.query("SELECT pg_advisory_lock($1)", [TICK_LOCK_KEY]);
+    // Transaction-level lock, not a session lock: behind a transaction-mode
+    // pooler (Neon's pgbouncer) a session lock lands on whichever server
+    // connection served that statement, the pooler then hands that
+    // connection to other clients and routes the unlock elsewhere, and the
+    // lock is stranded forever (every worker blocked, silent). An open
+    // transaction pins one server connection for the whole tick, and the
+    // lock ends with the COMMIT, or with the connection if the worker dies.
+    await client.query("BEGIN");
     try {
+      await client.query("SELECT pg_advisory_xact_lock($1)", [TICK_LOCK_KEY]);
       return await fn();
     } finally {
       try {
-        await client.query("SELECT pg_advisory_unlock($1)", [TICK_LOCK_KEY]);
+        await client.query("COMMIT");
       } catch {
         this.client = null;
       }
