@@ -3038,16 +3038,21 @@ function defaultDeadlines(
   // leaves room for the statement artifact write that follows creation;
   // hosted seats took 19 to 45 s with page writes off the critical path; a
   // seat that misses the commit window fails closed and 4 of 5 still settle.
+  // Committees must span three model families (jury.move
+  // E_INSUFFICIENT_DIVERSE_AGENTS) and a round needs four matching reveals
+  // of five (REQUIRED_MATCHING), so the slowest family must usually make it:
+  // Kimi-K2.6 answered in 33 to 100 s on 2026-08-30. The commit window
+  // leaves seats about 140 s of research.
   const second = 1_000;
   return {
     evidenceCutoffMs: now + 60 * second,
     proposalDeadlineMs: now + 65 * second,
     challengeDeadlineMs: now + 70 * second,
-    firstCommitDeadlineMs: now + 210 * second,
-    firstRevealDeadlineMs: now + 270 * second,
-    discussionDeadlineMs: now + 330 * second,
-    secondCommitDeadlineMs: now + 480 * second,
-    secondRevealDeadlineMs: now + 540 * second,
+    firstCommitDeadlineMs: now + 240 * second,
+    firstRevealDeadlineMs: now + 300 * second,
+    discussionDeadlineMs: now + 360 * second,
+    secondCommitDeadlineMs: now + 540 * second,
+    secondRevealDeadlineMs: now + 600 * second,
   };
 }
 
