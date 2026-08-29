@@ -622,6 +622,14 @@ class OpenVerdictEngine implements Engine {
     const storedPageCache = new Map<string, Promise<PageStorePage>>();
     // Background Walrus writes of discovered pages, keyed by evidence id.
     const pageUploads = new Map<string, Promise<void>>();
+    // Every seat must finish early enough for the lock, the approvals and
+    // the commits to land before the commit deadline; a seat past this point
+    // fails closed while its committee mates still commit (4 of 5 settle).
+    const commitDeadlineMs =
+      phase === 1
+        ? claim.deadlines.firstCommitDeadlineMs
+        : claim.deadlines.secondCommitDeadlineMs;
+    const seatDeadlineMs = commitDeadlineMs - SEAT_COMMIT_MARGIN_MS;
 
     await Promise.all(
       seats.map(async (seat) => {
@@ -639,6 +647,7 @@ class OpenVerdictEngine implements Engine {
           searchCache,
           storedPageCache,
           pageUploads,
+          seatDeadlineMs,
         );
       }),
     );
@@ -1696,6 +1705,7 @@ class OpenVerdictEngine implements Engine {
     searchCache: SearchCache,
     storedPageCache: Map<string, Promise<PageStorePage>>,
     pageUploads: Map<string, Promise<void>>,
+    seatDeadlineMs: number,
   ): Promise<void> {
     const agent = await this.requiredAgent(seat.agentProfileId);
     const baseRunId = deterministicId(`run:${claim.claimId}:${seat.jurySeatId}:${seat.phase}`);
@@ -1874,6 +1884,7 @@ class OpenVerdictEngine implements Engine {
         pages,
         searchCache,
         now: this.#now,
+        deadlineMs: seatDeadlineMs,
       });
       if (!loop.ok) {
         if (loop.attempts.length === 0) {
@@ -2866,6 +2877,9 @@ function evidencePolicyId(manifest: ReleaseManifest): `0x${string}` {
     toHex(blake2b256(new TextEncoder().encode(EVIDENCE_POLICY_V1_LABEL)))
   ) as `0x${string}`;
 }
+
+/** Time reserved after the last seat for lock_committee, approvals and commit_vote txs. */
+const SEAT_COMMIT_MARGIN_MS = 60_000;
 
 function defaultDeadlines(
   now: number,

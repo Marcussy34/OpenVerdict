@@ -204,17 +204,23 @@ describe("createRealWalrusStore", () => {
     expect(sleep).not.toHaveBeenCalled();
   });
 
-  it("rethrows the last stale-object error after three write attempts", async () => {
+  it("rethrows the last stale-object error after five write attempts", async () => {
+    // Every wording the fullnode and validators use for a coin another
+    // write (ours or a sibling's) just moved.
     const staleErrors = [
       new Error("object is unavailable for consumption"),
       new Error("transaction needs to be rebuilt"),
       new Error("ObjectVersionUnavailableForConsumption"),
+      new Error("Object (0x21) already locked by a different transaction: TransactionDigest(abc)"),
+      new Error("provided version doesn't match for object 0x21, provided: 1 actual: 2"),
     ] as const;
     writeBlobMock
       .mockReset()
       .mockRejectedValueOnce(staleErrors[0])
       .mockRejectedValueOnce(staleErrors[1])
-      .mockRejectedValueOnce(staleErrors[2]);
+      .mockRejectedValueOnce(staleErrors[2])
+      .mockRejectedValueOnce(staleErrors[3])
+      .mockRejectedValueOnce(staleErrors[4]);
     const sleep = vi
       .fn<(milliseconds: number) => Promise<void>>()
       .mockResolvedValue(undefined);
@@ -224,10 +230,11 @@ describe("createRealWalrusStore", () => {
       sleep,
     });
 
-    await expect(store.put(new Uint8Array([3]))).rejects.toBe(staleErrors[2]);
-    expect(writeBlobMock).toHaveBeenCalledTimes(3);
+    await expect(store.put(new Uint8Array([3]))).rejects.toBe(staleErrors[4]);
+    expect(writeBlobMock).toHaveBeenCalledTimes(5);
     expect(sleep).toHaveBeenNthCalledWith(1, 750);
     expect(sleep).toHaveBeenNthCalledWith(2, 1_500);
+    expect(sleep).toHaveBeenNthCalledWith(4, 3_000);
   });
 
   it("maps the SDK not-found error from readBlob to WalrusNotFoundError", async () => {

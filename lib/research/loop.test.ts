@@ -248,6 +248,7 @@ function loopDependencies(options: {
   pages?: PageStore;
   searchCache?: SearchCache;
   now?: () => number;
+  deadlineMs?: number;
 }) {
   return {
     complete: options.complete,
@@ -261,6 +262,7 @@ function loopDependencies(options: {
     pages: options.pages ?? new MemoryPageStore(),
     searchCache: options.searchCache ?? createSearchCache(),
     ...(options.now === undefined ? {} : { now: options.now }),
+    ...(options.deadlineMs === undefined ? {} : { deadlineMs: options.deadlineMs }),
   };
 }
 
@@ -586,6 +588,37 @@ describe("research loop", () => {
       cached: true,
     });
     expect(result.transcript.counts.searches).toBe(1);
+  });
+
+  it("fails with TIMEOUT once the seat deadline passes and bounds each call by the time left", async () => {
+    const query = "independent research";
+    const script = scriptedCompletion([
+      action({ action: "search", query }),
+      unsureAnswer(),
+    ]);
+    // Each model call advances the clock past the 500 ms deadline, so turn 1
+    // runs with the full time left as its call timeout and turn 2 never starts.
+    let clock = 0;
+    const now = () => clock;
+    const original = script.complete;
+    const timeouts: Array<number | undefined> = [];
+    const complete: GonkaCompletion = async (request) => {
+      timeouts.push(request.timeoutMs);
+      clock += 600;
+      return original(request);
+    };
+
+    const result = await runResearchLoop(
+      loopDependencies({ complete, now, deadlineMs: 500 }),
+    );
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.status).toBe("TIMEOUT");
+    expect(result.message).toContain("seat deadline");
+    // Turn 1 ran (search) with the 500 ms left as its call timeout; turn 2 never started.
+    expect(timeouts).toEqual([500]);
+    expect(result.transcript.counts).toEqual({ searches: 1, opens: 0, turns: 1 });
   });
 
   it("fails with TIMEOUT before a turn starts beyond maxLoopMs", async () => {

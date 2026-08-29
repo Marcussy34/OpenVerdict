@@ -71,6 +71,8 @@ export type GonkaCompletionRequest = {
   input: OracleInferenceInput;
   /** Shared across the whole run; complete() appends one record per model call. */
   attempts: GonkaAttemptRecord[];
+  /** Upper bound for this single model call (the seat's remaining time), in ms. */
+  timeoutMs?: number;
 };
 
 export type GonkaCompletionResult =

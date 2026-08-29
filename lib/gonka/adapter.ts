@@ -603,6 +603,11 @@ export function createGonkaAdapterWithDependencies(
   ): Promise<GonkaCompletionResult> {
     const input = oracleInferenceInputSchema.parse(request.input);
     assertManifest(request.manifest);
+    // A seat near its commit deadline bounds the call by the time it has left.
+    const callTimeoutMs =
+      request.timeoutMs !== undefined && request.timeoutMs > 0
+        ? Math.min(researchTimeoutMs, request.timeoutMs)
+        : researchTimeoutMs;
     const provider = await execute(
       request.kind,
       request.messages,
@@ -611,7 +616,7 @@ export function createGonkaAdapterWithDependencies(
       request.manifest,
       request.attempts,
       researchSpec,
-      researchTimeoutMs,
+      callTimeoutMs,
     );
     if (!provider.ok) {
       return {

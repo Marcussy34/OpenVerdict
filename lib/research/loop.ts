@@ -135,6 +135,13 @@ export async function runResearchLoop(
     pages: PageStore;
     searchCache: SearchCache;
     now?: () => number;
+    /**
+     * Wall-clock point (ms) after which this seat cannot commit in time. The
+     * loop stops with TIMEOUT before a turn that would start past it and
+     * bounds every model call by the time left, so a slow seat fails closed
+     * while its committee mates still make the commit deadline.
+     */
+    deadlineMs?: number;
   },
 ): Promise<ResearchLoopResult> {
   const now = deps.now ?? Date.now;
@@ -249,12 +256,18 @@ export async function runResearchLoop(
     if (now() - startedAt > policy.maxLoopMs) {
       return fail("TIMEOUT", "research loop exceeded maxLoopMs");
     }
+    const timeLeftMs =
+      deps.deadlineMs === undefined ? undefined : deps.deadlineMs - now();
+    if (timeLeftMs !== undefined && timeLeftMs <= 0) {
+      return fail("TIMEOUT", "seat deadline reached before the commit window");
+    }
     counts.turns = turn;
     const kind: GonkaAttemptKind = turn === 1
       ? "PRIMARY"
       : repaired
         ? "REPAIR"
         : "PRIMARY";
+    const timeout = timeLeftMs === undefined ? {} : { timeoutMs: timeLeftMs };
     let completion = await deps.complete({
       manifest: deps.manifest,
       messages,
@@ -262,6 +275,7 @@ export async function runResearchLoop(
       jsonMode,
       input: deps.input,
       attempts,
+      ...timeout,
     });
 
     if (!completion.ok && completion.responseFormatUnsupported && jsonMode) {
@@ -277,6 +291,7 @@ export async function runResearchLoop(
         jsonMode,
         input: deps.input,
         attempts,
+        ...timeout,
       });
     }
     if (!completion.ok) {

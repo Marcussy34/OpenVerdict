@@ -175,9 +175,11 @@ function validateEpochs(epochs: number): void {
   }
 }
 
+// Parallel writes from one signer race on the gas and WAL coins; every one of
+// these wordings means "rebuild with fresh versions and try again".
 const STALE_WALRUS_WRITE_PATTERN =
-  /unavailable for consumption|needs to be rebuilt|ObjectVersionUnavailableForConsumption|provided version doesn't match/i;
-const WALRUS_WRITE_ATTEMPTS = 3;
+  /unavailable for consumption|needs to be rebuilt|ObjectVersionUnavailableForConsumption|provided version doesn't match|already locked by a different transaction|reserved for another transaction/i;
+const WALRUS_WRITE_ATTEMPTS = 5;
 const WALRUS_WRITE_RETRY_DELAY_MS = 750;
 
 async function retryStaleWalrusWrite<T>(
