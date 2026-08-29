@@ -341,9 +341,22 @@ then submit a fast test claim and time it.
     node_modules/.cache/set-eligibility.mjs <weight> <profileId...>
     (key from .env). Reversible: weight 10000 restores Kimi.
 
+37. REVERTED 06:53 (digest 3Bo51fFisSfQMrdykmQjZzye3boboA3CLXdCCetZ33V8):
+    with Kimi at weight 100, jury::select_committee aborted every tick with
+    code 0 E_INSUFFICIENT_DIVERSE_AGENTS: the draw must span three model
+    families, so Kimi is always seated. Claim #11
+    `0xf6115251da13216e0721c4e0eb94db15f72ec0feb85efdd0097cdaa0ceb3c043`
+    (bind-fix build 04d60dc live since 06:51) got its committee at t+99 s
+    after the revert and froze at t+118 s (late start, short round).
+38. The lever is time: commit "commit window +240 s so the slowest model
+    family can make the round": ladder cutoff +60 s, commit +240 s, reveal
+    +300 s, discussion +360 s, second round +540 / +600 s (seat budget
+    ~140 s; certificate ~5.5 min after POST). Gate 356 tests, lint, build.
+    Chain deploys after claim #11 (or 07:05); then claim #12.
+
 ### Next steps
-- Deploy the bind fix (chain running), submit claim #11 on the new
-  committee mix, measure; then STATUS.md/runbook with the numbers.
+- Measure claim #12 on the +240 s ladder; then STATUS.md/runbook with the
+  numbers and the demo claim ids.
 - Then deploy `c55949a` (clean worktree checkout, `railway up -s app -d`),
   submit a fast claim, time it, and record timings here and in STATUS.md.
 - Residue on testnet: `0x1936ddd3…` (orphan), `0xdb9c7bae…` (REVEAL_1 with
