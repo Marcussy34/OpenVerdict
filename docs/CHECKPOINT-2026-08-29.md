@@ -322,9 +322,28 @@ then submit a fast test claim and time it.
 34. Fast claim #10 `0xb2a2e9ffe74686b0bd1880fc597cf55309cca096f5b82c622e38df5a4a6e337d`
     submitted 06:39:17 on the lane build with funded jurors (freeze t+56 s).
 
+35. Claim #10 (funded jurors, lane build): three seats valid and COMMITTED
+    by t+178 s (MiniMax 6 s, Kimi 38 s, DeepSeek 29 s; one DeepSeek lost to
+    a gas-coin rejection, one Kimi to a 90 s timeout), advance t+234 s,
+    all three reveals by t+283 s, and STILL discussion at t+295 s: the
+    on-chain rule is jury.move REQUIRED_MATCHING = 4 (four matching reveals
+    of five), so three agreeing YES votes never resolve a round. Round two
+    again 3 YES; finalized UNRESOLVED, truth score 9667, certificate
+    `0xef4383de1115a0e2b83c46f0179f605c9edd829592c847f516ee5931a6292acf`
+    at t+571 s. Every UNRESOLVED-with-high-truth-score certificate tonight
+    is this rule, not a bug.
+36. Lever applied 06:49: agent_registry::set_agent_eligibility (AdminCap
+    `0x525aed28…` owned by the operator; AgentProfile objects are shared)
+    set both Kimi-K2.6 profiles (`0x19e6bda3…`, `0x6ef1974f…`) to weight
+    100 (others 10000; digest EQmGEX44DStaLa7C3rqqHhWQmzfjYKDRqvNS9giYxuy6)
+    so committees draw the healthy DeepSeek x3 + MiniMax x2 almost always;
+    a verdict then needs at most one lost seat. Script:
+    node_modules/.cache/set-eligibility.mjs <weight> <profileId...>
+    (key from .env). Reversible: weight 10000 restores Kimi.
+
 ### Next steps
-- Measure claim #10; deploy the bind fix after it; record the
-  time-to-certificate and the demo claim ids in STATUS.md and the runbook.
+- Deploy the bind fix (chain running), submit claim #11 on the new
+  committee mix, measure; then STATUS.md/runbook with the numbers.
 - Then deploy `c55949a` (clean worktree checkout, `railway up -s app -d`),
   submit a fast claim, time it, and record timings here and in STATUS.md.
 - Residue on testnet: `0x1936ddd3…` (orphan), `0xdb9c7bae…` (REVEAL_1 with
