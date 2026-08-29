@@ -160,6 +160,17 @@ async function createRuntimeRealWalrusStore(
     baseUrl: readEnv(process.env.OPENVERDICT_SUI_GRPC_URL, manifest.suiRpcUrl),
     signer,
     epochs: manifest.walrus.epochs ?? 10,
+    // Serverless functions cannot fan a blob out to ~100 storage nodes (the
+    // SDK gives up once a third of the shards fail); an upload relay takes
+    // the slivers in one request. Opt in per host with WALRUS_UPLOAD_RELAY_URL.
+    ...(process.env.WALRUS_UPLOAD_RELAY_URL?.trim()
+      ? {
+          uploadRelay: {
+            host: process.env.WALRUS_UPLOAD_RELAY_URL.trim(),
+            sendTip: { max: numberEnv("WALRUS_UPLOAD_RELAY_MAX_TIP_MIST", 1_000) },
+          },
+        }
+      : {}),
   });
 }
 

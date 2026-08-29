@@ -176,9 +176,33 @@ Execution state:
   (engine test asserts it).
 - Tip moved under us: the owner's other session committed `app/icon.svg`
   as `19cc76a feat(landing): add the tab favicon`; our tree sits on top.
-- Next: commit, push (Vercel has FIRECRAWL_API_KEY and FIRECRAWL_API_URL
-  set in production since 00:58), `railway up -s workers -d`, verify worker
-  logs, then a hosted end-to-end claim, then fast mode.
+- COMMITTED 01:27 as `9b58256 feat: proof chain v2 and juror research v1`
+  (92 files, +12110 / -683) on top of `19cc76a`; pushed to origin main
+  (Vercel builds from it); `railway up -s workers -d` started right after.
+- RAILWAY WORKERS LIVE 01:37: deployment `81979b39-bc33-4751-848a-921abebcca8b`
+  SUCCESS (Dockerfile build); logs show exactly one launch each of
+  evidence-worker, inference-worker, resolution-worker, no web process, no
+  errors (pg SSL-mode warnings are benign), no restart loop. The hosted
+  back office exists for the first time.
+- Vercel production Ready on `9b58256` at 01:40 (`open-verdict-o91vbssfr`,
+  44 s build); `/api/status` healthy (suiHealthy, gonkaMode live, walrusMode
+  testnet, dbHealthy).
+- HOSTED WRITE BUG FOUND 01:45 (first hosted submission ever attempted):
+  `POST /api/fact-checks` on Vercel failed twice with the Walrus SDK error
+  "Too many failures while writing blob ... to nodes" while uploading the
+  submitted text. Cause: a serverless function cannot fan a blob out to
+  ~100 storage nodes (the SDK aborts once a third of the shards fail). No
+  claim residue (the write precedes the claim record). Remedy: the Walrus
+  UPLOAD RELAY (docs: for clients that cannot open many connections).
+  Probe from this machine through
+  `https://upload-relay.testnet.walrus.space` with the operator key: write
+  in 13.6 s (direct fan-out takes ~30 s), tip 105 MIST, read back exact.
+  `createRuntimeRealWalrusStore` now passes `uploadRelay` when
+  `WALRUS_UPLOAD_RELAY_URL` is set (max tip `WALRUS_UPLOAD_RELAY_MAX_TIP_MIST`,
+  default 1000); both variables set on Vercel production and on the Railway
+  `workers` service (skip-deploys, redeploy after the commit).
+- Next: commit + push the relay wiring, `railway up -s workers -d`, retry
+  the hosted submission, watch the workers advance the claim, then fast mode.
   (engine, storage, server, scripts, engine tests) to one Codex worker; then
   Task 7 rollout by the manager (publish v3 manifests, seed, live probe,
   canary).
