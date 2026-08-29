@@ -28,7 +28,7 @@ import {
   type RegisterAgentTransactionInput,
   type UpdateAgentManifestTransactionInput,
 } from "./builders";
-import { executeAndWait, type ExecutedMoveEvent } from "./execute";
+import { executeAndWait, waitForGasIndex, type ExecutedMoveEvent } from "./execute";
 import type {
   ClaimCreationResult,
   CommitteeSelectionResult,
@@ -387,9 +387,14 @@ export class RealSuiGateway implements SuiGateway {
     // and five seats approving and writing together made the validators
     // reject each other's transactions.
     return txResult(
-      await runOnOperatorLane(() =>
-        executeAndWait(this.#client, this.#signers.getOperator(), transaction),
-      ),
+      await runOnOperatorLane(async () => {
+        const operator = this.#signers.getOperator();
+        const result = await executeAndWait(this.#client, operator, transaction);
+        // Let the owned-object index catch up before the next operation
+        // (a Walrus write) selects gas from it.
+        await waitForGasIndex(this.#client, operator.toSuiAddress());
+        return result;
+      }),
     );
   }
 

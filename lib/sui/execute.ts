@@ -58,6 +58,59 @@ function staleObjectId(error: unknown): string | undefined {
   return undefined;
 }
 
+// The gas coin each sender last paid with. The fullnode's owned-object index
+// (what gas selection reads) lags its object store by seconds under load, so
+// a build right after our own transaction can pick the version that
+// transaction consumed; pinning from getObject (authoritative) avoids it.
+const gasCoinBySender = new Map<string, string>();
+
+async function pinKnownGas(
+  client: OpenVerdictSuiClient,
+  sender: string,
+  transaction: Transaction,
+): Promise<void> {
+  const objectId = gasCoinBySender.get(sender);
+  if (objectId === undefined || (transaction.getData().gasData.payment ?? []).length > 0) {
+    return;
+  }
+  try {
+    const fresh = await client.core.getObject({ objectId, include: {} });
+    transaction.setGasPayment([
+      { objectId, version: fresh.object.version, digest: fresh.object.digest },
+    ]);
+  } catch {
+    // The coin was merged or split away; let the builder select afresh.
+    gasCoinBySender.delete(sender);
+  }
+}
+
+/**
+ * Wait until the owned-object index reports the sender's gas coin at its
+ * current version, so the next build that selects gas from that index (the
+ * Walrus SDK's register and certify transactions do) sees fresh state.
+ */
+export async function waitForGasIndex(
+  client: OpenVerdictSuiClient,
+  sender: string,
+  timeoutMs = 6_000,
+): Promise<void> {
+  const objectId = gasCoinBySender.get(sender);
+  if (objectId === undefined) return;
+  try {
+    const fresh = await client.core.getObject({ objectId, include: {} });
+    const target = BigInt(fresh.object.version);
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      const listed = await client.core.listCoins({ owner: sender, coinType: "0x2::sui::SUI" });
+      const coin = listed.objects.find((entry) => entry.objectId === objectId);
+      if (coin !== undefined && BigInt(coin.version) >= target) return;
+      await new Promise((resolve) => setTimeout(resolve, 400));
+    }
+  } catch {
+    // Best effort only; the retry path still repins on a stale rejection.
+  }
+}
+
 /** Sign, execute, wait for indexing, and normalize the Sui v2 result union.
  * Multi-process stacks share sender gas coins (workers + web all sign as the
  * operator), so a build can race another process's spend and pin a stale gas
@@ -68,6 +121,7 @@ export async function executeAndWait(
   signer: Signer,
   transactionOrFactory: Transaction | (() => Transaction),
 ): Promise<ExecutedTxResult> {
+  const sender = signer.toSuiAddress();
   const makeTransaction = (): Transaction => {
     const tx =
       typeof transactionOrFactory === "function"
@@ -78,10 +132,13 @@ export async function executeAndWait(
     return tx;
   };
   let transaction = makeTransaction();
+  await pinKnownGas(client, sender, transaction);
   let submitted: Awaited<ReturnType<Signer["signAndExecuteTransaction"]>>;
   for (let attempt = 1; ; attempt += 1) {
     try {
       submitted = await signer.signAndExecuteTransaction({ transaction, client });
+      const paidWith = transaction.getData().gasData.payment?.[0]?.objectId;
+      if (paidWith !== undefined) gasCoinBySender.set(sender, paidWith);
       break;
     } catch (error) {
       // Five seats finishing together approve five runs and write five

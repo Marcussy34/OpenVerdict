@@ -7,6 +7,7 @@ import {
 } from "@mysten/walrus";
 import type { Signer } from "@mysten/sui/cryptography";
 import { SuiGrpcClient } from "@mysten/sui/grpc";
+import { waitForGasIndex } from "../sui/execute";
 import { runOnOperatorLane } from "../sui/operator-lane";
 import {
   assertValidWalrusEpoch,
@@ -75,8 +76,8 @@ export function createRealWalrusStore(
       // and five seats writing and approving together made the validators
       // reject each other's transactions. Uploads that wait here are
       // already off the model's critical path.
-      const result = await runOnOperatorLane(() =>
-        retryStaleWalrusWrite(
+      const result = await runOnOperatorLane(async () => {
+        const written = await retryStaleWalrusWrite(
           () =>
             client.walrus.writeBlob({
               blob: stableBytes,
@@ -88,8 +89,12 @@ export function createRealWalrusStore(
           config.sleep ?? defaultSleep,
           // Drop cached object versions so the rebuilt transaction sees the coins as they are now.
           () => client.walrus.reset(),
-        ),
-      );
+        );
+        // The SDK's certify just spent the gas coin; let the owned-object
+        // index catch up before the next lane operation selects gas from it.
+        await waitForGasIndex(client, config.signer.toSuiAddress());
+        return written;
+      });
       return {
         blobId: result.blobId,
         objectId: result.blobObject.id,
