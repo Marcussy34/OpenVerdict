@@ -84,7 +84,9 @@ export async function executeAndWait(
       submitted = await signer.signAndExecuteTransaction({ transaction, client });
       break;
     } catch (error) {
-      if (attempt >= 5) throw error;
+      // Five seats finishing together approve five runs and write five
+      // sealed bundles on one gas coin; the budget below rides out the burst.
+      if (attempt >= 8) throw error;
       const staleId = staleObjectId(error);
       const reserved = RESERVED_OBJECT_PATTERN.test(errorText(error));
       if (!staleId && !reserved) throw error;
@@ -94,7 +96,7 @@ export async function executeAndWait(
       const priorGas = (transaction.getData().gasData.payment ?? []).map(
         (ref) => ref.objectId,
       );
-      await new Promise((resolve) => setTimeout(resolve, 400 * attempt));
+      await new Promise((resolve) => setTimeout(resolve, 1_000 * attempt));
       transaction = makeTransaction();
       // Pin gas at its authoritative current version (coin listings can lag;
       // getObject does not). Never pin a stale NON-gas input as gas — a stale

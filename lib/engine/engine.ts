@@ -2917,11 +2917,11 @@ function defaultDeadlines(
     evidenceCutoffMs: now + 60 * second,
     proposalDeadlineMs: now + 65 * second,
     challengeDeadlineMs: now + 70 * second,
-    firstCommitDeadlineMs: now + 180 * second,
-    firstRevealDeadlineMs: now + 240 * second,
-    discussionDeadlineMs: now + 300 * second,
-    secondCommitDeadlineMs: now + 450 * second,
-    secondRevealDeadlineMs: now + 510 * second,
+    firstCommitDeadlineMs: now + 210 * second,
+    firstRevealDeadlineMs: now + 270 * second,
+    discussionDeadlineMs: now + 330 * second,
+    secondCommitDeadlineMs: now + 480 * second,
+    secondRevealDeadlineMs: now + 540 * second,
   };
 }
 

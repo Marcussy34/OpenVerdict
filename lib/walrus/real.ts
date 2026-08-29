@@ -179,8 +179,10 @@ function validateEpochs(epochs: number): void {
 // these wordings means "rebuild with fresh versions and try again".
 const STALE_WALRUS_WRITE_PATTERN =
   /unavailable for consumption|needs to be rebuilt|ObjectVersionUnavailableForConsumption|provided version doesn't match|already locked by a different transaction|reserved for another transaction/i;
-const WALRUS_WRITE_ATTEMPTS = 5;
-const WALRUS_WRITE_RETRY_DELAY_MS = 750;
+// Five seats finishing together write five sealed bundles and approve five
+// runs on one gas coin; the budget below rides out such a burst.
+const WALRUS_WRITE_ATTEMPTS = 8;
+const WALRUS_WRITE_RETRY_DELAY_MS = 1_500;
 
 async function retryStaleWalrusWrite<T>(
   writeBlob: () => Promise<T>,
