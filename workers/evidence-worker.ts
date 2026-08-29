@@ -8,13 +8,6 @@ const skippedNoEvidenceClaims = new Set<string>();
 export async function evidenceWorkerTick(): Promise<void> {
   const engine = await getServerEngine();
   const claims = await engine.listClaims();
-  const configuredFreezeLeadMs = Number(
-    process.env.OPENVERDICT_EVIDENCE_FREEZE_LEAD_MS ?? 2_000,
-  );
-  const discussionFreezeLeadMs =
-    Number.isFinite(configuredFreezeLeadMs) && configuredFreezeLeadMs >= 0
-      ? configuredFreezeLeadMs
-      : 2_000;
   await forEachClaim("evidence-worker", claims, async (claim) => {
     if (skippedNoEvidenceClaims.has(claim.claimId)) return;
     try {
@@ -31,9 +24,12 @@ export async function evidenceWorkerTick(): Promise<void> {
       ) {
         await engine.evidenceFreeze(claim.claimId, 1);
       }
+      // Phase two freezes as soon as discussion opens: the freeze needs a
+      // Walrus manifest write (about 15 s) before its transaction, and the
+      // fast ladder's discussion window is only a minute, so a freeze
+      // scheduled near the deadline lands after it and the claim dies.
       if (
         claim.state === CLAIM_STATE.DISCUSSION &&
-        now >= claim.deadlines.discussionDeadlineMs - discussionFreezeLeadMs &&
         now < claim.deadlines.discussionDeadlineMs &&
         !claim.evidenceRoots.some((root) => root.phase === 2)
       ) {
