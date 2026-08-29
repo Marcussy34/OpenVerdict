@@ -27,6 +27,7 @@ export interface RealWalrusStoreConfig {
   packageConfig?: WalrusPackageConfig;
   storageNodeClientOptions?: StorageNodeClientOptions;
   wasmUrl?: string;
+  sleep?: (milliseconds: number) => Promise<void>;
 }
 
 /** Create a signer-backed Walrus store using the current Sui client extension. */
@@ -60,13 +61,19 @@ export function createRealWalrusStore(
       // not the artifact, so a verifier hashing "the blob" would get a hash
       // that matches nothing on chain. writeBlob's blobId is derived from
       // the content itself, which is what content addressing needs.
-      const result = await client.walrus.writeBlob({
-        blob: stableBytes,
-        epochs,
-        deletable: options?.deletable ?? config.deletable ?? false,
-        owner: options?.owner,
-        signer: config.signer,
-      });
+      // Hosts share the operator signer. This SDK path bypasses the gateway
+      // retry, so each writeBlob retry rebuilds with fresh object versions.
+      const result = await retryStaleWalrusWrite(
+        () =>
+          client.walrus.writeBlob({
+            blob: stableBytes,
+            epochs,
+            deletable: options?.deletable ?? config.deletable ?? false,
+            owner: options?.owner,
+            signer: config.signer,
+          }),
+        config.sleep ?? defaultSleep,
+      );
       return {
         blobId: result.blobId,
         objectId: result.blobObject.id,
@@ -125,4 +132,48 @@ function validateEpochs(epochs: number): void {
   if (!Number.isSafeInteger(epochs) || epochs <= 0) {
     throw new Error("Walrus epochs must be a positive integer");
   }
+}
+
+const STALE_WALRUS_WRITE_PATTERN =
+  /unavailable for consumption|needs to be rebuilt|ObjectVersionUnavailableForConsumption/i;
+const WALRUS_WRITE_ATTEMPTS = 3;
+const WALRUS_WRITE_RETRY_DELAY_MS = 750;
+
+async function retryStaleWalrusWrite<T>(
+  writeBlob: () => Promise<T>,
+  sleep: (milliseconds: number) => Promise<void>,
+): Promise<T> {
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      return await writeBlob();
+    } catch (error) {
+      if (
+        attempt >= WALRUS_WRITE_ATTEMPTS ||
+        !isStaleWalrusWriteError(error)
+      ) {
+        throw error;
+      }
+      await sleep(WALRUS_WRITE_RETRY_DELAY_MS * attempt);
+    }
+  }
+}
+
+function isStaleWalrusWriteError(error: unknown): boolean {
+  const seen = new Set<unknown>();
+  let current = error;
+  while (current !== undefined && current !== null && !seen.has(current)) {
+    seen.add(current);
+    if (STALE_WALRUS_WRITE_PATTERN.test(errorMessage(current))) return true;
+    current = current instanceof Error ? current.cause : undefined;
+  }
+  return false;
+}
+
+function errorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  return typeof error === "string" ? error : "";
+}
+
+function defaultSleep(milliseconds: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }

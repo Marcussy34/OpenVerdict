@@ -201,8 +201,37 @@ Execution state:
   `WALRUS_UPLOAD_RELAY_URL` is set (max tip `WALRUS_UPLOAD_RELAY_MAX_TIP_MIST`,
   default 1000); both variables set on Vercel production and on the Railway
   `workers` service (skip-deploys, redeploy after the commit).
-- Next: commit + push the relay wiring, `railway up -s workers -d`, retry
-  the hosted submission, watch the workers advance the claim, then fast mode.
+- Relay wiring committed as `9ca5d57 fix(walrus): optional upload relay for
+  constrained hosts` and pushed (01:52). `components/landing/manifesto.tsx`
+  was modified in the tree by the owner's other session and was deliberately
+  left out. Railway redeploy runs from a clean worktree of HEAD in the
+  scratchpad (`scratchpad/railway-tree`, `git worktree add --detach`), so the
+  other session's uncommitted edit never reaches the image.
+- 01:56 Vercel Ready on 9ca5d57 (`open-verdict-3zm4kq1hz`); Railway
+  redeploy `b8ad7841` SUCCESS (three workers launched, relay env present).
+- HOSTED SUBMISSION, THIRD ATTEMPT (01:57): the relay fixed the Walrus write
+  and the request created the FIRST hosted claim ever,
+  `0x1936ddd30c00c7641465dd2ed5577385f022827a603873fe86466be350182b70`
+  (default hosted ladder: evidence cutoff +5 min, commit +30, reveal +45),
+  but the evidence ingestion then failed with a Sui rejection: "Transaction
+  needs to be rebuilt because object 0xdba0339f... version 0x3b61c93d is
+  unavailable for consumption, current version 0x3b61c96a" (45 versions
+  stale). Cause: the Walrus SDK builds and executes its own register and
+  certify txs with the shared operator signer and has no rebuild-on-stale
+  retry (lib/sui/execute.ts has one for gateway txs only); the Vercel
+  function, the Railway workers and tonight's local scripts all move the
+  same coins. Result: the claim exists with zero artifacts; the evidence
+  worker logs "evidence cannot be frozen without an accepted artifact" every
+  tick for it (isolated, noisy; the claim is testnet residue).
+- Hotfix dispatched 02:04 to Codex worker `codex-walrus-retry`: retry
+  `writeBlob` up to 3 times on "unavailable for consumption" / "needs to be
+  rebuilt" errors in `lib/walrus/real.ts` (+ tests). Follow-ups recorded:
+  (a) statement-only claims (freeze should not need a submitted artifact now
+  that jurors research), (b) stop retrying a claim whose evidence cutoff
+  passed with no artifact (mark it failed once), (c) longer term a separate
+  signer per host so coins are never shared across processes.
+- Next: land the hotfix, gate, commit, push, redeploy both hosts, submit a
+  fresh hosted claim and watch it advance, then fast mode.
   (engine, storage, server, scripts, engine tests) to one Codex worker; then
   Task 7 rollout by the manager (publish v3 manifests, seed, live probe,
   canary).

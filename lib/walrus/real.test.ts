@@ -109,6 +109,78 @@ describe("createRealWalrusStore", () => {
     expect(getFilesMock).not.toHaveBeenCalled();
   });
 
+  it("retries a stale-object write with a rebuilt Walrus transaction", async () => {
+    const staleError = new Error("Walrus write failed", {
+      cause: new Error(
+        "Transaction needs to be rebuilt because object 0xabc is unavailable for consumption",
+      ),
+    });
+    writeBlobMock.mockReset().mockRejectedValueOnce(staleError).mockResolvedValueOnce({
+      blobId: "C".repeat(43),
+      blobObject: { id: "0xdef", storage: { end_epoch: 51 } },
+    });
+    const sleep = vi
+      .fn<(milliseconds: number) => Promise<void>>()
+      .mockResolvedValue(undefined);
+    const store = createRealWalrusStore({
+      ...testConfig,
+      signer: Ed25519Keypair.generate(),
+      sleep,
+    });
+
+    await expect(store.put(new Uint8Array([1]))).resolves.toEqual({
+      blobId: "C".repeat(43),
+      objectId: "0xdef",
+      endEpoch: 51,
+    });
+    expect(writeBlobMock).toHaveBeenCalledTimes(2);
+    expect(sleep).toHaveBeenCalledTimes(1);
+    expect(sleep).toHaveBeenCalledWith(750);
+  });
+
+  it("does not retry an unrelated Walrus write error", async () => {
+    const error = new Error("insufficient WAL");
+    writeBlobMock.mockReset().mockRejectedValue(error);
+    const sleep = vi
+      .fn<(milliseconds: number) => Promise<void>>()
+      .mockResolvedValue(undefined);
+    const store = createRealWalrusStore({
+      ...testConfig,
+      signer: Ed25519Keypair.generate(),
+      sleep,
+    });
+
+    await expect(store.put(new Uint8Array([2]))).rejects.toBe(error);
+    expect(writeBlobMock).toHaveBeenCalledTimes(1);
+    expect(sleep).not.toHaveBeenCalled();
+  });
+
+  it("rethrows the last stale-object error after three write attempts", async () => {
+    const staleErrors = [
+      new Error("object is unavailable for consumption"),
+      new Error("transaction needs to be rebuilt"),
+      new Error("ObjectVersionUnavailableForConsumption"),
+    ] as const;
+    writeBlobMock
+      .mockReset()
+      .mockRejectedValueOnce(staleErrors[0])
+      .mockRejectedValueOnce(staleErrors[1])
+      .mockRejectedValueOnce(staleErrors[2]);
+    const sleep = vi
+      .fn<(milliseconds: number) => Promise<void>>()
+      .mockResolvedValue(undefined);
+    const store = createRealWalrusStore({
+      ...testConfig,
+      signer: Ed25519Keypair.generate(),
+      sleep,
+    });
+
+    await expect(store.put(new Uint8Array([3]))).rejects.toBe(staleErrors[2]);
+    expect(writeBlobMock).toHaveBeenCalledTimes(3);
+    expect(sleep).toHaveBeenNthCalledWith(1, 750);
+    expect(sleep).toHaveBeenNthCalledWith(2, 1_500);
+  });
+
   it("maps the SDK not-found error from readBlob to WalrusNotFoundError", async () => {
     readBlobMock.mockReset().mockRejectedValue(
       new WalrusSdkNotFoundError(404, {}, "not found"),
