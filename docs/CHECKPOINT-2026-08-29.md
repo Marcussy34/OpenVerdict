@@ -310,10 +310,21 @@ then submit a fast test claim and time it.
     THE DEMO (suix_getBalance per owner from /api/agents); the operator
     holds ~8.4 SUI and 4.3 WAL after funding.
 
+33. Claim #9 died in DISCUSSION: create_second_round_seats landed (10
+    seats) but an agent-signed bind failed right after funding, the DB
+    phase change never ran, and every later advance aborted with
+    jury.move code 1 E_INVALID_CLAIM_STATE. Fix (commit "idempotent,
+    retried seat binding; record COMMIT_2 before binding"): JurySeatRecord
+    gains evidenceBound; bindSeatsToEvidence skips bound seats and logs
+    instead of throwing; juryRun binds unbound seats each tick and runs
+    only bound seats; advance records COMMIT_2 before the round-two binds.
+    Gate 356 tests, lint, build. Deploy after claim #10.
+34. Fast claim #10 `0xb2a2e9ffe74686b0bd1880fc597cf55309cca096f5b82c622e38df5a4a6e337d`
+    submitted 06:39:17 on the lane build with funded jurors (freeze t+56 s).
+
 ### Next steps
-- Claim #9's round two runs with funded jurors; then claim #10 for the
-  clean measurement; record the time-to-certificate and the demo claim ids
-  in STATUS.md and the runbook.
+- Measure claim #10; deploy the bind fix after it; record the
+  time-to-certificate and the demo claim ids in STATUS.md and the runbook.
 - Then deploy `c55949a` (clean worktree checkout, `railway up -s app -d`),
   submit a fast claim, time it, and record timings here and in STATUS.md.
 - Residue on testnet: `0x1936ddd3…` (orphan), `0xdb9c7bae…` (REVEAL_1 with
