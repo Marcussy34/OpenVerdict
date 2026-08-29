@@ -51,7 +51,14 @@ export async function resolutionWorkerTick(): Promise<void> {
       if (!reached(claim.deadlines.discussionDeadlineMs)) return;
       try {
         await engine.advance(claim.claimId);
-      } catch {
+      } catch (error) {
+        // Say why round two did not open before trying the fallback; the
+        // fallback's own error otherwise hides it.
+        process.stderr.write(
+          `resolution-worker: claim ${claim.claimId.slice(0, 10)}…: round two not opened: ${
+            error instanceof Error ? error.message : String(error)
+          }\n`,
+        );
         // A committee that never locked can't open round two; once the final
         // deadline passes, finalize still resolves the claim (UNRESOLVED).
         await engine.finalize(claim.claimId);

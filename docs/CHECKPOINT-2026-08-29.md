@@ -157,9 +157,36 @@ then submit a fast test claim and time it.
     scratchpad/fast-claim.json; monitor b2kw3jihu only accepts a file
     newer than its start.
 
+16. `64f82d8` deployed 03:56 (deployment 58e5ae4d). Fast claim #3
+    `0x790eaa972c06f3738b002b92aa1b7166363c5ddb09e9d8a752436768605202d6`
+    ("The Ethereum Dencun upgrade activated on mainnet in March 2024."):
+    POST 43 s, ladder measured at the tx (cutoff 19:57:16Z, commit
+    19:59:16Z, reveal 20:00:16Z, discussion 20:01:16Z), freeze at t+65 s,
+    THREE valid seats (DeepSeek 23 s and 21 s, Kimi 57 s after one invalid
+    turn; page opens 3 to 4 s now), two MiniMax seats lost to a Walrus write
+    racing a sibling's write on the WAL coin ("already locked by a different
+    transaction", not covered by the Walrus retry). NO commits: votesCommit
+    runs only after every seat finished, and Kimi ended at 19:59:51Z, so
+    lock_committee hit jury.move E_DEADLINE_PASSED (code 7). Phase-two
+    freeze then landed 13 s into DISCUSSION (fix proven), but round two can
+    never open: create_second_round needs a locked committee, and finalize
+    needs a reveal phase, so the claim is dead in DISCUSSION (residue #5;
+    Move has no exit for "no commit at all in round one").
+17. Fix (commit "bound every seat by the commit deadline, retry locked
+    Walrus writes"): juryRun gives each seat deadline = commit deadline
+    minus 60 s (SEAT_COMMIT_MARGIN_MS); runResearchLoop stops with TIMEOUT
+    before a turn past it and passes the time left as the model call
+    timeout (GonkaCompletionRequest.timeoutMs, adapter takes the minimum
+    with the research timeout); the Walrus write retry covers "already
+    locked by a different transaction" and "reserved for another
+    transaction" with five attempts. Gate 354 tests, lint, build. Deploy in
+    flight (04:07). Uncommitted: resolution worker now logs why round two
+    did not open before trying finalize.
+
 ### Next steps
-- Watch claim `0xddd66882…` to a certificate (expected ~03:27 local); the
-  freeze proves the epoch fix, commits prove five seats with real Walrus.
+- Deploy is live: POST fast claim #4, record scratchpad/fast-claim.json,
+  watch monitor b2kw3jihu (or re-arm) to a certificate; then record the
+  measured time-to-certificate in STATUS.md and the runbook.
 - Then deploy `c55949a` (clean worktree checkout, `railway up -s app -d`),
   submit a fast claim, time it, and record timings here and in STATUS.md.
 - Residue on testnet: `0x1936ddd3…` (orphan), `0xdb9c7bae…` (REVEAL_1 with
