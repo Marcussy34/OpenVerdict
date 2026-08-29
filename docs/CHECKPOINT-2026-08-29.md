@@ -286,6 +286,12 @@ then submit a fast test claim and time it.
     lint, build. Chain deploys once claim #8 is terminal (or 06:27); then
     fast claim #9.
 
+30. `de9d567` (no visible retry past the seat deadline: runWithVisibleRetry
+    deadlineMs, adapter passes now + per-call timeout) committed 06:23 and
+    goes out with the lane deploy (the chain reads HEAD at deploy time).
+    Claim #8 round two: two more commits (4 total across rounds), no
+    threshold, UNRESOLVED expected ~06:24.
+
 ### Next steps
 - Measure claim #9 to the certificate; then record the time-to-certificate
   and the demo claim ids in STATUS.md and the runbook.
