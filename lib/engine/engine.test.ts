@@ -38,7 +38,7 @@ import {
   type FakeSuiAgent,
   type ReleaseManifest,
 } from "../sui";
-import { createLocalWalrusStore } from "../walrus";
+import { createLocalWalrusStore, type WalrusStore } from "../walrus";
 import {
   EVIDENCE_POLICY_V1_LABEL,
   parseAgentManifestDocument,
@@ -241,6 +241,63 @@ describe("headless engine", () => {
       /manifest tool policy hash.*engine tool policy/,
     );
     expect(setup.gonkaComplete).not.toHaveBeenCalled();
+  });
+
+  it("sends Sui retention epochs on chain when the Walrus store has a clock", async () => {
+    // A real store reports Walrus epochs (here 240, blobs kept until 250);
+    // the chain compares with its own epoch (900), so it must receive 910.
+    const directory = await mkdtemp(join(tmpdir(), "openverdict-epoch-"));
+    const base = createLocalWalrusStore(join(directory, "walrus"));
+    const walrus: WalrusStore = {
+      put: async (bytes, opts) => ({ ...(await base.put(bytes, opts)), endEpoch: 250 }),
+      get: (blobId) => base.get(blobId),
+      epochInfo: async () => ({ currentEpoch: 240, epochDurationMs: 86_400_000 }),
+    };
+    const gateway = new FakeSuiGateway();
+    gateway.epoch = { currentEpoch: 900, epochDurationMs: 86_400_000 };
+    const freeze = vi.spyOn(gateway, "freezeEvidence");
+    const approve = vi.spyOn(gateway, "approveRun");
+    const reveal = vi.spyOn(gateway, "revealVote");
+    const setup = await engineSetup(gateway, 5, { walrus });
+    const { claimId } = await setup.engine.factCheckStart({
+      claim: "Retention epochs are converted before they reach the chain.",
+      text: "Local evidence.",
+      urls: [],
+    });
+    await setup.engine.selectCommittee(claimId);
+    await setup.engine.evidenceFreeze(claimId, 1);
+    await setup.engine.juryRun(claimId, 1);
+    await setup.engine.votesCommit(claimId, 1);
+    await setup.engine.advance(claimId);
+    await setup.engine.votesReveal(claimId, 1);
+    await expect(setup.engine.finalize(claimId)).resolves.toMatchObject({
+      claimId,
+      result: "YES",
+    });
+
+    expect(freeze).toHaveBeenCalledWith(expect.objectContaining({ walrusEndEpoch: 910 }));
+    expect(approve).toHaveBeenCalledTimes(5);
+    for (const [input] of approve.mock.calls) {
+      expect(input.walrusEndEpoch).toBe(910);
+    }
+    expect(reveal).toHaveBeenCalledTimes(5);
+    for (const [input] of reveal.mock.calls) {
+      expect(input.argumentWalrusEndEpoch).toBe(910);
+    }
+    const chainEpochs = [
+      freeze.mock.calls[0]?.[0].walrusEndEpoch,
+      ...approve.mock.calls.map(([input]) => input.walrusEndEpoch),
+      ...reveal.mock.calls.map(([input]) => input.argumentWalrusEndEpoch),
+    ];
+    expect(
+      chainEpochs.every((epoch) => typeof epoch === "number" && epoch >= 900),
+    ).toBe(true);
+
+    const repository = createRepository(setup.db);
+    const record = (await repository.listInferenceRuns(claimId, 1))[0];
+    // The database keeps the Walrus epoch for renewals.
+    expect(record?.walrusEndEpoch).toBe(250);
+    expect((await repository.getEvidenceManifest(claimId, 1))?.walrusEndEpoch).toBe(250);
   });
 
   it("runs when every manifest binds the live prompt spec", async () => {
@@ -945,6 +1002,8 @@ async function engineSetup(
     promptHash?: `0x${string}`;
     toolPolicyHash?: `0x${string}`;
     failures?: Partial<Record<number, FakeFailure>>;
+    /** Replaces the local store (for example a store with a retention clock). */
+    walrus?: WalrusStore;
   } = {},
 ) {
   const directory = await mkdtemp(join(tmpdir(), "openverdict-engine-"));
@@ -977,7 +1036,7 @@ async function engineSetup(
         );
   const gonka = createFakeGonkaAdapter(fixtures);
   const gonkaComplete = vi.spyOn(gonka, "complete");
-  const walrus = createLocalWalrusStore(join(directory, "walrus"));
+  const walrus = options.walrus ?? createLocalWalrusStore(join(directory, "walrus"));
   const engine = await createEngine({
     network: "localnet",
     manifestPath,

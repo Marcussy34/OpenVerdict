@@ -9,7 +9,98 @@
 > stay on the table. Do not treat the current build as settled.
 > Companions: docs/STATUS.md, docs/demo/runbook.md, CHECKPOINT-08-27/08-28.
 
-## STATE AT 23:10 local (2026-08-29): juror research v1 build in flight
+## STATE AT COMPACTION #6 (2026-08-30 ~03:05 local): epoch fix + Railway cutover mid-flight
+
+**Read this first; it supersedes everything below for "what to do next".**
+Tip of main pushed: `9a403cb` (statement-only claims). Uncommitted in the
+tree (all manager-authored, all mine to commit): `proxy.ts` + `lib/web/`
+(host routing, tests 3/3), the EPOCH FIX (below), and this file.
+
+### The bug being fixed (blocks every hosted claim with real Walrus)
+Move compares retention epochs with the SUI epoch (`walrus_end_epoch >=
+ctx.epoch()`, E_RETENTION_EXPIRED = 4, evidence.move:56 new_evidence_bundle,
+jury.move:436 approve_run, jury.move:523 reveal_vote). The engine passed the
+blob's WALRUS end epoch (hundreds) against Sui's counter (~900). Canaries
+passed only because the local store has no endEpoch (MAX_LOCAL_WALRUS_EPOCH).
+Two Codex attempts produced nothing (one ran read-only, one got lost in
+tooling), so the manager implemented it directly:
+- `lib/sui/retention-epoch.ts` (+ test, 5 cases): `toChainRetentionEpoch`
+  = suiCurrent + max(1, ceil(walrusEpochsLeft * walrusEpochMs / suiEpochMs)).
+- `lib/walrus/store.ts`: `WalrusEpochInfo`, optional `epochInfo?()`.
+- `lib/walrus/real.ts`: `epochInfo()` from `client.walrus.stakingState()`
+  (`epoch`, `epoch_duration` ms), 60 s cache. Local store: none.
+- `lib/sui/gateway-types.ts`: `ChainEpochInfo`, `epochInfo()` on SuiGateway.
+- `lib/sui/gateway.ts`: `epochInfo()` from
+  `client.core.getCurrentSystemState().systemState` (`epoch`,
+  `parameters.epochDurationMs`), 60 s cache, `#epochCache`, EPOCH_CACHE_MS.
+- `lib/sui/fake.ts`: public `epoch` field (default 900 / 86_400_000) +
+  `epochInfo()`; `lib/sui/index.ts` exports retention-epoch.
+- `lib/engine/engine.ts`: private `chainRetentionEpoch(walrusEndEpoch)`
+  (MAX sentinel when the store has no clock), applied to freezeEvidence,
+  approveRun (`chainRetainedUntil`; DB record keeps `retainedUntil` = Walrus
+  epoch) and revealVote (`argumentWalrusEndEpoch`).
+- `lib/engine/engine.test.ts`: `engineSetup` option `walrus?: WalrusStore`;
+  test "sends Sui retention epochs on chain when the Walrus store has a
+  clock" (store endEpoch 250, clock 240, gateway epoch 900 → expects 910 in
+  freeze, 5 approve, 5 reveal calls; DB run keeps 250).
+Gate status at compaction: see the line "GATE AT COMPACTION #6" below (fill
+from the last typecheck/vitest run; if missing, run `pnpm typecheck` and
+`pnpm vitest run lib/sui lib/walrus lib/engine lib/web`).
+If a diagnostic mentions `serializeRunApprovals` (scripts/localnet-e2e.ts)
+it proxies the gateway generically (Proxy get), so `epochInfo` passes through.
+
+### Host routing (owner decision 02:50)
+`openverdict.info` = landing, `app.openverdict.info` = dashboard opened
+directly (public page; sign-in only changes what a visitor can do).
+`proxy.ts` (Next 16 "proxy", formerly middleware; matcher "/") rewrites the
+root of any `app.` host to `/app` using `lib/web/host-routing.ts`
+(`rewritePathForHost`, honours x-forwarded-host). Owner has added
+https://app.openverdict.info AND https://app-production-b800.up.railway.app
+to Google OAuth origins and Enoki allowed origins.
+
+### Railway cutover state (owner: "move everything to railway", DNS "go")
+- Project `openverdict-workers` (`6bfed6c6-7cc0-4631-984b-15ab765e02b0`),
+  workspace "Predictefy's Projects". Service `app` = full mode (web +
+  evidence/inference/resolution workers), 22 variables incl. PORT=3000,
+  OPENVERDICT_PUBLIC_WRITES=enabled, OPENVERDICT_TRUST_PROXY=1,
+  NEXT_PUBLIC_* (baked via Dockerfile ARG), FIRECRAWL_*, WALRUS_UPLOAD_RELAY_*.
+  Service `workers` DELETED. `app` is currently OFFLINE on purpose
+  (`railway down`) because the epoch bug made its evidence worker submit a
+  doomed freeze tx every 2 s (gas burned on aborts; operator 14.60 SUI).
+- Railway domain https://app-production-b800.up.railway.app (verified
+  earlier: site, /api/status, 7 agents, claim pages). Custom domains
+  registered on `app`: openverdict.info → CNAME `jp12gpeh.up.railway.app`,
+  www.openverdict.info → `fx4ky0p1.up.railway.app`, app.openverdict.info →
+  `2g3sfc2h.up.railway.app`. Vercel DNS (zone on Vercel nameservers): the
+  `app` CNAME to Railway is ALREADY created (rec_ffc66959b9f9ef1fcc29d66c);
+  apex + www still default ALIAS to Vercel (site still served by Vercel).
+- Deploy from a clean worktree: `git -C scratchpad/railway-tree checkout
+  --detach <sha>` then `cd` there and `railway up -s app -d`. Scratchpad =
+  /private/tmp/claude-501/-Users-marcus-Projects/ea697832-244e-426b-a971-ef1e18dba18e/scratchpad.
+- Vercel: project open-verdict (keep it: owns the Neon integration); env has
+  FIRECRAWL_* and WALRUS_UPLOAD_RELAY_* already.
+
+### Resume protocol (in this order)
+1. `git status --short`; `pnpm typecheck`; `pnpm vitest run lib/sui lib/walrus lib/engine lib/web`; fix anything red in the manager-authored files above.
+2. `pnpm vitest run` (full), `pnpm lint`, `pnpm build`.
+3. Commit everything except files owned by the owner's other session (only commit what `git status` shows from this list: proxy.ts, lib/web/*, lib/sui/retention-epoch*.ts, lib/sui/{gateway,gateway-types,fake,index}.ts, lib/walrus/{store,real}.ts, lib/engine/{engine,engine.test}.ts, docs/CHECKPOINT-2026-08-29.md); message without em dashes or Co-Authored-By; push.
+4. Redeploy Railway `app` from the clean worktree at the new sha; wait for SUCCESS; verify https://app-production-b800.up.railway.app/api/status and https://app.openverdict.info (TLS may take minutes after Railway validates).
+5. Submit a statement-only claim on the Railway URL (POST /api/fact-checks {"claim": "...", "urls": []}); confirm evidence freezes on chain (evidence worker log has no abort-4 lines) and seats run.
+6. DNS switch: `vercel dns add openverdict.info '' ALIAS jp12gpeh.up.railway.app --scope marcus-tans-projects-0956f18f` and `vercel dns add openverdict.info www CNAME fx4ky0p1.up.railway.app --scope ...`; check `railway domain status <id>` for verification/certificate; verify https://openverdict.info and https://www.openverdict.info serve Railway (compare a response header or the /api/status body); then remove the domain from the Vercel project (`vercel domains rm openverdict.info` or project settings) BUT keep the project.
+7. Hosted claim `0xdb9c7bae…` is stuck at COMMIT_1 (never frozen); once the fix is live the evidence worker will freeze it if its state still allows (it may be past deadlines; if it is, leave it as residue).
+8. Then: fast mode (spec in the "OWNER ASK" bullet below), per-host signer, docs (STATUS, runbook: Railway single host), memory update.
+
+GATE AT COMPACTION #6 (03:12 local): `pnpm typecheck` CLEAN; `pnpm vitest run
+lib/sui lib/walrus lib/engine lib/web` = 12 files / 103 tests passing
+(incl. the new retention-epoch tests and the engine "sends Sui retention
+epochs on chain" test); eslint clean on proxy.ts, lib/web, lib/sui,
+lib/walrus, lib/engine. NOT yet run: full `pnpm vitest run`, `pnpm lint`,
+`pnpm build`. Uncommitted tree = exactly the manager-authored files listed
+above (the owner's other session has committed its landing edits; tip
+before ours is `9a403cb`). Editor diagnostics claiming PromptSpecV2 vs V1
+errors at engine.ts ~2307/2443 are STALE (tsc is clean); ignore them.
+
+## STATE AT 23:10 local (2026-08-29): juror research v1 build in flight (historical)
 
 **Read this first.** Proof chain v2 is complete and proven (see "Rollout
 results" below: manifests v2 live on chain, canary certificate `0x464d397a…`).
@@ -295,9 +386,50 @@ Execution state:
 - Railway URL returned 502: the domain was created for port 3000 but Railway
   injects its own PORT; fixed by setting service variable PORT=3000 on
   `app` (redeploy in progress). Verify https://app-production-b800.up.railway.app after it.
-- Next: verify the Railway URL, ask the owner for the DNS go (Vercel DNS
-  ALIAS apex + CNAME www to the Railway custom-domain target), land the
-  statement-only follow-up; fast mode; per-host signer.
+- 02:18 Railway URL VERIFIED after PORT=3000: https://app-production-b800.up.railway.app
+  serves `/api/status` healthy, homepage 200, `/agents` (7 jurors),
+  `/claims` (2), `/verify`, and the hosted claim page, all 200 in under
+  0.6 s. Statement-only follow-up committed as `9a403cb` and pushed;
+  Railway `app` redeploy `4bcfded3` in progress from it.
+- DNS facts for the switch: Vercel DNS zone has default records only (CAA
+  x3, `*` ALIAS cname.vercel-dns-017.com, apex ALIAS
+  b87ac0cd64dd3aed.vercel-dns-017.com). Switch plan once the owner says go:
+  `railway domain openverdict.info -s app` and `railway domain
+  www.openverdict.info -s app` (Railway prints the CNAME target), then
+  `vercel dns add openverdict.info '' ALIAS <target>` and `vercel dns add
+  openverdict.info www CNAME <target>`, verify Railway serves the domain
+  with TLS, then `vercel domains rm`/project domain removal (keep the Vercel
+  project itself: it owns the Neon integration).
+- 02:30 ROOT CAUSE of every hosted freeze failure: Move compares a Walrus
+  epoch with the Sui epoch (`walrus_end_epoch >= ctx.epoch()` in
+  evidence.move:56, jury.move:436 and :523, E_RETENTION_EXPIRED = 4). The
+  engine passes the blob's WALRUS end epoch (hundreds) against the SUI epoch
+  counter (~900), so freeze_evidence aborts on every hosted claim with real
+  Walrus; canaries passed only because the local store yields
+  MAX_LOCAL_WALRUS_EPOCH. The evidence worker retried the doomed tx every 2 s
+  (gas burned on aborts: operator 15.18 → 14.60 SUI tonight incl. canaries)
+  and that coin churn is what broke the other transactions (stale-object
+  rejections). Mitigation: `railway down -s app` (service Offline, Vercel
+  still serves the domain). Fix dispatched 02:33 to Codex worker
+  `codex-retention-epoch`: lib/sui/retention-epoch.ts converts Walrus end
+  epochs to Sui epochs using both chains' current epoch and epoch duration
+  (store.epochInfo(), gateway.epochInfo()), applied to freeze, approve_run,
+  reveal; DB keeps Walrus epochs. Hosted claim `0xdb9c7bae…` is stuck at
+  COMMIT_1 (never frozen; no runs); the "5 commitments" in the API were
+  seat statuses, not votes.
+- DNS SWITCH (owner said go 02:31; Google OAuth + Enoki origins for the
+  Railway URL already allowed by the owner). Railway custom domains added on
+  `app`: openverdict.info → CNAME jp12gpeh.up.railway.app, www →
+  fx4ky0p1.up.railway.app, app.openverdict.info → 2g3sfc2h.up.railway.app
+  (certificates validate once DNS resolves). Owner wants the distinction
+  openverdict.info (landing) vs app.openverdict.info (the app); today
+  app.openverdict.info returned Vercel DEPLOYMENT_NOT_FOUND (unassigned), so
+  its CNAME was created immediately (no regression); apex + www records
+  switch only after the epoch fix is deployed and the Railway app verified.
+- Next: land the epoch fix, redeploy `app`, verify on the Railway URL and on
+  app.openverdict.info, then switch apex + www (ALIAS/CNAME in Vercel DNS),
+  verify TLS + sign-in + a claim, remove the domain from the Vercel project
+  (keep the project: Neon integration), then fast mode, per-host signer.
   (engine, storage, server, scripts, engine tests) to one Codex worker; then
   Task 7 rollout by the manager (publish v3 manifests, seed, live probe,
   canary).

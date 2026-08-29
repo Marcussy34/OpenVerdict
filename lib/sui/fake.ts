@@ -16,6 +16,7 @@ import type {
   SuiAgentIdentity,
   SuiGateway,
   SuiGatewayHealth,
+  ChainEpochInfo,
 } from "./gateway-types";
 import type {
   ChallengeOutcomeTransactionInput,
@@ -193,6 +194,13 @@ export class FakeSuiGateway implements SuiGateway {
 
   async health(): Promise<SuiGatewayHealth> {
     return { healthy: true, latestCheckpoint: this.#counter, paused: false };
+  }
+
+  /** Tests set this to model a chain whose epoch counter is far ahead of Walrus. */
+  epoch: ChainEpochInfo = { currentEpoch: 900, epochDurationMs: 86_400_000 };
+
+  async epochInfo(): Promise<ChainEpochInfo> {
+    return { ...this.epoch };
   }
 
   private selection(

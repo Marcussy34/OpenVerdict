@@ -62,6 +62,9 @@ export interface FinalizeChainResult extends TxResult {
   }>;
 }
 
+/** Current Sui epoch and its duration (both from the system state object). */
+export type ChainEpochInfo = { currentEpoch: number; epochDurationMs: number };
+
 export interface SuiGatewayHealth {
   healthy: boolean;
   latestCheckpoint?: number;
@@ -145,6 +148,8 @@ export interface SuiGateway {
     payoutTicketId: string;
   }): Promise<TxResult>;
   health(): Promise<SuiGatewayHealth>;
+  /** Current Sui epoch and its length; retention epochs sent on chain are Sui epochs. */
+  epochInfo(): Promise<ChainEpochInfo>;
 }
 
 export function outcomeLabel(outcome: VoteOutcome): "YES" | "NO" | "UNSURE" {

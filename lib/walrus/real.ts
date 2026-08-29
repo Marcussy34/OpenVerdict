@@ -17,6 +17,8 @@ import {
   assertValidWalrusBlobId,
 } from "./store";
 
+const EPOCH_CACHE_MS = 60_000;
+
 export interface RealWalrusStoreConfig {
   network: "testnet" | "mainnet";
   baseUrl: string;
@@ -48,6 +50,10 @@ export function createRealWalrusStore(
       wasmUrl: config.wasmUrl,
     }),
   );
+
+  let epochCache:
+    | { value: { currentEpoch: number; epochDurationMs: number }; fetchedAtMs: number }
+    | undefined;
 
   return {
     async put(bytes, options) {
@@ -91,6 +97,30 @@ export function createRealWalrusStore(
         }
         throw error;
       }
+    },
+
+    async epochInfo() {
+      // The chain compares retention with the SUI epoch, so callers convert
+      // Walrus end epochs with this clock; cached briefly, epochs last hours.
+      const now = Date.now();
+      if (epochCache && now - epochCache.fetchedAtMs < EPOCH_CACHE_MS) {
+        return epochCache.value;
+      }
+      const staking = await client.walrus.stakingState();
+      const value = {
+        currentEpoch: Number(staking.epoch),
+        epochDurationMs: Number(staking.epoch_duration),
+      };
+      if (
+        !Number.isFinite(value.currentEpoch) ||
+        value.currentEpoch < 0 ||
+        !Number.isFinite(value.epochDurationMs) ||
+        value.epochDurationMs <= 0
+      ) {
+        throw new Error("Walrus staking state reported invalid epoch information");
+      }
+      epochCache = { value, fetchedAtMs: now };
+      return value;
     },
 
     async renew({ blobId, objectId, targetEndEpoch }) {

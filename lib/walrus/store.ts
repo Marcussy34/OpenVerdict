@@ -17,9 +17,14 @@ export interface WalrusPutResult {
   endEpoch?: number;
 }
 
+/** Where the Walrus clock stands; needed to translate blob end epochs to Sui epochs. */
+export type WalrusEpochInfo = { currentEpoch: number; epochDurationMs: number };
+
 export interface WalrusStore {
   put(bytes: Uint8Array, opts?: WalrusPutOptions): Promise<WalrusPutResult>;
   get(blobId: string): Promise<Uint8Array>;
+  /** Real stores report the Walrus epoch; local stores omit it (no retention clock). */
+  epochInfo?(): Promise<WalrusEpochInfo>;
 }
 
 export class WalrusNotFoundError extends Error {

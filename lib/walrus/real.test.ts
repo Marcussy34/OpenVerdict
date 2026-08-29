@@ -6,14 +6,19 @@ import { WalrusNotFoundError, type WalrusStore } from "./store";
 
 // Hoisted so vi.mock's factory (itself hoisted above these imports) can see
 // the same references the tests assert against.
-const { writeBlobMock, readBlobMock, writeFilesMock, getFilesMock } = vi.hoisted(
-  () => ({
+const {
+  writeBlobMock,
+  readBlobMock,
+  writeFilesMock,
+  getFilesMock,
+  stakingStateMock,
+} = vi.hoisted(() => ({
     writeBlobMock: vi.fn(),
     readBlobMock: vi.fn(),
     writeFilesMock: vi.fn(),
     getFilesMock: vi.fn(),
-  }),
-);
+    stakingStateMock: vi.fn(),
+  }));
 
 // Replace the walrus client extension with an in-memory fake: no real network
 // I/O, and it lets tests assert exactly which SDK methods the store calls.
@@ -28,6 +33,7 @@ vi.mock("@mysten/walrus", async (importOriginal) => {
         readBlob: readBlobMock,
         writeFiles: writeFilesMock,
         getFiles: getFilesMock,
+        stakingState: stakingStateMock,
       }),
     }),
   };
@@ -74,6 +80,42 @@ describe("createRealWalrusStore", () => {
     expect(() =>
       createRealWalrusStore({ ...baseConfig, baseUrl: "not a URL" }),
     ).toThrow(/baseUrl/i);
+  });
+
+  it("reports and caches Walrus epoch information for 60 seconds", async () => {
+    stakingStateMock
+      .mockReset()
+      .mockResolvedValueOnce({ epoch: 240, epoch_duration: "86400000" })
+      .mockResolvedValueOnce({ epoch: 241, epoch_duration: "86400000" });
+    const now = vi.spyOn(Date, "now").mockReturnValue(1_000);
+    try {
+      const store = createRealWalrusStore({
+        ...testConfig,
+        signer: Ed25519Keypair.generate(),
+      });
+      const epochInfo = store.epochInfo;
+      if (!epochInfo) throw new Error("expected real store epoch information");
+
+      await expect(epochInfo()).resolves.toEqual({
+        currentEpoch: 240,
+        epochDurationMs: 86_400_000,
+      });
+      now.mockReturnValue(60_999);
+      await expect(epochInfo()).resolves.toEqual({
+        currentEpoch: 240,
+        epochDurationMs: 86_400_000,
+      });
+      expect(stakingStateMock).toHaveBeenCalledTimes(1);
+
+      now.mockReturnValue(61_000);
+      await expect(epochInfo()).resolves.toEqual({
+        currentEpoch: 241,
+        epochDurationMs: 86_400_000,
+      });
+      expect(stakingStateMock).toHaveBeenCalledTimes(2);
+    } finally {
+      now.mockRestore();
+    }
   });
 
   it("puts and gets back identical bytes via raw blobs, never quilts", async () => {

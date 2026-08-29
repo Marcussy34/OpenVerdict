@@ -72,6 +72,7 @@ import {
   createSuiGateway,
   loadReleaseManifest,
   outcomeLabel,
+  toChainRetentionEpoch,
   type ReleaseManifest,
   type SuiGateway,
 } from "../sui";
@@ -528,7 +529,7 @@ class OpenVerdictEngine implements Engine {
       manifestBlobObjectId: manifestUpload.objectId ?? ZERO_OBJECT_ID,
       sourceCount: artifacts.length,
       policyId: fromHex(policyId),
-      walrusEndEpoch: manifestUpload.endEpoch ?? MAX_LOCAL_WALRUS_EPOCH,
+      walrusEndEpoch: await this.chainRetentionEpoch(manifestUpload.endEpoch),
     });
     const timestamp = this.isoNow();
     const record: EvidenceManifestRecord = {
@@ -801,8 +802,9 @@ class OpenVerdictEngine implements Engine {
         salt: fromHex(votePackage.saltHex),
         argumentBlobId: argumentUpload.blobId,
         argumentBlobObjectId: argumentUpload.objectId ?? ZERO_OBJECT_ID,
-        argumentWalrusEndEpoch:
-          argumentUpload.endEpoch ?? MAX_LOCAL_WALRUS_EPOCH,
+        argumentWalrusEndEpoch: await this.chainRetentionEpoch(
+          argumentUpload.endEpoch,
+        ),
       });
       const timestamp = this.isoNow();
       await this.#repository.saveInferenceRun({
@@ -1309,6 +1311,30 @@ class OpenVerdictEngine implements Engine {
     } catch {
       return null;
     }
+  }
+
+  /**
+   * Move compares retention epochs with ctx.epoch(), the SUI epoch, while
+   * Walrus reports its own epoch numbers; convert before anything goes on
+   * chain. Local stores have no retention clock, so they keep the sentinel.
+   */
+  private async chainRetentionEpoch(
+    walrusEndEpoch: number | undefined,
+  ): Promise<number> {
+    if (walrusEndEpoch === undefined || this.#walrus.epochInfo === undefined) {
+      return MAX_LOCAL_WALRUS_EPOCH;
+    }
+    const [walrus, sui] = await Promise.all([
+      this.#walrus.epochInfo(),
+      this.#gateway.epochInfo(),
+    ]);
+    return toChainRetentionEpoch({
+      walrusEndEpoch,
+      walrusCurrentEpoch: walrus.currentEpoch,
+      walrusEpochDurationMs: walrus.epochDurationMs,
+      suiCurrentEpoch: sui.currentEpoch,
+      suiEpochDurationMs: sui.epochDurationMs,
+    });
   }
 
   async status(): Promise<EngineStatus> {
@@ -1862,6 +1888,8 @@ class OpenVerdictEngine implements Engine {
       );
       const retainedUntil =
         endEpoch(sealedUpload) ?? MAX_LOCAL_WALRUS_EPOCH;
+      // The database keeps the Walrus epoch (renewals); the chain gets Sui epochs.
+      const chainRetainedUntil = await this.chainRetentionEpoch(endEpoch(sealedUpload));
       const approval = await this.#gateway.approveRun({
         claimId: claim.claimId,
         committeeId: committee.committeeId,
@@ -1874,7 +1902,7 @@ class OpenVerdictEngine implements Engine {
         runBlobObjectId: sealedUpload.objectId ?? ZERO_OBJECT_ID,
         toolBlobId: sealedUpload.blobId,
         toolBlobObjectId: sealedUpload.objectId ?? ZERO_OBJECT_ID,
-        walrusEndEpoch: retainedUntil,
+        walrusEndEpoch: chainRetainedUntil,
       });
       const timestamp = this.isoNow();
       const storedAudit: InferenceRunRecord["audit"] = {

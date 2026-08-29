@@ -45,6 +45,7 @@ import type {
   SuiAgentIdentity,
   SuiGateway,
   SuiGatewayHealth,
+  ChainEpochInfo,
 } from "./gateway-types";
 import type { OpenVerdictSuiClient } from "./client";
 import type { ReleaseManifest } from "./manifest";
@@ -56,11 +57,15 @@ export interface SuiGatewayConfig {
   signers: SignerRegistry;
 }
 
+/** Epoch info changes about once a day; refetch at most once a minute. */
+const EPOCH_CACHE_MS = 60_000;
+
 /** Real Sui implementation of the narrow lifecycle seam used by the engine. */
 export class RealSuiGateway implements SuiGateway {
   readonly #client: OpenVerdictSuiClient;
   readonly #manifest: ReleaseManifest;
   readonly #signers: SignerRegistry;
+  #epochCache: { value: ChainEpochInfo; fetchedAtMs: number } | undefined;
 
   constructor(config: SuiGatewayConfig) {
     this.#client = config.client;
@@ -333,6 +338,30 @@ export class RealSuiGateway implements SuiGateway {
     payoutTicketId: string;
   }): Promise<TxResult> {
     return this.executeOperator(() => buildWithdrawPayoutTransaction(this.#manifest, input));
+  }
+
+  async epochInfo(): Promise<ChainEpochInfo> {
+    // Retention epochs handed to Move are compared with ctx.epoch(), the Sui
+    // epoch; cached briefly because an epoch lasts about a day.
+    const now = Date.now();
+    if (this.#epochCache && now - this.#epochCache.fetchedAtMs < EPOCH_CACHE_MS) {
+      return this.#epochCache.value;
+    }
+    const { systemState } = await this.#client.core.getCurrentSystemState();
+    const value = {
+      currentEpoch: Number(systemState.epoch),
+      epochDurationMs: Number(systemState.parameters.epochDurationMs),
+    };
+    if (
+      !Number.isFinite(value.currentEpoch) ||
+      value.currentEpoch < 0 ||
+      !Number.isFinite(value.epochDurationMs) ||
+      value.epochDurationMs <= 0
+    ) {
+      throw new Error("Sui system state reported an invalid epoch");
+    }
+    this.#epochCache = { value, fetchedAtMs: now };
+    return value;
   }
 
   async health(): Promise<SuiGatewayHealth> {

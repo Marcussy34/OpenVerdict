@@ -6,5 +6,6 @@ export * from "./fake";
 export * from "./gateway";
 export * from "./gateway-types";
 export * from "./manifest";
+export * from "./retention-epoch";
 export * from "./signers";
 export * from "./sponsor";
