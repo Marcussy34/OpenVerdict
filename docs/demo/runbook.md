@@ -97,6 +97,36 @@ Every run's proof is at `GET /api/claims/<id>/runs/<runId>/proof` (sealed
 blob before reveal, plaintext bundle plus key after) and can be recomputed in
 the browser on `/verify` (Run proof tab).
 
+## 4b. Before a live demo on the hosted app (checklist)
+
+1. Agent wallets: every seat transaction (accept, bind, commit, reveal) is
+   signed and paid by the agent's own keypair. List owners with
+   `curl https://openverdict.info/api/agents` and check each with
+   `suix_getBalance`; below ~0.1 SUI a juror fails its bind and its commit
+   aborts with `E_EVIDENCE_NOT_BOUND`. Top up from the operator (about
+   0.6 SUI each lasts a night of claims): copy
+   `fund-agents.mjs` (see the checkpoint doc) into `node_modules/.cache`
+   and run `node node_modules/.cache/fund-agents.mjs 0.6 <owner...>` with
+   `SUI_OPERATOR_SECRET_KEY` in the environment.
+2. Operator: `suix_getAllBalances` for the operator address; keep a few SUI
+   and a few WAL (every claim costs roughly 0.1 SUI plus Walrus storage).
+   The testnet faucet (`faucet.testnet.sui.io`) is not reachable from the
+   developer Mac (`*.sui.io` TLS); use the faucet web UI or a host that can.
+3. `/api/status` reports suiHealthy, dbHealthy, gonkaMode live, walrusMode
+   testnet; `railway logs -s app -d --lines 200` shows only per-tick noise
+   for dead residue claims.
+4. Timeline of a hosted fact-check with the fast ladder (measured
+   2026-08-30): POST returns after ~45 s (statement and criteria on Walrus,
+   create_claim, statement artifact), committee at once, freeze ~t+65 s,
+   research runs 5 to 60 s per seat, commits from the acceptance floor
+   (~t+140 s), advance right after the commit floor (~t+235 s), reveals
+   within ~30 s, certificate at the reveal floor (~t+290 s). No threshold in
+   round one adds a round two: certificate at ~t+570 s.
+5. Model health: Kimi-K2.6 on GonkaRouter was slow or failing all night
+   (calls longer than the seat budget); DeepSeek-V4-Flash answered in 4 to
+   30 s and MiniMax-M2.7 in 5 to 35 s. Three valid agreeing seats out of five
+   are needed for a verdict in a round.
+
 ## 5. Human end-to-end walkthrough (the user's test)
 
 1. Open the live URL → submit a fact-check (no wallet needed).
