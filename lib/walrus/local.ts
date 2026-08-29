@@ -16,7 +16,7 @@ export function createLocalWalrusStore(directory: string): WalrusStore {
   return {
     async put(bytes) {
       const stableBytes = Uint8Array.from(bytes);
-      const blobId = Buffer.from(blake2b256(stableBytes)).toString("base64url");
+      const blobId = localBlobId(stableBytes);
       const destination = resolve(root, blobId);
       const temporary = resolve(
         root,
@@ -52,7 +52,16 @@ export function createLocalWalrusStore(directory: string): WalrusStore {
         throw error;
       }
     },
+
+    async blobIdFor(bytes) {
+      return localBlobId(Uint8Array.from(bytes));
+    },
   };
+}
+
+/** Same content address `put` stores under; base64url like real Walrus ids. */
+function localBlobId(bytes: Uint8Array): string {
+  return Buffer.from(blake2b256(bytes)).toString("base64url");
 }
 
 async function removeTemporaryFile(path: string): Promise<void> {

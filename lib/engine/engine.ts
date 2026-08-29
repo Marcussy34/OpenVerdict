@@ -609,6 +609,8 @@ class OpenVerdictEngine implements Engine {
     const artifacts = await this.artifactsForPhase(claimId, phase);
     const searchCache = createSearchCache();
     const storedPageCache = new Map<string, Promise<PageStorePage>>();
+    // Background Walrus writes of discovered pages, keyed by evidence id.
+    const pageUploads = new Map<string, Promise<void>>();
 
     await Promise.all(
       seats.map(async (seat) => {
@@ -625,9 +627,13 @@ class OpenVerdictEngine implements Engine {
           research,
           searchCache,
           storedPageCache,
+          pageUploads,
         );
       }),
     );
+    // Let background page uploads finish inside this tick; failures were
+    // already attributed to the seats that cited those pages.
+    await Promise.allSettled([...pageUploads.values()]);
     const runs = await this.#repository.listInferenceRuns(claimId, phase);
     return {
       claimId,
@@ -1667,6 +1673,7 @@ class OpenVerdictEngine implements Engine {
     research: ResearchProvider,
     searchCache: SearchCache,
     storedPageCache: Map<string, Promise<PageStorePage>>,
+    pageUploads: Map<string, Promise<void>>,
   ): Promise<void> {
     const agent = await this.requiredAgent(seat.agentProfileId);
     const baseRunId = deterministicId(`run:${claim.claimId}:${seat.jurySeatId}:${seat.phase}`);
@@ -1726,16 +1733,27 @@ class OpenVerdictEngine implements Engine {
         store: async (page, meta) => {
           const existing = storedPageCache.get(meta.evidenceId);
           if (existing) return existing;
-          const pending = (async (): Promise<PageStorePage> => {
-            const truncated = page.markdown.length > meta.maxPageChars;
-            const text = truncated
-              ? page.markdown.slice(0, meta.maxPageChars)
-              : page.markdown;
-            const bytes = new TextEncoder().encode(text);
-            const hash = toHex(blake2b256(bytes));
-            const upload = await this.#walrus.put(bytes, {
-              identifier: `${meta.evidenceId}-discovered.md`,
-            });
+          const truncated = page.markdown.length > meta.maxPageChars;
+          const text = truncated
+            ? page.markdown.slice(0, meta.maxPageChars)
+            : page.markdown;
+          const bytes = new TextEncoder().encode(text);
+          const hash = toHex(blake2b256(bytes));
+          const identifier = `${meta.evidenceId}-discovered.md`;
+          const stored = (blobId: string): PageStorePage => ({
+            evidenceId: meta.evidenceId,
+            url: meta.normalizedUrl,
+            finalUrl: page.finalUrl,
+            ...(page.title === undefined ? {} : { title: page.title }),
+            text,
+            totalChars: text.length,
+            truncated,
+            contentHash: hash,
+            canonicalHash: hash,
+            canonicalWalrusBlobId: blobId,
+          });
+          // Records the discovered page once its bytes are on Walrus.
+          const persist = async (upload: WalrusPutResult): Promise<void> => {
             const timestamp = this.isoNow();
             const submissionId = deterministicId(`submission:${meta.evidenceId}`);
             await this.#repository.saveEvidenceSubmission({
@@ -1780,28 +1798,46 @@ class OpenVerdictEngine implements Engine {
               sourceClass: "DISCOVERED",
               discoveredByRunId: input.runId,
             });
-            return {
-              evidenceId: meta.evidenceId,
-              url: meta.normalizedUrl,
-              finalUrl: page.finalUrl,
-              ...(page.title === undefined ? {} : { title: page.title }),
-              text,
-              totalChars: text.length,
-              truncated,
-              contentHash: hash,
-              canonicalHash: hash,
-              canonicalWalrusBlobId: upload.blobId,
-            };
-          })();
-          storedPageCache.set(meta.evidenceId, pending);
-          try {
-            return await pending;
-          } catch (error) {
-            if (storedPageCache.get(meta.evidenceId) === pending) {
-              storedPageCache.delete(meta.evidenceId);
+          };
+          const walrus = this.#walrus;
+          const blobId = walrus.blobIdFor ? await walrus.blobIdFor(bytes) : undefined;
+          if (blobId === undefined) {
+            // No content address ahead of the write: upload before the model sees the page.
+            const pending = (async (): Promise<PageStorePage> => {
+              const upload = await walrus.put(bytes, { identifier });
+              await persist(upload);
+              return stored(upload.blobId);
+            })();
+            storedPageCache.set(meta.evidenceId, pending);
+            try {
+              return await pending;
+            } catch (error) {
+              if (storedPageCache.get(meta.evidenceId) === pending) {
+                storedPageCache.delete(meta.evidenceId);
+              }
+              throw error;
             }
-            throw error;
           }
+          // Walrus blob ids are content addresses, so the id is known before
+          // the write (about 14 s on testnet). Hand the page to the model now
+          // and upload in the background; every seat awaits the uploads of the
+          // pages it opened before sealing, so a failed write still fails that
+          // seat closed.
+          const upload = (async (): Promise<void> => {
+            const result = await walrus.put(bytes, { identifier });
+            if (result.blobId !== blobId) {
+              throw new Error(
+                `discovered page ${meta.evidenceId} uploaded as ${result.blobId}, expected ${blobId}`,
+              );
+            }
+            await persist(result);
+          })();
+          // The seats that opened the page observe the rejection; never leave it unhandled.
+          upload.catch(() => undefined);
+          pageUploads.set(meta.evidenceId, upload);
+          const ready = stored(blobId);
+          storedPageCache.set(meta.evidenceId, Promise.resolve(ready));
+          return ready;
         },
       };
       const loop = await runResearchLoop({
@@ -1823,6 +1859,11 @@ class OpenVerdictEngine implements Engine {
         }
         throw new GonkaRunError(loop.message, loop.attempts);
       }
+      // Every page this run opened must be on Walrus before the run is sealed
+      // and cited on chain; a failed background upload fails the seat closed.
+      await Promise.all(
+        loop.opened.map((page) => pageUploads.get(page.evidenceId)),
+      );
       const response: GonkaRunResult = {
         type: "gonka-run-result",
         attempts: loop.attempts,

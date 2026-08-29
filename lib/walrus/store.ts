@@ -25,6 +25,11 @@ export interface WalrusStore {
   get(blobId: string): Promise<Uint8Array>;
   /** Real stores report the Walrus epoch; local stores omit it (no retention clock). */
   epochInfo?(): Promise<WalrusEpochInfo>;
+  /**
+   * Content address of `bytes` exactly as `put` would report it, without
+   * writing. Lets a caller hand out the blob id before the upload finishes.
+   */
+  blobIdFor?(bytes: Uint8Array): Promise<string>;
 }
 
 export class WalrusNotFoundError extends Error {

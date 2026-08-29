@@ -31,9 +31,14 @@ export class SuiTransactionExecutionError extends Error {
 // names the exact object, so recovery can refetch it authoritatively.
 const STALE_OBJECT_PATTERN =
   /Object ID (0x[0-9a-f]+) Version \S+ Digest \S+ is not available for consumption/i;
-// Equivocation: another in-flight transaction from the same sender holds the
-// object lock (usually the shared gas coin). It clears when that tx settles.
-const RESERVED_OBJECT_PATTERN = /reserved for another transaction/i;
+// Equivocation: another transaction from the same sender holds the object
+// lock (usually the shared gas coin). "reserved" is the fullnode's wording
+// while that tx is in flight; "already locked by a different transaction" is
+// the validators' wording, seen right after our own Walrus certify tx when
+// the fullnode's coin index still reports the version that tx consumed.
+// Both clear once the other tx settles, so rebuild with fresh gas versions.
+const RESERVED_OBJECT_PATTERN =
+  /reserved for another transaction|already locked by a different transaction/i;
 
 function errorText(error: unknown): string {
   return error instanceof Error ? error.message : String(error);

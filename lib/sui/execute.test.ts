@@ -32,4 +32,45 @@ describe("executeAndWait", () => {
       gasData: { budget: "2000000000" },
     });
   });
+
+  it("rebuilds and retries when validators report the gas coin already locked", async () => {
+    const client = new SuiJsonRpcClient({
+      network: "testnet",
+      url: "http://127.0.0.1:9000",
+    });
+    const signer = new Ed25519Keypair();
+    // The validators' wording, seen right after our own Walrus certify tx
+    // while the fullnode's coin index still reports the consumed version.
+    const locked = new Error(
+      "Transaction is rejected as invalid by more than 1/3 of validators by stake (non-retriable). Non-retriable errors: [Object (0xdba0339f14877799f829e0b07e262c47d77122d41b884cd3cd273b8fef77cfa8, SequenceNumber(996334867), o#2S1TSUBQUYd1RyZyS7zakBmtaMCJgaj5BbJnjkdgNXbw) already locked by a different transaction: TransactionDigest(7hrAHmFLWW7k5LiB5AHfa76ZXyrsiZ9qhhB7DrPMXDrJ) with 6942 stake].",
+    );
+    const execute = vi
+      .spyOn(signer, "signAndExecuteTransaction")
+      .mockRejectedValueOnce(locked)
+      .mockResolvedValue({
+        $kind: "Transaction",
+        Transaction: { digest: "submitted" },
+      } as never);
+    vi.spyOn(client.core, "waitForTransaction").mockResolvedValue({
+      $kind: "Transaction",
+      Transaction: {
+        digest: "settled",
+        effects: { changedObjects: [] },
+        objectTypes: {},
+        events: [],
+      },
+    } as never);
+    let builds = 0;
+    const factory = (): Transaction => {
+      builds += 1;
+      return new Transaction();
+    };
+
+    const result = await executeAndWait(client, signer, factory);
+
+    expect(result.digest).toBe("settled");
+    expect(execute).toHaveBeenCalledTimes(2);
+    // The second attempt signs a freshly built transaction, not the rejected one.
+    expect(builds).toBe(2);
+  });
 });

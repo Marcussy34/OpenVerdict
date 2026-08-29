@@ -300,6 +300,108 @@ describe("headless engine", () => {
     expect((await repository.getEvidenceManifest(claimId, 1))?.walrusEndEpoch).toBe(250);
   });
 
+  it("hands a research page to the model before its Walrus upload finishes and seals only after it lands", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "openverdict-deferred-"));
+    const base = createLocalWalrusStore(join(directory, "walrus"));
+    const events: string[] = [];
+    let releaseUpload: () => void = () => undefined;
+    const uploadGate = new Promise<void>((resolve) => {
+      releaseUpload = resolve;
+    });
+    // Discovered page writes are held back until the test releases them.
+    const walrus: WalrusStore = {
+      put: async (bytes, opts) => {
+        if (opts?.identifier?.endsWith("-discovered.md")) {
+          events.push("upload-started");
+          await uploadGate;
+          events.push("upload-finished");
+        }
+        return base.put(bytes, opts);
+      },
+      get: (blobId) => base.get(blobId),
+      blobIdFor: (bytes) => {
+        if (!base.blobIdFor) throw new Error("local store lacks blobIdFor");
+        return base.blobIdFor(bytes);
+      },
+    };
+    const gateway = new FakeSuiGateway();
+    const approve = vi.spyOn(gateway, "approveRun");
+    const setup = await engineSetup(gateway, 5, { walrus });
+    const { claimId } = await setup.engine.factCheckStart({
+      claim: "Pages reach the model before their upload lands.",
+      text: "Local evidence.",
+      urls: [],
+    });
+    await setup.engine.selectCommittee(claimId);
+    await setup.engine.evidenceFreeze(claimId, 1);
+    const running = setup.engine.juryRun(claimId, 1);
+
+    // The answer turn (the request carrying the open tool result) must be
+    // requested while the page upload is still held back. The request holds
+    // the loop's live message array, so any message may carry the result.
+    await vi.waitFor(() => {
+      expect(
+        setup.gonkaComplete.mock.calls.some(([request]) =>
+          request.messages.some((message) => message.content.includes('"tool":"open"')),
+        ),
+      ).toBe(true);
+    });
+    expect(events).toEqual(["upload-started"]);
+    expect(approve).not.toHaveBeenCalled();
+
+    releaseUpload();
+    await running;
+    expect(events).toEqual(["upload-started", "upload-finished"]);
+    expect(approve).toHaveBeenCalledTimes(5);
+    const repository = createRepository(setup.db);
+    const record = (await repository.listInferenceRuns(claimId, 1))[0];
+    const core = JSON.parse(record?.audit.bundleCore ?? "{}") as PublicRunBundleCoreV3;
+    const opened = core.transcript.opened[0];
+    if (!opened) throw new Error("expected an opened research page");
+    // The transcript cites the content address the background write produced.
+    await expect(repository.getEvidenceArtifact(opened.evidenceId)).resolves.toMatchObject({
+      canonicalWalrusBlobId: opened.canonicalWalrusBlobId,
+      sourceClass: "DISCOVERED",
+    });
+  });
+
+  it("fails a seat closed when the upload of a page it opened fails", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "openverdict-upload-fail-"));
+    const base = createLocalWalrusStore(join(directory, "walrus"));
+    const walrus: WalrusStore = {
+      put: async (bytes, opts) => {
+        if (opts?.identifier?.endsWith("-discovered.md")) {
+          throw new Error("storage nodes unavailable");
+        }
+        return base.put(bytes, opts);
+      },
+      get: (blobId) => base.get(blobId),
+      blobIdFor: (bytes) => {
+        if (!base.blobIdFor) throw new Error("local store lacks blobIdFor");
+        return base.blobIdFor(bytes);
+      },
+    };
+    const gateway = new FakeSuiGateway();
+    const approve = vi.spyOn(gateway, "approveRun");
+    const setup = await engineSetup(gateway, 5, { walrus });
+    const { claimId } = await setup.engine.factCheckStart({
+      claim: "A lost page upload must not become a vote.",
+      text: "Local evidence.",
+      urls: [],
+    });
+    await setup.engine.selectCommittee(claimId);
+    await setup.engine.evidenceFreeze(claimId, 1);
+    const jury = await setup.engine.juryRun(claimId, 1);
+
+    expect(jury.runs).toHaveLength(5);
+    expect(approve).not.toHaveBeenCalled();
+    const repository = createRepository(setup.db);
+    const runs = await repository.listInferenceRuns(claimId, 1);
+    expect(runs.map((run) => run.validationStatus)).toEqual(
+      Array.from({ length: 5 }, () => "PROVIDER_ERROR"),
+    );
+  });
+
   it("runs when every manifest binds the live prompt spec", async () => {
     const setup = await engineSetup(new FakeSuiGateway(), 5);
     const { claimId } = await setup.engine.factCheckStart({

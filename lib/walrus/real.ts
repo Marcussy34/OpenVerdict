@@ -99,6 +99,15 @@ export function createRealWalrusStore(
       }
     },
 
+    async blobIdFor(bytes) {
+      // The blob id depends only on the content and the shard count, so it is
+      // what writeBlob will report; the nonce only feeds relay authentication.
+      const { blobId } = await client.walrus.computeBlobMetadata({
+        bytes: Uint8Array.from(bytes),
+      });
+      return blobId;
+    },
+
     async epochInfo() {
       // The chain compares retention with the SUI epoch, so callers convert
       // Walrus end epochs with this clock; cached briefly, epochs last hours.
