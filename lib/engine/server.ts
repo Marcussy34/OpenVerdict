@@ -80,7 +80,15 @@ async function buildServerEngine(): Promise<Engine> {
 
   const signers = SignerRegistry.fromEnv(process.env, 7);
   const suiClient = createSuiClients(manifest);
-  const db = createDb({ url: process.env.DATABASE_URL || undefined });
+  // Without DATABASE_URL this falls back to embedded PGlite, which needs a
+  // writable directory. Serverless roots are read-only (mkdir '/var/task/
+  // .pglite' fails with EROFS), so the data dir is overridable. Note the
+  // fallback is per-container and ephemeral: set DATABASE_URL for real
+  // persistence across cold starts and concurrent invocations.
+  const db = createDb({
+    url: process.env.DATABASE_URL || undefined,
+    dataDir: readEnv(process.env.PGLITE_DATA_DIR, ".pglite"),
+  });
   const walrus =
     manifest.walrus.mode === "local"
       ? createLocalWalrusStore(manifest.walrus.localDir ?? ".localnet/walrus-local")
