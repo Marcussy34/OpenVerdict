@@ -104,10 +104,31 @@ then submit a fast test claim and time it.
     seat closed), juryRun lets the rest settle. Tests: "hands a research
     page to the model before its Walrus upload finishes..." and "fails a
     seat closed when the upload of a page it opened fails"; full gate 351.
-11. Chain in flight (03:20): wait for `0xddd66882…` to enter DISCUSSION
-    (03:26), deploy `a07a136`, then POST the fast claim with up to three
-    attempts, write scratchpad/fast-claim.json, and log its timeline; a
-    monitor prints state changes with elapsed seconds.
+11. `a07a136` deployed 03:28:22 (after `0xddd66882…` entered DISCUSSION at
+    03:26:15, 15 s after its reveal deadline). All three fast-claim POSTs
+    then failed on stale owned objects (gas coin `0xdba0339f…`, WAL coin
+    `0x21305b77…` "provided version doesn't match").
+12. ROOT CAUSE (operator tx history + logs): the evidence worker retried a
+    phase-two freeze for the residue claim `0xdb9c7bae…` (DISCUSSION, its
+    discussion deadline passed 03:12) every tick, and each attempt uploaded
+    a manifest to Walrus (register_blob + certify_blob, two txs on the gas
+    and WAL coins) before the freeze aborted (`assert_can_freeze_evidence`
+    code 6). The operator's coins moved every few seconds, so every other
+    transaction raced stale versions, and the gateway retry only knew the
+    old "Object ID ... is not available for consumption" wording. Fixed in
+    the next commit: evidence worker freezes phase one only until the
+    commit deadline and phase two only until the discussion deadline;
+    engine.evidenceFreeze refuses a closed window before any upload;
+    executeAndWait retries "object ... is unavailable for consumption",
+    "needs to be rebuilt because object ...", "provided version doesn't
+    match for object ..."; the Walrus write retry covers the last wording.
+    Gate: 353 tests, lint, build. Residue `0xdb9c7bae…` stays in DISCUSSION
+    forever (no phase-two evidence; Move has no exit), harmless now.
+13. Chain in flight (03:36): commit + push, deploy at once (before the old
+    claim's phase-two freeze at 03:41), wait for its round-two commits (or
+    03:48), then POST the fast claim (three attempts), write
+    scratchpad/fast-claim.json and log the timeline; monitor b3flanuz2
+    prints state changes with elapsed seconds.
 
 ### Next steps
 - Watch claim `0xddd66882…` to a certificate (expected ~03:27 local); the
