@@ -292,9 +292,28 @@ then submit a fast test claim and time it.
     Claim #8 round two: two more commits (4 total across rounds), no
     threshold, UNRESOLVED expected ~06:24.
 
+31. Claim #8 finalized UNRESOLVED (truth score 9500) at t+569 s, cert
+    `0xb554098eb56d08d7e0ad8760faa6804a604d16c99cfb695f61d85591d43ee799`.
+    `d0edfeb` (shared lane + deadline-aware retry) deployed 06:26. Fast
+    claim #9 `0xbb1272544552274883b842bcf4b89f3fab69c086b866ee0da78623bcf3a5f571`
+    submitted 06:27:59 (attempt 2; attempt 1 hit a cross-process gas lock).
+32. ROOT CAUSE of the night's rising seat failures: AGENT WALLETS ARE
+    EMPTY. Seat transactions (accept, bind, commit, reveal) are signed and
+    paid by the agent keypairs; all seven wallets had drained to 0.002 to
+    0.016 SUI by 06:30. Symptoms: "Unable to perform gas selection due to
+    insufficient SUI balance ... for account 0xf89c42d2..." (a MiniMax
+    juror) on the bind, then commit_vote abort code 21 E_EVIDENCE_NOT_BOUND
+    every pump tick. Funded 0.6 SUI each from the operator at 06:33
+    (digest 9seD2ivo4zxAd7H9XuvP9EJchmthSbxbdnBxyHBNKy1M; script
+    scratchpad/fund-agents.mjs, run from node_modules/.cache so ESM resolves
+    @mysten/sui; key from .env, never printed). CHECK AGENT BALANCES BEFORE
+    THE DEMO (suix_getBalance per owner from /api/agents); the operator
+    holds ~8.4 SUI and 4.3 WAL after funding.
+
 ### Next steps
-- Measure claim #9 to the certificate; then record the time-to-certificate
-  and the demo claim ids in STATUS.md and the runbook.
+- Claim #9's round two runs with funded jurors; then claim #10 for the
+  clean measurement; record the time-to-certificate and the demo claim ids
+  in STATUS.md and the runbook.
 - Then deploy `c55949a` (clean worktree checkout, `railway up -s app -d`),
   submit a fast claim, time it, and record timings here and in STATUS.md.
 - Residue on testnet: `0x1936ddd3…` (orphan), `0xdb9c7bae…` (REVEAL_1 with
