@@ -54,6 +54,8 @@ export function createRealWalrusStore(
   let epochCache:
     | { value: { currentEpoch: number; epochDurationMs: number }; fetchedAtMs: number }
     | undefined;
+  // Tail of the write queue; every put chains behind it (see put).
+  let writeChain: Promise<void> = Promise.resolve();
 
   return {
     async put(bytes, options) {
@@ -69,17 +71,30 @@ export function createRealWalrusStore(
       // the content itself, which is what content addressing needs.
       // Hosts share the operator signer. This SDK path bypasses the gateway
       // retry, so each writeBlob retry rebuilds with fresh object versions.
-      const result = await retryStaleWalrusWrite(
-        () =>
-          client.walrus.writeBlob({
-            blob: stableBytes,
-            epochs,
-            deletable: options?.deletable ?? config.deletable ?? false,
-            owner: options?.owner,
-            signer: config.signer,
-          }),
-        config.sleep ?? defaultSleep,
+      // One write at a time per store: every write spends from the same gas
+      // and WAL coins, and five seats writing together made the validators
+      // reject each other's register and certify transactions. Uploads that
+      // wait here are already off the model's critical path.
+      const write = writeChain.then(() =>
+        retryStaleWalrusWrite(
+          () =>
+            client.walrus.writeBlob({
+              blob: stableBytes,
+              epochs,
+              deletable: options?.deletable ?? config.deletable ?? false,
+              owner: options?.owner,
+              signer: config.signer,
+            }),
+          config.sleep ?? defaultSleep,
+          // Drop cached object versions so the rebuilt transaction sees the coins as they are now.
+          () => client.walrus.reset(),
+        ),
       );
+      writeChain = write.then(
+        () => undefined,
+        () => undefined,
+      );
+      const result = await write;
       return {
         blobId: result.blobId,
         objectId: result.blobObject.id,
@@ -187,6 +202,7 @@ const WALRUS_WRITE_RETRY_DELAY_MS = 1_500;
 async function retryStaleWalrusWrite<T>(
   writeBlob: () => Promise<T>,
   sleep: (milliseconds: number) => Promise<void>,
+  beforeRetry?: () => void,
 ): Promise<T> {
   for (let attempt = 1; ; attempt += 1) {
     try {
@@ -199,6 +215,7 @@ async function retryStaleWalrusWrite<T>(
         throw error;
       }
       await sleep(WALRUS_WRITE_RETRY_DELAY_MS * attempt);
+      beforeRetry?.();
     }
   }
 }

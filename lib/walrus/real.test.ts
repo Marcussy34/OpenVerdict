@@ -204,6 +204,39 @@ describe("createRealWalrusStore", () => {
     expect(sleep).not.toHaveBeenCalled();
   });
 
+  it("runs concurrent writes one at a time", async () => {
+    let releaseFirst: () => void = () => undefined;
+    const firstGate = new Promise<void>((resolve) => {
+      releaseFirst = resolve;
+    });
+    const order: string[] = [];
+    writeBlobMock
+      .mockReset()
+      .mockImplementationOnce(async () => {
+        order.push("first-start");
+        await firstGate;
+        order.push("first-end");
+        return { blobId: "A".repeat(43), blobObject: { id: "0x1", storage: { end_epoch: 9 } } };
+      })
+      .mockImplementationOnce(async () => {
+        order.push("second-start");
+        return { blobId: "B".repeat(43), blobObject: { id: "0x2", storage: { end_epoch: 9 } } };
+      });
+    const store = createRealWalrusStore({
+      ...testConfig,
+      signer: Ed25519Keypair.generate(),
+    });
+
+    const first = store.put(new Uint8Array([1]));
+    const second = store.put(new Uint8Array([2]));
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    // The second write has not started while the first is still in flight.
+    expect(order).toEqual(["first-start"]);
+    releaseFirst();
+    await Promise.all([first, second]);
+    expect(order).toEqual(["first-start", "first-end", "second-start"]);
+  });
+
   it("rethrows the last stale-object error after eight write attempts", async () => {
     // Every wording the fullnode and validators use for a coin another
     // write (ours or a sibling's) just moved.
