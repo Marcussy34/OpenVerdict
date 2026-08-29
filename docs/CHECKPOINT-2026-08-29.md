@@ -232,10 +232,27 @@ then submit a fast test claim and time it.
     requires a found quote only where the validated output still carries
     one; spec §4.4 rule 3 + failure table updated.
 
+24. `1542eb8` (quote change) deployed 05:46. Fast claim #6
+    `0x66e6f6cdb6e4fce05bc16e297f11c20b3294340bf3a9f969f176c0fe30016f45`
+    ("The Sui mainnet launched in May 2023."): DeepSeek valid in 7.8 s,
+    MiniMax valid in 21.6 s (YES 10000; the quote change worked), one
+    DeepSeek lost to a WAL-coin lock, both Kimi seats to provider
+    timeouts. Both early commit attempts hit jury::lock_committee code 20
+    (E_DEADLINE_NOT_REACHED in jury.move: before the acceptance floor),
+    nothing retried while Kimi ran, and the worker's final votesCommit hit
+    the commit floor (code 7). Zero commits; UNRESOLVED via round two.
+25. Fix (commit "pump queued commits from the acceptance floor to the
+    commit deadline"): juryRun runs a commit pump next to the seats (every
+    5 s from the acceptance floor, estimated as midpoint(committee
+    createdAt or updatedAt, commit deadline) + 2 s, until the deadline);
+    a seat queues its own commit only once the floor has passed. Gate 354
+    tests, lint, build. Background chain deploys it once claim #6 is
+    terminal (or 06:00); then fast claim #7.
+
 ### Next steps
-- Gate, commit, deploy the quote change; POST fast claim #6 and measure;
-  then record the time-to-certificate and the demo claim ids in STATUS.md
-  and the runbook.
+- Deploy is live: POST fast claim #7 and measure to the certificate; then
+  record the time-to-certificate and the demo claim ids in STATUS.md and
+  the runbook.
 - Then deploy `c55949a` (clean worktree checkout, `railway up -s app -d`),
   submit a fast claim, time it, and record timings here and in STATUS.md.
 - Residue on testnet: `0x1936ddd3…` (orphan), `0xdb9c7bae…` (REVEAL_1 with
