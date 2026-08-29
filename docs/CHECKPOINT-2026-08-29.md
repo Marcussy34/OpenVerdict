@@ -71,6 +71,26 @@ then submit a fast test claim and time it.
    means a spec v3 + manifest republish.
 6. Docs updated: STATUS.md (hosting + fast mode bullets), runbook §3
    (Railway single host, deploy procedure, pooler warning), README table row.
+7. Hosted claim `0xddd66882…` after the lock was freed (02:58): evidence
+   froze on chain (epoch fix proven with real Walrus), five research runs,
+   two SCHEMA_VALID (DeepSeek 19 s: search, open, answer; Kimi 45 s: search,
+   open x2, answer; both sealed + approve_run on chain), three failed closed
+   with toolCallCount 0: the models answered from memory with invented
+   citations (MiniMax x2, DeepSeek x1). Two commits landed 03:00 (lock +
+   commit_vote proven hosted) but 2 < 3 threshold, so this claim goes to
+   discussion at 03:26 and round two (old ladder: freeze 03:41, commit
+   03:56, reveal 04:11). Scratch tools: `dump-runs.cjs <claimId>` (run
+   `NODE_PATH=<repo>/node_modules`, env from rollout.env) prints
+   transcripts and failure reasons from the DB.
+8. Fix for the failure mode (`787a156`): the research loop refuses a YES or
+   NO before any SEARCH-origin page is opened with a `RESEARCH_REQUIRED`
+   tool error (at most two per run), then normal validation/repair. Spec
+   §4.4 updated. Full gate green (348 tests, lint, build).
+9. Deploy plan in flight: a background script waits for the old claim's two
+   reveals (03:11 to 03:13), deploys `787a156`, waits for SUCCESS, then
+   POSTs a fast test claim ("The Ethereum Dencun upgrade activated on
+   mainnet in March 2024.") and writes scratchpad/fast-claim.json
+   ({claimId, startMs}); a monitor prints its states with elapsed seconds.
 
 ### Next steps
 - Watch claim `0xddd66882…` to a certificate (expected ~03:27 local); the
