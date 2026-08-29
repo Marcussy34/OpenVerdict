@@ -81,7 +81,10 @@ export const citationSchema = z
   .object({
     evidenceId: z.string().min(1),
     url: z.string().url(),
-    quote: z.string().min(20).max(300),
+    // The prompt asks for an excerpt; an excerpt the engine cannot find in
+    // the opened page is blanked (the citation stays as a verified URL), so
+    // validated outputs may carry an empty quote.
+    quote: z.string().max(300),
   })
   .strict();
 

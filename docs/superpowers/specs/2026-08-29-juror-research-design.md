@@ -213,8 +213,12 @@ conversation, so the bundle records literally what the model saw),
    becomes an opened page with `origin: "SUBMITTED"` and its own
    `discovered:` id; the frozen `url:` artifact ids stay usable in the
    evidence arrays but not in citations); `url` must equal that page's `url`
-   or `finalUrl`; `quote` must occur in the stored canonical text after
-   whitespace collapsing, case-insensitive.
+   or `finalUrl`; `quote` is checked against the stored canonical text after
+   whitespace collapsing, case-insensitive. Since 2026-08-30 a quote that is
+   not found no longer fails the seat: the engine blanks it in the validated
+   output (the citation stays a verified URL) and the transcript keeps the
+   claimed quote with `found: false`; the verifier requires a found quote
+   only for citations that still carry one.
 4. Independence: `outcome` `YES` or `NO` requires at least one citation whose
    page has `origin: "SEARCH"`. `UNSURE` needs no citation.
 5. `decisiveEvidence`, when non-empty, must contain at least one cited id.
@@ -417,7 +421,8 @@ input (frozen) ─┐
 | Budget exhausted | tool error naming the budget; final turn forced to answer |
 | Provider search/open fails | tool error, budget unit consumed, model may continue |
 | YES/NO answered before any SEARCH page was opened | `RESEARCH_REQUIRED` tool error (at most two per run), turn consumed, then the row below applies |
-| Citation quote not in page, or YES/NO without a SEARCH citation | repair turn with the exact failures, then `CITATION_INVALID`, no vote |
+| Citation quote not in page | quote blanked in the validated output, citation kept as a verified URL, transcript records `found: false` |
+| Citation of a page not opened, URL mismatch, or YES/NO without a SEARCH citation | repair turn with the exact failures, then `CITATION_INVALID`, no vote |
 | Model call fails (network, 5xx) | existing visible retry then `PROVIDER_ERROR` / `TIMEOUT` |
 | Loop exceeds `maxLoopMs` | `TIMEOUT`, no vote |
 | Firecrawl key missing in live mode | engine refuses to start (`server.ts`) |

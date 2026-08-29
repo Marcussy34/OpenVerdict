@@ -216,9 +216,20 @@ export async function recomputeRunProof(
       openedById.has(citation.evidenceId),
     ).length;
     const allCitationsOpened = openedCitationCount === outputCitations.length;
-    const allQuotesFound = bundle.transcript.citations.every(
-      (citation) => citation.found,
+    // A quote the engine could not find in the page is blanked in the
+    // validated output and recorded in the transcript with found: false; a
+    // quote that is still present must have been found.
+    const recordedById = new Map(
+      bundle.transcript.citations.map((citation) => [
+        `${citation.evidenceId}|${citation.url}`,
+        citation,
+      ]),
     );
+    const quotesConsistent = outputCitations.every((citation) => {
+      const recorded = recordedById.get(`${citation.evidenceId}|${citation.url}`);
+      if (recorded === undefined) return false;
+      return recorded.found ? true : citation.quote.trim().length === 0;
+    });
     const needsSearchCitation =
       bundle.validatedOutput.outcome === "YES" ||
       bundle.validatedOutput.outcome === "NO";
@@ -227,7 +238,7 @@ export async function recomputeRunProof(
     );
     const citationsOk =
       allCitationsOpened &&
-      allQuotesFound &&
+      quotesConsistent &&
       (!needsSearchCitation || hasSearchCitation);
     const citationCountLabel = `${outputCitations.length} of ${outputCitations.length} citations opened`;
 
@@ -255,7 +266,7 @@ export async function recomputeRunProof(
         ...(citationsOk
           ? {}
           : {
-              detail: "Citations must reference opened pages, contain found quotes, and independently support YES or NO outcomes",
+              detail: "Citations must reference opened pages, keep only quotes found in them, and independently support YES or NO outcomes",
             }),
       },
     );

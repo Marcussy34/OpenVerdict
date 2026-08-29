@@ -304,28 +304,26 @@ describe("research answer validation", () => {
     }
   });
 
-  it("requires each quote to occur in canonical page text", () => {
+  it("keeps a citation whose quote is not in the page as a URL citation with an empty quote", () => {
+    const quote = "This sufficiently long quote does not occur in the page.";
     const result = validateResearchAnswer(
       {
         ...validSearchAnswer(),
         outcome: "UNSURE" as const,
-        citations: [
-          {
-            evidenceId: SEARCH_ID,
-            url: searchPage.url,
-            quote: "This sufficiently long quote does not occur in the page.",
-          },
-        ],
+        citations: [{ evidenceId: SEARCH_ID, url: searchPage.url, quote }],
       },
       context(),
     );
 
-    expect(result.ok).toBe(false);
-    if (!result.ok) {
-      expect(result.errors).toContain(
-        "citation 0: quote not found in the opened page",
-      );
-    }
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    // The vote carries only the verified part; the transcript keeps the claim.
+    expect(result.output.citations).toEqual([
+      { evidenceId: SEARCH_ID, url: searchPage.url, quote: "" },
+    ]);
+    expect(result.citations).toEqual([
+      { evidenceId: SEARCH_ID, url: searchPage.url, quote, found: false },
+    ]);
   });
 
   it("requires YES or NO to cite independently searched evidence", () => {

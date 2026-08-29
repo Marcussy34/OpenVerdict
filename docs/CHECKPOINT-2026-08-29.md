@@ -215,10 +215,27 @@ then submit a fast test claim and time it.
     juryRun drains the queue); gate 354 tests, lint, build; deploying
     04:20, then fast claim #5.
 
+22. `76ef0c2` (commit-as-you-go) deployed 04:22. Fast claim #5
+    `0xbbd3febcc5418f880813af30e7522d668ac9bb47456af90ef76a808ae549c01a`
+    ("The Paris 2024 Summer Olympics opening ceremony took place on the
+    Seine river.") finalized UNRESOLVED at t+572 s, certificate
+    `0x677ec538958dd78b2344737f7af36fd6147283f9f543aff90d563bd1f9c36c73`,
+    with ZERO commits in both rounds: round one lost MiniMax and DeepSeek
+    to "citation 0: quote not found in the opened page", one DeepSeek to a
+    gas-coin lock, both Kimi seats to provider timeouts (calls longer than
+    the seat budget). Commit mechanics were never exercised.
+23. Fix in tree (uncommitted at 04:35): an unfound quote no longer fails a
+    seat. lib/research/citations.ts blanks the quote in the validated
+    output (citation stays a verified URL) and records the claimed quote in
+    the transcript with found: false; lib/gonka/schemas.ts quote is
+    `z.string().max(300)` (the schema is not hash-bound); the verifier
+    requires a found quote only where the validated output still carries
+    one; spec §4.4 rule 3 + failure table updated.
+
 ### Next steps
-- Deploy is live: POST fast claim #5 and measure to the certificate; then
-  record the time-to-certificate and the demo claim ids in STATUS.md and
-  the runbook.
+- Gate, commit, deploy the quote change; POST fast claim #6 and measure;
+  then record the time-to-certificate and the demo claim ids in STATUS.md
+  and the runbook.
 - Then deploy `c55949a` (clean worktree checkout, `railway up -s app -d`),
   submit a fast claim, time it, and record timings here and in STATUS.md.
 - Residue on testnet: `0x1936ddd3…` (orphan), `0xdb9c7bae…` (REVEAL_1 with

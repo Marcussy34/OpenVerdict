@@ -187,6 +187,13 @@ export function validateResearchAnswer(
   }
 
   const citations = parsed.citations ?? [];
+  // Quotes the opened page does not contain. The page and its URL are
+  // verified (engine-executed open, hashed, on Walrus); only the excerpt is
+  // not, so the citation survives as a verified URL with the quote blanked
+  // and the transcript records the claimed quote with found: false. Models
+  // paraphrase or quote search snippets often enough that failing the seat
+  // here cost real rounds (hosted claims of 2026-08-30).
+  const unverifiedQuotes = new Set<number>();
   for (const [index, citation] of citations.entries()) {
     const page = ctx.opened.find(
       (candidate) => candidate.evidenceId === citation.evidenceId,
@@ -202,8 +209,8 @@ export function validateResearchAnswer(
     if (citationUrl === undefined || !pageUrls.includes(citationUrl)) {
       errors.push(`citation ${index}: url does not match the opened page`);
     }
-    if (!quoteFound(page.text, citation.quote)) {
-      errors.push(`citation ${index}: quote not found in the opened page`);
+    if (citation.quote.trim().length > 0 && !quoteFound(page.text, citation.quote)) {
+      unverifiedQuotes.add(index);
     }
   }
 
@@ -228,7 +235,15 @@ export function validateResearchAnswer(
   if (errors.length > 0) return { ok: false, errors };
   return {
     ok: true,
-    output: parsed,
-    citations: citations.map((citation) => ({ ...citation, found: true })),
+    output: {
+      ...parsed,
+      citations: citations.map((citation, index) =>
+        unverifiedQuotes.has(index) ? { ...citation, quote: "" } : citation,
+      ),
+    },
+    citations: citations.map((citation, index) => ({
+      ...citation,
+      found: !unverifiedQuotes.has(index),
+    })),
   };
 }
