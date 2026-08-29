@@ -107,6 +107,19 @@
     --ov-accent: #0e76ff; /* arrow chips, pins, links, accents */
     --ov-surface: #f3f3f3; /* chips, buttons, light text on dark */
     --ov-paper: #f7f7f5; /* body background */
+    /* The paper join. Every light ground on this page ends on exactly
+       --ov-paper, so a section that follows one carries that paper over the
+       edge and dissolves it, and the two grounds meet with no visible cut.
+       Depth is set per site with background-size: a steep ground needs a
+       shorter band than a slow one. Fades to a zero-alpha PAPER, never
+       `transparent`: premultiplied interpolation would dirty the ramp. */
+    --ov-paper-join: linear-gradient(
+        180deg,
+        #f7f7f5 0%,
+        rgb(247 247 245 / 62%) 26%,
+        rgb(247 247 245 / 24%) 60%,
+        rgb(247 247 245 / 0%) 100%
+    );
     --ov-ink: #000000;
     --ov-line: rgb(0 0 0 / 15%); /* hairlines on light */
     --ov-line-strong: rgb(0 0 0 / 32%); /* the same hairline, under a pointer */
@@ -689,16 +702,22 @@
 /* Propositions: paper behind the heading, then the descent finishes before the
    list starts (~28%) so every row sits on ground dark enough to carry white. */
 .ov-light-to-navy {
-    background: linear-gradient(
-        180deg,
-        #dae5f2 0%,
-        #a9c2e0 14%,
-        #6b93c4 23%,
-        #24568f 31%,
-        #123a76 52%,
-        #04122b 76%,
-        #020c1c 100%
-    );
+    background:
+        var(--ov-paper-join),
+        linear-gradient(
+            180deg,
+            #dae5f2 0%,
+            #a9c2e0 14%,
+            #6b93c4 23%,
+            #24568f 31%,
+            #123a76 52%,
+            #04122b 76%,
+            #020c1c 100%
+        );
+    background-size:
+        100% 185px,
+        auto;
+    background-repeat: no-repeat;
 }
 /* Manifesto: near-black at the top fading into the light list below. */
 .ov-navy-to-light {
@@ -714,15 +733,24 @@
 }
 /* Footer: light blue → accent family → deep navy. */
 .ov-footer-ground {
-    background: linear-gradient(
-        180deg,
-        #cddcee 0%,
-        #6f9bd2 16%,
-        #1f62c4 38%,
-        #0d3f8e 60%,
-        #061c3f 82%,
-        #030f24 100%
-    );
+    background:
+        var(--ov-paper-join),
+        linear-gradient(
+            180deg,
+            #cddcee 0%,
+            #6f9bd2 16%,
+            #1f62c4 38%,
+            #0d3f8e 60%,
+            #061c3f 82%,
+            #030f24 100%
+        );
+    /* Shallower than the others on purpose: this ground is already deep blue
+       by 97px and the "Settled on" row sits just below that, so the band has
+       to be clear of it. */
+    background-size:
+        100% 110px,
+        auto;
+    background-repeat: no-repeat;
 }
 
 /* The globe's heads-up display stands down once the visual has docked into

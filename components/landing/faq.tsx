@@ -42,8 +42,13 @@ export function Faq() {
     <section
       data-header-theme="light"
       className="relative z-30 isolate overflow-hidden text-black"
+      // The paper join carries the section above's ground over the edge, so the
+      // two meet without a visible cut. See --ov-paper-join in globals.css.
       style={{
-        background: "linear-gradient(180deg,#dfe7f1 0%,#eef1f3 42%,#f7f7f5 100%)",
+        background:
+          "var(--ov-paper-join), linear-gradient(180deg,#dfe7f1 0%,#eef1f3 42%,#f7f7f5 100%)",
+        backgroundSize: "100% 185px, auto",
+        backgroundRepeat: "no-repeat",
       }}
     >
       {/* Only the first column guide: the second one cut straight through the

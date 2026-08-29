@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useReducedMotion } from "motion/react";
 import { CornerPin, GridGuides, Hairline, ArrowUp, Eyebrow } from "./primitives";
 import { SuiMark, GonkaMark } from "@/components/brand/logos";
-import { useScrollFrame, clamp01, ease } from "./scroll-driver";
+import { useScrollFrame, clamp01 } from "./scroll-driver";
 
 const NAVIGATION = [
   { href: "/", label: "Home" },
@@ -32,6 +32,7 @@ const LEGAL = [
  */
 export function LandingFooter() {
   const markRef = React.useRef<HTMLDivElement>(null);
+  const bandRef = React.useRef<HTMLDivElement>(null);
   const reduce = useReducedMotion();
   // It closes every page now, so it reads its own deployment rather than being
   // handed one.
@@ -55,13 +56,24 @@ export function LandingFooter() {
 
   useScrollFrame(
     ({ scrollY, vh }) => {
+      const band = bandRef.current;
       const mark = markRef.current;
-      if (!mark) return;
-      // The wordmark is the last thing on the page, so its ride is measured
-      // against the remaining scroll: it lands exactly as the page bottoms out.
+      if (!band || !mark) return;
+      // The band is the crop the wordmark shows through, and it is pinned to
+      // the page's bottom edge, so its lower half is always off screen while
+      // there is scroll left. Left alone, the scroll would just uncover the
+      // type from the top down, which is why it read as already landed rather
+      // than arriving.
+      // So the type climbs the band FASTER than the page scrolls: LIFT 2 puts
+      // it at 1.5x, which is what makes it rise out of the bottom edge. The
+      // reveal takes the last (LIFT / (1 + LIFT)) of a band height of scroll,
+      // and it costs the footer no extra height at all.
+      // Linear, like every other scrub on this page: stop means stop. The last
+      // of the travel lands on the last of the scroll.
+      const LIFT = 2;
       const remaining = document.documentElement.scrollHeight - vh - scrollY;
-      const p = ease(clamp01(1 - remaining / Math.max(1, vh * 0.8)));
-      mark.style.transform = `translate3d(0, ${(1 - p) * 35}%, 0)`;
+      const p = clamp01(1 - remaining / Math.max(1, band.clientHeight * LIFT));
+      mark.style.transform = `translate3d(0, ${((1 - p) * band.clientHeight).toFixed(1)}px, 0)`;
     },
     !reduce,
   );
@@ -174,9 +186,11 @@ export function LandingFooter() {
         </div>
       </div>
 
-      {/* The wordmark: sized to the full gutter width, cropped by the section's
-          bottom edge, and riding up into place with the footer's scroll. */}
-      <div className="relative mt-2 h-[8.6vw] min-h-[46px] overflow-hidden">
+      {/* The wordmark: sized to the full gutter width, cropped by the page's
+          bottom edge, and climbing into place with the footer's scroll.
+          11.1vw shows 60% of the word's ink: the type's ink runs 15.8vw and
+          starts 1.6vw down from the band's top edge. */}
+      <div ref={bandRef} className="relative mt-2 h-[11.1vw] min-h-[59px] overflow-hidden">
         <div ref={markRef} className="will-change-transform">
           <p
             aria-hidden
@@ -200,7 +214,7 @@ function FooterColumn({
   return (
     <div>
       <h3 className="ov-micro text-[#F3F3F3]/60">{heading}</h3>
-      <ul className="mt-4 space-y-2.5 text-[17px] leading-snug">{children}</ul>
+      <ul className="mt-4 space-y-2.5 text-[17px] leading-snug font-medium">{children}</ul>
     </div>
   );
 }
