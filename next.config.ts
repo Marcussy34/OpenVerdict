@@ -1,8 +1,10 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  // pglite ships wasm assets; keep it external to the server bundle
-  serverExternalPackages: ["@electric-sql/pglite"],
+  // These ship wasm assets; keep them external to the server bundle. Being
+  // listed here is also what lets the tracer follow them into the serverless
+  // function, so the runtime `require` actually resolves.
+  serverExternalPackages: ["@electric-sql/pglite", "@mysten/walrus"],
   // The release manifest is read at runtime from a path in
   // OPENVERDICT_RELEASE_MANIFEST, so the file tracer cannot see it statically
   // and the JSON never reached the serverless bundle: every API route 503'd

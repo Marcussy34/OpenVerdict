@@ -119,9 +119,12 @@ async function createRuntimeRealWalrusStore(
   if (manifest.walrus.mode === "local") {
     throw new Error("real Walrus requires testnet or mainnet mode");
   }
-  const { WalrusFile, walrus } = await import(
-    /* webpackIgnore: true */ "@mysten/walrus"
-  );
+  // Deliberately NOT webpackIgnore'd: that hid the import from the file
+  // tracer, so @mysten/walrus never shipped to the serverless function and
+  // every request died with "Cannot find package '@mysten/walrus'". The
+  // package is listed in serverExternalPackages instead, which keeps the wasm
+  // out of the route bundle AND lets the tracer follow it.
+  const { WalrusFile, walrus } = await import("@mysten/walrus");
   const client = new SuiGrpcClient({
     network: manifest.walrus.mode,
     baseUrl: manifest.suiRpcUrl,
