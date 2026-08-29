@@ -146,7 +146,10 @@ export function Productivity({
   return (
     <section
       ref={sectionRef}
-      className="ov-light-wash relative overflow-hidden text-black"
+      // On tall screens the content is shorter than the viewport, so the
+      // section fills it and centres. Without this the padding below reads as
+      // double the padding above, with the next section bleeding into the gap.
+      className="ov-light-wash relative flex flex-col justify-center overflow-hidden text-black lg:min-h-screen"
     >
       <GridGuides columns={3} className="hidden md:block" />
 
@@ -169,7 +172,7 @@ export function Productivity({
             </h2>
             <p
               ref={paraRef}
-              className="mt-10 max-w-[330px] text-[15px] leading-[1.5] text-black/70 lg:mt-0"
+              className="mt-10 max-w-[330px] text-[15px] leading-[1.5] text-black lg:mt-0"
             >
               Five jurors drawn across at least three model families deliberate under
               commit–reveal, and the tally settles on-chain. Every score is integer
@@ -260,7 +263,7 @@ export function Productivity({
 function StatRow({ label, value }: { label: string; value: number }) {
   return (
     <div className="flex items-baseline justify-between gap-4">
-      <Eyebrow className="text-[#F3F3F3]/70">{label}</Eyebrow>
+      <Eyebrow className="text-[#F3F3F3]">{label}</Eyebrow>
       <span className="text-[clamp(1.6rem,2.4vw,2rem)] leading-none font-medium tabular-nums">
         {value.toLocaleString()}
       </span>
