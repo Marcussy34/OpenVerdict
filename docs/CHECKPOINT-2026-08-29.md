@@ -124,11 +124,22 @@ then submit a fast test claim and time it.
     match for object ..."; the Walrus write retry covers the last wording.
     Gate: 353 tests, lint, build. Residue `0xdb9c7bae…` stays in DISCUSSION
     forever (no phase-two evidence; Move has no exit), harmless now.
-13. Chain in flight (03:36): commit + push, deploy at once (before the old
-    claim's phase-two freeze at 03:41), wait for its round-two commits (or
-    03:48), then POST the fast claim (three attempts), write
-    scratchpad/fast-claim.json and log the timeline; monitor b3flanuz2
-    prints state changes with elapsed seconds.
+13. `61e6378` deployed 03:37:33. The old claim's phase-two freeze at 03:41
+    did NOT land: the freeze was scheduled at discussionDeadline minus the
+    configured lead (OPENVERDICT_EVIDENCE_FREEZE_LEAD_MS = 5000 on Railway)
+    but needs a ~15 s Walrus manifest write first, so Move rejected it after
+    the deadline (claim.move:507). `0xddd66882…` is now dead in DISCUSSION
+    (residue #3; its round-one proofs stay viewable: 2 YES reveals, report
+    PENDING). Fix committed next (`fix(workers): freeze phase-two evidence
+    as soon as discussion opens`): the worker freezes phase two right when
+    the claim enters DISCUSSION (never after the deadline); the lead
+    setting is gone from .env.example (the Railway variable is ignored).
+    Background chains must stay under the Bash tool's 10-minute cap; the
+    03:36 chain was killed at 03:45 before it could submit.
+14. Next: once that deploy is SUCCESS, POST the fast claim ("The Ethereum
+    Dencun upgrade activated on mainnet in March 2024.") on
+    app.openverdict.info, write scratchpad/fast-claim.json ({claimId,
+    startMs}) so monitor b3flanuz2 (armed until ~04:10) prints its timeline.
 
 ### Next steps
 - Watch claim `0xddd66882…` to a certificate (expected ~03:27 local); the
