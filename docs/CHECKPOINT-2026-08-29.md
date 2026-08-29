@@ -384,9 +384,29 @@ then submit a fast test claim and time it.
     funnels writes into writeBlobMock; executor mocked. Gate 356 tests,
     lint, build. Chain deploys after claim #12 (or 07:22), then claim #13.
 
+41. Claim #12 finalized UNRESOLVED (truth score 10000) at t+630 s, cert
+    `0xfbdab9dd00b74b86495a0181a0505ca378b5b3cf583d47977575ffbd12f2a8ad`.
+    `3f4aa9a` (flow-driven writes) deployed 07:17; claim #13
+    `0x686e53b446fb819d4a99cde29f3407ec6e0e55be03db8d2243cd01370101fe98`:
+    DeepSeek x2 valid and committed, Kimi timed out at 103 s, BOTH MiniMax
+    seats again "already locked by a different transaction" within
+    seconds of their own approve_run.
+42. ROOT CAUSE FOUND (07:24): the locking digests were our own successful
+    jury::approve_run transactions, and the seats failed 8 s after them,
+    far too fast for an eight-attempt retry: the gRPC transport delivers
+    validator rejections PERCENT-ENCODED
+    ("Transaction%20is%20rejected...already%20locked%20by%20a%20different
+    %20transaction"), so no space-separated pattern ever matched them and
+    every validator-side rejection failed on attempt 1 all night, while
+    fullnode-side wordings (plain JSON) retried. Fix (commit "decode
+    percent-encoded gRPC rejections before matching retry patterns"):
+    errorText/errorMessage decodeURIComponent before matching; test with
+    the encoded wording. Gate 357 tests, lint, build. Chain deploys after
+    claim #13 (or 07:33), then claim #14.
+
 ### Next steps
-- Measure claim #13 (flow-driven Walrus writes with pinned gas); then
-  STATUS.md/runbook with the numbers and the demo claim ids.
+- Measure claim #14 (retries now actually run on validator rejections);
+  then STATUS.md/runbook with the numbers and the demo claim ids.
 - Then deploy `c55949a` (clean worktree checkout, `railway up -s app -d`),
   submit a fast claim, time it, and record timings here and in STATUS.md.
 - Residue on testnet: `0x1936ddd3…` (orphan), `0xdb9c7bae…` (REVEAL_1 with
