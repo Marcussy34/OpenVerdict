@@ -252,11 +252,8 @@ class OpenVerdictEngine implements Engine {
 
   async factCheckStart(req: FactCheckRequest): Promise<{ claimId: string }> {
     validateFactCheckRequest(req);
-    const deadlines =
-      req.deadlines ?? defaultDeadlines(this.#now(), this.#manifest.network);
     if (process.env.OPENVERDICT_DEBUG_DEADLINES === "1") {
       console.error("FCS req.deadlines:", JSON.stringify(req.deadlines));
-      console.error("FCS effective:", JSON.stringify(deadlines), "now:", Date.now());
     }
     const resolutionCriteria =
       req.resolutionCriteria?.trim() ||
@@ -266,7 +263,9 @@ class OpenVerdictEngine implements Engine {
         statement: req.claim.trim(),
         resolutionCriteria,
         mode: CLAIM_MODE.DIRECT_REVIEW,
-        deadlines,
+        // Without explicit deadlines the ladder starts at the create_claim
+        // transaction (createClaimRecord), after the request's Walrus writes.
+        ...(req.deadlines === undefined ? {} : { deadlines: req.deadlines }),
         committeeBudget: process.env.OPENVERDICT_DEFAULT_COMMITTEE_BUDGET ?? "10000000",
         evidenceBudget: process.env.OPENVERDICT_DEFAULT_EVIDENCE_BUDGET ?? "0",
       },
@@ -1409,14 +1408,19 @@ class OpenVerdictEngine implements Engine {
   }
 
   private async createClaimRecord(
-    request: ClaimCreateRequest,
+    request: Omit<ClaimCreateRequest, "deadlines"> & {
+      /** Omitted for hosted fact-checks: the default ladder is measured from the transaction. */
+      deadlines?: ClaimCreateRequest["deadlines"];
+    },
     submission: {
       directReviewStarted: boolean;
       submittedText?: string;
       submittedUrls: string[];
     },
   ): Promise<ClaimRecord> {
-    validateClaimCreateRequest(request);
+    const ladder = (): ClaimCreateRequest["deadlines"] =>
+      request.deadlines ?? defaultDeadlines(this.#now(), this.#manifest.network);
+    validateClaimCreateRequest({ ...request, deadlines: ladder() });
     const statementUpload = await this.#walrus.put(
       new TextEncoder().encode(request.statement),
       { identifier: "claim-statement.txt" },
@@ -1432,8 +1436,14 @@ class OpenVerdictEngine implements Engine {
         resolutionCriteria: request.resolutionCriteria,
       }),
     );
+    // The two writes above take about 35 s on testnet; a ladder computed at
+    // the start of the request would already have spent its evidence cutoff
+    // before the workers can see the claim, so measure it from here.
+    const deadlines = ladder();
+    validateClaimCreateRequest({ ...request, deadlines });
     const result = await this.#gateway.createClaim({
       ...request,
+      deadlines,
       directReviewStarted: submission.directReviewStarted,
       contentHash,
       statementBlobId: statementUpload.blobId,
@@ -1457,7 +1467,7 @@ class OpenVerdictEngine implements Engine {
       ...(result.creator === undefined ? {} : { creator: result.creator }),
       statement: request.statement,
       resolutionCriteria: request.resolutionCriteria,
-      deadlines: request.deadlines,
+      deadlines,
       committeeBudget: request.committeeBudget,
       evidenceBudget: request.evidenceBudget,
       ...(submission.submittedText === undefined
@@ -2880,21 +2890,24 @@ function defaultDeadlines(
       secondRevealDeadlineMs: now + 840_000,
     };
   }
-  // Fast ladder (hosted): a certificate can land only after the reveal
-  // deadline (settlement.move) and the committee locks only after the
-  // midpoint of the commit window (jury.move), so these windows, not the
-  // models, set the time to resolution. Canary seats took 25 to 146 s;
-  // a seat that misses the commit window fails closed and 4 of 5 still settle.
+  // Fast ladder (hosted), measured from the create_claim transaction (the
+  // request's own Walrus writes come before it): a certificate can land
+  // only after the reveal deadline (settlement.move) and the committee
+  // locks only after the midpoint of the commit window (jury.move), so
+  // these windows, not the models, set the time to resolution. The cutoff
+  // leaves room for the statement artifact write that follows creation;
+  // hosted seats took 19 to 45 s with page writes off the critical path; a
+  // seat that misses the commit window fails closed and 4 of 5 still settle.
   const second = 1_000;
   return {
-    evidenceCutoffMs: now + 20 * second,
-    proposalDeadlineMs: now + 25 * second,
-    challengeDeadlineMs: now + 30 * second,
-    firstCommitDeadlineMs: now + 210 * second,
-    firstRevealDeadlineMs: now + 270 * second,
-    discussionDeadlineMs: now + 330 * second,
-    secondCommitDeadlineMs: now + 480 * second,
-    secondRevealDeadlineMs: now + 540 * second,
+    evidenceCutoffMs: now + 60 * second,
+    proposalDeadlineMs: now + 65 * second,
+    challengeDeadlineMs: now + 70 * second,
+    firstCommitDeadlineMs: now + 180 * second,
+    firstRevealDeadlineMs: now + 240 * second,
+    discussionDeadlineMs: now + 300 * second,
+    secondCommitDeadlineMs: now + 450 * second,
+    secondRevealDeadlineMs: now + 510 * second,
   };
 }
 

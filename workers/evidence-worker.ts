@@ -4,6 +4,7 @@ import { CLAIM_STATE } from "../lib/protocol";
 import { forEachClaim, isWorkerEntrypoint, runWorker } from "./runtime";
 
 const skippedNoEvidenceClaims = new Set<string>();
+const NO_EVIDENCE_GRACE_MS = 60_000;
 
 export async function evidenceWorkerTick(): Promise<void> {
   const engine = await getServerEngine();
@@ -36,9 +37,11 @@ export async function evidenceWorkerTick(): Promise<void> {
         await engine.evidenceFreeze(claim.claimId, 2);
       }
     } catch (error) {
+      // Give the request path a grace period after the cutoff: the statement
+      // artifact is ingested (a Walrus write) only after the claim exists.
       if (
         error instanceof EngineNoEvidenceError &&
-        claim.deadlines.evidenceCutoffMs < Date.now()
+        claim.deadlines.evidenceCutoffMs + NO_EVIDENCE_GRACE_MS < Date.now()
       ) {
         skippedNoEvidenceClaims.add(claim.claimId);
         process.stderr.write(
