@@ -249,8 +249,26 @@ then submit a fast test claim and time it.
     tests, lint, build. Background chain deploys it once claim #6 is
     terminal (or 06:00); then fast claim #7.
 
+26. `b27f613` (commit pump) deployed 06:02. Fast claim #7
+    `0x1c2bbd3bb7e37bc2ad7fc1b7eed48e7e9f355cb7d23a72c9c072121717c41718`:
+    the pump WORKS (DeepSeek valid in 4.8 s, committed at t+139 s right
+    after the acceptance floor while other seats ran). Lost: DeepSeek +
+    MiniMax at the same second on one shared background page write (WAL
+    coin locked by a sibling write; retries kept colliding), both Kimi
+    seats provider-side (one failed in 2.9 s: the devshard is unhealthy
+    tonight). One vote, so round two again.
+27. Fix (commit "one Walrus write and one operator transaction at a time
+    per process"): the real Walrus store chains its writes (uploads are off
+    the critical path) and calls client.walrus.reset() before each retry;
+    RealSuiGateway chains operator transactions. Gate 355 tests, lint,
+    build. Chain deploys once claim #7 is terminal (or 06:16); then fast
+    claim #8.
+    Note for later: the visible retry helper allows one retry and a Kimi
+    call that times out at the seat budget burns one more futile call;
+    harmless for the round now, a deadline-aware tweak is possible.
+
 ### Next steps
-- Deploy is live: POST fast claim #7 and measure to the certificate; then
+- Deploy is live: POST fast claim #8 and measure to the certificate; then
   record the time-to-certificate and the demo claim ids in STATUS.md and
   the runbook.
 - Then deploy `c55949a` (clean worktree checkout, `railway up -s app -d`),
