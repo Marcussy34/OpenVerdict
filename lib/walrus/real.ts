@@ -7,7 +7,8 @@ import {
 } from "@mysten/walrus";
 import type { Signer } from "@mysten/sui/cryptography";
 import { SuiGrpcClient } from "@mysten/sui/grpc";
-import { waitForGasIndex } from "../sui/execute";
+import type { Transaction } from "@mysten/sui/transactions";
+import { executeAndWait, waitForGasIndex } from "../sui/execute";
 import { runOnOperatorLane } from "../sui/operator-lane";
 import {
   assertValidWalrusEpoch,
@@ -79,12 +80,10 @@ export function createRealWalrusStore(
       const result = await runOnOperatorLane(async () => {
         const written = await retryStaleWalrusWrite(
           () =>
-            client.walrus.writeBlob({
-              blob: stableBytes,
+            writeBlobPinned(client, config.signer, stableBytes, {
               epochs,
               deletable: options?.deletable ?? config.deletable ?? false,
               owner: options?.owner,
-              signer: config.signer,
             }),
           config.sleep ?? defaultSleep,
           // Drop cached object versions so the rebuilt transaction sees the coins as they are now.
@@ -189,6 +188,46 @@ function validateEpochs(epochs: number): void {
     throw new Error("Walrus epochs must be a positive integer");
   }
 }
+
+/**
+ * writeBlob with its two Sui transactions (register, certify) executed by our
+ * own executor, which pins gas from the object store. The SDK's built-in
+ * execution selects gas from the owned-object index, which lags under load,
+ * so its certify kept losing to the version its own register had consumed.
+ */
+async function writeBlobPinned(
+  client: Parameters<typeof executeAndWait>[0] & {
+    walrus: { writeBlobFlow: (options: { blob: Uint8Array }) => WalrusWriteFlow };
+  },
+  signer: Signer,
+  blob: Uint8Array,
+  options: { epochs: number; deletable: boolean; owner?: string },
+): Promise<Awaited<ReturnType<WalrusWriteFlow["getBlob"]>>> {
+  const flow = client.walrus.writeBlobFlow({ blob });
+  await flow.encode();
+  const registered = await executeAndWait(client, signer, () =>
+    flow.register({
+      epochs: options.epochs,
+      deletable: options.deletable,
+      owner: options.owner ?? signer.toSuiAddress(),
+    }),
+  );
+  await flow.upload({ digest: registered.digest });
+  await executeAndWait(client, signer, () => flow.certify());
+  return flow.getBlob();
+}
+
+/** The subset of the SDK's write flow this store drives (step records are ignored). */
+type WalrusWriteFlow = {
+  encode(): Promise<unknown>;
+  register(options: { epochs: number; deletable: boolean; owner: string }): Transaction;
+  upload(options: { digest: string }): Promise<unknown>;
+  certify(): Transaction;
+  getBlob(): Promise<{
+    blobId: string;
+    blobObject: { id: string; storage: { end_epoch: number } };
+  }>;
+};
 
 // Parallel writes from one signer race on the gas and WAL coins; every one of
 // these wordings means "rebuild with fresh versions and try again".

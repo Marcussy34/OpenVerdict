@@ -8,6 +8,7 @@ import { WalrusNotFoundError, type WalrusStore } from "./store";
 // the same references the tests assert against.
 const {
   writeBlobMock,
+  writeBlobFlowMock,
   readBlobMock,
   writeFilesMock,
   getFilesMock,
@@ -15,12 +16,46 @@ const {
   resetMock,
 } = vi.hoisted(() => ({
     writeBlobMock: vi.fn(),
+    writeBlobFlowMock: vi.fn(),
     readBlobMock: vi.fn(),
     writeFilesMock: vi.fn(),
     getFilesMock: vi.fn(),
     stakingStateMock: vi.fn(),
     resetMock: vi.fn(),
   }));
+
+// The store drives the SDK's step-wise flow; the fake flow funnels every
+// write into writeBlobMock (called at register time with the blob and the
+// register options) so the tests keep asserting one call per attempt.
+writeBlobFlowMock.mockImplementation(({ blob }: { blob: Uint8Array }) => {
+  let pending:
+    | Promise<{ blobId: string; blobObject: { id: string; storage: { end_epoch: number } } }>
+    | undefined;
+  return {
+    encode: async () => undefined,
+    register: (options: { epochs: number; deletable: boolean; owner: string }) => {
+      pending = Promise.resolve().then(() => writeBlobMock({ blob, ...options }));
+      pending.catch(() => undefined);
+      return {};
+    },
+    upload: async () => undefined,
+    certify: () => ({}),
+    getBlob: async () => {
+      if (!pending) throw new Error("register must run before getBlob");
+      return pending;
+    },
+  };
+});
+
+// The store executes the flow's register and certify transactions through
+// the shared executor; here it only has to invoke the transaction factory.
+vi.mock("../sui/execute", () => ({
+  executeAndWait: vi.fn(async (_client: unknown, _signer: unknown, txOrFactory: unknown) => {
+    if (typeof txOrFactory === "function") (txOrFactory as () => unknown)();
+    return { digest: "fake-digest", moveEvents: [] };
+  }),
+  waitForGasIndex: vi.fn(async () => undefined),
+}));
 
 // Replace the walrus client extension with an in-memory fake: no real network
 // I/O, and it lets tests assert exactly which SDK methods the store calls.
@@ -32,6 +67,7 @@ vi.mock("@mysten/walrus", async (importOriginal) => {
       name: "walrus" as const,
       register: () => ({
         writeBlob: writeBlobMock,
+        writeBlobFlow: writeBlobFlowMock,
         readBlob: readBlobMock,
         writeFiles: writeFilesMock,
         getFiles: getFilesMock,

@@ -94,8 +94,22 @@ export async function waitForGasIndex(
   sender: string,
   timeoutMs = 6_000,
 ): Promise<void> {
-  const objectId = gasCoinBySender.get(sender);
-  if (objectId === undefined) return;
+  let objectId = gasCoinBySender.get(sender);
+  if (objectId === undefined) {
+    // Nothing built through executeAndWait yet in this process (a worker's
+    // first operations are Walrus writes): learn the coin from the index.
+    try {
+      const listed = await client.core.listCoins({ owner: sender, coinType: "0x2::sui::SUI" });
+      const largest = [...listed.objects].sort((a, b) =>
+        BigInt(b.balance) > BigInt(a.balance) ? 1 : -1,
+      )[0];
+      if (largest === undefined) return;
+      objectId = largest.objectId;
+      gasCoinBySender.set(sender, objectId);
+    } catch {
+      return;
+    }
+  }
   try {
     const fresh = await client.core.getObject({ objectId, include: {} });
     const target = BigInt(fresh.object.version);
