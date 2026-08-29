@@ -10,6 +10,10 @@ export async function GET() {
     return NextResponse.json(status, { status: 200 });
   } catch (error) {
     if (error instanceof EngineNotWiredError || (error as Error)?.name === "EngineNotWiredError") {
+      // Log WHY the engine is unwired: the five wiring failures are otherwise
+      // indistinguishable from outside, which makes deploys undebuggable. The
+      // response stays generic so config details never reach anonymous callers.
+      console.error("[status] engine_not_wired:", (error as Error).message);
       return NextResponse.json({ error: "engine_not_wired" }, { status: 503 });
     }
     const message = error instanceof Error ? error.message : "Internal server error";
