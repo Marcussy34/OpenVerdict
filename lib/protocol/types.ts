@@ -347,7 +347,9 @@ export type ResearchToolErrorCode =
   | "OPEN_FAILED"
   | "SEARCH_FAILED"
   | "INVALID_ACTION"
-  | "INVALID_ANSWER";
+  | "INVALID_ANSWER"
+  /** A YES or NO answered before any page found by the model's own search was opened. */
+  | "RESEARCH_REQUIRED";
 
 export type ResearchToolResult =
   | {

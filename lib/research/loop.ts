@@ -110,6 +110,12 @@ function visibleSearchResults(
   }));
 }
 
+const RESEARCH_REQUIRED_MESSAGE =
+  "The independence rule: YES or NO must cite a page you found with your own search and opened in this run. Search now, open the most relevant result, then answer. UNSURE needs no citation.";
+
+/** Premature YES/NO answers refused before the usual validation and repair take over. */
+const MAX_RESEARCH_NUDGES = 2;
+
 function isCitationFailure(errors: readonly string[]): boolean {
   return errors.some(
     (error) => error.includes("citation") || error.includes("independence"),
@@ -153,6 +159,7 @@ export async function runResearchLoop(
   );
   let jsonMode = true;
   let repaired = false;
+  let researchNudges = 0;
 
   const transcript = (
     citations: Array<Citation & { found: boolean }> = [],
@@ -490,6 +497,34 @@ export async function runResearchLoop(
       });
       push(toolResultContent(toolResult));
       forceAnswerBeforeLastTurn(turn);
+      continue;
+    }
+
+    // Models sometimes answer from memory on the first turn with invented
+    // citations (three of five hosted seats did, 2026-08-30). Such a YES or
+    // NO can never pass the independence rule, so instead of spending the
+    // single repair on it, refuse it as a tool error that says what to do
+    // next and keep the loop going. UNSURE needs no citation and passes
+    // through; on the last turn the answer is validated as usual.
+    const researchedPageOpened = opened.some(
+      (page) => origins.get(page.evidenceId) === "SEARCH",
+    );
+    if (
+      researchAction.output.outcome !== "UNSURE" &&
+      !researchedPageOpened &&
+      researchNudges < MAX_RESEARCH_NUDGES &&
+      turn < policy.maxTurns
+    ) {
+      researchNudges += 1;
+      completion.attempt.audit.status = "CITATION_INVALID";
+      recordToolError({
+        turn,
+        startedAtMs: stepStart,
+        modelRequestId,
+        action: researchAction,
+        code: "RESEARCH_REQUIRED",
+        message: RESEARCH_REQUIRED_MESSAGE,
+      });
       continue;
     }
 

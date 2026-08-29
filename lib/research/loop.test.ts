@@ -296,6 +296,42 @@ describe("research loop", () => {
     ]);
   });
 
+  it("refuses a YES before any searched page is opened, then accepts the researched answer", async () => {
+    const query = "independent research";
+    const url = "https://fake.evidence.test/independent-research/1";
+    const evidenceId = discoveredEvidenceId(CLAIM_ID, PHASE, normalizeUrl(url));
+    const quote = "This page discusses independent-research in detail.";
+    // Turn 1 answers from memory with an invented page ref; the loop must
+    // steer the model into search, open, answer instead of failing it.
+    const script = scriptedCompletion([
+      citedAnswer({ evidenceId: "p1", url, quote }),
+      action({ action: "search", query }),
+      action({ action: "open", url }),
+      citedAnswer({ evidenceId, url, quote }),
+    ]);
+
+    const result = await runResearchLoop(
+      loopDependencies({ complete: script.complete }),
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.transcript.counts).toEqual({ searches: 1, opens: 1, turns: 4 });
+    expect(result.transcript.steps[0]?.result).toMatchObject({
+      tool: "error",
+      code: "RESEARCH_REQUIRED",
+    });
+    expect(
+      script.requests[1]?.messages.at(-1)?.content.includes("RESEARCH_REQUIRED"),
+    ).toBe(true);
+    expect(result.attempts.map((attempt) => attempt.audit.status)).toEqual([
+      "CITATION_INVALID",
+      "SCHEMA_VALID",
+      "SCHEMA_VALID",
+      "SCHEMA_VALID",
+    ]);
+  });
+
   it("assigns p1 and resolves a ref plus a URL-only citation", async () => {
     const query = "page ref research";
     const url = "https://fake.evidence.test/page-ref-research/1";
@@ -442,8 +478,11 @@ describe("research loop", () => {
       url,
       quote: "This page discusses submitted in detail.",
     });
+    // Two RESEARCH_REQUIRED nudges, then validation fails, one repair, fail closed.
     const script = scriptedCompletion([
       action({ action: "open", url }),
+      answer,
+      answer,
       answer,
       answer,
     ]);
@@ -461,8 +500,15 @@ describe("research loop", () => {
         message.content.includes("independence"),
       ),
     ).toBe(true);
+    expect(
+      result.transcript.steps.filter(
+        (step) => step.result.tool === "error" && step.result.code === "RESEARCH_REQUIRED",
+      ),
+    ).toHaveLength(2);
     expect(result.attempts.map((attempt) => attempt.audit.status)).toEqual([
       "SCHEMA_VALID",
+      "CITATION_INVALID",
+      "CITATION_INVALID",
       "CITATION_INVALID",
       "CITATION_INVALID",
     ]);

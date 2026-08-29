@@ -219,6 +219,15 @@ conversation, so the bundle records literally what the model saw),
    page has `origin: "SEARCH"`. `UNSURE` needs no citation.
 5. `decisiveEvidence`, when non-empty, must contain at least one cited id.
 
+Procedural guard (added 2026-08-30 after three of five hosted seats answered
+from memory with invented citations): a `YES` or `NO` answered before any
+page with `origin: "SEARCH"` has been opened is refused before validation
+with the `RESEARCH_REQUIRED` tool error (message names the independence
+rule and tells the model to search, open, then answer). At most two such
+refusals per run, each consuming a turn; afterwards the answer goes through
+the normal validation and repair path above. `UNSURE` is never refused, and
+an answer on the last turn is validated as usual.
+
 Failure after the repair turn fails the seat closed with status
 `CITATION_INVALID` (new `InferenceRunStatus` member, treated like
 `INVALID_SCHEMA` everywhere: no vote, `NO_VALID_INFERENCE` reporting).
@@ -407,6 +416,7 @@ input (frozen) ─┐
 | Model opens a URL it has not seen | `URL_NOT_SEEN` tool error, turn consumed |
 | Budget exhausted | tool error naming the budget; final turn forced to answer |
 | Provider search/open fails | tool error, budget unit consumed, model may continue |
+| YES/NO answered before any SEARCH page was opened | `RESEARCH_REQUIRED` tool error (at most two per run), turn consumed, then the row below applies |
 | Citation quote not in page, or YES/NO without a SEARCH citation | repair turn with the exact failures, then `CITATION_INVALID`, no vote |
 | Model call fails (network, 5xx) | existing visible retry then `PROVIDER_ERROR` / `TIMEOUT` |
 | Loop exceeds `maxLoopMs` | `TIMEOUT`, no vote |
