@@ -267,10 +267,28 @@ then submit a fast test claim and time it.
     call that times out at the seat budget burns one more futile call;
     harmless for the round now, a deadline-aware tweak is possible.
 
+28. Claim #7 finalized at t+572 s: certificate
+    `0x82684a50f041c2e81279cbcfef22369c5b6deca72465a3e645574940e4ebb9a3`,
+    UNRESOLVED with truth score 9750 bps (round two: DeepSeek 3.8 s and
+    MiniMax 34 s both YES and committed through the pump; a third DeepSeek
+    seat lost to the shared-write race, both Kimi seats provider-side).
+    `436d2b2` (serialized writes + operator txs) deployed 06:14; fast claim
+    #8 `0x5eeebcaa412e26426984b52c649a3c502e5ff21bc42c8ac54d9b62549f78a196`
+    submitted 06:15:16 (Sui mainnet statement).
+
+29. Claim #8 on `436d2b2`: DeepSeek x2 valid (9 s, 17 s) and committed at
+    t+142 s; Kimi failed closed at the seat deadline; both MiniMax seats
+    still died on gas-coin rejections because Walrus writes and gateway
+    transactions were serialized on two separate chains. Fix (commit "one
+    shared lane for Walrus writes and operator transactions"):
+    lib/sui/operator-lane.ts is the single per-process queue used by the
+    real Walrus store and RealSuiGateway.executeOperator. Gate 355 tests,
+    lint, build. Chain deploys once claim #8 is terminal (or 06:27); then
+    fast claim #9.
+
 ### Next steps
-- Deploy is live: POST fast claim #8 and measure to the certificate; then
-  record the time-to-certificate and the demo claim ids in STATUS.md and
-  the runbook.
+- Measure claim #9 to the certificate; then record the time-to-certificate
+  and the demo claim ids in STATUS.md and the runbook.
 - Then deploy `c55949a` (clean worktree checkout, `railway up -s app -d`),
   submit a fast claim, time it, and record timings here and in STATUS.md.
 - Residue on testnet: `0x1936ddd3…` (orphan), `0xdb9c7bae…` (REVEAL_1 with
