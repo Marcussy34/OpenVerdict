@@ -86,11 +86,28 @@ then submit a fast test claim and time it.
    NO before any SEARCH-origin page is opened with a `RESEARCH_REQUIRED`
    tool error (at most two per run), then normal validation/repair. Spec
    §4.4 updated. Full gate green (348 tests, lint, build).
-9. Deploy plan in flight: a background script waits for the old claim's two
-   reveals (03:11 to 03:13), deploys `787a156`, waits for SUCCESS, then
-   POSTs a fast test claim ("The Ethereum Dencun upgrade activated on
-   mainnet in March 2024.") and writes scratchpad/fast-claim.json
-   ({claimId, startMs}); a monitor prints its states with elapsed seconds.
+9. `787a156` deployed 03:13:47 after the old claim's reveals landed
+   (advance 19 s after the commit deadline, both reveals 33 s later; the
+   deadline gating and hosted reveal_vote are proven). The first fast-claim
+   POST then FAILED at the API: create_claim was rejected by validators as
+   "Object 0xdba0339f… already locked by a different transaction 7hrAHm…".
+   That digest is our own Walrus `system::certify_blob` for the statement
+   upload, executed 200 ms earlier; the fullnode's coin index still served
+   the consumed gas version. Fix in `a07a136`: executeAndWait treats
+   "already locked by a different transaction" like "reserved for another
+   transaction" (rebuild + fresh gas versions, 5 attempts, 400 ms x attempt).
+10. `a07a136` also moves discovered-page uploads off the research loop's
+    critical path: WalrusStore.blobIdFor (SDK computeBlobMetadata; local
+    blake2b address) gives the content address first, the model gets the
+    page at once, the write runs in the background, each seat awaits the
+    uploads of the pages it opened before sealing (a failed write fails the
+    seat closed), juryRun lets the rest settle. Tests: "hands a research
+    page to the model before its Walrus upload finishes..." and "fails a
+    seat closed when the upload of a page it opened fails"; full gate 351.
+11. Chain in flight (03:20): wait for `0xddd66882…` to enter DISCUSSION
+    (03:26), deploy `a07a136`, then POST the fast claim with up to three
+    attempts, write scratchpad/fast-claim.json, and log its timeline; a
+    monitor prints state changes with elapsed seconds.
 
 ### Next steps
 - Watch claim `0xddd66882…` to a certificate (expected ~03:27 local); the
