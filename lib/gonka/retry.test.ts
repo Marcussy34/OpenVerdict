@@ -21,6 +21,29 @@ describe("Gonka retry policy", () => {
     },
   );
 
+  it("does not retry once the deadline has passed", async () => {
+    // A seat's call that ran out its remaining time: retrying would only
+    // burn one more call past the seat deadline.
+    let clock = 0;
+    const operation = vi.fn<() => Promise<string>>().mockImplementation(async () => {
+      clock += 100;
+      throw Object.assign(new Error("timeout"), { status: 503 });
+    });
+    const sleep = vi.fn<() => Promise<void>>().mockResolvedValue();
+
+    await expect(
+      runWithVisibleRetry(operation, {
+        maxRetries: 1,
+        now: () => clock,
+        deadlineMs: 50,
+        sleep,
+      }),
+    ).rejects.toBeInstanceOf(VisibleRetryError);
+
+    expect(operation).toHaveBeenCalledTimes(1);
+    expect(sleep).not.toHaveBeenCalled();
+  });
+
   it("makes exactly one visible retry with jitter", async () => {
     const operation = vi
       .fn<() => Promise<string>>()

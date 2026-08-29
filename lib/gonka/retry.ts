@@ -19,6 +19,8 @@ export interface VisibleRetryOptions {
   now?: () => number;
   random?: () => number;
   sleep?: (delayMs: number) => Promise<void>;
+  /** No retry starts at or after this wall-clock point (a seat's deadline). */
+  deadlineMs?: number;
 }
 
 export class VisibleRetryError<T = unknown> extends Error {
@@ -99,7 +101,11 @@ export async function runWithVisibleRetry<T>(
       return { value, attempts };
     } catch (error) {
       attempts.push({ ok: false, error, requestedAtMs, completedAtMs: now() });
-      if (retry === retryLimit || !isRetryableGonkaError(error)) {
+      // A call that ran out its deadline must not be retried past it: the
+      // seat fails closed now instead of after one more futile call.
+      const pastDeadline =
+        options.deadlineMs !== undefined && now() >= options.deadlineMs;
+      if (retry === retryLimit || pastDeadline || !isRetryableGonkaError(error)) {
         throw new VisibleRetryError(attempts);
       }
 

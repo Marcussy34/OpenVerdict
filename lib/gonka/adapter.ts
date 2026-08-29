@@ -503,6 +503,8 @@ export function createGonkaAdapterWithDependencies(
           now,
           random: dependencies.random,
           sleep: dependencies.sleep,
+          // The per-call timeout is the seat's remaining time; no retry past it.
+          ...(requestTimeoutMs === undefined ? {} : { deadlineMs: now() + requestTimeoutMs }),
         },
       );
 
