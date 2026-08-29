@@ -632,27 +632,54 @@ class OpenVerdictEngine implements Engine {
         ? claim.deadlines.firstCommitDeadlineMs
         : claim.deadlines.secondCommitDeadlineMs;
     const seatDeadlineMs = commitDeadlineMs - SEAT_COMMIT_MARGIN_MS;
+    const commitFloorMs = acceptanceFloorMs(committee, phase, commitDeadlineMs);
 
-    await Promise.all(
-      seats.map(async (seat) => {
-        const existing = (await this.#repository.listInferenceRuns(claimId, phase)).find(
-          (run) => run.jurySeatId === seat.jurySeatId,
-        );
-        if (existing !== undefined) return;
-        await this.runSeat(
-          claim,
-          committee,
-          seat,
-          evidence,
-          artifacts,
-          research,
-          searchCache,
-          storedPageCache,
-          pageUploads,
-          seatDeadlineMs,
-        );
-      }),
-    );
+    // Commit pump: the chain allows lock_committee only from the acceptance
+    // floor, seats finish at different times, and the slowest seat must not
+    // decide when the others commit. From the floor until the deadline, push
+    // the queued commit every few seconds while seats are still running.
+    let seatsDone = false;
+    let signalSeatsDone: () => void = () => undefined;
+    const seatsSettled = new Promise<void>((resolve) => {
+      signalSeatsDone = resolve;
+    });
+    const pump = (async () => {
+      while (!seatsDone) {
+        await Promise.race([seatsSettled, sleep(COMMIT_PUMP_INTERVAL_MS)]);
+        if (seatsDone) break;
+        const now = this.#now();
+        if (now < commitFloorMs || now > commitDeadlineMs) continue;
+        await this.queueCommit(claimId, phase);
+      }
+    })();
+
+    try {
+      await Promise.all(
+        seats.map(async (seat) => {
+          const existing = (await this.#repository.listInferenceRuns(claimId, phase)).find(
+            (run) => run.jurySeatId === seat.jurySeatId,
+          );
+          if (existing !== undefined) return;
+          await this.runSeat(
+            claim,
+            committee,
+            seat,
+            evidence,
+            artifacts,
+            research,
+            searchCache,
+            storedPageCache,
+            pageUploads,
+            seatDeadlineMs,
+            commitFloorMs,
+          );
+        }),
+      );
+    } finally {
+      seatsDone = true;
+      signalSeatsDone();
+    }
+    await pump;
     // Let background page uploads finish inside this tick; failures were
     // already attributed to the seats that cited those pages.
     await Promise.allSettled([...pageUploads.values()]);
@@ -1709,6 +1736,7 @@ class OpenVerdictEngine implements Engine {
     storedPageCache: Map<string, Promise<PageStorePage>>,
     pageUploads: Map<string, Promise<void>>,
     seatDeadlineMs: number,
+    commitFloorMs: number,
   ): Promise<void> {
     const agent = await this.requiredAgent(seat.agentProfileId);
     const baseRunId = deterministicId(`run:${claim.claimId}:${seat.jurySeatId}:${seat.phase}`);
@@ -2066,8 +2094,12 @@ class OpenVerdictEngine implements Engine {
       return;
     }
     // Commit this seat now instead of after the slowest seat: one seat that
-    // overruns must not push every commit past the commit deadline.
-    await this.queueCommit(claim.claimId, seat.phase);
+    // overruns must not push every commit past the commit deadline. Before
+    // the acceptance floor the chain refuses the lock; the pump in juryRun
+    // picks the run up once the floor has passed.
+    if (this.#now() >= commitFloorMs) {
+      await this.queueCommit(claim.claimId, seat.phase);
+    }
   }
 
   /**
@@ -2912,6 +2944,28 @@ function evidencePolicyId(manifest: ReleaseManifest): `0x${string}` {
 
 /** Time reserved after the last seat for lock_committee, approvals and commit_vote txs. */
 const SEAT_COMMIT_MARGIN_MS = 60_000;
+/** How often juryRun retries the queued commit between the acceptance floor and the deadline. */
+const COMMIT_PUMP_INTERVAL_MS = 5_000;
+
+function sleep(milliseconds: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
+}
+
+/**
+ * Chain floor for lock_committee: the midpoint between the phase start and
+ * the commit deadline (jury.move acceptance_deadline_ms). The database
+ * timestamps trail the chain by a few seconds, so this estimate is never
+ * early; an unparsable timestamp defers to the worker's final votesCommit.
+ */
+function acceptanceFloorMs(
+  committee: CommitteeRecord,
+  phase: 1 | 2,
+  commitDeadlineMs: number,
+): number {
+  const startMs = Date.parse(phase === 1 ? committee.createdAt : committee.updatedAt);
+  if (!Number.isFinite(startMs) || startMs >= commitDeadlineMs) return commitDeadlineMs;
+  return startMs + Math.floor((commitDeadlineMs - startMs) / 2) + 2_000;
+}
 
 function defaultDeadlines(
   now: number,
