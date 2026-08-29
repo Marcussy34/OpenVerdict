@@ -1,6 +1,6 @@
 # OpenVerdict — Product Status Snapshot
 
-> Last updated: 2026-08-28. Source of truth for claims below: the code and its
+> Last updated: 2026-08-29. Source of truth for claims below: the code and its
 > test suites (`pnpm test`, `pnpm test:move`), not this file.
 
 ## What the product is right now
@@ -38,7 +38,12 @@ operational proof and public deployments in flight.
   profile→signer self-healing, stale-gas retry, per-claim worker error
   isolation, in-gateway approveRun serialization (previously only the E2E
   harness proxy had it), and factory-rebuilt transaction retries.
-- No public URL yet: four Railway builds stuck at "scheduling on Metal builder" — needs a dashboard builder flip/retry.
+- PUBLIC AND LIVE 2026-08-29 on Vercel at https://openverdict.info (apex and
+  www both serve; Neon Postgres attached). `/api/status` reports suiHealthy,
+  gonkaMode live, walrusMode testnet, dbHealthy. Seven jurors bound and
+  verified 7/7 against chain. Railway abandoned in favour of Vercel. Five
+  stacked deploy faults fixed to get there: see docs/CHECKPOINT-2026-08-29.md.
+  Not yet proven: a claim run end-to-end through the HOSTED app.
 - Landing redesign v3 SHIPPED 2026-08-28 (Sharplink-style: Archivo type,
   #0E76FF/#F3F3F3, globe hero docking into a live stat card, sticky protocol
   stack, FAQ, footer claim form + rising wordmark; commit 83322e1).
