@@ -354,9 +354,23 @@ then submit a fast test claim and time it.
     ~140 s; certificate ~5.5 min after POST). Gate 356 tests, lint, build.
     Chain deploys after claim #11 (or 07:05); then claim #12.
 
+39. Claim #11 finalized UNRESOLVED (truth score 9833) at t+566 s, cert
+    `0x9f58e980ecbee989b8451411d721ceae4daf16ef214155e38eb4baaf6d7bb33a`:
+    round one MiniMax x2 valid (5 s, 7 s), Kimi timed out (late start),
+    BOTH DeepSeek seats lost to gas-coin rejections with nothing else
+    transacting: the fullnode's owned-object index (what gas selection
+    reads) lags its object store, so a build right after our own tx picked
+    the consumed version. Fix `e4579e4`: executeAndWait remembers the
+    sender's gas coin and pins its version from getObject before every
+    build; after each operator tx or Walrus write the lane waits until the
+    index reports the coin's current version (waitForGasIndex), so the
+    Walrus SDK's register/certify build fresh. Gate 356 tests, lint, build.
+    Chain: ee2fa1c (ladder +240 s) deployed first, then e4579e4, then fast
+    claim #12.
+
 ### Next steps
-- Measure claim #12 on the +240 s ladder; then STATUS.md/runbook with the
-  numbers and the demo claim ids.
+- Measure claim #12 (ladder +240 s, gas pinning, funded jurors); then
+  STATUS.md/runbook with the numbers and the demo claim ids.
 - Then deploy `c55949a` (clean worktree checkout, `railway up -s app -d`),
   submit a fast claim, time it, and record timings here and in STATUS.md.
 - Residue on testnet: `0x1936ddd3…` (orphan), `0xdb9c7bae…` (REVEAL_1 with
