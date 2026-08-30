@@ -79,7 +79,20 @@ node blooms into its real content. Content never leaves the engine early.
    `/claims/[id]/report` (the audit surface loses nothing); the separate
    `/observe` page retires with a redirect to the canvas. Mobile: canvas
    on top, sidebars become slide-up sheets.
-6. **Degradation.** Claims from before juror research render juror to
+6. **Replay (owner addition, 2026-08-31 04:00: "make sure that users can
+   watch a replay too, everything played out from beginning to the
+   end").** On a finalized claim the whole event log is public, and every
+   event carries `occurredAt`; research steps additionally arrive as
+   RESEARCH_TICK events with their own timestamps. The canvas gets a
+   replay mode: a play/pause control with a scrubber and speed presets
+   (10x default, 1x and 60x) that rebuilds the canvas as of time t, so
+   the claim plays out from creation through committee, freeze, sealed
+   pulses, reveals and certificate exactly in recorded order. Claims
+   finalized before ticks existed replay with research steps spread in
+   transcript order across the research window (labelled "approximate
+   timing"). Live claims show the live canvas; the replay control appears
+   once the claim is terminal.
+7. **Degradation.** Claims from before juror research render juror to
    verdict only. Failed seats always render their failure node. A second
    round adds a phase-2 ring of the same juror nodes. Engine-offline and
    not-found states keep the current handling.
