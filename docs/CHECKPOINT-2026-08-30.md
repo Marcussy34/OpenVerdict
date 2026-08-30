@@ -396,6 +396,27 @@ Open (needs the owner): none for the hosts. Note the stray local
 gets slow; the e2e:localnet regression run is still the next verification
 step when wanted.
 
+## 3f. DONE 2026-08-31 02:50: a fact-check is one claim statement (owner decision)
+
+The owner asked why the form still wanted evidence URLs, pasted context and
+resolution criteria when the jurors research the web themselves, then
+decided: statement only, and no user-set criteria (the lead's
+recommendation: one public rubric for every claim; the API and CLI keep the
+optional fields). Shipped in commit `59d989f` (deployment `7cc6ed22`,
+SUCCESS 02:49, no claim live): `/fact-check` is a single statement field
+with coaching copy ("one falsifiable sentence with the who, what and
+when"), the "What happens next" rail says claim frozen then five jurors
+research the open web for and against, the console desk, timeline and
+privacy copy follow, the engine's default rubric now reads "decide whether
+the statement is true as written as of the evidence cutoff; weigh primary
+sources for and against found through your own research; the submitter's
+material is context only; YES or NO only when credible sources agree,
+otherwise UNSURE", PRD addendum item 16 and STATUS record it. Verified
+live: the page markup has no URL, context or criteria fields and carries
+the new copy; screenshot checked. Note: `components/landing/claim-form.tsx`
+(also reduced to one row) is not mounted anywhere on the landing; dead
+component, left in place.
+
 ## 4. Planned next (owner-approved direction)
 
 - Attestation (docs/superpowers/specs/2026-08-30-attested-inference-design.md):
