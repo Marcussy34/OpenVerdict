@@ -1,5 +1,8 @@
 # Session checkpoint — 2026-08-29 (pre-compaction #4, supersedes 08-28)
 
+> 2026-08-30 21:15: the current resume map is docs/CHECKPOINT-2026-08-30.md
+> (read it first). This file keeps the detailed log, items 1 to 56.
+
 > Resume map. Repo is the source of truth; this file is the index.
 > **THE BIG CHANGE: production is LIVE and healthy at https://openverdict.info.**
 > Active work at compaction: an UNFINISHED brainstorm on consolidating 15
