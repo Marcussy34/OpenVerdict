@@ -299,9 +299,11 @@ class OpenVerdictEngine implements Engine {
     if (process.env.OPENVERDICT_DEBUG_DEADLINES === "1") {
       console.error("FCS req.deadlines:", JSON.stringify(req.deadlines));
     }
+    // The public form sends only the statement; every such claim is judged by
+    // this one public rubric (the API and CLI may still pass their own).
     const resolutionCriteria =
       req.resolutionCriteria?.trim() ||
-      "Determine whether the bounded claim is supported by the frozen evidence available before the evidence cutoff. Return YES, NO, or UNSURE when evidence conflicts or is insufficient.";
+      "Decide whether the statement is true as written, as of the claim's evidence cutoff. Weigh evidence for and against from primary sources found through your own research; the submitter's material is context only. Answer YES or NO only when credible sources agree; answer UNSURE when they conflict or are insufficient.";
     const claim = await this.createClaimRecord(
       {
         statement: req.claim.trim(),

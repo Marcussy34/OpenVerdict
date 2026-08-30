@@ -106,7 +106,7 @@ export function ClaimTimeline({ claim }: TimelineProps) {
       title: "Evidence phase 1 frozen",
       description: claim.evidenceRoots?.length
         ? "Evidence manifest frozen into an on-chain Merkle root and stored on Walrus."
-        : "Public source URLs and text retrieved, sanitized, and stored on Walrus.",
+        : "Statement and any submitted material sanitized and stored on Walrus.",
       status: claim.evidenceRoots?.length ? "completed" : state >= 4 ? "in_progress" : "pending",
       artifactHash: claim.evidenceRoots?.[0]?.root,
       icon: DocumentText,

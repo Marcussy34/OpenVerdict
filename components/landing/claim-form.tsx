@@ -5,15 +5,13 @@ import { SplitButton } from "./primitives";
 import { useClaimSubmission, MAX_CLAIM } from "@/components/claim/use-claim-submission";
 
 /**
- * The landing's claim entry — the same submission path as /fact-check, wearing
- * the footer's dark skin. Two underlined rows: the claim, and the source the
- * jury will be frozen against (the engine refuses a claim with no evidence).
+ * The landing's claim entry: one statement, same submission path as /fact-check,
+ * wearing the footer's dark skin.
  * Validation, the live character count and the engine's own errors all render
  * inline.
  */
 export function ClaimForm() {
   const [claim, setClaim] = React.useState("");
-  const [url, setUrl] = React.useState("");
   const { submit, submitting, errorMessage, isEngineOffline } = useClaimSubmission();
   const tooLong = claim.length > MAX_CLAIM * 0.9;
   const errorId = errorMessage || isEngineOffline ? "landing-claim-error" : undefined;
@@ -22,12 +20,12 @@ export function ClaimForm() {
     <form
       onSubmit={async (e) => {
         e.preventDefault();
-        await submit({ claim, urls: [url] });
+        await submit({ claim });
       }}
       className="w-full"
       noValidate
     >
-      <div className="border-b border-[#F3F3F3]/40 pb-3 transition-colors focus-within:border-[#F3F3F3]/80">
+      <div className="flex items-end gap-4 border-b border-[#F3F3F3]/40 pb-3 transition-colors focus-within:border-[#F3F3F3]/80">
         <label htmlFor="landing-claim" className="sr-only">
           Claim statement
         </label>
@@ -39,22 +37,7 @@ export function ClaimForm() {
           placeholder="Enter a claim…"
           aria-invalid={errorMessage ? true : undefined}
           aria-describedby={errorId}
-          className="w-full min-w-0 bg-transparent pb-1 text-[19px] leading-snug text-[#F3F3F3] placeholder:text-[#F3F3F3]/50 focus:outline-none"
-        />
-      </div>
-
-      <div className="mt-4 flex items-end gap-4 border-b border-[#F3F3F3]/40 pb-3 transition-colors focus-within:border-[#F3F3F3]/80">
-        <label htmlFor="landing-url" className="sr-only">
-          Evidence source URL
-        </label>
-        <input
-          id="landing-url"
-          type="url"
-          value={url}
-          onChange={(e) => setUrl(e.target.value)}
-          placeholder="Evidence source — https://…"
-          aria-describedby={errorId}
-          className="min-w-0 flex-1 bg-transparent pb-1 text-[15px] leading-snug text-[#F3F3F3] placeholder:text-[#F3F3F3]/50 focus:outline-none"
+          className="min-w-0 flex-1 bg-transparent pb-1 text-[19px] leading-snug text-[#F3F3F3] placeholder:text-[#F3F3F3]/50 focus:outline-none"
         />
         <SplitButton
           type="submit"

@@ -66,7 +66,10 @@ Postgres. Tests: 431 vitest, 70 Move.
   and the Enoki popup inject scripts). The DNS zone stays on Vercel
   nameservers (apex ALIAS, www and app CNAMEs point at Railway; Let's
   Encrypt certificates for all three; Google OAuth and the Enoki allowlist
-  cover every host). Since 2026-08-30
+  cover every host). Since 2026-08-31 03:00 the public forms take one claim
+  statement only (the jurors research; the API and CLI keep optional sources
+  and criteria; the default rubric now names the jurors' own research and
+  UNSURE on conflict). Since 2026-08-30
   15:00 the database is a Railway Postgres service in the same project
   (`Postgres`, private network only, daily and weekly volume backups). Neon
   hit its free plan's 5 GB monthly egress the same afternoon; both Neon

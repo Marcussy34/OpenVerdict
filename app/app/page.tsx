@@ -27,7 +27,7 @@ const DESKS = [
     href: "/fact-check",
     icon: DocumentText,
     title: "Put a claim on trial",
-    body: "Submit a statement and its sources. The evidence is frozen to Walrus before any juror reads it.",
+    body: "Submit one bounded statement. Five jurors research it on the open web before the vote is sealed.",
   },
   {
     href: "/claims",
