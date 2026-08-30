@@ -1,11 +1,12 @@
 "use client";
 
-import { useState, useEffect, use, useCallback, useMemo } from "react";
+import { useState, useEffect, use, useCallback, useMemo, useRef } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { StateBadge } from "@/components/claim/state-badge";
 import { isStrandedDiscussion } from "@/lib/engine/claim-lifecycle";
 import { useNow } from "@/components/use-now";
+import { useClaimEvents } from "@/components/use-claim-events";
 import { VerdictGauge } from "@/components/viz/verdict-gauge";
 import { ClaimTimeline } from "@/components/claim/timeline";
 import { TimeDisplay } from "@/components/time-display";
@@ -45,6 +46,8 @@ export default function ClaimDetailPage({ params }: ClaimDetailPageProps) {
   // Hooks run before the loading and error returns below (rules of hooks).
   const now = useNow();
   const { id } = use(params);
+  const { events } = useClaimEvents(id);
+  const hasClaimRef = useRef(false);
 
   const [claim, setClaim] = useState<ClaimInspection | null>(null);
   const [report, setReport] = useState<FactCheckReport | null>(null);
@@ -54,7 +57,7 @@ export default function ClaimDetailPage({ params }: ClaimDetailPageProps) {
 
   const loadData = useCallback(async () => {
     try {
-      setLoading(true);
+      if (!hasClaimRef.current) setLoading(true);
       setEngineOffline(false);
       setNotFound(false);
 
@@ -74,6 +77,7 @@ export default function ClaimDetailPage({ params }: ClaimDetailPageProps) {
 
       const inspectData: ClaimInspection = await inspectRes.json();
       setClaim(inspectData);
+      hasClaimRef.current = true;
 
       if (inspectData.state >= 9) {
         try {
@@ -110,7 +114,10 @@ export default function ClaimDetailPage({ params }: ClaimDetailPageProps) {
         }
 
         const inspectData: ClaimInspection = await inspectRes.json();
-        if (!ignore) setClaim(inspectData);
+        if (!ignore) {
+          setClaim(inspectData);
+          hasClaimRef.current = true;
+        }
 
         if (inspectData.state >= 9) {
           try {
@@ -134,6 +141,17 @@ export default function ClaimDetailPage({ params }: ClaimDetailPageProps) {
       ignore = true;
     };
   }, [id]);
+
+  // Live: any new engine event refetches the inspection (debounced), so the
+  // page follows the claim without the Refresh button.
+  const eventCount = events.length;
+  useEffect(() => {
+    if (eventCount === 0) return;
+    const timer = setTimeout(() => {
+      void loadData();
+    }, 800);
+    return () => clearTimeout(timer);
+  }, [eventCount, loadData]);
 
   /** Merge on-chain seat state with the post-reveal agent card for each seat. */
   const seats = useMemo(() => {

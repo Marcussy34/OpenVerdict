@@ -129,7 +129,7 @@ function FactCheckContent() {
               {submitting ? (
                 <>
                   <Refresh size="16" variant="Linear" className="motion-safe:animate-spin" />
-                  Submitting…
+                  Freezing to Walrus (about 20 s)…
                 </>
               ) : (
                 <>
