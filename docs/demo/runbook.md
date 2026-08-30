@@ -157,7 +157,11 @@ the browser on `/verify` (Run proof tab).
    citations; and the full public bundle as JSON next to the recomputed
    hash checks. Jurors whose manifest is still version 3 show the v1 trail
    (one side is enough for them); the seven testnet jurors carry version
-   4 manifests since the republish of 2026-08-30.
+   4 manifests since the republish of 2026-08-30. Demo claims: #21
+   `0x5629faca…` (YES 9750, certificate `0x8a5ab5ad…`, the first v2
+   verdict: open any of its four revealed runs), #16 `0x9169c707…` (YES
+   9860 under v1), #18 `0xb526116e…` and #19 `0xe46d6997…` (two-round
+   UNRESOLVED with v2 trails).
 
 ## 5. Human end-to-end walkthrough (the user's test)
 

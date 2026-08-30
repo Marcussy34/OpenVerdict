@@ -108,7 +108,16 @@ operational proof and public deployments in flight.
   and Walrus links), the per-turn conversation with the node that
   answered, the engine's refusals, the system prompt and budgets,
   evidence for and against with the reasoning trace, every remaining
-  audit field, and the full public bundle as JSON.
+  audit field, and the full public bundle as JSON. FIRST V2 VERDICT, claim
+  #21 (17:10, `0x5629faca…`, "The Bitcoin genesis block was mined on
+  January 3, 2009"): four seats valid (both DeepSeek, both MiniMax; the
+  Kimi seat lost), each with a support search, a challenge search, pages
+  on both sides, citations from two sites and a counter-evidence summary;
+  commits t+212 to t+274 s, REVEAL_1 t+398 s, four reveals by t+445 s,
+  finalized YES with truth score 9750 at t+479 s (8.0 min from POST),
+  certificate
+  `0x8a5ab5ad7bb8e70a7b118a18d5e0ee0cbff1165ddae0b4a78195a5b19d4b079d`.
+  Its DeepSeek run `0x76fe683f…` passes all 13 verifier checks.
 - PROOF CHAIN V2 PROVEN ON TESTNET 2026-08-29 late: the seven juror manifests
   on chain are real v2 documents on Walrus (prompt spec embedded, hashes
   match, `scripts/publish-agent-manifests.ts`), and a live canary ran under

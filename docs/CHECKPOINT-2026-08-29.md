@@ -663,15 +663,29 @@ then submit a fast test claim and time it.
     at t+278 s. Fix (commit "330 s commit window for juror research v2"):
     hosted ladder commit +330 s, reveal +450 s, discussion +510 s, second
     round +690/+810 s; about 230 s of research per seat, certificate
-    around 8.5 min. Deployed 17:12; claim #21 follows.
+    around 8.5 min. Deployed 17:10 (deployment 4ec3d0cb).
+56. FIRST V2 VERDICT (17:18): claim #21
+    `0x5629faca8dd2f0bd812c6d4e01ed99ed16184e41675379d251b5252103d5a46c`
+    ("The Bitcoin genesis block was mined on January 3, 2009", submitted
+    17:10:29 on the 330 s window): committee t+56 s, four seats valid
+    (both DeepSeek, both MiniMax; the Kimi seat lost), commits t+212 to
+    t+274 s, REVEAL_1 t+398 s, four YES reveals (9500 to 10000) by
+    t+445 s, finalized YES with truth score 9750 at t+479 s (8.0 min),
+    certificate
+    `0x8a5ab5ad7bb8e70a7b118a18d5e0ee0cbff1165ddae0b4a78195a5b19d4b079d`
+    (digest Cuuk24K3h46uS7LNGxVZmfoRzWDS3hJVzLavv1MdhsL4). DeepSeek run
+    `0x76fe683f…`: search:support, open, search:challenge, four opens,
+    answer YES 9500 citing Wikipedia and Investopedia, counter-evidence
+    summary noting only a timezone nuance; all 13 verifier checks pass
+    locally. Claim #20 finalizes UNRESOLVED on its old deadlines.
 
 ### Next steps
-- Demo claims: #16 `0x9169c707…` (YES 9860, certificate `0x62036142…`,
-  v1 research) for the verdict path; #18 `0xb526116e…` for the v2
-  research trail (both sides, corroboration, counter-evidence, full
-  provenance; run `0x5020bc5b…`); #15 `0xc9e0d4eb…` for the discussion
-  and round-two path. Report page, proof endpoints and `/verify` all work
-  from these ids.
+- Demo claims: #21 `0x5629faca…` (YES 9750, certificate `0x8a5ab5ad…`,
+  the first v2 verdict) for the verdict and research path; #16
+  `0x9169c707…` (YES 9860, v1) as the fallback verdict; #18
+  `0xb526116e…` and #19 `0xe46d6997…` for the discussion and round-two
+  path with v2 trails. Report page, proof endpoints and `/verify` all
+  work from these ids.
 - Verdict odds: with three model families and seven agents, half of all
   committees seat both Kimi profiles, and Kimi on GonkaRouter has failed
   most seats today; a fourth model family (new registrations, funding,
