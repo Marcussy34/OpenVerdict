@@ -365,6 +365,37 @@ tree is clean; no Codex job, monitor or background task is running.
   "OpenVerdict production topology" hold the same facts as dated
   observations; the newest is "DOCS AUDIT APPLIED 2026-08-31 02:05".
 
+## 3e. DONE 2026-08-31 02:30: the two hosts are set up properly (owner: "I think it's not fully set up")
+
+Audit result before the fix: DNS, TLS, HTTP to HTTPS, Google OAuth
+redirect URIs and the Enoki allowlist were already right for apex, www and
+app. What was missing: `NEXT_PUBLIC_APP_URL` was unset on Railway (the
+header never handed visitors to app.openverdict.info and the whole console
+was duplicated on the apex), www was a duplicate, the console home wore
+the landing's transparent dark header (browser URL "/" on the app host),
+the claims API was oldest-first (the landing showed an Aug 29 UNRESOLVED
+claim as "latest verdict", the console listed day-old claims as latest and
+counted ten stranded discussion claims as "in deliberation"), and there
+were no titles, Open Graph cards, robots, sitemap or security headers.
+
+Shipped in commit `62cb7f9` (deployment `2ec605fb`, SUCCESS 02:24, no claim
+was live): Codex wrote `redirectForHost` + proxy + headers (14 tests),
+Gemini wrote the metadata files and the stranded display, the lead wired
+the header, the Dockerfile ARGs, the repository ordering and the
+`useNow` clock hook. Verified live with a curl redirect matrix (www 308 to
+apex with path and query, apex console paths 308 to the app host, apex
+`/app` to the app root, landing and `/api` untouched, Railway host
+untouched), the five headers on both hosts, per-route titles, the OG image
+(47 KB PNG), robots and sitemap, and screenshots (landing leads with claim
+#26 NO; console header readable, "In deliberation 0", latest claims #26 and
+#25; stranded claim shows "Discussion · expired" with its note). Gate:
+typecheck, lint (0 errors), 448 tests, production build.
+
+Open (needs the owner): none for the hosts. Note the stray local
+`sui start` process from an earlier localnet run (pid 67740) if the Mac
+gets slow; the e2e:localnet regression run is still the next verification
+step when wanted.
+
 ## 4. Planned next (owner-approved direction)
 
 - Attestation (docs/superpowers/specs/2026-08-30-attested-inference-design.md):
