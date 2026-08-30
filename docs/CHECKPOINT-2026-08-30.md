@@ -283,8 +283,15 @@ Kimi timeouts and node-dependent latency; the owner has a message for
 the GonkaRouter team (signed receipts, request lookup, Kimi capacity,
 substitution and a fourth model).
 
-After the jobs land: review against the briefs, full gate, commit, deploy
-between claims, run a claim, then update STATUS/runbook/memory. Also
+Update 00:15: the hedge job finished and was accepted (111 adapter tests);
+the two failed-seat jobs stalled together at 23:40 (same app-server
+session prefix; phantom "pnpm lint"), were cancelled at 00:12; the
+engine job's work was complete and reviewed and is committed with the
+hedge as `85ce5ad` (gate: 44 files / 431 tests, lint clean), deploying
+now; the UI panel was re-dispatched on a fresh session (subagent
+failed-ui-2, prompt-failed-ui-2.txt; run-proof-types.ts already carries
+the failure types). After the UI job lands: gate, commit, deploy between
+claims, run a claim, then update STATUS/runbook/memory. Also
 still open: a human click on "Open through Seal" and "Re-run this juror";
 the round-two window unexercised live; the submission package once the
 owner names the format; Nautilus via Marlin Oyster if the owner wants it.
