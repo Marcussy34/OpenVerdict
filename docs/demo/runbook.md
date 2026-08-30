@@ -77,7 +77,10 @@ plus www) and https://app.openverdict.info (dashboard; `proxy.ts` rewrites
 the root of `app.` hosts to `/app`). DNS: the zone stays on Vercel
 nameservers; apex ALIAS, www CNAME and app CNAME point at the Railway
 domain targets, and Railway ownership is proven by `_railway-verify` TXT
-records. Neon and the Vercel project are no longer used. Env per
+records. Neon (both resources and the integration) and the Vercel project
+were deleted on 2026-08-30; the Vercel account only keeps the domain and
+its DNS zone now, so never remove the domain there without moving DNS
+first. Env per
 `.env.example` (operator key, agent seed, manifest=testnet, Gonka key,
 Firecrawl key, operator token, `PORT=3000`, `OPENVERDICT_PUBLIC_WRITES=
 enabled`, `OPENVERDICT_TRUST_PROXY=1`, `WALRUS_UPLOAD_RELAY_URL`,

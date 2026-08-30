@@ -489,8 +489,14 @@ then submit a fast test claim and time it.
     claims, 10 certificates). Then `DATABASE_URL=${{Postgres.DATABASE_URL}}`
     on the app service (the temporary `TARGET_DATABASE_URL` reference
     deleted; note `railway variable delete KEY --service app`, not
-    `--unset`), redeploy, verified: /api/status dbHealthy, docket 20/10
-    finalized, claim #16 page, report and proof all 200. Backups: daily
+    `--unset`). CAUTION: deleting a variable did NOT redeploy, so the
+    container kept running on Neon until the next deploy (`be6bb237`,
+    14:45); the first verification round was still served from Neon.
+    Proof of the switch afterwards: Neon frozen at the copy's counts
+    (20 claims, 826 events) while Railway shows claim #17's rows (21
+    claims, 829 events), the app's 33 connections all on the Railway
+    instance, /api/status dbHealthy, docket, claim #16 page, report and
+    proof all 200 from the new container. Backups: daily
     and weekly schedules on the volume instance via the GraphQL API
     (`railway api -f -` with `volumeInstanceBackupScheduleUpdate`).
     Railway bills no egress for private-network traffic; the Postgres
@@ -506,6 +512,32 @@ then submit a fast test claim and time it.
     the two claim-creating routes touch a wake file (lib/engine/wake.ts,
     `OPENVERDICT_WAKE_FILE`, default `<tmpdir>/openverdict-wake`) that
     ends an idle wait within a second. Gate: 362 tests, lint, build.
+
+49. NEON AND VERCEL REMOVED (14:50 to 14:56, owner: "drop and remove all
+    neon database completely, as well as vercel"). Neon had reached 100 %
+    of its egress at 14:49 (compute suspended) with production already on
+    Railway Postgres: /api/status dbHealthy, docket 21, claim pages 200
+    throughout. Removed with the Vercel CLI: `vercel integration-resource
+    remove neon-teal-book --disconnect-all --yes` (the production Neon
+    project), `... remove neon-lime-queen-test --yes` (an unlinked test
+    resource), `vercel integration remove neon --yes`, then `printf 'y\n'
+    | vercel project rm open-verdict` (a y/N prompt; piping the project
+    name aborts it). Note the Vercel project had kept auto-deploying every
+    push and its Next build prerendered pages against Neon, which is what
+    the last Neon queries at 06:44Z were. KEPT: the domain openverdict.info
+    and its DNS zone in the Vercel account (nameservers are Vercel DNS;
+    apex ALIAS, www and app CNAMEs point at Railway; `_railway-verify` TXT
+    records). Verified after: `vercel project ls` shows no verdict
+    project, `vercel domains ls` still lists openverdict.info, both hosts
+    200. The local `.env` never carried a DATABASE_URL (local dev runs on
+    embedded PGlite); only the scratchpad `rollout.env` did, and that line
+    is now a comment (the Railway database needs Public Access +
+    DATABASE_PUBLIC_URL from a laptop, or `railway ssh -s app`). Claim #17 `0xfe6c61f4…` (14:45, the post-migration check):
+    database side fine, but GonkaRouter failed four seats in round one
+    ("provider request failed" on both DeepSeek seats, timeouts with zero
+    actions on Kimi and a MiniMax seat); the one valid seat committed and
+    revealed 16 s into the reveal phase; a probe at 14:51 answered all
+    three models in ~1 s (transient). Round two opened at t+456 s.
 
 ### Next steps
 - Demo claims: #16 `0x9169c707…` (YES 9860, certificate `0x62036142…`)

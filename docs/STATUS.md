@@ -44,9 +44,12 @@ operational proof and public deployments in flight.
   rewrites the root of `app.` hosts to `/app`). The DNS zone stays on Vercel
   nameservers (apex ALIAS and www CNAME point at Railway). Since 2026-08-30
   15:00 the database is a Railway Postgres service in the same project
-  (`Postgres`, private network only, daily and weekly volume backups); Neon
-  was retired after its free plan hit 90 % of its 5 GB monthly egress, and
-  the Vercel project is no longer needed. The workers inspect only live
+  (`Postgres`, private network only, daily and weekly volume backups). Neon
+  hit its free plan's 5 GB monthly egress the same afternoon; both Neon
+  resources, the Neon integration and the Vercel project `open-verdict`
+  were deleted at 14:55 (owner's request). The domain `openverdict.info`
+  and its DNS records remain in the Vercel account, which is the only
+  thing Vercel still does for the product. The workers inspect only live
   claims, poll every 2 s while a claim is in flight and every 15 s
   otherwise, and a submission wakes them at once through a shared wake
   file. `/api/status` reports suiHealthy, gonkaMode live, walrusMode
