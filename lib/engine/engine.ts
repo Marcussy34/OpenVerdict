@@ -17,6 +17,7 @@ import {
   hashCanonicalJson,
   promptSpecHash,
   toolPolicyHash,
+  type GonkaAttemptRecord,
   type GonkaRouterAdapter,
   type GonkaRunResult,
 } from "../gonka";
@@ -36,6 +37,7 @@ import {
   type AgentManifestDocumentV3,
   type AgentManifestDocumentV4,
   type AgentManifestDocumentV5,
+  type InferenceFailureV1,
   type InferenceRunAudit,
   type OracleInferenceInput,
   type OracleInferenceOutput,
@@ -44,6 +46,7 @@ import {
   type PromptSpecV4,
   type PublicRunBundle,
   type PublicRunBundleCore,
+  type ResearchTranscriptV1,
   type SealedRunBundleV2,
   type ToolPolicyV2,
   type ToolPolicyV3,
@@ -107,7 +110,7 @@ import type {
   ResolutionEvent,
   ResolutionEventSource,
   ResolutionEventVisibility,
-  RunProof,
+  RunProofResult,
   TxResult,
   ZkBackedRegistrationRequest,
   ZkBackedRegistrationResult,
@@ -165,14 +168,18 @@ type SeatResearchConfig =
 
 class ResearchLoopError extends GonkaRunError {
   readonly status: ResearchLoopFailureStatus;
+  readonly transcript?: ResearchTranscriptV1;
 
   constructor(
     status: ResearchLoopFailureStatus,
     message: string,
+    attempts: GonkaAttemptRecord[] = [],
+    transcript?: ResearchTranscriptV1,
   ) {
-    super(message, []);
+    super(message, attempts);
     this.name = "ResearchLoopError";
     this.status = status;
+    if (transcript !== undefined) this.transcript = transcript;
   }
 }
 const DEFAULT_EVIDENCE_POLICY: RetrievalPolicy = {
@@ -1456,7 +1463,7 @@ class OpenVerdictEngine implements Engine {
     }));
   }
 
-  async runProof(claimId: string, runId: string): Promise<RunProof> {
+  async runProof(claimId: string, runId: string): Promise<RunProofResult> {
     const claim = await this.claim(claimId);
     const run = (await this.#repository.listInferenceRuns(claimId)).find(
       (candidate) => candidate.runId === runId,
@@ -1465,6 +1472,55 @@ class OpenVerdictEngine implements Engine {
       throw new EngineValidationError(
         `inference run ${runId} was not found for claim ${claimId}`,
       );
+    }
+    const common = {
+      runId: run.runId,
+      claimId: run.claimId,
+      phase: run.phase,
+      agentProfileId: run.agentProfileId,
+      jurySeatId: run.jurySeatId,
+      promptHash: run.promptHash,
+      inputHash: run.inputHash,
+      outputHash: run.outputHash,
+      gateway: {
+        ...(run.audit.gatewayRequestId === undefined
+          ? {}
+          : { gatewayRequestId: run.audit.gatewayRequestId }),
+        ...(run.audit.devshardId === undefined
+          ? {}
+          : { devshardId: run.audit.devshardId }),
+        ...(run.audit.systemFingerprint === undefined
+          ? {}
+          : { systemFingerprint: run.audit.systemFingerprint }),
+      },
+      claimDeadlines: {
+        firstRevealDeadlineMs: claim.deadlines.firstRevealDeadlineMs,
+        secondRevealDeadlineMs: claim.deadlines.secondRevealDeadlineMs,
+      },
+      ...(this.#manifest.seal === undefined
+        ? {}
+        : {
+            sealPolicy: {
+              packageId: this.#manifest.seal.packageId as `0x${string}`,
+              threshold: this.#manifest.seal.threshold,
+              keyServers: this.#manifest.seal.keyServers.map((server) => ({
+                ...server,
+                objectId: server.objectId as `0x${string}`,
+              })),
+            },
+          }),
+    };
+    if (run.failure) {
+      return {
+        ...common,
+        runHash: null,
+        sealedBlobId: null,
+        sealed: null,
+        revealedBlobId: null,
+        revealed: false,
+        bundle: null,
+        failure: run.failure,
+      };
     }
     if (!run.runHash) {
       throw new EngineValidationError(
@@ -1486,47 +1542,13 @@ class OpenVerdictEngine implements Engine {
               new TextDecoder().decode(await this.#walrus.get(revealedBlobId)),
             ) as PublicRunBundle;
     return {
-      runId: run.runId,
-      claimId: run.claimId,
-      phase: run.phase,
-      agentProfileId: run.agentProfileId,
-      jurySeatId: run.jurySeatId,
-      promptHash: run.promptHash,
-      inputHash: run.inputHash,
-      outputHash: run.outputHash,
+      ...common,
       runHash: run.runHash,
-      gateway: {
-        ...(run.audit.gatewayRequestId === undefined
-          ? {}
-          : { gatewayRequestId: run.audit.gatewayRequestId }),
-        ...(run.audit.devshardId === undefined
-          ? {}
-          : { devshardId: run.audit.devshardId }),
-        ...(run.audit.systemFingerprint === undefined
-          ? {}
-          : { systemFingerprint: run.audit.systemFingerprint }),
-      },
       sealedBlobId,
       sealed,
       revealedBlobId,
       revealed: revealedBlobId !== null,
       bundle,
-      claimDeadlines: {
-        firstRevealDeadlineMs: claim.deadlines.firstRevealDeadlineMs,
-        secondRevealDeadlineMs: claim.deadlines.secondRevealDeadlineMs,
-      },
-      ...(this.#manifest.seal === undefined
-        ? {}
-        : {
-            sealPolicy: {
-              packageId: this.#manifest.seal.packageId as `0x${string}`,
-              threshold: this.#manifest.seal.threshold,
-              keyServers: this.#manifest.seal.keyServers.map((server) => ({
-                ...server,
-                objectId: server.objectId as `0x${string}`,
-              })),
-            },
-          }),
     };
   }
 
@@ -2097,10 +2119,12 @@ class OpenVerdictEngine implements Engine {
         deadlineMs: seatDeadlineMs,
       });
       if (!loop.ok) {
-        if (loop.attempts.length === 0) {
-          throw new ResearchLoopError(loop.status, loop.message);
-        }
-        throw new GonkaRunError(loop.message, loop.attempts);
+        throw new ResearchLoopError(
+          loop.status,
+          loop.message,
+          loop.attempts,
+          loop.transcript,
+        );
       }
       // Every page this run opened must be on Walrus before the run is sealed
       // and cited on chain; a failed background upload fails the seat closed.
@@ -2359,18 +2383,42 @@ class OpenVerdictEngine implements Engine {
     // Surface the underlying cause: the audit row only keeps a category
     // (PROVIDER_ERROR etc.), which made real failures (an on-chain abort in
     // acceptJurySeat, a Walrus read error) invisible in operations.
+    const message = error instanceof Error ? error.message : String(error);
     process.stderr.write(
       `inference failed: claim ${claim.claimId.slice(0, 10)}… seat ${seat.jurySeatId.slice(0, 10)}… (${agent.manifest.modelId}): ${
-        error instanceof Error ? error.message : String(error)
+        message
       }\n`,
     );
     const failedAudit = terminalFailureAudit(error);
     const timestampMs = this.#now();
-    const runId = failedAudit?.runId ?? deterministicId(`failed:${input.runId}`);
+    const runId = input.runId as `0x${string}`;
     const status =
-      failedAudit?.status ?? terminalFailureStatus(error) ?? "PROVIDER_ERROR";
+      terminalFailureStatus(error) ?? failedAudit?.status ?? "PROVIDER_ERROR";
     const timestamp = new Date(timestampMs).toISOString();
     const zeroHash = hashCanonicalJson(null);
+    let failure: InferenceFailureV1 = {
+      version: 1,
+      status,
+      message,
+      failedAtMs: timestampMs,
+      transcript:
+        error instanceof ResearchLoopError ? error.transcript ?? null : null,
+      attempts:
+        error instanceof GonkaRunError ? error.result.attempts : [],
+    };
+    try {
+      const upload = await this.#walrus.put(canonicalJsonBytes(failure), {
+        identifier: `${runId}-failed-run.json`,
+      });
+      failure = { ...failure, walrusBlobId: upload.blobId };
+    } catch (uploadError) {
+      // A Walrus outage must not hide the local failure audit.
+      process.stderr.write(
+        `failed-run upload: ${
+          uploadError instanceof Error ? uploadError.message : String(uploadError)
+        }\n`,
+      );
+    }
     const audit: InferenceRunAudit = {
       ...(failedAudit ?? {
         runId: runId as `0x${string}`,
@@ -2388,6 +2436,7 @@ class OpenVerdictEngine implements Engine {
         latencyMs: 0,
         status,
       }),
+      runId,
       claimObjectId: claim.claimId as `0x${string}`,
       agentProfileId: seat.agentProfileId as `0x${string}`,
       jurySeatId: seat.jurySeatId as `0x${string}`,
@@ -2395,6 +2444,7 @@ class OpenVerdictEngine implements Engine {
       promptHash: agent.manifest.promptHash,
       inputHash: hashCanonicalJson(input),
       evidenceRoot: input.evidenceManifest.root as `0x${string}`,
+      status,
     };
     const record: InferenceRunRecord = {
       runId: audit.runId,
@@ -2414,6 +2464,7 @@ class OpenVerdictEngine implements Engine {
       validationStatus: status,
       latencyMs: audit.latencyMs,
       audit,
+      failure,
       requestedAt: new Date(audit.requestedAtMs).toISOString(),
       completedAt: new Date(audit.completedAtMs).toISOString(),
       createdAt: timestamp,

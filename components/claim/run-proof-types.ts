@@ -161,6 +161,18 @@ export type TransparentTranscript = {
   [key: string]: unknown;
 };
 
+/** Failed runs are untrusted and may omit any field recorded before commit. */
+export type TransparentInferenceFailure = {
+  version?: number;
+  status?: string;
+  message?: string;
+  failedAtMs?: number;
+  transcript?: TransparentTranscript | null;
+  attempts?: TransparentAttempt[] | null;
+  walrusBlobId?: string;
+  [key: string]: unknown;
+};
+
 export type TransparentBundle = {
   version: number;
   kind?: string;
@@ -263,13 +275,14 @@ export type SuiRunProof = {
 
 export type TransparentRunProof = Omit<
   BrowserRunProof,
-  "bundle" | "sealed" | "claimDeadlines" | "sealPolicy"
+  "bundle" | "sealed" | "claimDeadlines" | "sealPolicy" | "failure"
 > & {
   bundle: TransparentBundle | null;
   sealed?: TransparentSealedBundle | null;
   claimDeadlines?: TransparentClaimDeadlines;
   sealPolicy?: TransparentSealPolicy;
   sui?: SuiRunProof;
+  failure?: TransparentInferenceFailure;
 };
 
 export function isProofRecord(value: unknown): value is ProofRecord {

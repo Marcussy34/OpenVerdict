@@ -36,6 +36,7 @@ export interface GonkaRouterAdapter {
 export type GonkaAttemptKind =
   | "PRIMARY"
   | "RETRY"
+  | "HEDGE"
   | "JSON_PROMPT_FALLBACK"
   | "REPAIR";
 
@@ -52,8 +53,14 @@ export type GonkaAttemptRecord = {
   audit: InferenceRunAudit;
   response?: unknown;
   error?: {
-    category: "TIMEOUT" | "HTTP_ERROR" | "CONNECTION_ERROR" | "INVALID_RESPONSE";
+    category:
+      | "TIMEOUT"
+      | "HTTP_ERROR"
+      | "CONNECTION_ERROR"
+      | "INVALID_RESPONSE"
+      | "HEDGE_ABANDONED";
     httpStatus?: number;
+    message?: string;
   };
   investigationFlags: GonkaInvestigationFlag[];
 };
@@ -66,7 +73,8 @@ export type PromptMessage = {
 export type GonkaCompletionRequest = {
   manifest: AgentManifest;
   messages: PromptMessage[];
-  kind: GonkaAttemptKind;
+  /** HEDGE is assigned only to backup calls created inside the adapter. */
+  kind: Exclude<GonkaAttemptKind, "HEDGE">;
   jsonMode: boolean;
   input: OracleInferenceInput;
   /** Shared across the whole run; complete() appends one record per model call. */

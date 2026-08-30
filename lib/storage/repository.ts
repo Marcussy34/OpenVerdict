@@ -336,6 +336,7 @@ export class Repository {
       output_tokens: record.outputTokens,
       output: record.output === undefined ? undefined : json(record.output),
       audit: json(record.audit),
+      failure: record.failure === undefined ? null : json(record.failure),
       requested_at: record.requestedAt,
       completed_at: record.completedAt,
       created_at: record.createdAt,

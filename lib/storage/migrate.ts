@@ -77,7 +77,8 @@ CREATE TABLE IF NOT EXISTS inference_runs (
   tool_transcript_hash TEXT NOT NULL, tool_transcript_walrus_blob_id TEXT,
   tool_transcript_walrus_object_id TEXT, walrus_end_epoch BIGINT, evidence_root TEXT NOT NULL,
   validation_status TEXT NOT NULL, latency_ms INTEGER NOT NULL, input_tokens INTEGER,
-  output_tokens INTEGER, output JSONB, audit JSONB NOT NULL, requested_at TEXT NOT NULL,
+  output_tokens INTEGER, output JSONB, audit JSONB NOT NULL, failure JSONB,
+  requested_at TEXT NOT NULL,
   completed_at TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
   record_json JSONB NOT NULL
 );
@@ -158,6 +159,7 @@ ALTER TABLE inference_runs ADD COLUMN IF NOT EXISTS sealed_blob_id TEXT;
 ALTER TABLE inference_runs ADD COLUMN IF NOT EXISTS sealed_object_id TEXT;
 ALTER TABLE inference_runs ADD COLUMN IF NOT EXISTS revealed_blob_id TEXT;
 ALTER TABLE inference_runs ADD COLUMN IF NOT EXISTS revealed_object_id TEXT;
+ALTER TABLE inference_runs ADD COLUMN IF NOT EXISTS failure JSONB;
 ALTER TABLE evidence_artifacts ADD COLUMN IF NOT EXISTS source_class TEXT;
 
 CREATE INDEX IF NOT EXISTS claims_state_idx ON claims (state);

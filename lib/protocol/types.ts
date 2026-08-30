@@ -1,4 +1,5 @@
 import type { ClaimMode, VoteOutcome } from "./constants";
+import type { GonkaAttemptRecord } from "../gonka/types";
 
 export type HexString = `0x${string}`;
 export type U64Input = number | bigint | string;
@@ -213,7 +214,7 @@ export type ProviderRequestRecord = {
   temperature: 0;
   maxTokens: 4096;
   responseFormat: "json_object" | "none";
-  attemptKind: "PRIMARY" | "RETRY" | "JSON_PROMPT_FALLBACK" | "REPAIR";
+  attemptKind: "PRIMARY" | "RETRY" | "HEDGE" | "JSON_PROMPT_FALLBACK" | "REPAIR";
   messages: Array<{
     role: "system" | "user" | "assistant";
     content: string;
@@ -492,6 +493,17 @@ export type ResearchTranscriptV1 = {
     turns: number;
     challengeSearches?: number;
   };
+};
+
+/** Public audit material captured before a juror seat failed. */
+export type InferenceFailureV1 = {
+  version: 1;
+  status: InferenceRunAudit["status"];
+  message: string;
+  failedAtMs: number;
+  transcript: ResearchTranscriptV1 | null;
+  attempts: GonkaAttemptRecord[];
+  walrusBlobId?: string;
 };
 
 export type PublicRunBundleCoreV3 = Omit<

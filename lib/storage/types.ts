@@ -4,6 +4,7 @@ import type {
 } from "../engine/contract";
 import type {
   AgentManifest,
+  InferenceFailureV1,
   InferenceRunAudit,
   OracleInferenceOutput,
 } from "../protocol/types";
@@ -196,6 +197,7 @@ export interface InferenceRunRecord {
   outputTokens?: number;
   output?: OracleInferenceOutput;
   audit: InferenceRunAudit & { bundleCore?: string };
+  failure?: InferenceFailureV1;
   requestedAt: string;
   completedAt: string;
   createdAt: string;

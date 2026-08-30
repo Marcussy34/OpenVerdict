@@ -945,6 +945,89 @@ describe("headless engine", () => {
     });
   });
 
+  it("persists a failed research seat under its derived run id and returns its proof", async () => {
+    const sealPolicy = {
+      packageId: `0x${"77".repeat(32)}` as const,
+      threshold: 1,
+      keyServers: [{ objectId: `0x${"88".repeat(32)}` as const, weight: 1 }],
+    };
+    const setup = await engineSetup(new FakeSuiGateway(), 5, {
+      failures: { 0: "no_independent_citation" },
+      seal: sealPolicy,
+    });
+    const { claimId } = await setup.engine.factCheckStart({
+      claim: "A failed juror must leave a public research trail.",
+      text: "Local evidence.",
+      urls: [],
+    });
+    const claim = await setup.engine.inspect(claimId);
+    await setup.engine.selectCommittee(claimId);
+    await setup.engine.evidenceFreeze(claimId, 1);
+    const put = vi.spyOn(setup.walrus, "put");
+
+    await setup.engine.juryRun(claimId, 1);
+
+    const repository = createRepository(setup.db);
+    const failed = (await repository.listInferenceRuns(claimId, 1)).find(
+      (run) => run.validationStatus === "CITATION_INVALID",
+    );
+    if (!failed?.failure) throw new Error("expected a persisted failure record");
+    const expectedRunId = toHex(
+      blake2b256(
+        new TextEncoder().encode(
+          `run:${claimId}:${failed.jurySeatId}:1`,
+        ),
+      ),
+    );
+    expect(failed.runId).toBe(expectedRunId);
+    expect(failed.failure).toMatchObject({
+      version: 1,
+      status: "CITATION_INVALID",
+      failedAtMs: Date.parse("2026-08-27T00:00:00.000Z"),
+      transcript: {
+        version: 1,
+        runId: expectedRunId,
+        counts: { turns: expect.any(Number) },
+        steps: expect.arrayContaining([
+          expect.objectContaining({ result: expect.objectContaining({ tool: "error" }) }),
+        ]),
+      },
+      attempts: expect.arrayContaining([
+        expect.objectContaining({
+          type: "gonka-attempt",
+          response: expect.objectContaining({ id: expect.stringMatching(/^msg_fake_/) }),
+        }),
+      ]),
+      walrusBlobId: expect.any(String),
+    });
+    expect(failed.failure.attempts).toHaveLength(4);
+
+    const failedWrite = put.mock.calls.find(
+      ([, options]) => options?.identifier === `${expectedRunId}-failed-run.json`,
+    );
+    if (!failedWrite) throw new Error("expected a failed-run Walrus write");
+    const canonicalFailure = new TextDecoder().decode(failedWrite[0]);
+    expect(canonicalFailure).not.toMatch(
+      /"(?:sealKeyHex|keyHex|saltHex|apiKey)":/,
+    );
+
+    await expect(setup.engine.runProof(claimId, expectedRunId)).resolves.toMatchObject({
+      runId: expectedRunId,
+      runHash: null,
+      sealedBlobId: null,
+      sealed: null,
+      revealedBlobId: null,
+      revealed: false,
+      bundle: null,
+      failure: failed.failure,
+      claimDeadlines: {
+        firstRevealDeadlineMs: claim.deadlines.firstRevealDeadlineMs,
+        secondRevealDeadlineMs: claim.deadlines.secondRevealDeadlineMs,
+      },
+      sealPolicy,
+    });
+  });
+
   it("does not expose agent outputs in a report before reveal", async () => {
     const gateway = new FakeSuiGateway();
     const setup = await engineSetup(gateway, 5);

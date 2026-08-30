@@ -44,7 +44,6 @@ import {
   getGonkaErrorStatus,
   isGonkaTimeoutError,
   runWithVisibleRetry,
-  type VisibleRetryAttempt,
 } from "./retry";
 import {
   oracleInferenceInputSchema,
@@ -66,6 +65,10 @@ import {
 const DEFAULT_BASE_URL = "https://api.gonkarouter.io/v1";
 const DEFAULT_TIMEOUT_MS = 120_000;
 const DEFAULT_RESEARCH_TIMEOUT_MS = 240_000;
+const DEFAULT_HEDGE_AFTER_MS = 25_000;
+const MIN_HEDGE_REMAINING_MS = 5_000;
+const HEDGE_ABANDONED_MESSAGE =
+  "abandoned: the hedged request answered first";
 type GonkaMessage = ProviderRequestRecord["messages"][number];
 
 export type GonkaAdapterConfig = {
@@ -73,6 +76,7 @@ export type GonkaAdapterConfig = {
   apiKey: string;
   timeoutMs?: number;
   researchTimeoutMs?: number;
+  hedgeAfterMs?: number;
   maxRetries?: number;
   promptSpec?: PromptSpecV1;
   researchSpec?: PromptSpecV2;
@@ -105,6 +109,45 @@ type ProviderFailure = {
   error: unknown;
   kind: GonkaAttemptKind;
 };
+
+type ProviderResponse = {
+  data: unknown;
+  response: Response;
+};
+
+type ProviderCallSuccess = {
+  ok: true;
+  value: ProviderResponse;
+  requestedAtMs: number;
+  completedAtMs: number;
+  kind: GonkaAttemptKind;
+};
+
+type ProviderCallFailure = {
+  ok: false;
+  error: unknown;
+  requestedAtMs: number;
+  completedAtMs: number;
+  kind: GonkaAttemptKind;
+};
+
+type ProviderCallSettlement = ProviderCallSuccess | ProviderCallFailure;
+
+type ProviderCallHandle = {
+  controller: AbortController;
+  promise: Promise<ProviderCallSettlement>;
+  requestedAtMs: number;
+  kind: GonkaAttemptKind;
+};
+
+type AbandonedProviderCall = {
+  abandoned: true;
+  requestedAtMs: number;
+  completedAtMs: number;
+  kind: GonkaAttemptKind;
+};
+
+type ProviderCallEvent = ProviderCallFailure | AbandonedProviderCall;
 
 type ProviderExecution =
   | { ok: true; success: ProviderSuccess }
@@ -377,6 +420,10 @@ export function createGonkaAdapterWithDependencies(
   if (!Number.isFinite(researchTimeoutMs) || researchTimeoutMs <= 0) {
     throw new RangeError("researchTimeoutMs must be positive");
   }
+  const hedgeAfterMs = cfg.hedgeAfterMs ?? DEFAULT_HEDGE_AFTER_MS;
+  if (!Number.isFinite(hedgeAfterMs) || hedgeAfterMs < 0) {
+    throw new RangeError("hedgeAfterMs must be non-negative and finite");
+  }
   const maxRetries = cfg.maxRetries ?? 1;
   if (!Number.isInteger(maxRetries) || maxRetries < 0 || maxRetries > 1) {
     throw new RangeError("maxRetries must be 0 or 1");
@@ -446,27 +493,55 @@ export function createGonkaAdapterWithDependencies(
   };
 
   const appendProviderFailure = (
-    visible: Extract<VisibleRetryAttempt<unknown>, { ok: false }>,
-    kind: GonkaAttemptKind,
+    failure: ProviderCallFailure,
     input: OracleInferenceInput,
     manifest: AgentManifest,
     attempts: GonkaAttemptRecord[],
   ): void => {
-    const status = isGonkaTimeoutError(visible.error) ? "TIMEOUT" : "PROVIDER_ERROR";
+    const status = isGonkaTimeoutError(failure.error) ? "TIMEOUT" : "PROVIDER_ERROR";
     const record: GonkaAttemptRecord = {
       type: "gonka-attempt",
-      kind,
+      kind: failure.kind,
       audit: createAttemptAudit({
         input,
         manifest,
         attempt: attempts.length + 1,
-        requestedAtMs: visible.requestedAtMs,
-        completedAtMs: visible.completedAtMs,
+        requestedAtMs: failure.requestedAtMs,
+        completedAtMs: failure.completedAtMs,
         status,
         outputValue: null,
         engineContext: engineContextFor(attempts, input, manifest),
       }),
-      error: errorSummary(visible.error),
+      error: errorSummary(failure.error),
+      investigationFlags: [],
+    };
+    attempts.push(record);
+    logAttempt(record);
+  };
+
+  const appendAbandonedProviderCall = (
+    abandoned: AbandonedProviderCall,
+    input: OracleInferenceInput,
+    manifest: AgentManifest,
+    attempts: GonkaAttemptRecord[],
+  ): void => {
+    const record: GonkaAttemptRecord = {
+      type: "gonka-attempt",
+      kind: abandoned.kind,
+      audit: createAttemptAudit({
+        input,
+        manifest,
+        attempt: attempts.length + 1,
+        requestedAtMs: abandoned.requestedAtMs,
+        completedAtMs: abandoned.completedAtMs,
+        status: "PROVIDER_ERROR",
+        outputValue: null,
+        engineContext: engineContextFor(attempts, input, manifest),
+      }),
+      error: {
+        category: "HEDGE_ABANDONED",
+        message: HEDGE_ABANDONED_MESSAGE,
+      },
       investigationFlags: [],
     };
     attempts.push(record);
@@ -485,81 +560,187 @@ export function createGonkaAdapterWithDependencies(
   ): Promise<ProviderExecution> => {
     const retriesUsed = attempts.filter((attempt) => attempt.kind === "RETRY").length;
     const retriesRemaining = Math.max(0, maxRetries - retriesUsed);
+    const deadlineMs = requestTimeoutMs === undefined
+      ? undefined
+      : now() + requestTimeoutMs;
+    const callEvents: ProviderCallEvent[] = [];
+    let callEventsAppended = false;
+    let operationIndex = 0;
+    const requestBody = {
+      model: manifest.modelId,
+      temperature: spec.temperature,
+      max_tokens: spec.maxOutputTokens,
+      messages,
+      ...(includeResponseFormat
+        ? { response_format: { type: spec.responseFormat } }
+        : {}),
+    };
+
+    const startProviderCall = (
+      callKind: GonkaAttemptKind,
+      remainingMs: number,
+    ): ProviderCallHandle => {
+      const requestedAtMs = now();
+      const controller = new AbortController();
+      let providerPromise: Promise<ProviderResponse>;
+      try {
+        providerPromise = client.chat.completions.create(
+          requestBody,
+          {
+            signal: controller.signal,
+            timeout: Math.max(1, Math.ceil(remainingMs)),
+          },
+        ).withResponse();
+      } catch (error) {
+        providerPromise = Promise.reject(error);
+      }
+      // Both branches settle, so aborting the losing call cannot leak a rejection.
+      const promise: Promise<ProviderCallSettlement> = providerPromise.then(
+        (value) => ({
+          ok: true,
+          value,
+          requestedAtMs,
+          completedAtMs: now(),
+          kind: callKind,
+        }),
+        (error: unknown) => ({
+          ok: false,
+          error,
+          requestedAtMs,
+          completedAtMs: now(),
+          kind: callKind,
+        }),
+      );
+      return { controller, promise, requestedAtMs, kind: callKind };
+    };
+
+    const settleSingleCall = async (
+      call: ProviderCallHandle,
+    ): Promise<ProviderCallSuccess> => {
+      const settlement = await call.promise;
+      if (settlement.ok) return settlement;
+      callEvents.push(settlement);
+      throw settlement.error;
+    };
+
+    const runProviderOperation = async (
+      operationKind: GonkaAttemptKind,
+      remainingMs: number,
+    ): Promise<ProviderCallSuccess> => {
+      const primary = startProviderCall(operationKind, remainingMs);
+      if (
+        hedgeAfterMs === 0 ||
+        remainingMs <= hedgeAfterMs + MIN_HEDGE_REMAINING_MS
+      ) {
+        return settleSingleCall(primary);
+      }
+
+      const hedgeReady = Symbol("hedge-ready");
+      let hedgeTimer: ReturnType<typeof setTimeout> | undefined;
+      const hedgeDelay = new Promise<typeof hedgeReady>((resolve) => {
+        hedgeTimer = setTimeout(() => resolve(hedgeReady), hedgeAfterMs);
+      });
+      const primaryOrDelay = await Promise.race([primary.promise, hedgeDelay]);
+      if (primaryOrDelay !== hedgeReady) {
+        if (hedgeTimer !== undefined) clearTimeout(hedgeTimer);
+        if (primaryOrDelay.ok) return primaryOrDelay;
+        callEvents.push(primaryOrDelay);
+        throw primaryOrDelay.error;
+      }
+
+      const backupRemainingMs = deadlineMs === undefined
+        ? remainingMs - hedgeAfterMs
+        : deadlineMs - now();
+      const backup = startProviderCall("HEDGE", backupRemainingMs);
+      const first = await Promise.race([
+        primary.promise.then((settlement) => ({ call: primary, settlement })),
+        backup.promise.then((settlement) => ({ call: backup, settlement })),
+      ]);
+      const other = first.call === primary ? backup : primary;
+
+      if (first.settlement.ok) {
+        other.controller.abort();
+        callEvents.push({
+          abandoned: true,
+          kind: other.kind,
+          requestedAtMs: other.requestedAtMs,
+          completedAtMs: now(),
+        });
+        return first.settlement;
+      }
+
+      const second = await other.promise;
+      if (second.ok) {
+        callEvents.push(first.settlement);
+        return second;
+      }
+      callEvents.push(first.settlement, second);
+      throw second.error;
+    };
+
+    const appendCallEvents = (): void => {
+      if (callEventsAppended) return;
+      callEventsAppended = true;
+      callEvents.sort(
+        (left, right) =>
+          left.completedAtMs - right.completedAtMs ||
+          left.requestedAtMs - right.requestedAtMs,
+      );
+      callEvents.forEach((event) => {
+        if ("abandoned" in event) {
+          appendAbandonedProviderCall(event, input, manifest, attempts);
+        } else {
+          appendProviderFailure(event, input, manifest, attempts);
+        }
+      });
+    };
+
     try {
       const result = await runWithVisibleRetry(
-        async () =>
-          client.chat.completions.create(
-            {
-              model: manifest.modelId,
-              temperature: spec.temperature,
-              max_tokens: spec.maxOutputTokens,
-              messages,
-              ...(includeResponseFormat
-                ? { response_format: { type: spec.responseFormat } }
-                : {}),
-            },
-            requestTimeoutMs === undefined
-              ? undefined
-              : { timeout: requestTimeoutMs },
-          ).withResponse(),
+        async () => {
+          const operationKind = operationIndex === 0 ? kind : "RETRY";
+          operationIndex += 1;
+          const remainingMs = deadlineMs === undefined
+            ? timeoutMs
+            : Math.max(1, deadlineMs - now());
+          return runProviderOperation(operationKind, remainingMs);
+        },
         {
           maxRetries: retriesRemaining,
           now,
           random: dependencies.random,
           sleep: dependencies.sleep,
           // The per-call timeout is the seat's remaining time; no retry past it.
-          ...(requestTimeoutMs === undefined ? {} : { deadlineMs: now() + requestTimeoutMs }),
+          ...(deadlineMs === undefined ? {} : { deadlineMs }),
         },
       );
 
-      result.attempts.forEach((visible, index) => {
-        if (!visible.ok) {
-          appendProviderFailure(
-            visible,
-            index === 0 ? kind : "RETRY",
-            input,
-            manifest,
-            attempts,
-          );
-        }
-      });
-      const success = result.attempts.at(-1);
-      if (!success?.ok) throw new Error("visible retry result has no successful attempt");
-      const successKind = result.attempts.length > 1 ? "RETRY" : kind;
+      appendCallEvents();
+      const success = result.value;
       return {
         ok: true,
         success: {
-          response: result.value.data,
+          response: success.value.data,
           requestedAtMs: success.requestedAtMs,
           completedAtMs: success.completedAtMs,
-          kind: successKind,
+          kind: success.kind,
           request: {
             model: manifest.modelId,
             temperature: spec.temperature,
             maxTokens: spec.maxOutputTokens,
             responseFormat: includeResponseFormat ? spec.responseFormat : "none",
-            attemptKind: successKind,
+            attemptKind: success.kind,
             messages: messages.map((message) => ({ ...message })),
           },
           gateway: gatewayResponseMeta(
-            result.value.data,
-            result.value.response.headers,
+            success.value.data,
+            success.value.response.headers,
           ),
         },
       };
     } catch (error) {
+      appendCallEvents();
       if (!(error instanceof VisibleRetryError)) throw error;
-      error.attempts.forEach((visible, index) => {
-        if (!visible.ok) {
-          appendProviderFailure(
-            visible,
-            index === 0 ? kind : "RETRY",
-            input,
-            manifest,
-            attempts,
-          );
-        }
-      });
       const last = error.attempts.at(-1);
       const cause = last && !last.ok ? last.error : error;
       return { ok: false, failure: { error: cause, kind } };

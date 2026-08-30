@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { blake2b256, toHex } from "../protocol/hash";
 import {
   createGonkaAdapter as createConfiguredGonkaAdapter,
@@ -33,6 +33,15 @@ type FetchStep = Error | {
   status?: number;
   headers?: Record<string, string>;
 };
+
+type TimedFetchStep =
+  | { delayMs: number; error: Error }
+  | {
+      delayMs: number;
+      body: unknown;
+      status?: number;
+      headers?: Record<string, string>;
+    };
 
 function queuedFetch(...steps: FetchStep[]): {
   fetch: typeof fetch;
@@ -72,6 +81,48 @@ function queuedFetch(...steps: FetchStep[]): {
   };
 }
 
+function timedQueuedFetch(...steps: TimedFetchStep[]): {
+  fetch: typeof fetch;
+  bodies: Array<Record<string, unknown>>;
+  calls: () => number;
+} {
+  const bodies: Array<Record<string, unknown>> = [];
+  let callCount = 0;
+  const fetchImpl: typeof fetch = (input, init) => {
+    callCount += 1;
+    if (typeof init?.body === "string") {
+      bodies.push(JSON.parse(init.body) as Record<string, unknown>);
+    }
+    const step = steps.shift();
+    if (!step) return Promise.reject(new Error("unexpected network call"));
+    const signal = input instanceof Request ? input.signal : init?.signal;
+
+    return new Promise<Response>((resolve, reject) => {
+      const onAbort = (): void => {
+        clearTimeout(timer);
+        signal?.removeEventListener("abort", onAbort);
+        reject(Object.assign(new Error("aborted"), { name: "AbortError" }));
+      };
+      const timer = setTimeout(() => {
+        signal?.removeEventListener("abort", onAbort);
+        if ("error" in step) {
+          reject(step.error);
+          return;
+        }
+        resolve(new Response(JSON.stringify(step.body), {
+          status: step.status ?? 200,
+          headers: { "content-type": "application/json", ...step.headers },
+        }));
+      }, step.delayMs);
+
+      if (signal?.aborted) onAbort();
+      else signal?.addEventListener("abort", onAbort, { once: true });
+    });
+  };
+
+  return { fetch: fetchImpl, bodies, calls: () => callCount };
+}
+
 function dependencies(fetchImpl: typeof fetch): GonkaAdapterDependencies {
   return {
     fetch: fetchImpl,
@@ -94,6 +145,26 @@ async function expectRunError(promise: Promise<unknown>): Promise<GonkaRunError>
     return error as GonkaRunError;
   }
 }
+
+function completeResearch(
+  adapter: ReturnType<typeof createGonkaAdapter>,
+  attempts: GonkaAttemptRecord[],
+  timeoutMs?: number,
+) {
+  return adapter.complete({
+    manifest: makeManifest(),
+    messages: [{ role: "user", content: "u" }],
+    kind: "PRIMARY",
+    jsonMode: true,
+    input: makeInput({ promptVersion: "2" }),
+    attempts,
+    ...(timeoutMs === undefined ? {} : { timeoutMs }),
+  });
+}
+
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 describe("createGonkaAdapter", () => {
   it("complete() records one attempt per call and returns the assistant content", async () => {
@@ -280,6 +351,222 @@ describe("createGonkaAdapter", () => {
     });
     expect(attempts[0]?.audit.status).toBe("TIMEOUT");
   });
+
+  it("does not start a hedge when the primary answers before the delay", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(0);
+    const network = timedQueuedFetch({
+      delayMs: 5_000,
+      body: completionBody('{"action":"answer"}', { id: "primary-fast" }),
+    });
+    const adapter = createGonkaAdapter(
+      { apiKey: "test-key", maxRetries: 0 },
+      dependencies(network.fetch),
+    );
+    const attempts: GonkaAttemptRecord[] = [];
+
+    const pending = completeResearch(adapter, attempts);
+    await vi.advanceTimersByTimeAsync(5_000);
+    const result = await pending;
+
+    expect(result.ok).toBe(true);
+    expect(network.calls()).toBe(1);
+    expect(attempts).toHaveLength(1);
+    expect(attempts[0]).toMatchObject({
+      kind: "PRIMARY",
+      audit: { requestedAtMs: 0, completedAtMs: 5_000, status: "RECEIVED" },
+    });
+  });
+
+  it("uses the hedge when it answers before the slow primary", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(0);
+    const network = timedQueuedFetch(
+      {
+        delayMs: 40_000,
+        body: completionBody('{"action":"answer"}', { id: "primary-slow" }),
+      },
+      {
+        delayMs: 3_000,
+        body: completionBody('{"action":"answer"}', {
+          id: "hedge-winner",
+          system_fingerprint: "hedge-fingerprint",
+        }),
+        headers: {
+          "x-request-id": "hedge-gateway-request",
+          "x-devshard-id": "hedge-devshard",
+        },
+      },
+    );
+    const entries: unknown[] = [];
+    const adapter = createGonkaAdapter(
+      { apiKey: "test-key", maxRetries: 0 },
+      {
+        ...dependencies(network.fetch),
+        logger: createRedactingLogger((_level, entry) => entries.push(entry)),
+      },
+    );
+    const attempts: GonkaAttemptRecord[] = [];
+
+    const pending = completeResearch(adapter, attempts);
+    await vi.advanceTimersByTimeAsync(28_000);
+    const result = await pending;
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("expected ok");
+    expect(network.calls()).toBe(2);
+    expect(network.bodies[1]).toEqual(network.bodies[0]);
+    expect(result.request.attemptKind).toBe("HEDGE");
+    expect(result.gateway).toEqual({
+      gatewayRequestId: "hedge-gateway-request",
+      devshardId: "hedge-devshard",
+      systemFingerprint: "hedge-fingerprint",
+    });
+    expect(attempts).toHaveLength(2);
+    expect(attempts[0]).toMatchObject({
+      kind: "PRIMARY",
+      audit: { requestedAtMs: 0, completedAtMs: 28_000, status: "PROVIDER_ERROR" },
+      error: {
+        category: "HEDGE_ABANDONED",
+        message: "abandoned: the hedged request answered first",
+      },
+    });
+    expect(attempts[1]).toMatchObject({
+      kind: "HEDGE",
+      audit: { requestedAtMs: 25_000, completedAtMs: 28_000, status: "RECEIVED" },
+    });
+    expect(entries).toHaveLength(2);
+  });
+
+  it("keeps the primary when it answers before the started hedge", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(0);
+    const network = timedQueuedFetch(
+      {
+        delayMs: 30_000,
+        body: completionBody('{"action":"answer"}', { id: "primary-winner" }),
+      },
+      {
+        delayMs: 10_000,
+        body: completionBody('{"action":"answer"}', { id: "hedge-slow" }),
+      },
+    );
+    const adapter = createGonkaAdapter(
+      { apiKey: "test-key", maxRetries: 0 },
+      dependencies(network.fetch),
+    );
+    const attempts: GonkaAttemptRecord[] = [];
+
+    const pending = completeResearch(adapter, attempts);
+    await vi.advanceTimersByTimeAsync(30_000);
+    const result = await pending;
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("expected ok");
+    expect(network.calls()).toBe(2);
+    expect(result.request.attemptKind).toBe("PRIMARY");
+    expect(attempts).toHaveLength(2);
+    expect(attempts[0]).toMatchObject({
+      kind: "HEDGE",
+      audit: { requestedAtMs: 25_000, completedAtMs: 30_000 },
+      error: { category: "HEDGE_ABANDONED" },
+    });
+    expect(attempts[1]).toMatchObject({
+      kind: "PRIMARY",
+      audit: { requestedAtMs: 0, completedAtMs: 30_000, status: "RECEIVED" },
+    });
+  });
+
+  it("keeps timeout failures and the visible retry path", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(0);
+    const timeout = (): Error => Object.assign(new Error("timed out"), {
+      name: "TimeoutError",
+    });
+    const network = timedQueuedFetch(
+      { delayMs: 30_000, error: timeout() },
+      { delayMs: 3_000, error: timeout() },
+      { delayMs: 30_000, error: timeout() },
+      { delayMs: 3_000, error: timeout() },
+    );
+    const adapter = createGonkaAdapter(
+      { apiKey: "test-key", maxRetries: 1 },
+      dependencies(network.fetch),
+    );
+    const attempts: GonkaAttemptRecord[] = [];
+
+    const pending = completeResearch(adapter, attempts);
+    await vi.advanceTimersByTimeAsync(60_000);
+    const result = await pending;
+
+    expect(result).toMatchObject({
+      ok: false,
+      status: "TIMEOUT",
+      responseFormatUnsupported: false,
+    });
+    expect(network.calls()).toBe(4);
+    expect(attempts.map((attempt) => attempt.kind)).toEqual([
+      "HEDGE",
+      "PRIMARY",
+      "HEDGE",
+      "RETRY",
+    ]);
+    expect(attempts.every((attempt) => attempt.audit.status === "TIMEOUT")).toBe(true);
+  });
+
+  it("disables hedging when hedgeAfterMs is zero", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(0);
+    const network = timedQueuedFetch({
+      delayMs: 40_000,
+      body: completionBody('{"action":"answer"}', { id: "hedge-disabled" }),
+    });
+    const adapter = createGonkaAdapter(
+      { apiKey: "test-key", maxRetries: 0, hedgeAfterMs: 0 },
+      dependencies(network.fetch),
+    );
+    const attempts: GonkaAttemptRecord[] = [];
+
+    const pending = completeResearch(adapter, attempts);
+    await vi.advanceTimersByTimeAsync(40_000);
+    const result = await pending;
+
+    expect(result.ok).toBe(true);
+    expect(network.calls()).toBe(1);
+    expect(attempts).toHaveLength(1);
+  });
+
+  it("skips hedging when less than five seconds would remain", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(0);
+    const network = timedQueuedFetch({
+      delayMs: 28_000,
+      body: completionBody('{"action":"answer"}', { id: "deadline-primary" }),
+    });
+    const adapter = createGonkaAdapter(
+      { apiKey: "test-key", maxRetries: 0, hedgeAfterMs: 25_000 },
+      dependencies(network.fetch),
+    );
+    const attempts: GonkaAttemptRecord[] = [];
+
+    const pending = completeResearch(adapter, attempts, 29_000);
+    await vi.advanceTimersByTimeAsync(25_000);
+    expect(network.calls()).toBe(1);
+    await vi.advanceTimersByTimeAsync(3_000);
+    const result = await pending;
+
+    expect(result.ok).toBe(true);
+    expect(network.calls()).toBe(1);
+    expect(attempts).toHaveLength(1);
+  });
+
+  it.each([-1, Number.POSITIVE_INFINITY, Number.NaN])(
+    "rejects invalid hedgeAfterMs %s",
+    (hedgeAfterMs) => {
+      expect(() => createConfiguredGonkaAdapter({ apiKey: "test-key", hedgeAfterMs }))
+        .toThrowError(RangeError);
+    },
+  );
 
   it("exposes the v2 research spec and tool policy hashes", () => {
     const adapter = createConfiguredGonkaAdapter({ apiKey: "test-key" });

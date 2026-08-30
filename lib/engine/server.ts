@@ -126,6 +126,7 @@ async function buildServerEngine(): Promise<Engine> {
             timeoutMs: numberEnv("GONKA_REQUEST_TIMEOUT_MS", 120_000),
             // Research turns carry a growing conversation; give them longer.
             researchTimeoutMs: numberEnv("GONKA_RESEARCH_TIMEOUT_MS", 240_000),
+            hedgeAfterMs: numberEnv("GONKA_HEDGE_AFTER_MS", 25_000),
             maxRetries: numberEnv("GONKA_MAX_RETRIES", 1),
           },
           {

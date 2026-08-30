@@ -187,6 +187,8 @@ export const inferenceRuns = pgTable("inference_runs", {
   outputTokens: integer("output_tokens"),
   output: jsonb("output"),
   audit: jsonb("audit").notNull(),
+  // Public audit payload for seats that never produced a run hash.
+  failure: jsonb("failure"),
   requestedAt: text("requested_at").notNull(),
   completedAt: text("completed_at").notNull(),
   ...auditColumns(),

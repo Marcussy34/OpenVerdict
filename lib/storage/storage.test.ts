@@ -1,10 +1,11 @@
 import { afterEach, describe, expect, it } from "vitest";
-import type { PGlite } from "@electric-sql/pglite";
+import { PGlite } from "@electric-sql/pglite";
 import {
   createDb,
   createRepository,
   migrate,
   type ClaimRecord,
+  type InferenceRunRecord,
 } from "./index";
 
 const openDatabases: PGlite[] = [];
@@ -56,6 +57,97 @@ describe("storage", () => {
 
     await repository.saveClaim(claim);
     expect(await repository.getClaim(claim.claimId)).toEqual(claim);
+  });
+
+  it("round trips an inference failure through its JSONB column", async () => {
+    const repository = await testRepository();
+    const hash = `0x${"11".repeat(32)}` as const;
+    const runId = `0x${"22".repeat(32)}` as const;
+    const audit: InferenceRunRecord["audit"] = {
+      runId,
+      claimObjectId: `0x${"33".repeat(32)}`,
+      agentProfileId: `0x${"44".repeat(32)}`,
+      jurySeatId: `0x${"55".repeat(32)}`,
+      phase: 1,
+      attempt: 1,
+      providerId: "gonkarouter",
+      modelId: "test-model",
+      gonkaRequestId: "request-1",
+      promptHash: hash,
+      inputHash: hash,
+      outputHash: hash,
+      runWalrusBlobId: "",
+      toolTranscriptHash: hash,
+      toolTranscriptWalrusBlobId: "",
+      toolCallCount: 1,
+      evidenceRoot: hash,
+      requestedAtMs: 10,
+      completedAtMs: 20,
+      latencyMs: 10,
+      status: "CITATION_INVALID",
+    };
+    const failure: NonNullable<InferenceRunRecord["failure"]> = {
+      version: 1,
+      status: "CITATION_INVALID",
+      message: "the final citation could not be verified",
+      failedAtMs: 20,
+      transcript: {
+        version: 1,
+        runId,
+        provider: { name: "test", mode: "offline" },
+        policyHash: hash,
+        steps: [],
+        opened: [],
+        citations: [],
+        counts: { searches: 1, opens: 0, turns: 1 },
+      },
+      attempts: [
+        {
+          type: "gonka-attempt",
+          kind: "PRIMARY",
+          audit,
+          response: { id: "raw-reply-1", choices: [] },
+          investigationFlags: [],
+        },
+      ],
+      walrusBlobId: "failed-run-blob",
+    };
+    const record: InferenceRunRecord = {
+      runId,
+      claimId: audit.claimObjectId,
+      phase: 1,
+      agentProfileId: audit.agentProfileId,
+      jurySeatId: audit.jurySeatId,
+      attempt: 1,
+      providerId: "gonkarouter",
+      modelId: audit.modelId,
+      gonkaRequestId: audit.gonkaRequestId,
+      promptHash: hash,
+      inputHash: hash,
+      outputHash: hash,
+      toolTranscriptHash: hash,
+      evidenceRoot: hash,
+      validationStatus: "CITATION_INVALID",
+      latencyMs: 10,
+      audit,
+      failure,
+      requestedAt: "1970-01-01T00:00:00.010Z",
+      completedAt: "1970-01-01T00:00:00.020Z",
+      createdAt: "1970-01-01T00:00:00.020Z",
+      updatedAt: "1970-01-01T00:00:00.020Z",
+    };
+
+    await repository.saveInferenceRun(record);
+
+    await expect(repository.listInferenceRuns(record.claimId, 1)).resolves.toEqual([
+      record,
+    ]);
+    if (!(repository.db instanceof PGlite)) throw new Error("expected pglite");
+    const raw = await repository.db.query<{ failure: unknown }>(
+      "SELECT failure FROM inference_runs WHERE run_id = $1",
+      [runId],
+    );
+    expect(raw.rows[0]?.failure).toEqual(failure);
   });
 
   it("assigns stable, monotonically increasing per-claim event sequences", async () => {

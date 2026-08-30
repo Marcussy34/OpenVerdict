@@ -2,6 +2,7 @@ import type {
   AgentManifestDocument,
   GatewayResponseMeta,
   HexString,
+  InferenceFailureV1,
   InferenceRunAudit,
   OracleInferenceOutput,
   PublicRunBundle,
@@ -138,6 +139,7 @@ export type RunProof = {
   revealedBlobId: string | null;
   revealed: boolean;
   bundle: PublicRunBundle | null;
+  failure?: InferenceFailureV1;
   claimDeadlines?: {
     firstRevealDeadlineMs: number;
     secondRevealDeadlineMs: number;
@@ -148,6 +150,27 @@ export type RunProof = {
     keyServers: SealEscrowV1["keyServers"];
   };
 };
+
+export type FailedRunProof = Omit<
+  RunProof,
+  | "runHash"
+  | "sealedBlobId"
+  | "sealed"
+  | "revealedBlobId"
+  | "revealed"
+  | "bundle"
+  | "failure"
+> & {
+  runHash: null;
+  sealedBlobId: null;
+  sealed: null;
+  revealedBlobId: null;
+  revealed: false;
+  bundle: null;
+  failure: InferenceFailureV1;
+};
+
+export type RunProofResult = RunProof | FailedRunProof;
 
 export type FinalizeReport = {
   claimId: string;
@@ -299,7 +322,7 @@ export interface Engine {
   report(claimId: string): Promise<FactCheckReport>;
   listClaims(filter?: { state?: ClaimState }): Promise<ClaimInspection[]>;
   listAgents(): Promise<AgentDirectoryEntry[]>;
-  runProof(claimId: string, runId: string): Promise<RunProof>;
+  runProof(claimId: string, runId: string): Promise<RunProofResult>;
   agentManifestDocument(
     agentProfileId: string,
   ): Promise<AgentManifestDocument | null>;
