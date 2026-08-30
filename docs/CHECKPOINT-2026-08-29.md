@@ -652,6 +652,18 @@ then submit a fast test claim and time it.
     `0x160d59e1911d3965388e014ff21ac821886aa9c2e4753829347e316867f485f1`.
     Claim #20 (Dencun activation date) submitted 17:02 on the build with
     the attempt log.
+55. Claim #20 `0x16539432…` and the first real diagnosis: the attempt log
+    showed 25 RECEIVED model calls and only four TIMEOUT entries, all
+    ending at the same instant (t+202 s, the seat deadline), so no router
+    failure this time: a v2 seat runs six to ten turns (DeepSeek reached
+    attempt 10) and Kimi needs 30 to 40 s per turn, which does not fit
+    the ~140 s research window of a 240 s commit window; the one seat
+    that validated did so after its deadline and was refused ("seat
+    deadline reached before the commit window"). Zero commits, REVEAL_1
+    at t+278 s. Fix (commit "330 s commit window for juror research v2"):
+    hosted ladder commit +330 s, reveal +450 s, discussion +510 s, second
+    round +690/+810 s; about 230 s of research per seat, certificate
+    around 8.5 min. Deployed 17:12; claim #21 follows.
 
 ### Next steps
 - Demo claims: #16 `0x9169c707…` (YES 9860, certificate `0x62036142…`,

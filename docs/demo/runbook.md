@@ -134,6 +134,9 @@ the browser on `/verify` (Run proof tab).
    then the reveal transactions go out in parallel: all five by t+337 s),
    certificate ~20 s after the reveal floor (t+404 s, 6.7 min). No
    threshold in round one adds a round two: certificate at ~t+765 s.
+   Since juror research v2 (17:10) the commit window is 330 s, so a seat
+   has about 230 s of research, the advance lands ~t+360 s, the
+   certificate ~t+495 s (about 8.5 min), and a round two ends ~t+860 s.
 5. Model health: Kimi-K2.6 on GonkaRouter was slow or failing most of the
    night (calls longer than the seat budget), then answered in 40 to 72 s on
    claim #15 (08:05, all five seats valid); DeepSeek-V4-Flash answers in 4

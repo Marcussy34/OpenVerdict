@@ -3191,21 +3191,25 @@ function defaultDeadlines(
   // Committees must span three model families (jury.move
   // E_INSUFFICIENT_DIVERSE_AGENTS) and a round needs four matching reveals
   // of five (REQUIRED_MATCHING), so the slowest family must usually make it:
-  // Kimi-K2.6 answered in 33 to 100 s on 2026-08-30. The commit window
-  // leaves seats about 140 s of research. The reveal window must hold the
-  // advance (about 15 s after the commit deadline) plus five reveal-bundle
-  // writes, which run one at a time on the operator lane at about 15 s
-  // each: a 60 s window lost every reveal of claim #15, so it is 120 s.
+  // Kimi-K2.6 answered in 33 to 100 s on 2026-08-30. Juror research v2
+  // (a support search, a challenge search, pages on both sides, nudges)
+  // runs six to ten turns per seat; with a 240 s commit window every
+  // seat of claim #20 hit the seat deadline mid-research, so the commit
+  // window is 330 s (about 230 s of research). The reveal window must
+  // hold the advance (about 15 s after the commit deadline) plus five
+  // reveal-bundle writes, which run one at a time on the operator lane at
+  // about 15 s each: a 60 s window lost every reveal of claim #15, so it
+  // is 120 s.
   const second = 1_000;
   return {
     evidenceCutoffMs: now + 60 * second,
     proposalDeadlineMs: now + 65 * second,
     challengeDeadlineMs: now + 70 * second,
-    firstCommitDeadlineMs: now + 240 * second,
-    firstRevealDeadlineMs: now + 360 * second,
-    discussionDeadlineMs: now + 420 * second,
-    secondCommitDeadlineMs: now + 600 * second,
-    secondRevealDeadlineMs: now + 720 * second,
+    firstCommitDeadlineMs: now + 330 * second,
+    firstRevealDeadlineMs: now + 450 * second,
+    discussionDeadlineMs: now + 510 * second,
+    secondCommitDeadlineMs: now + 690 * second,
+    secondRevealDeadlineMs: now + 810 * second,
   };
 }
 

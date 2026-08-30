@@ -62,8 +62,10 @@ operational proof and public deployments in flight.
   see docs/CHECKPOINT-2026-08-29.md for the latest claim ids and results.
 - FAST MODE 2026-08-30 (measured through eleven hosted claims overnight):
   the hosted ladder is measured from the `create_claim` transaction
-  (evidence cutoff +60 s, commit +240 s, reveal +360 s, discussion +420 s,
-  second round +600 / +720 s). Seats commit as they finish (a per-claim
+  (evidence cutoff +60 s, commit +330 s, reveal +450 s, discussion +510 s,
+  second round +690 / +810 s since juror research v2, whose six to ten
+  turns per seat did not fit the earlier 240 s commit window: every seat
+  of claim #20 hit the seat deadline mid-research). Seats commit as they finish (a per-claim
   commit pump from the chain's acceptance floor), reveal bundles publish
   one at a time on the operator lane (about 15 s each, which is why the
   reveal window is 120 s) and the five agent-signed reveal transactions
