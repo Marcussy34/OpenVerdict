@@ -40,12 +40,23 @@ pnpm e2e:localnet  # full localnet lifecycle (spawns `sui start`)
   resolve in one call.
 - Icons: iconsax-react in app-level code (not lucide). shadcn/ui + Tailwind
   utilities; no custom CSS files.
+- Everything inside a run bundle (attempts, hedges, repairs, transcript) is
+  part of the sealed core and of the public record; never strip or rewrite
+  it. Prompt specs and tool policies are hashed into on-chain manifests:
+  never change a published version's text, add a new version.
+- The Seal escrow of a reveal key is insurance: its failure is logged and
+  never costs a seat; votes still fail closed on any unverifiable output.
+- Deploy only between claims: a container restart drops in-flight research
+  and those seats fail closed.
+- Move or SDK work: load the `sui-dev-skills` skill first (Mysten's
+  conventions for Move 2024 and `@mysten/sui` v2). The Seal policy package
+  lives in `move/openverdict_seal` (`sui move test` there too).
 
 ## Layout
 
 See the Repository layout section in `README.md`. Ownership seams the build
-used (protocol/gonka/evidence/walrus/sui/storage/events/engine/cli/workers/
-app) still make good boundaries for parallel work.
+used (protocol/gonka/research/evidence/walrus/seal/sui/storage/events/engine/
+verify/cli/workers/app) still make good boundaries for parallel work.
 
 <!-- BEGIN:nextjs-agent-rules -->
 

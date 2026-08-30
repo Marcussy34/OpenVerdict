@@ -174,9 +174,10 @@ export function Productivity({
               ref={paraRef}
               className="mt-10 max-w-[330px] text-[15px] leading-[1.5] text-black lg:mt-0"
             >
-              Five jurors drawn across at least three model families deliberate under
-              commit–reveal, and the tally settles on-chain. Every score is integer
-              arithmetic anyone can rerun against the same frozen evidence.
+              Five jurors drawn across three model families research both sides,
+              deliberate under commit–reveal, and the tally settles on-chain. Every
+              score is integer arithmetic anyone can rerun against the same recorded
+              evidence and research trails.
             </p>
           </div>
 

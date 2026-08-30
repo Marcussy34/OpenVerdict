@@ -1,14 +1,26 @@
 # OpenVerdict — Product Status Snapshot
 
-> Last updated: 2026-08-29. Source of truth for claims below: the code and its
-> test suites (`pnpm test`, `pnpm test:move`), not this file.
+> Last updated: 2026-08-31 01:30. Source of truth for claims below: the code
+> and its test suites (`pnpm test`, `pnpm test:move`), not this file. The
+> dated bullets under "What is NOT true yet" are the change log, newest first.
 
 ## What the product is right now
 
-A complete, tested implementation of the OpenVerdict verification engine —
-Sui Move protocol, TypeScript engine + CLI, and read-only observer — running
-end-to-end against a fake (deterministic) inference adapter, with the localnet
-operational proof and public deployments in flight.
+A live, demo-able verification engine on Sui testnet: https://openverdict.info
+(landing) and https://app.openverdict.info (dashboard). A submitted claim gets
+a five-seat jury drawn on chain with native randomness from seven registered
+jurors spanning GonkaRouter's three model families; every juror searches the
+web through the engine, reads pages on both sides (up to three per turn),
+cites them, commits a sealed verdict and reveals it; the chain settles a
+resolution certificate with a truth score about 10 minutes after submission
+(about 21 minutes when a second round is needed). Every prompt, model reply,
+request id, node id, page, hash, Sui object and Walrus blob is public after
+the reveal; reveal keys are also escrowed under a Mysten Seal time-lock policy
+so a sealed bundle opens after its deadline without the operator; a browser
+verifier recomputes 15 checks per run, re-runs a juror against the recorded
+model, and opens bundles through Seal; failed seats keep their research trail.
+Hosted on one Railway container (web, API, three workers) with Railway
+Postgres. Tests: 431 vitest, 70 Move.
 
 ## Layer inventory
 
@@ -16,12 +28,12 @@ operational proof and public deployments in flight.
 | --- | --- | --- | --- |
 | Protocol (Move) | `move/openverdict` — 8 modules: agent_registry, claim, evidence, jury, settlement, demo_fact_checker, demo_binary_pool, display_meta | ✅ | 66/66 `sui move test`; commit–reveal enforced on-chain; immutable certificates; one-time payout tickets; Object Display metadata |
 | Cross-language contract | `lib/protocol` + `tests/integration/parity.test.ts` + `tests/parity_tests.move` | ✅ | 6 blake2b256/BCS vectors asserted byte-identical in BOTH suites |
-| Inference adapter | `lib/gonka` | ✅ | Live-verified GonkaRouter API (4096-token cap, `devshard-…` ids, visible retries, redaction); prompt spec v1 (`promptSpec.ts`) hashed over canonical JSON and bound into every juror manifest; gateway ids (`x-request-id`, `x-devshard-id`, `system_fingerprint`) kept as audit pointers; deterministic fake for offline juries |
+| Inference adapter | `lib/gonka`, `lib/research` | ✅ | Live-verified GonkaRouter API (4096-token cap, `devshard-…` ids, visible retries, hedged same-model calls after 25 s, redacting attempt log); prompt specs v1 to v4 and tool policies v2 to v4 (`promptSpec.ts`) hashed over canonical JSON and bound into every juror manifest (v5 documents live); juror research loop (search with intent, batched page opens, citations, two-sided checks) through Firecrawl; gateway ids (`x-request-id`, `x-devshard-id`, `system_fingerprint`) kept as audit pointers; deterministic fake for offline juries |
 | Evidence pipeline | `lib/evidence`, `lib/walrus` | ✅ | SSRF suite (DNS-first, per-hop revalidation, streaming caps); Merkle manifests; local + SDK Walrus stores + retention; SDK store writes raw blobs (`writeBlob`/`readBlob`, no quilts) so every blob id on chain is a content address a verifier can fetch |
-| Engine | `lib/engine` (contract.ts seam), `lib/sui` (builders per entry point, SuiGateway + fake), `lib/storage` (drizzle/pglite/pg), `lib/events` (phase-gated serializer) | ✅ | Full lifecycle: direct review + optimistic; `juryRun` fails closed unless every seat's manifest `promptHash` equals the live prompt spec hash; each run's bundle (exact prompt, input, raw response, validated output, audit) is sealed with AES-256-GCM before `approve_run` and the commit, and the plaintext bundle plus key is published as the reveal argument blob; `runProof` / `agentManifestDocument` seams; 261/261 vitest incl. lifecycle, seal-then-reveal and zkLogin registration tests over FakeSuiGateway |
+| Engine | `lib/engine` (contract.ts seam), `lib/sui` (builders per entry point, SuiGateway + fake), `lib/seal` (reveal-key escrow), `lib/storage` (drizzle/pglite/pg), `lib/events` (phase-gated serializer) | ✅ | Full lifecycle: direct review + optimistic; `juryRun` fails closed unless every seat's manifest hashes equal its published document; each run's bundle (exact conversation, input, every attempt, validated output, transcript, audit) is sealed with AES-256-GCM before `approve_run` and the commit, the key is escrowed under the Seal time-lock policy, and the plaintext bundle plus key is published as the reveal argument blob; failed seats keep a failure record; `runProof` / `agentManifestDocument` seams; 431/431 vitest incl. lifecycle, seal-then-reveal, escrow, hedge and zkLogin registration tests over FakeSuiGateway |
 | CLI | `cli/` (`openverdict`, PRD §27.3 surface) | ✅ | `--json` NDJSON, preflight prints, stable exit codes |
-| Workers | `workers/` | ✅ | evidence / inference / resolution loops, graceful shutdown |
-| Observer + fact-check UI | `app/`, `components/` — 26 routes | ✅ | Builds/typechecks/lints; SSE with resume; strict pre-reveal redaction; client-side `/verify` incl. a Run proof tab that recomputes prompt/input/output/run hashes and decrypts the sealed blob with WebCrypto; `GET /api/claims/[id]/runs/[runId]/proof`, `GET /api/agents/[id]/manifest`; manifest panel on `/agents/[id]` |
+| Workers | `workers/` | ✅ | evidence / inference / resolution loops, graceful shutdown; live-claim triage (2 s poll while a claim is in flight, 15 s idle, wake file on submission), stranded and dead claims skipped, exponential backoff per failing claim |
+| Observer + fact-check UI | `app/`, `components/` | ✅ | Builds/typechecks/lints; SSE with resume; strict pre-reveal redaction; run view with provenance strip, research trail (batched opens, both sides, refusals), per-turn conversation with the answering node, "Re-run this juror", "Open through Seal", "Seat failed before commit"; client-side `/verify` recomputes 15 checks per run and decrypts the sealed blob with WebCrypto; `GET /api/claims/[id]/runs/[runId]/proof`, `POST …/reexecute`, `GET /api/agents/[id]/manifest`; manifest panel on `/agents/[id]` |
 | API guards | `app/api/_lib/guard.ts` | ✅ | Operator bearer token, public-write flag, trusted-proxy-gated rate limits |
 | Wallet + zkLogin onboarding | `components/wallet`, `components/agents` | ✅ | dapp-kit v2 + Enoki (env-gated); zkLogin-backed agent registration (T7b): SDK signature verification, blake2b backing hash, one-social-account-one-seat, guarded POST /api/agents/register |
 | Localnet E2E + sponsorship | `scripts/localnet-e2e.ts`, `scripts/cockpit-demo.ts` | ✅ | `pnpm e2e:localnet` exits 0 (3 lifecycle paths, sponsored deposit, CLI parity, recomputed Truth Score); cockpit harness leaves a finalized + a sealed claim live for the observer |
@@ -245,7 +257,8 @@ operational proof and public deployments in flight.
   finalized YES with truth score 9750 at t+479 s (8.0 min from POST),
   certificate
   `0x8a5ab5ad7bb8e70a7b118a18d5e0ee0cbff1165ddae0b4a78195a5b19d4b079d`.
-  Its DeepSeek run `0x76fe683f…` passes all 13 verifier checks.
+  Its DeepSeek run `0x76fe683f…` passes all 13 verifier checks of that
+  bundle version (v5 bundles have 15 checks).
 - PROOF CHAIN V2 PROVEN ON TESTNET 2026-08-29 late: the seven juror manifests
   on chain are real v2 documents on Walrus (prompt spec embedded, hashes
   match, `scripts/publish-agent-manifests.ts`), and a live canary ran under

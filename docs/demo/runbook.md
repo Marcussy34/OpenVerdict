@@ -49,18 +49,30 @@ Operator address (generated 2026-08-27, key held in local .env only):
 3. Canary: one full direct-review lifecycle against testnet, fake adapter
    unless `GONKA_ROUTER_API_KEY` is set. First run registers the 7 agents;
    later runs reuse them.
-4. Publish the real juror manifests (proof chain v2, 2026-08-29). Each
-   agent's on-chain `manifest_hash` must be the blake2b256 of a v2 manifest
-   document on Walrus that embeds the exact prompt spec, otherwise `juryRun`
-   fails closed ("does not match the engine prompt spec"):
+4. Publish the real juror manifests. Each agent's on-chain `manifest_hash`
+   must be the blake2b256 of the manifest document on Walrus that embeds
+   the exact prompt spec and tool policy, otherwise `juryRun` fails closed
+   ("does not match the engine prompt spec"). The script publishes the
+   current document version (v5 = prompt spec v4 + tool policy v4 since
+   2026-08-30 21:33; v2 on 2026-08-29, v3 and v4 on 2026-08-30 before it):
    `pnpm tsx scripts/publish-agent-manifests.ts --dry-run`, then without the
    flag (7 `update_agent_manifest` txs signed by the agent keys, 7 Walrus
    blobs paid by the operator's WAL). Re-running is idempotent: profiles
-   whose hash already matches are skipped.
+   whose hash already matches are skipped. On the hosted stack run it inside
+   the container: `railway ssh -s app -- sh -c 'cd /app && node
+   node_modules/tsx/dist/cli.mjs scripts/publish-agent-manifests.ts --dry-run'`.
 5. Bind the hosted engine: `pnpm tsx scripts/seed-testnet-agents.ts`
    (with the production `DATABASE_URL`) rebuilds the agent rows from the
    chain + Walrus documents and refuses placeholder manifests.
-6. Record explorer links below.
+6. Seal policy (2026-08-30): the reveal-key escrow needs the
+   `openverdict_seal` package on chain and a `seal` section in the release
+   manifest. `pnpm tsx scripts/publish-seal-policy.ts --dry-run`, then
+   without the flag (inside the container use `--bytecode
+   move/openverdict_seal/bytecode.json`; the Mac cannot reach the fullnode),
+   then record `packageId`, threshold 1 and Mysten's two testnet key servers
+   under `seal` in `config/release.testnet.json`. Current package:
+   `0xf54eb61116372f8506ca332457b2fee61231a559e44923429f54fab355d0f0c5`.
+7. Record explorer links below.
 
 ## 3. Live URL (T8)
 
@@ -97,12 +109,18 @@ a session lock, the pooler strands those.
 Set `GONKA_ROUTER_API_KEY` (free credit for new accounts at
 gonkarouter.io/dashboard) and flip the manifest `gonka.mode` to `live`.
 Also set `FIRECRAWL_API_KEY` (dedicated Firecrawl account) so jurors can
-research: every seat searches and opens pages through the engine and must cite
-a page it found itself (juror research v1, 2026-08-29).
-Run one jury round; verify five real `devshard-…` ids across ≥3 model families.
-Every run's proof is at `GET /api/claims/<id>/runs/<runId>/proof` (sealed
-blob before reveal, plaintext bundle plus key after) and can be recomputed in
-the browser on `/verify` (Run proof tab).
+research: every seat runs a support search and a challenge search, opens
+pages on both sides (up to three per turn), and must cite pages it found
+itself from at least two sites with a counter-evidence summary (juror
+research v2 with batched opens, 2026-08-30). Optional knobs:
+`GONKA_HEDGE_AFTER_MS` (default 25000; a slow call is repeated to the same
+model and the first valid reply wins), `GONKA_RESEARCH_TIMEOUT_MS`.
+Run one jury round; verify five real `devshard-…` ids across the three model
+families. Every run's proof is at `GET /api/claims/<id>/runs/<runId>/proof`
+(sealed blob plus its Seal escrow before reveal, plaintext bundle plus key
+after, or a failure record for a seat that never committed) and can be
+recomputed in the browser on `/verify` (Run proof tab, 15 checks), re-run
+against the recorded model, or opened through Seal after the deadline.
 
 ## 4b. Before a live demo on the hosted app (checklist)
 
@@ -134,9 +152,9 @@ the browser on `/verify` (Run proof tab).
    then the reveal transactions go out in parallel: all five by t+337 s),
    certificate ~20 s after the reveal floor (t+404 s, 6.7 min). No
    threshold in round one adds a round two: certificate at ~t+765 s.
-   Since juror research v2 (17:10) the commit window is 330 s, so a seat
-   has about 230 s of research, the advance lands ~t+360 s, the
-   certificate ~t+495 s (about 8.5 min), and a round two ends ~t+860 s.
+   From juror research v2 (17:10) until 22:26 the commit window was 330 s
+   (about 230 s of research, the advance ~t+360 s, the certificate ~t+495 s,
+   about 8.5 min, a round two ending ~t+860 s).
    Under the version 5 manifests (batched opens, 21:33) claim #22
    measured the same shape: commits by t+227 s, reveal phase t+380 s, four
    reveals by t+411 s, certificate t+502 s (8.4 min); opening three pages

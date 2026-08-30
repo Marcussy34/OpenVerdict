@@ -39,7 +39,9 @@
   clean worktree `/private/tmp/claude-501/-Users-marcus-Projects/ea697832-244e-426b-a971-ef1e18dba18e/scratchpad/railway-tree`:
   `git -C <tree> checkout -q --detach <sha> && cd <tree> && railway up -s app -d`,
   then poll `railway deployment list -s app --json` until SUCCESS (about
-  3 to 4 minutes). Latest deployment 4ec3d0cb = commit `99463d6`.
+  3 to 4 minutes; run `railway` commands from the linked repo directory).
+  Latest deployment `ab06e557` = commit `2bbb33f` (2026-08-31 00:46).
+  Never redeploy while a claim is live.
 - Service `Postgres` (id b31b2b5f…, private host postgres.railway.internal,
   volume instance 41608886…, daily + weekly backups scheduled). The app's
   `DATABASE_URL` is the reference `${{Postgres.DATABASE_URL}}`. Neon and
@@ -54,9 +56,12 @@
   suiHealthy, dbHealthy, gonkaMode live, walrusMode testnet.
 - Sui testnet package `0xb411210a52dad799b9b4a53e3a44b30c3c8b8a3b1981795f830166533a474c1d`,
   registry `0x9036764a…`, AdminCap `0x525aed28…`, operator
-  `0xff3538d7…`. Balances at 17:30: operator 3.40 SUI / 2.81 WAL (about
-  0.26 SUI + 0.06 WAL per claim), agents about 0.6 SUI each. Faucet is not
-  reachable from the Mac (*.sui.io TLS); top up from another host.
+  `0xff3538d7…`. Balances at 2026-08-31 01:35: operator 1.95 SUI / 2.41 WAL
+  (about 0.26 SUI + 0.06 WAL per claim, so about seven more claims; the
+  Seal policy publish and the evening's claims spent the rest), agents about
+  0.59 SUI each. Top up the operator before a demo day: the faucet is not
+  reachable from the Mac (*.sui.io TLS), use the faucet web UI or another
+  host. Seal policy package `0xf54eb611…` (UpgradeCap `0xbc0f64f8…`).
 - GonkaRouter (api.gonkarouter.io, OpenAI-compatible): all three juror
   models priced $0.0012 per 1M tokens; a claim uses about 190k tokens.
   Replies carry x-request-id, x-devshard-id, id devshard-<n>-<seq>,
@@ -73,7 +78,14 @@
 - Costs per claim: about 10 cents cash today (all Firecrawl), 30 to 40
   cents on mainnet prices; inference is a fraction of a cent.
 
-## 2. Protocol and code state (main = `9e2dd98` plus the docs commit after it, pushed)
+## 2. Protocol and code state (main at the latest docs commit after `2bbb33f`, pushed; see `git log`)
+
+- 2026-08-31 additions: hedged requests (`85ce5ad`, GONKA_HEDGE_AFTER_MS
+  25 s, attempt kind HEDGE, HEDGE_ABANDONED), failed-seat records and the
+  "Seat failed before commit" panel (`85ce5ad`, `2bbb33f`), proven on claim
+  #26 `0x089c6c7c…` (NO 200, 5 of 5, 10.2 min, five hedges). Seal escrow
+  proven on claim #25 `0xbdab0011…` (YES 9860, 5 of 5). Second commit
+  deadline +1080 s, second reveal +1200 s (not yet exercised live).
 
 - PROTOCOL V4 / MANIFEST V5 IS LIVE since 21:33 (commit `9e2dd98`,
   deployment `db421474`): an open action may name up to three urls

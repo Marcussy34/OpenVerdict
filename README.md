@@ -7,24 +7,29 @@ See how the verdict was reached.
 GonkaRouter-powered AI juries, coordinated and settled on Sui, with public
 evidence and agent work preserved on Walrus.
 
-> **Status: code-complete and operationally proven (hackathon build).**
+> **Status: live and demo-able on Sui testnet (hackathon build, 2026-08-31).**
 > Full lifecycles run end-to-end on a real local Sui network (`pnpm
-> e2e:localnet` exits 0), and a complete LIVE lifecycle has finalized on Sui
-> testnet — five GonkaRouter jurors across three model families, YES @ 9700
-> bps, immutable certificate `0x8efdabe0…1a8634`. Unaudited; no real user
-> funds may touch this code.
+> e2e:localnet` exits 0), and live claims finalize on Sui testnet in about
+> ten minutes with five GonkaRouter jurors across three model families,
+> each researching the web through the engine: latest verdicts YES @ 9860
+> bps (certificate `0xff3191bc…`, claim #25, all five seats, Seal escrows)
+> and NO @ 200 bps (certificate `0x975b3ae1…`, claim #26, hedged calls).
+> Unaudited; no real user funds may touch this code.
 >
 > | Layer | State |
 > | --- | --- |
-> | Sui Move package (8 modules incl. Object Display) | ✅ `sui move test`: **66/66** |
-> | TS libs · engine · CLI · workers | ✅ vitest: **236/236** (full suite) |
+> | Sui Move packages (8 protocol modules incl. Object Display, plus the Seal policy) | ✅ `sui move test`: **66/66** protocol, **4/4** Seal policy |
+> | TS libs · engine · CLI · workers | ✅ vitest: **431/431** (full suite) |
 > | TS↔Move commitment parity gate | ✅ 6 cross-pinned blake2b256/BCS vectors |
 > | Localnet E2E + cockpit demo state | ✅ 3 lifecycle paths, sponsored deposit, CLI parity — exit 0 |
+> | Juror research (v2, batched opens) | ✅ support + challenge searches, pages on both sides, citations from two sites, counter-evidence summary; every step in the sealed transcript |
+> | Transparency + browser verifier | ✅ full conversations, request and node ids, 15 checks per run, re-run a juror, open a sealed bundle through Seal |
+> | Seal escrow of reveal keys | ✅ time-lock policy package on testnet; sealed bundles open after the deadline without the operator |
+> | Reliability under a flaky provider | ✅ hedged same-model calls, failed seats keep their trail, workers skip dead claims |
 > | Wallet + zkLogin onboarding · T7b one-account-one-seat registration | ✅ SDK-verified signatures, pseudonymous backing hash |
-> | Observer + fact-check UI (light + Sui blue redesign) | ✅ 14 routes; builds, typechecks, lints |
+> | Observer + fact-check UI (light + Sui blue redesign) | ✅ builds, typechecks, lints |
 > | Sui testnet package | ✅ published — ids in `config/release.testnet.json` |
-> | Live-model testnet canary (T8a) | ✅ YES @ 9700 bps, 5/5 live juries, certificate `0x8efdabe0…1a8634` |
-> | Hosted on Railway (web + workers) | ✅ https://openverdict.info · app at https://app.openverdict.info |
+> | Hosted on Railway (web + API + workers, Railway Postgres) | ✅ https://openverdict.info · app at https://app.openverdict.info |
 >
 > Full specification: [PRD.md](./PRD.md) · Live status: [docs/STATUS.md](./docs/STATUS.md) · Build plan: [docs/superpowers/plans/2026-08-26-openverdict-build.md](./docs/superpowers/plans/2026-08-26-openverdict-build.md)
 
@@ -87,20 +92,28 @@ lifecycle runs offline. Public API write routes stay `403` until
 
 ```text
 move/openverdict/     Sui Move package: agent_registry, claim, evidence, jury,
-                      settlement, demo_fact_checker, demo_binary_pool + tests
-lib/protocol/         BCS schemas, blake2b256 commitments, Truth Score, u8 codes
-lib/gonka/            GonkaRouter adapter (live + deterministic fake), zod schemas
+                      settlement, demo_fact_checker, demo_binary_pool, display_meta + tests
+move/openverdict_seal/ Seal time-lock policy (reveal_lock::seal_approve) for escrowed reveal keys
+lib/protocol/         BCS schemas, blake2b256 commitments, Truth Score, u8 codes, bundle types
+lib/gonka/            GonkaRouter adapter (live + deterministic fake, retries, hedged
+                      requests, redacting attempt log), prompt specs, zod schemas
+lib/research/         Juror research loop (search / open / answer), Firecrawl provider,
+                      citations and two-sided checks
 lib/evidence/         SSRF-safe retriever, HTML canonicalization, Merkle manifests
 lib/walrus/           Content-addressed local store, SDK-backed real store, retention
+lib/seal/             Seal escrow of reveal keys (identity encoding, escrow service)
+lib/verify/           Browser verifier: hash checks, Seal recovery, re-execution client
 lib/engine/           Engine contract seam + full lifecycle implementation (SuiGateway seam)
 lib/storage/          drizzle schema over pglite (dev/tests) or Postgres (prod)
 lib/sui/              SuiGrpcClient wiring + per-entry-point transaction builders
 cli/                  `openverdict` CLI — complete headless control surface
-workers/              evidence / inference / resolution loops
+workers/              evidence / inference / resolution loops (live-claim triage, wake file)
 app/                  Next.js 16 observer, fact-check UI, thin API routes
-config/               Release manifests (localnet/testnet): ids, models, policies
+config/               Release manifests (localnet/testnet): ids, models, policies, Seal
 scripts/              Parity vectors, localnet E2E, cockpit demo, testnet deploy,
-                      live canary, registry prune
+                      live canary, manifest and Seal policy publishing, registry prune
+docs/                 STATUS.md (current state), demo/runbook.md, checkpoints (resume
+                      maps), superpowers/specs (design records)
 PRD.md                The complete product/protocol specification (source of truth)
 ```
 
@@ -224,22 +237,24 @@ Diagram sources are editable Excalidraw files in
 theme inverts them natively, and the paired `*-dark.png` exports serve GitHub's
 dark mode).
 
-## 🧱 Technology stack (implemented, versions verified 2026-08-26)
+## 🧱 Technology stack (implemented, versions verified 2026-08-31)
 
 | Layer | Technology | Purpose |
 | --- | --- | --- |
-| AI inference | GonkaRouter (`/v1/chat/completions`, 4096-token output cap) | Every oracle-agent reasoning pass; no hidden fallback |
+| AI inference | GonkaRouter (`/v1/chat/completions`, 4096-token output cap; three model families) | Every oracle-agent reasoning pass; no hidden fallback; hedged same-model calls after 25 s |
+| Juror research | Firecrawl v2 REST through the engine | Engine-executed web search and page reads; every step recorded and hashed |
 | Protocol | Sui Move (edition 2024, sui CLI 1.52) | Objects, capabilities, native randomness, commit-reveal, settlement |
+| Reveal-key escrow | Mysten Seal (`@mysten/seal` 1.4, time-lock policy package on testnet) | Sealed bundles openable by anyone after the reveal deadline, without the operator |
 | Sui client | `@mysten/sui` 2.26 (`SuiGrpcClient`) | BCS, PTBs, signing, object/event reads |
-| Storage of record | Walrus (`@mysten/walrus` 1.2) | Evidence, manifests, arguments, run audits |
-| App/db | drizzle-orm + pglite (dev/tests) / Postgres (prod) | Rebuildable indexes and the resolution event log |
+| Storage of record | Walrus (`@mysten/walrus` 1.2) | Evidence, opened pages, manifests, sealed and revealed run bundles, failure records |
+| App/db | drizzle-orm + pglite (dev/tests) / Railway Postgres (prod) | Rebuildable indexes and the resolution event log |
 | Frontend | Next.js 16, React 19, Tailwind 4, shadcn/ui, iconsax | Read-only observer + fact-check UI |
 | CLI | TypeScript + commander 15 (`pnpm cli`) | Complete control, inspection, automation |
 | Validation | zod 4 (strict schemas) | Oracle I/O contracts, manifests, config |
 | Hashing | `@noble/hashes` blake2b-256 == `sui::hash::blake2b256` | One commitment format across TS and Move |
 | Onboarding | `@mysten/enoki` (zkLogin) + dapp-kit v2 | Social-login self-custodial addresses; env-gated, wallet-standard |
 | Object metadata | Sui Object Display (`display_meta` module) | Certificates/profiles/positions render in wallets + explorers |
-| Tests | vitest 4 + `sui move test` | 236 TS + 66 Move, incl. the cross-language parity gate |
+| Tests | vitest 4 + `sui move test` | 431 TS + 70 Move (66 protocol, 4 Seal policy), incl. the cross-language parity gate |
 
 ## 🔍 What is auditable
 
@@ -251,15 +266,23 @@ dark mode).
 | Evidence roots | Immutable Sui evidence-bundle objects |
 | Evidence files and metadata | Public Walrus blobs plus explicit hashes |
 | GonkaRouter response metadata | Walrus run audit + Sui RunApproval object |
-| Gonka Request IDs | Original response `id` in each immutable run audit |
+| Gonka Request IDs, devshard ids, fingerprints, every attempt (retries, repairs, hedges) | Revealed run bundle on Walrus (sealed copy cited on chain before the commit) |
+| Juror research trail (searches with intent, pages opened on both sides, citations) | Transcript inside the sealed bundle; its hash is in the on-chain run hash |
+| Exact prompt and conversation sent to the model | `request.messages` in the revealed bundle; re-runnable through the re-execution check |
+| Reveal keys | Published at reveal, and escrowed under the Seal time-lock policy so the sealed bundle opens after the deadline without the operator |
+| Failed seats | Failure record (status, message, trail, attempts) on Walrus and on the claim page; no vote is inferred |
 | Truth Score | Final-round tally + immutable resolution certificate |
 | Payouts and refunds | Payout-ticket objects and Sui coin movement |
 | Observer dashboard | Rebuildable read-only projection, never authoritative |
 
 Verify it yourself: `/verify` in the app recomputes commitments and Truth
-Scores client-side from revealed fields, and
-`scripts/gen-parity-vectors.ts` regenerates the cross-language vectors pinned
-in both test suites.
+Scores client-side from revealed fields, runs 15 checks on any revealed run
+(prompt, policy, system prompt, input, output and transcript hashes,
+citations, both sides opened, citation sites, counter-evidence summary, opens
+per turn, Seal escrow binding, run hash, sealed core), opens a sealed bundle
+through Seal after its deadline, and re-runs a juror against the recorded
+model; `scripts/gen-parity-vectors.ts` regenerates the cross-language vectors
+pinned in both test suites.
 
 ## 🔒 Security posture and honest limitations
 
@@ -269,19 +292,28 @@ Implemented defenses:
   every resolved address (loopback/private/link-local/CGNAT/metadata/reserved,
   including IPv4-mapped IPv6), per-hop redirect revalidation, streaming byte
   caps, MIME allowlists, sanitized errors.
-- Models never receive keys, URLs to fetch, or transaction authority; outputs
-  are strict-schema validated and may cite only frozen evidence IDs.
+- Models never fetch, never hold keys or transaction authority; every URL a
+  juror sees or opens is executed by the engine and recorded in the sealed
+  transcript; outputs are strict-schema validated and may cite only pages the
+  juror opened in that run or frozen evidence IDs (fail closed otherwise).
 - API write routes: operator routes need a bearer token (uniform 403 on any
   failure), public submissions sit behind an explicit enable flag plus rate
   limiting whose per-client keys apply only behind a trusted proxy.
 - Salts never reach the inference provider; commitments bind the approved run
-  hash before any vote is cast.
+  hash before any vote is cast; the Seal escrow of a reveal key is insurance
+  only and can never cost a seat.
 
 Known limitations (V1, disclosed by design):
 
 - The run attestor and evidence freezer are single team-held capabilities —
   the pipeline upstream of the commitment is trusted infrastructure in the
   hackathon build (multi-attestor is production work, PRD §28.6).
+- There is no proof yet that the model received exactly the recorded bytes:
+  the re-execution check is a soft corroboration, a signed receipt has been
+  requested from GonkaRouter, and an attested forwarder (Nautilus) is the
+  planned closure (see `docs/superpowers/specs/2026-08-30-attested-inference-design.md`).
+- Seal keys and salts are stored in plaintext in the engine's Postgres on
+  testnet; encrypt at rest before any mainnet use.
 - Five LLM jurors are correlated even across model families; diversity
   constraints reduce but cannot remove shared failure modes (PRD §32.4).
 - DNS validation → fetch has a residual rebinding TOCTOU window; production
@@ -298,9 +330,9 @@ Known limitations (V1, disclosed by design):
 | --- | --- |
 | All AI reasoning/verification through GonkaRouter | Single adapter; no other provider; fail-closed on outage |
 | URL or text input | `/fact-check` and CLI accept claim, URLs, or both |
-| Multi-model cross-verification | 5 agents, ≥3 GonkaRouter model IDs, no model majority |
-| Truth Score 0–100 + reasoning trace | Deterministic, recomputable; evidence-linked public traces, never chain-of-thought |
-| Gonka Request IDs | Response `id` preserved verbatim for every attempt, shown after reveal |
+| Multi-model cross-verification | 5 agents spanning all three GonkaRouter model families, no model majority, each juror researching both sides of the claim |
+| Truth Score 0–100 + reasoning trace | Deterministic, recomputable; evidence-linked public traces with the full research trail, never chain-of-thought |
+| Gonka Request IDs | Response `id`, `x-request-id`, devshard id and fingerprint preserved verbatim for every attempt, shown after reveal |
 
 **MUBA Sui Track 02 — AI × Sui**:
 
@@ -309,7 +341,8 @@ Known limitations (V1, disclosed by design):
 | Sui is integral | Native `Random` jury selection, owned `JurySeat`s, Move capabilities, immutable certificates, coin settlement |
 | Ownership & identity | `AgentProfile` + `AgentCap`; every seat, approval, ticket is an owned object |
 | On-chain execution | Deadlines, commit-reveal, thresholds, and payouts enforced in Move — 66 tests |
-| Working demo path | Localnet E2E exit 0 AND a finalized LIVE testnet lifecycle: certificate [`0x8efdabe0…1a8634`](https://suiscan.xyz/testnet/object/0x8efdabe0900a3e4da39210394d211123ec82be6d176a51175adef7b8f41a8634) |
+| Working demo path | Localnet E2E exit 0 AND finalized LIVE testnet lifecycles on https://app.openverdict.info: YES certificate [`0xff3191bc…`](https://suiscan.xyz/testnet/object/0xff3191bcad4a645f44a6caccf2e6c661e8defcbf4943b44ec8b08d91b4f4133c) (claim #25, 5 of 5 seats, Seal escrows) and NO certificate [`0x975b3ae1…`](https://suiscan.xyz/testnet/object/0x975b3ae103c7832c4405714196528808af70ef975fe0d0db3ae70017191c00e4) (claim #26, hedged calls); see `docs/demo/runbook.md` |
+| Reveal-key escrow | Mysten Seal time-lock policy on testnet; sealed juror bundles open after the deadline without the operator |
 
 Both public track pages were placeholders at spec time; final submission
 requirements must be reconfirmed against organizer material (PRD §7.3).
@@ -322,8 +355,14 @@ requirements must be reconfirmed against organizer material (PRD §7.3).
 - **“Can the backend change votes?”** No: votes bind to on-chain commitments
   before reveal; anyone can recompute `blake2b256(BCS(preimage))` — the app
   even does it for you at `/verify`.
-- **“Do agents browse or transact?”** No: read-only, typed, server-executed
-  tools over frozen evidence and pinned Sui state; no wallet keys near models.
+- **“Do agents browse or transact?”** They research, but only through the
+  engine: every web search and page open is executed server-side, recorded
+  in the sealed transcript and hashed into the on-chain run hash; models
+  never fetch, never hold keys, never sign. No wallet keys near models.
+- **“Did the model really see that prompt?”** The exact conversation is in
+  the revealed bundle and can be resent to the same model from the run page;
+  the byte-level proof (signed receipts or an attested forwarder) is the one
+  disclosed gap, documented and requested.
 - **“Is the dashboard running the protocol?”** No: stop it and the CLI
   continues; it has no signer and no mutation endpoint.
 - **“Does GonkaRouter prove truth?”** No, and we never claim it does: Gonka
@@ -335,9 +374,12 @@ The long-form defence and full protocol semantics live in [PRD.md](./PRD.md)
 
 ## 📚 Documentation
 
-- [Complete product requirements and implementation specification](./PRD.md)
+- [Complete product requirements and implementation specification](./PRD.md) (§1.1 records every place the code corrected the spec)
+- [Current product state](./docs/STATUS.md) and the [resume map for agents](./docs/CHECKPOINT-2026-08-30.md)
 - [Demo runbook + preserved live testnet claim ids](./docs/demo/runbook.md)
+- Design records: [juror research v1](./docs/superpowers/specs/2026-08-29-juror-research-design.md), [juror research v2 and batched opens](./docs/superpowers/specs/2026-08-30-juror-research-v2-design.md), [Seal escrow of reveal keys](./docs/superpowers/specs/2026-08-30-seal-escrow-design.md), [attested inference](./docs/superpowers/specs/2026-08-30-attested-inference-design.md), [Sui stack map](./docs/superpowers/specs/2026-08-30-sui-stack-map.md)
 - [Master build plan (verified stack + interface contracts)](./docs/superpowers/plans/2026-08-26-openverdict-build.md)
+- [Seal documentation](https://seal-docs.wal.app/) · [Mysten Sui dev skills for coding agents](https://github.com/MystenLabs/sui-dev-skills)
 - [GonkaRouter developer documentation](https://gonkarouter.io/docs)
 - [Gonka network architecture](https://gonka.ai/docs/architecture/)
 - [Sui documentation](https://docs.sui.io/) · [on-chain randomness](https://docs.sui.io/sui-stack/on-chain-primitives/randomness-onchain)

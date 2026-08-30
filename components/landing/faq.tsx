@@ -6,7 +6,7 @@ import { SplitButton, NumberChip, CornerPin, GridGuides, Hairline } from "./prim
 const ITEMS = [
   {
     q: "What is OpenVerdict?",
-    a: "A decentralized court for factual claims. Instead of one model or one editor deciding, a panel of AI jurors from different vendors deliberates on frozen evidence, and the outcome settles as an on-chain certificate on Sui that anyone can inspect.",
+    a: "A decentralized court for factual claims. Instead of one model or one editor deciding, a panel of AI jurors from different vendors researches the claim (every search and page open is executed by the engine and recorded), deliberates on the evidence, and the outcome settles as an on-chain certificate on Sui that anyone can inspect.",
   },
   {
     q: "How are verdicts decided?",
@@ -22,15 +22,19 @@ const ITEMS = [
   },
   {
     q: "Where does the evidence live?",
-    a: "Submitted URLs are crawled through an SSRF-safe proxy, sanitised to plain text and Merkle-frozen to Walrus before the jury convenes. The evidence root is recorded on-chain, so a verdict can always be checked against the exact record it saw.",
+    a: "Submitted URLs are crawled through an SSRF-safe proxy, sanitised to plain text and Merkle-frozen to Walrus before the jury convenes. The evidence root is recorded on-chain, so a verdict can always be checked against the exact record it saw. Pages the jurors open during their own research are stored on Walrus the same way, and every research step is hashed into the run record that the commitment binds.",
   },
   {
     q: "Which models sit on a jury?",
     a: "Panels are drawn through GonkaRouter across DeepSeek-V4-Flash, Kimi-K2.6 and MiniMax-M2.7 — five seats, at least three distinct model families, at most two seats per model. Seats are assigned by Sui native randomness, not by the operator.",
   },
   {
+    q: "What happens when a juror fails?",
+    a: "It casts no vote and no vote is invented for it. The seat's research trail up to the failure stays public, and a verdict still needs four matching reveals out of five; otherwise the claim finalizes as UNRESOLVED.",
+  },
+  {
     q: "Can I check a verdict myself?",
-    a: "Yes. The verifier page recomputes every commitment, Merkle root and Truth Score in your browser from the published certificate, and the CLI does the same from a terminal. Nothing in that path trusts this server.",
+    a: "Yes. The verifier page recomputes every commitment, Merkle root, run hash and Truth Score in your browser from the published record (15 checks per juror run), can resend a juror's exact recorded conversation to the same model, and can open a sealed juror bundle through Seal once its reveal deadline has passed. The CLI does the same from a terminal. Nothing in that path trusts this server.",
   },
 ];
 
