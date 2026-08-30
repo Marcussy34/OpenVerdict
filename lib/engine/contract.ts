@@ -187,6 +187,8 @@ export type CommitmentStatus = {
   revealed: boolean;
   outcome?: VoteOutcome;
   confidenceBps?: number;
+  /** Set when the seat failed before committing (status of its failure record). */
+  failureStatus?: string;
 };
 
 export type ClaimInspection = {

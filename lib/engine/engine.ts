@@ -1283,9 +1283,17 @@ class OpenVerdictEngine implements Engine {
     const packageBySeat = new Map(packages.map((item) => [item.jurySeatId, item]));
     const reveals = await this.#repository.listReveals(claimId);
     const revealBySeat = new Map(reveals.map((reveal) => [reveal.jurySeatId, reveal]));
+    // A seat that failed before committing keeps a failure record on its run
+    // row; the claim page marks the seat from it without loading the proof.
+    const failureBySeat = new Map(
+      (await this.#repository.listInferenceRuns(claimId))
+        .filter((run) => run.failure !== undefined)
+        .map((run) => [run.jurySeatId, run.failure?.status ?? "PROVIDER_ERROR"]),
+    );
     const commitments: CommitmentStatus[] = seats.map((seat) => {
       const item = packageBySeat.get(seat.jurySeatId);
       const reveal = revealBySeat.get(seat.jurySeatId);
+      const failureStatus = failureBySeat.get(seat.jurySeatId);
       return {
         jurySeatId: seat.jurySeatId,
         agentProfileId: seat.agentProfileId,
@@ -1294,6 +1302,9 @@ class OpenVerdictEngine implements Engine {
         ...(reveal === undefined
           ? {}
           : { outcome: reveal.outcome, confidenceBps: reveal.confidenceBps }),
+        ...(failureStatus !== undefined && !(item?.committed ?? false)
+          ? { failureStatus }
+          : {}),
       };
     });
     const result = await this.#repository.getResolutionCertificate(claimId);

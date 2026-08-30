@@ -28,6 +28,10 @@ import {
 import type { ReexecuteRunResult } from "@/lib/verify/reexecute";
 import { cn } from "@/lib/utils";
 import { ResearchTrail } from "@/components/claim/run-proof-research";
+import {
+  failureDisplayBundle,
+  RunProofFailure,
+} from "@/components/claim/run-proof-failure";
 import { RunProofSeal } from "@/components/claim/run-proof-seal";
 import {
   EverythingElse,
@@ -323,6 +327,7 @@ export function RunProofDetails({ proof }: { proof: TransparentRunProof }) {
   const [checking, setChecking] = useState(false);
   const [checkError, setCheckError] = useState<string | null>(null);
   const bundle = proof.bundle;
+  const failureBundle = proof.failure ? failureDisplayBundle(proof) : null;
 
   const recompute = useCallback(async () => {
     setChecking(true);
@@ -343,79 +348,89 @@ export function RunProofDetails({ proof }: { proof: TransparentRunProof }) {
     <div className="space-y-4">
       <ProvenanceStrip
         proof={proof}
-        bundle={bundle}
+        bundle={bundle ?? failureBundle}
         walrusUrl={walrusAggregatorUrl}
       />
 
-      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-        <ProofValue label="Prompt hash" value={proof.promptHash} tone="sealed" />
-        <ProofValue label="Input hash" value={proof.inputHash} tone="chain" />
-        <ProofValue label="Output hash" value={proof.outputHash} tone="chain" />
-        <ProofValue label="Run hash" value={proof.runHash} tone="yes" />
-        <ProofValue label="Gateway request id" value={proof.gateway?.gatewayRequestId} />
-        <ProofValue label="Devshard id" value={proof.gateway?.devshardId} />
-        <ProofValue label="Sealed blob id" value={proof.sealedBlobId} tone="sealed" />
-        <ProofValue label="Revealed blob id" value={proof.revealedBlobId} tone="yes" />
-      </div>
-
-      {!bundle ? (
-        <div className="flex items-center gap-2 rounded-lg border border-sealed/25 bg-sealed/8 p-3 text-xs font-semibold text-sealed">
-          <Lock size="15" variant="Bold" />
-          <span>sealed until reveal</span>
-        </div>
+      {proof.failure && failureBundle ? (
+        <RunProofFailure
+          proof={proof}
+          bundle={failureBundle}
+          walrusUrl={walrusAggregatorUrl}
+        />
       ) : (
         <>
-          <ResearchTrail bundle={bundle} walrusUrl={walrusAggregatorUrl} />
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+            <ProofValue label="Prompt hash" value={proof.promptHash} tone="sealed" />
+            <ProofValue label="Input hash" value={proof.inputHash} tone="chain" />
+            <ProofValue label="Output hash" value={proof.outputHash} tone="chain" />
+            <ProofValue label="Run hash" value={proof.runHash} tone="yes" />
+            <ProofValue label="Gateway request id" value={proof.gateway?.gatewayRequestId} />
+            <ProofValue label="Devshard id" value={proof.gateway?.devshardId} />
+            <ProofValue label="Sealed blob id" value={proof.sealedBlobId} tone="sealed" />
+            <ProofValue label="Revealed blob id" value={proof.revealedBlobId} tone="yes" />
+          </div>
 
-          <SystemPromptAndBudgets bundle={bundle} />
-
-          <EvidenceSidesPanel bundle={bundle} />
-
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => void recompute()}
-            disabled={checking}
-            aria-busy={checking}
-            className="min-h-[40px] w-full font-semibold"
-          >
-            {checking ? (
-              <Refresh size="15" variant="Bold" className="motion-safe:animate-spin" />
-            ) : (
-              <ShieldTick size="15" variant="Bold" />
-            )}
-            {checking ? "Recomputing" : "Recompute in this browser"}
-          </Button>
-
-          {checkError && (
-            <div
-              role="alert"
-              className="flex items-start gap-2 rounded-lg border border-no/25 bg-no/6 p-3 text-xs text-no"
-            >
-              <Warning2 size="15" variant="Bold" className="mt-px shrink-0" />
-              {checkError}
+          {!bundle ? (
+            <div className="flex items-center gap-2 rounded-lg border border-sealed/25 bg-sealed/8 p-3 text-xs font-semibold text-sealed">
+              <Lock size="15" variant="Bold" />
+              <span>sealed until reveal</span>
             </div>
+          ) : (
+            <>
+              <ResearchTrail bundle={bundle} walrusUrl={walrusAggregatorUrl} />
+
+              <SystemPromptAndBudgets bundle={bundle} />
+
+              <EvidenceSidesPanel bundle={bundle} />
+
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => void recompute()}
+                disabled={checking}
+                aria-busy={checking}
+                className="min-h-[40px] w-full font-semibold"
+              >
+                {checking ? (
+                  <Refresh size="15" variant="Bold" className="motion-safe:animate-spin" />
+                ) : (
+                  <ShieldTick size="15" variant="Bold" />
+                )}
+                {checking ? "Recomputing" : "Recompute in this browser"}
+              </Button>
+
+              {checkError && (
+                <div
+                  role="alert"
+                  className="flex items-start gap-2 rounded-lg border border-no/25 bg-no/6 p-3 text-xs text-no"
+                >
+                  <Warning2 size="15" variant="Bold" className="mt-px shrink-0" />
+                  {checkError}
+                </div>
+              )}
+
+              {checks && (
+                <ul className="grid gap-2 lg:grid-cols-2">
+                  {checks.map((check) => (
+                    <CheckRow key={check.key} check={check} />
+                  ))}
+                </ul>
+              )}
+
+              <ReexecuteRunBlock
+                key={proof.runId}
+                proof={proof}
+                bundle={bundle}
+              />
+            </>
           )}
 
-          {checks && (
-            <ul className="grid gap-2 lg:grid-cols-2">
-              {checks.map((check) => (
-                <CheckRow key={check.key} check={check} />
-              ))}
-            </ul>
-          )}
+          <RunProofSeal proof={proof} />
 
-          <ReexecuteRunBlock
-            key={proof.runId}
-            proof={proof}
-            bundle={bundle}
-          />
+          {bundle && <EverythingElse bundle={bundle} />}
         </>
       )}
-
-      <RunProofSeal proof={proof} />
-
-      {bundle && <EverythingElse bundle={bundle} />}
     </div>
   );
 }

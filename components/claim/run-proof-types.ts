@@ -275,8 +275,14 @@ export type SuiRunProof = {
 
 export type TransparentRunProof = Omit<
   BrowserRunProof,
-  "bundle" | "sealed" | "claimDeadlines" | "sealPolicy" | "failure"
+  | "bundle"
+  | "sealed"
+  | "claimDeadlines"
+  | "sealPolicy"
+  | "failure"
+  | "runHash"
 > & {
+  runHash: BrowserRunProof["runHash"] | null;
   bundle: TransparentBundle | null;
   sealed?: TransparentSealedBundle | null;
   claimDeadlines?: TransparentClaimDeadlines;

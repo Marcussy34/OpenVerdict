@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils";
 import { HashChip } from "./hash-chip";
 import { ModelDot, modelFamily } from "./model-badge";
 
-export type SeatState = "pending" | "running" | "sealed" | "revealed";
+export type SeatState = "pending" | "running" | "sealed" | "revealed" | "failed";
 export type SeatOutcome = "YES" | "NO" | "UNSURE";
 
 const HEX = "24,1.2 43.9,12.6 43.9,35.4 24,46.8 4.1,35.4 4.1,12.6";
@@ -43,6 +43,7 @@ const STATE_LABEL: Record<SeatState, string> = {
   running: "Running",
   sealed: "Sealed",
   revealed: "Revealed",
+  failed: "Failed",
 };
 
 const STATE_CHIP: Record<SeatState, string> = {
@@ -50,6 +51,7 @@ const STATE_CHIP: Record<SeatState, string> = {
   running: "bg-sea/12 text-primary",
   sealed: "bg-sealed/10 text-sealed",
   revealed: "bg-yes/10 text-yes",
+  failed: "bg-no/10 text-no",
 };
 
 const STATE_BORDER: Record<SeatState, string> = {
@@ -57,6 +59,7 @@ const STATE_BORDER: Record<SeatState, string> = {
   running: "border-sea/45",
   sealed: "border-sealed/30",
   revealed: "border-yes/30",
+  failed: "border-no/30",
 };
 
 /** Map the shared u8 vote outcome (OUTCOME.YES/NO/UNSURE) to its display label. */
@@ -71,7 +74,10 @@ export function outcomeLabel(outcome?: number | string | null): SeatOutcome | un
 export function seatStateOf(commitment?: {
   committed?: boolean;
   revealed?: boolean;
-}): SeatState {
+  failureStatus?: string;
+}, failure?: { status?: string } | null): SeatState {
+  // The claim inspection carries the failure status of a seat that never committed.
+  if (failure || commitment?.failureStatus) return "failed";
   if (commitment?.revealed) return "revealed";
   if (commitment?.committed) return "sealed";
   return "pending";
@@ -86,11 +92,13 @@ export function seatStateOf(commitment?: {
 export function SealGlyph({
   state,
   outcome,
+  failureStatus,
   size = 48,
   className,
 }: {
   state: SeatState;
   outcome?: SeatOutcome;
+  failureStatus?: string;
   size?: number;
   className?: string;
 }) {
@@ -99,6 +107,8 @@ export function SealGlyph({
   const stroke =
     state === "revealed" && style
       ? style.stroke
+      : state === "failed"
+        ? "var(--signal-no)"
       : state === "sealed"
         ? "var(--signal-sealed)"
         : state === "running"
@@ -108,6 +118,8 @@ export function SealGlyph({
   const Glyph =
     state === "revealed"
       ? (style?.icon ?? Unlock)
+      : state === "failed"
+        ? ShieldCross
       : state === "sealed"
         ? Lock
         : state === "running"
@@ -120,6 +132,17 @@ export function SealGlyph({
     <div
       className={cn("relative grid shrink-0 place-items-center", className)}
       style={{ width: size, height: size }}
+      title={
+        state === "failed"
+          ? `Failed before commit${failureStatus ? `: ${failureStatus}` : ""}`
+          : undefined
+      }
+      role={state === "failed" ? "img" : undefined}
+      aria-label={
+        state === "failed"
+          ? `Seat failed before commit${failureStatus ? `: ${failureStatus}` : ""}`
+          : undefined
+      }
     >
       <svg viewBox="0 0 48 48" width={size} height={size} aria-hidden className="absolute inset-0">
         <defs>
@@ -163,6 +186,8 @@ export function SealGlyph({
           "relative",
           state === "revealed"
             ? style?.text
+            : state === "failed"
+              ? "text-no"
             : state === "sealed"
               ? "text-sealed"
               : state === "running"
@@ -182,21 +207,34 @@ export function SeatStrip({
   seats,
   className,
 }: {
-  seats: { state: SeatState; outcome?: SeatOutcome }[];
+  seats: { state: SeatState; outcome?: SeatOutcome; failureStatus?: string }[];
   className?: string;
 }) {
   const revealed = seats.filter((s) => s.state === "revealed").length;
   const sealed = seats.filter((s) => s.state === "sealed").length;
+  const failed = seats.filter((s) => s.state === "failed").length;
 
   return (
     <div className={cn("flex items-center justify-between gap-2", className)}>
       <div className="flex items-center gap-1">
         {seats.map((seat, i) => (
-          <SealGlyph key={i} state={seat.state} outcome={seat.outcome} size={22} />
+          <SealGlyph
+            key={i}
+            state={seat.state}
+            outcome={seat.outcome}
+            failureStatus={seat.failureStatus}
+            size={22}
+          />
         ))}
       </div>
       <span className="ov-micro ov-micro-sm text-muted-foreground">
-        {revealed > 0 ? `${revealed}/${seats.length} revealed` : `${sealed}/${seats.length} sealed`}
+        {failed > 0
+          ? revealed > 0
+            ? `${revealed}/${seats.length} revealed, ${failed} failed`
+            : `${failed}/${seats.length} failed`
+          : revealed > 0
+            ? `${revealed}/${seats.length} revealed`
+            : `${sealed}/${seats.length} sealed`}
       </span>
     </div>
   );
@@ -218,6 +256,7 @@ export function SeatSeal({
   role,
   reasoning,
   gonkaRequestId,
+  failureStatus,
   footer,
   className,
 }: {
@@ -231,6 +270,7 @@ export function SeatSeal({
   role?: string;
   reasoning?: string;
   gonkaRequestId?: string;
+  failureStatus?: string;
   footer?: React.ReactNode;
   className?: string;
 }) {
@@ -254,7 +294,12 @@ export function SeatSeal({
       </span>
 
       <div className="flex items-start gap-3">
-        <SealGlyph state={state} outcome={outcome} size={44} />
+        <SealGlyph
+          state={state}
+          outcome={outcome}
+          failureStatus={failureStatus}
+          size={44}
+        />
         <div className="min-w-0 flex-1">
           {/* Seat label and state stack vertically at narrow widths so the
               badges can never collide (fixes the 1440px "Runni#4" overlap). */}
@@ -267,6 +312,11 @@ export function SeatSeal({
                 "ov-micro ov-micro-sm shrink-0 rounded px-1 py-px",
                 STATE_CHIP[state],
               )}
+              title={
+                state === "failed" && failureStatus
+                  ? `Failed before commit: ${failureStatus}`
+                  : undefined
+              }
             >
               {STATE_LABEL[state]}
             </span>
@@ -291,7 +341,20 @@ export function SeatSeal({
       </div>
 
       {/* Body: redacted while sealed, opened vote after reveal. */}
-      {state === "revealed" && outcome ? (
+      {state === "failed" ? (
+        <div className="space-y-1.5 rounded-lg border border-no/25 bg-no/8 p-2.5">
+          <div className="flex items-center gap-1.5 text-no">
+            <ShieldCross size="12" variant="Bold" />
+            <span className="ov-micro ov-micro-sm">Failed before commit</span>
+          </div>
+          <p className="font-mono text-[10px] leading-snug text-no">
+            {failureStatus || "Failure status not recorded"}
+          </p>
+          <p className="text-[10px] leading-snug text-muted-foreground">
+            This seat cast no vote.
+          </p>
+        </div>
+      ) : state === "revealed" && outcome ? (
         <div className="space-y-2">
           <div
             className={cn(

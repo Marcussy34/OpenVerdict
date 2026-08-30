@@ -143,6 +143,8 @@ export default function ClaimDetailPage({ params }: ClaimDetailPageProps) {
         phase,
         runId: deriveRunId(claim.claimId, c.jurySeatId, phase),
         state: seatStateOf(c),
+        // Present only for a seat that failed before committing.
+        failureStatus: c.failureStatus,
         outcome: outcomeLabel(c.outcome ?? card?.outcome),
         confidenceBps: c.confidenceBps ?? card?.confidenceBps,
         agentProfileId: c.agentProfileId,
@@ -511,6 +513,7 @@ export default function ClaimDetailPage({ params }: ClaimDetailPageProps) {
                   role={seat.role}
                   reasoning={seat.reasoning}
                   gonkaRequestId={seat.gonkaRequestId}
+                  failureStatus={seat.failureStatus}
                 />
               ))}
             </div>
