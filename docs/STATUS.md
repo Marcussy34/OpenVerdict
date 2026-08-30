@@ -81,9 +81,12 @@ operational proof and public deployments in flight.
   certificate
   `0x62036142117e5dc3b1c6949ff338d55c2a0da5b5396ccfcc68428a2cefe49ecc`.
   Earlier hosted certificates: `0xfb68f1ff…`, `0x677ec538…`, `0x82684a50…`, `0xb554098e…`,
-  `0xef4383de…`, `0x9f58e980…`, `0xfbdab9dd…`, `0x3dc599e7…`, `0x3a5f337d…`
-  (all UNRESOLVED: fewer than four matching reveals per round, first for
-  lost seats, then for reveals that missed a 60 s window). Two chain rules shape the outcome:
+  `0xef4383de…`, `0x9f58e980…`, `0xfbdab9dd…`, `0x3dc599e7…`, `0x3a5f337d…`,
+  `0xc51065e4…` (all UNRESOLVED: fewer than four matching reveals per
+  round, for lost seats, for reveals that missed a 60 s window, and on
+  claim #17 for GonkaRouter serving DeepSeek requests from a MiniMax
+  devshard, which the adapter fails closed because a juror's run must
+  come from its declared model). Two chain rules shape the outcome:
   `REQUIRED_MATCHING = 4` (four matching reveals of five resolve a round)
   and committee diversity (three model families, so the slowest family is
   always seated). Operational: agent wallets pay for seat transactions and

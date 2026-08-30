@@ -538,6 +538,25 @@ then submit a fast test claim and time it.
     actions on Kimi and a MiniMax seat); the one valid seat committed and
     revealed 16 s into the reveal phase; a probe at 14:51 answered all
     three models in ~1 s (transient). Round two opened at t+456 s.
+50. Claim #17 finalized UNRESOLVED (truth score 10000 from the two valid
+    seats) at t+803 s, certificate
+    `0xc51065e44070783752967b18f0924b155b4e8f3380cf8443781ab12a1192364e`:
+    the whole two-round lifecycle ran on the Railway database with the
+    reduced polling (workers woke within a second of the POST, committee
+    and freeze by t+84 s, each valid reveal 16 s into its phase). ROOT
+    CAUSE of the lost seats, from the run audits: GonkaRouter served the
+    DeepSeek requests from a MiniMax devshard (audit `modelId`
+    deepseek-ai/DeepSeek-V4-Flash-0731 but `responseModelId`
+    MiniMaxAI/MiniMax-M2.7, fingerprint vllm-0.25.1-tp2, devshard 66187)
+    and the adapter fails such a run closed (PROVIDER_ERROR,
+    INVALID_RESPONSE: a juror's run must come from its declared model),
+    which is exactly right for the proof chain; the Kimi seats timed out
+    and one MiniMax seat returned malformed JSON. Probes at 14:58 show
+    DeepSeek served by DeepSeek again (devshard 66515). Lesson: a
+    committee can lose two seats to router-side model substitution at
+    any time; nothing to fix on our side, but the demo should have a
+    fallback claim ready (#16) and the report page makes the substitution
+    visible through the audit's responseModelId.
 
 ### Next steps
 - Demo claims: #16 `0x9169c707…` (YES 9860, certificate `0x62036142…`)
