@@ -20,6 +20,9 @@ importers:
       '@mysten/enoki':
         specifier: ^1.2.16
         version: 1.2.16(@mysten/sui@2.26.2(typescript@5.9.3))(@types/react@19.2.18)(react@19.2.8)
+      '@mysten/seal':
+        specifier: 1.4.6
+        version: 1.4.6(@mysten/sui@2.26.2(typescript@5.9.3))
       '@mysten/sui':
         specifier: ^2.26.2
         version: 2.26.2(typescript@5.9.3)
@@ -813,6 +816,11 @@ packages:
         optional: true
       react:
         optional: true
+
+  '@mysten/seal@1.4.6':
+    resolution: {integrity: sha512-rAVzHvJIrE99SZcxQlE9hPb1lybYyy0QOUUwoRtWvkCJtjOYw9k1cA8N/QPqdkWHRYChOlItgF3/jYvGWPWB/A==}
+    peerDependencies:
+      '@mysten/sui': ^2.27.1
 
   '@mysten/slush-wallet@1.1.18':
     resolution: {integrity: sha512-TSe6kw7qCXpTxQjcQSnx7cG1g+WJiez2walEfUoR82sPkJQ7WZaxckOSsrMBtCm7sCNyesFR4qU+hN/wEtnYng==}
@@ -5558,6 +5566,13 @@ snapshots:
     optionalDependencies:
       '@types/react': 19.2.18
       react: 19.2.8
+
+  '@mysten/seal@1.4.6(@mysten/sui@2.26.2(typescript@5.9.3))':
+    dependencies:
+      '@mysten/bcs': 2.1.1
+      '@mysten/sui': 2.26.2(typescript@5.9.3)
+      '@noble/curves': 2.3.0
+      '@noble/hashes': 2.3.0
 
   '@mysten/slush-wallet@1.1.18(@mysten/sui@2.26.2(typescript@5.9.3))(typescript@5.9.3)':
     dependencies:
