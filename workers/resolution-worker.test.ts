@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { ClaimInspection } from "../lib/engine/contract";
 import { CLAIM_MODE, CLAIM_STATE } from "../lib/protocol";
-import { isDead, urgency } from "./resolution-worker";
+import { backoffDelayMs, isDead, urgency } from "./resolution-worker";
 
 const NOW = 1_000_000;
 
@@ -34,10 +34,6 @@ describe("resolution worker triage", () => {
   it("skips claims that can never change on chain again", () => {
     expect(isDead(claim({ state: CLAIM_STATE.FINALIZED_REVIEWED }), NOW)).toBe(true);
     expect(isDead(claim({ state: CLAIM_STATE.UNRESOLVED }), NOW)).toBe(true);
-    // Every deadline has passed: no phase can be entered or finalized.
-    expect(
-      isDead(claim({ state: CLAIM_STATE.REVEAL_1, secondRevealDeadlineMs: NOW - 1 }), NOW),
-    ).toBe(true);
     // Discussion closed without phase-two evidence: round two cannot open.
     expect(
       isDead(
@@ -50,6 +46,10 @@ describe("resolution worker triage", () => {
   it("keeps claims that still have a move available", () => {
     expect(isDead(claim({ state: CLAIM_STATE.REVEAL_1 }), NOW)).toBe(false);
     expect(isDead(claim({ state: CLAIM_STATE.COMMIT_1 }), NOW)).toBe(false);
+    // A reveal phase past its deadline is exactly when finalize is allowed.
+    expect(
+      isDead(claim({ state: CLAIM_STATE.REVEAL_2, secondRevealDeadlineMs: NOW - 1 }), NOW),
+    ).toBe(false);
     // Discussion closed with phase-two evidence bound: round two can open.
     expect(
       isDead(
@@ -58,6 +58,14 @@ describe("resolution worker triage", () => {
       ),
     ).toBe(false);
     expect(isDead(claim({ state: CLAIM_STATE.DISCUSSION }), NOW)).toBe(false);
+  });
+
+  it("backs off a failing claim exponentially up to ten minutes", () => {
+    expect(backoffDelayMs(1)).toBe(30_000);
+    expect(backoffDelayMs(2)).toBe(60_000);
+    expect(backoffDelayMs(5)).toBe(480_000);
+    expect(backoffDelayMs(6)).toBe(600_000);
+    expect(backoffDelayMs(20)).toBe(600_000);
   });
 
   it("orders reveal phases before commit and selection, then the rest", () => {
