@@ -581,11 +581,50 @@ then submit a fast test claim and time it.
     Next: deploy, republish the seven manifests as v4 inside the container
     (`railway ssh -s app`), run a live claim, record it here.
 
+52. V2 LIVE (16:29 deploy `4dcad3e5`, republish 16:33, claim #18 16:35).
+    `scripts/publish-agent-manifests.ts` ran inside the container
+    (`railway ssh -s app -- sh -c 'cd /app && node
+    node_modules/tsx/dist/cli.mjs scripts/publish-agent-manifests.ts'`,
+    dry run first): seven v4 documents on Walrus and seven
+    update_agent_manifest digests (profile 0: `9m7dUnT7…`, 1 `DdmwVu5P…`,
+    2 `G2XGUpxd…`, 3 `2atUJfLV…`, 4 `3rgbRMxu…`, 5 `Fxb929Fx…`, 6
+    `Xt7p1BGv…`); `/api/agents/<id>/manifest` serves document version 4
+    (prompt spec 3, policy 3, four searches). Claim #18
+    `0xb526116eb6410343e8be366c50b2a997ea5ebbbae7bfa67fc6ea6c9b646bd82b`
+    ("The Sui mainnet launched on May 3, 2023"): committee and freeze by
+    t+53 s, three seats valid under v2 (DeepSeek 14 s and 60 s, MiniMax
+    6 s of research; each ran support and challenge searches, opened
+    pages on both sides, two of them had a first answer bounced by the
+    engine and answered again), commits t+178 to t+224 s, REVEAL_1
+    t+286 s, three reveals by t+333 s, discussion t+398 s. Example v4 run
+    `0x5020bc5b…` (MiniMax seat): search:support, search:challenge, opened
+    Sui's launch announcement on x.com and a BitMEX explainer (both listed
+    under both intents), YES 10000, two found citations from two sites,
+    counter-evidence summary "No counter-evidence was found. The challenge
+    search returned no sources disputing the May 3, 2023 launch date…".
+    Both Kimi seats were lost again: attempts 1 to 3 failed with
+    "GonkaRouter provider request failed" and attempts 4 and 5 were cut
+    by the seat deadline (t+200 s). Three valid seats are one short of
+    REQUIRED_MATCHING, so the claim went to round two. Levers considered
+    and NOT applied: lowering Kimi's eligibility weight (with three
+    families and seven agents a committee without Kimi aborts on the
+    diversity rule, and the worker's backoff would then slow selection);
+    the real fix is a fourth model family on GonkaRouter so committees can
+    form without Kimi, which needs new registrations, funding, manifests
+    and a quality probe (next session).
+
 ### Next steps
-- Demo claims: #16 `0x9169c707…` (YES 9860, certificate `0x62036142…`)
-  for the verdict path; #15 `0xc9e0d4eb…` (UNRESOLVED, two rounds) for
-  the discussion and round-two path. Report page, proof endpoints and
-  `/verify` all work from these ids.
+- Demo claims: #16 `0x9169c707…` (YES 9860, certificate `0x62036142…`,
+  v1 research) for the verdict path; #18 `0xb526116e…` for the v2
+  research trail (both sides, corroboration, counter-evidence, full
+  provenance; run `0x5020bc5b…`); #15 `0xc9e0d4eb…` for the discussion
+  and round-two path. Report page, proof endpoints and `/verify` all work
+  from these ids.
+- Verdict odds: with three model families and seven agents, half of all
+  committees seat both Kimi profiles, and Kimi on GonkaRouter has failed
+  most seats today; a fourth model family (new registrations, funding,
+  manifests, a research quality probe) lets committees form without Kimi
+  and is the next lever for reliable YES/NO certificates.
 - Sub-5-minute resolution, if wanted: publish reveal bundles as soon as no
   further commit is possible (needs the blob object id and end epoch
   persisted per run), then shrink the reveal window back to 60 s (about
