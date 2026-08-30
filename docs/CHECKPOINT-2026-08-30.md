@@ -261,6 +261,34 @@ persist the research transcript of a FAILED seat (steps only) and show
 "why this seat failed" on the claim page (claim #24 lost a MiniMax seat to
 "no answer within maxTurns" and nothing of its trail survives today).
 
+## 3c. IN FLIGHT 23:40: failed-seat transparency (two Codex jobs) and same-model hedging (one job)
+
+Owner said "continue with everything else" after the Seal proof. Three
+codex-worker subagents (failed-engine, failed-ui, hedge); prompts saved
+verbatim in the scratchpad as prompt-failed-engine.txt,
+prompt-failed-ui.txt, prompt-hedge.txt. File ownership: engine job owns
+lib/engine/{engine,contract}.ts, lib/storage/*, lib/protocol/types.ts and
+tests (InferenceFailureV1 record stored under the seat's derived run id
+with the research transcript at failure time, best-effort Walrus copy,
+`runProof` returns failure proofs); UI job owns
+components/claim/run-proof.tsx, new run-proof-failure.tsx,
+run-proof-types.ts, components/viz/seat-seal.tsx, app/claims/[id]/page.tsx
+("Seat failed before commit" panel with the trail, Failed seat state);
+hedge job owns lib/gonka/{adapter,types,retry}.ts, their tests and
+lib/engine/server.ts (hedgeAfterMs, env GONKA_HEDGE_AFTER_MS default
+25 s: a second identical request to the same model after 25 s, first
+valid reply wins, the other recorded as HEDGE_ABANDONED; new attempt kind
+HEDGE). Community context: two other GonkaRouter teams report the same
+Kimi timeouts and node-dependent latency; the owner has a message for
+the GonkaRouter team (signed receipts, request lookup, Kimi capacity,
+substitution and a fourth model).
+
+After the jobs land: review against the briefs, full gate, commit, deploy
+between claims, run a claim, then update STATUS/runbook/memory. Also
+still open: a human click on "Open through Seal" and "Re-run this juror";
+the round-two window unexercised live; the submission package once the
+owner names the format; Nautilus via Marlin Oyster if the owner wants it.
+
 ## 4. Planned next (owner-approved direction)
 
 - Attestation (docs/superpowers/specs/2026-08-30-attested-inference-design.md):
