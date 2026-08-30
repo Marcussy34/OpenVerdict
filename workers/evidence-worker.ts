@@ -1,14 +1,24 @@
 import { getServerEngine } from "../lib/engine/server";
 import { EngineNoEvidenceError } from "../lib/engine/errors";
 import { CLAIM_STATE } from "../lib/protocol";
-import { forEachClaim, isWorkerEntrypoint, runWorker } from "./runtime";
+import {
+  LIVE_CLAIM_STATES,
+  forEachClaim,
+  isWorkerEntrypoint,
+  listLiveClaims,
+  runWorker,
+} from "./runtime";
 
 const skippedNoEvidenceClaims = new Set<string>();
 const NO_EVIDENCE_GRACE_MS = 60_000;
 
-export async function evidenceWorkerTick(): Promise<void> {
+/** Resolves true while any claim is in flight (keeps the fast poll). */
+export async function evidenceWorkerTick(): Promise<boolean> {
   const engine = await getServerEngine();
-  const claims = await engine.listClaims();
+  // Every live state, not only the two this worker acts on: the phase-two
+  // freeze must land within seconds of discussion opening, so the worker
+  // stays on the fast poll through the reveal phase before it.
+  const claims = await listLiveClaims(engine, LIVE_CLAIM_STATES);
   await forEachClaim("evidence-worker", claims, async (claim) => {
     if (skippedNoEvidenceClaims.has(claim.claimId)) return;
     try {
@@ -52,6 +62,7 @@ export async function evidenceWorkerTick(): Promise<void> {
       throw error;
     }
   });
+  return claims.length > 0;
 }
 
 if (isWorkerEntrypoint(import.meta.url)) {

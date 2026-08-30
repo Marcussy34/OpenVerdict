@@ -1,10 +1,17 @@
 import { getServerEngine } from "../lib/engine/server";
 import { CLAIM_STATE } from "../lib/protocol";
-import { forEachClaim, isWorkerEntrypoint, runWorker } from "./runtime";
+import {
+  LIVE_CLAIM_STATES,
+  forEachClaim,
+  isWorkerEntrypoint,
+  listLiveClaims,
+  runWorker,
+} from "./runtime";
 
-export async function inferenceWorkerTick(): Promise<void> {
+/** Resolves true while any claim is in flight (keeps the fast poll). */
+export async function inferenceWorkerTick(): Promise<boolean> {
   const engine = await getServerEngine();
-  const claims = await engine.listClaims();
+  const claims = await listLiveClaims(engine, LIVE_CLAIM_STATES);
   await forEachClaim("inference-worker", claims, async (claim) => {
     const phase =
       claim.state === CLAIM_STATE.COMMIT_1
@@ -18,6 +25,7 @@ export async function inferenceWorkerTick(): Promise<void> {
     await engine.juryRun(claim.claimId, phase);
     await engine.votesCommit(claim.claimId, phase);
   });
+  return claims.length > 0;
 }
 
 if (isWorkerEntrypoint(import.meta.url)) {

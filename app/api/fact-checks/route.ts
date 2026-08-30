@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getServerEngine, EngineNotWiredError } from "@/lib/engine/server";
+import { touchWake } from "@/lib/engine/wake";
 import type { FactCheckRequest } from "@/lib/engine/contract";
 import { rateLimitPublic, requirePublicWritesEnabled } from "../_lib/guard";
 
@@ -155,6 +156,8 @@ export async function POST(req: Request) {
 
     const engine = await getServerEngine();
     const result = await engine.factCheckStart(requestData);
+    // Idle workers poll slowly; the wake file ends their wait at once.
+    touchWake();
 
     return NextResponse.json(result, { status: 201 });
   } catch (error) {

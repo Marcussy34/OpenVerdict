@@ -1,9 +1,37 @@
 import { Client } from "pg";
+import type { ClaimInspection } from "../lib/engine/contract";
+import { wakeStamp } from "../lib/engine/wake";
+import { CLAIM_STATE, type ClaimState } from "../lib/protocol";
+
+/** States a hosted claim passes through between submission and its certificate. */
+export const LIVE_CLAIM_STATES: readonly ClaimState[] = [
+  CLAIM_STATE.REVIEW_REQUESTED,
+  CLAIM_STATE.COMMIT_1,
+  CLAIM_STATE.REVEAL_1,
+  CLAIM_STATE.DISCUSSION,
+  CLAIM_STATE.COMMIT_2,
+  CLAIM_STATE.REVEAL_2,
+];
 
 export interface WorkerRuntimeOptions {
   name: string;
-  tick: () => Promise<void>;
+  /** Resolves true while a claim is in flight, which keeps the fast poll. */
+  tick: () => Promise<void | boolean>;
   intervalMs?: number;
+  idleIntervalMs?: number;
+}
+
+/**
+ * Only claims in the given states, inspected one state at a time. The docket
+ * is mostly finished claims; inspecting all of them every two seconds was a
+ * few hundred queries per tick around the clock (Neon's egress alert).
+ */
+export async function listLiveClaims(
+  engine: { listClaims(filter?: { state?: ClaimState }): Promise<ClaimInspection[]> },
+  states: readonly ClaimState[],
+): Promise<ClaimInspection[]> {
+  const perState = await Promise.all(states.map((state) => engine.listClaims({ state })));
+  return perState.flat();
 }
 
 // All workers share one Sui operator signer. Concurrent submissions equivocate
@@ -67,20 +95,30 @@ export async function runWorker(options: WorkerRuntimeOptions): Promise<void> {
   process.once("SIGINT", stop);
   process.once("SIGTERM", stop);
   const intervalMs = options.intervalMs ?? numberEnv("OPENVERDICT_WORKER_POLL_MS", 2_000);
+  // Between claims the database is polled slowly; a submitted claim touches
+  // the wake file (lib/engine/wake.ts) and ends the slow wait at once.
+  const idleIntervalMs =
+    options.idleIntervalMs ?? numberEnv("OPENVERDICT_WORKER_IDLE_POLL_MS", 15_000);
   const dbUrl = process.env.DATABASE_URL?.trim();
   const serializer = dbUrl ? new TickSerializer(dbUrl) : null;
 
   try {
     while (!controller.signal.aborted) {
+      let busy = true;
+      const stampBefore = wakeStamp();
       try {
-        await (serializer ? serializer.run(options.tick) : options.tick());
+        busy = (await (serializer ? serializer.run(options.tick) : options.tick())) !== false;
       } catch (error) {
         // A phase deadline commonly makes a queue item temporarily ineligible.
         process.stderr.write(
           `${options.name}: ${errorCode(error)}: ${errorMessage(error)}\n`,
         );
       }
-      await wait(intervalMs, controller.signal);
+      if (busy) {
+        await wait(intervalMs, controller.signal);
+      } else {
+        await waitForWake(idleIntervalMs, stampBefore, controller.signal);
+      }
     }
   } finally {
     process.removeListener("SIGINT", stop);
@@ -129,6 +167,19 @@ async function wait(delayMs: number, signal: AbortSignal): Promise<void> {
     if (signal.aborted) onAbort();
     else signal.addEventListener("abort", onAbort, { once: true });
   });
+}
+
+/** Idle wait in one-second slices, cut short when the wake file changes. */
+async function waitForWake(
+  delayMs: number,
+  stampBefore: number,
+  signal: AbortSignal,
+): Promise<void> {
+  const deadline = Date.now() + delayMs;
+  while (!signal.aborted && Date.now() < deadline) {
+    await wait(Math.min(1_000, deadline - Date.now()), signal);
+    if (wakeStamp() !== stampBefore) return;
+  }
 }
 
 function numberEnv(name: string, fallback: number): number {

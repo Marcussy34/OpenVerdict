@@ -2,7 +2,13 @@ import type { ClaimInspection } from "../lib/engine/contract";
 import { getServerEngine } from "../lib/engine/server";
 import { EngineStateError } from "../lib/engine/errors";
 import { CLAIM_STATE } from "../lib/protocol";
-import { forEachClaim, isWorkerEntrypoint, runWorker } from "./runtime";
+import {
+  LIVE_CLAIM_STATES,
+  forEachClaim,
+  isWorkerEntrypoint,
+  listLiveClaims,
+  runWorker,
+} from "./runtime";
 
 // Move treats phase deadlines as floors (advance_phase, open_discussion,
 // create_second_round and finalize_claim abort with E_DEADLINE_NOT_REACHED
@@ -72,10 +78,11 @@ export function urgency(state: number): number {
   return 2;
 }
 
-export async function resolutionWorkerTick(): Promise<void> {
+/** Resolves true while any claim is in flight (keeps the fast poll). */
+export async function resolutionWorkerTick(): Promise<boolean> {
   const engine = await getServerEngine();
   const now = Date.now();
-  const claims = (await engine.listClaims())
+  const claims = (await listLiveClaims(engine, LIVE_CLAIM_STATES))
     .filter((claim) => !isDead(claim, now) && !inBackoff(claim.claimId, now))
     .sort((a, b) => urgency(a.state) - urgency(b.state));
   await forEachClaim("resolution-worker", claims, async (claim) => {
@@ -87,6 +94,7 @@ export async function resolutionWorkerTick(): Promise<void> {
       throw error;
     }
   });
+  return claims.length > 0;
 }
 
 async function resolveClaim(
