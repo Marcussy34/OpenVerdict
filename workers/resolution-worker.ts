@@ -30,14 +30,18 @@ const TERMINAL_STATES = new Set<number>([
 /**
  * Claims that can never change on chain again: finalized ones, and those
  * sitting in DISCUSSION past the discussion deadline without phase-two
- * evidence (round two cannot open, finalize needs a reveal phase). Passed
- * deadlines alone do not make a claim dead: a reveal phase past its
- * deadline is exactly when finalize is allowed.
+ * evidence (round two cannot open, finalize needs a reveal phase), or past
+ * the second commit deadline (jury.move create_second_round_seats asserts
+ * now <= second_commit_deadline_ms, so round two can never open: three
+ * such claims aborted on every backoff cycle for a day). Passed deadlines
+ * alone do not make a claim dead: a reveal phase past its deadline is
+ * exactly when finalize is allowed.
  */
 export function isDead(claim: ClaimInspection, nowMs: number): boolean {
   if (TERMINAL_STATES.has(claim.state)) return true;
+  if (claim.state !== CLAIM_STATE.DISCUSSION) return false;
+  if (claim.deadlines.secondCommitDeadlineMs < nowMs) return true;
   return (
-    claim.state === CLAIM_STATE.DISCUSSION &&
     claim.deadlines.discussionDeadlineMs < nowMs &&
     !claim.evidenceRoots.some((root) => root.phase === 2)
   );

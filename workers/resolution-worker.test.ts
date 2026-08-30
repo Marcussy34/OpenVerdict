@@ -8,6 +8,7 @@ const NOW = 1_000_000;
 function claim(overrides: {
   state: number;
   secondRevealDeadlineMs?: number;
+  secondCommitDeadlineMs?: number;
   discussionDeadlineMs?: number;
   phases?: (1 | 2)[];
 }): ClaimInspection {
@@ -19,6 +20,7 @@ function claim(overrides: {
     resolutionCriteria: "",
     deadlines: {
       secondRevealDeadlineMs: overrides.secondRevealDeadlineMs ?? NOW + 60_000,
+      secondCommitDeadlineMs: overrides.secondCommitDeadlineMs ?? NOW + 45_000,
       discussionDeadlineMs: overrides.discussionDeadlineMs ?? NOW + 30_000,
     } as ClaimInspection["deadlines"],
     evidenceRoots: (overrides.phases ?? [1]).map((phase) => ({
@@ -38,6 +40,19 @@ describe("resolution worker triage", () => {
     expect(
       isDead(
         claim({ state: CLAIM_STATE.DISCUSSION, discussionDeadlineMs: NOW - 1, phases: [1] }),
+        NOW,
+      ),
+    ).toBe(true);
+    // Round two must open before its own commit deadline (jury.move), so a
+    // discussion still open after it is stranded even with phase-two roots.
+    expect(
+      isDead(
+        claim({
+          state: CLAIM_STATE.DISCUSSION,
+          discussionDeadlineMs: NOW - 120_000,
+          secondCommitDeadlineMs: NOW - 1,
+          phases: [1, 2],
+        }),
         NOW,
       ),
     ).toBe(true);
