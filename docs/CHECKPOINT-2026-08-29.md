@@ -629,6 +629,29 @@ then submit a fast test claim and time it.
     bothSidesOpened, citationSites 2, counterEvidenceSummary, runHash,
     sealedCore). Claim #19 submitted 16:50 for another v2 attempt while
     the router is healthy.
+54. Claim #19 `0xe46d69977e2da88bccf788876df324d1c532cdec3b863c58cd72240949a6c3cf`
+    ("The Bitcoin genesis block was mined on January 3, 2009", 16:48):
+    committee t+46 s, round one three valid v2 seats (DeepSeek 10 s and
+    84 s, MiniMax 8 s; every one with a support search, a challenge search
+    and several opens), the other MiniMax and the Kimi seat timed out with
+    zero actions; commits t+170 to t+216 s, REVEAL_1 t+294 s, three
+    reveals by t+325 s, discussion t+403 s, round two two commits by
+    t+589 s. Every seat needed five to eight attempts before a call went
+    through, so the router was failing intermittently for all models
+    during the claim; a burst of six parallel real-shaped requests from
+    the Mac at 16:56 all answered 200 in 3 to 10 s. WHY THE LOSSES WERE
+    UNDIAGNOSABLE: lib/engine/server.ts built the Gonka adapter without a
+    logger, so the adapter's attempt entries (error category, HTTP status,
+    request ids) went to the silent redacting logger. Fix: the server now
+    passes createRedactingLogger writing `gonka-attempt <level> <json>`
+    lines to stderr (secrets redacted); deployed after #19's round-two
+    commit deadline. Next lost seat shows its status codes in
+    `railway logs -s app`. Claim #19 finalized UNRESOLVED (truth score
+    9750, three round-one and two round-two reveals) at t+756 s,
+    certificate
+    `0x160d59e1911d3965388e014ff21ac821886aa9c2e4753829347e316867f485f1`.
+    Claim #20 (Dencun activation date) submitted 17:02 on the build with
+    the attempt log.
 
 ### Next steps
 - Demo claims: #16 `0x9169c707…` (YES 9860, certificate `0x62036142…`,
