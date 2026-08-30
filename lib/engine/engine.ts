@@ -3231,16 +3231,24 @@ function defaultDeadlines(
   // reveal-bundle writes, which run one at a time on the operator lane at
   // about 15 s each: a 60 s window lost every reveal of claim #15, so it
   // is 120 s.
+  // 2026-08-30 22:30: the owner keeps all jurors at equal selection weight
+  // and accepts slower verdicts so that the slow family finishes. Kimi's
+  // calls on claim #22 took 60, 5 and 36 s and its fourth (the minimum
+  // trail under policy v4 is four turns) was cut at 97 s by the seat
+  // bound, so the commit window grows from 330 s to 450 s (about 350 s of
+  // research; a certificate lands about 10 min after the POST). The reveal
+  // window, the discussion window and the round-two spacing keep their
+  // lengths and shift with it.
   const second = 1_000;
   return {
     evidenceCutoffMs: now + 60 * second,
     proposalDeadlineMs: now + 65 * second,
     challengeDeadlineMs: now + 70 * second,
-    firstCommitDeadlineMs: now + 330 * second,
-    firstRevealDeadlineMs: now + 450 * second,
-    discussionDeadlineMs: now + 510 * second,
-    secondCommitDeadlineMs: now + 690 * second,
-    secondRevealDeadlineMs: now + 810 * second,
+    firstCommitDeadlineMs: now + 450 * second,
+    firstRevealDeadlineMs: now + 570 * second,
+    discussionDeadlineMs: now + 630 * second,
+    secondCommitDeadlineMs: now + 810 * second,
+    secondRevealDeadlineMs: now + 930 * second,
   };
 }
 
