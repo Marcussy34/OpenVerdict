@@ -30,6 +30,13 @@ the policy. Testnet key servers named in the SDK guide: committee-mode
 `0xb012378c9f3799fb5b1a7083da74a4069e3c3f1c93de0b27212a5799ce1e1e98` through
 `https://seal-aggregator-testnet.mystenlabs.com`, and the independent server
 `0x73d05d62c18d9374e3ea529e8e0ed6161da1a141a94d3f76ae3fe4e99356db75`.
+Verified on chain 2026-08-30 23:05 with `SealClient.getKeyServers()` (probe
+script node_modules/.cache/seal-servers.mts): the committee server answers
+through the aggregator, the independent one is `mysten-v1-1` at
+`https://seal-key-server-testnet-1.mystenlabs.com`, both key type 0, public
+keys fetched. From the developer Mac only the public JSON-RPC endpoint
+reaches the objects (`fullnode.testnet.sui.io` fails locally); the Railway
+container reaches the fullnode, and browsers do too.
 
 ## The use we have for it
 
