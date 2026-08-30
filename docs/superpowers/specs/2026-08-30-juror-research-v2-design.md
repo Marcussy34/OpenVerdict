@@ -48,6 +48,37 @@ their hashes are on chain and their earlier runs must keep verifying.
   `agent_registry::update_agent_manifest` transactions (the scripted path,
   idempotent, dry run first).
 
+## Protocol v4 (prompt spec v4 + tool policy v4): batched opens, 2026-08-30 evening
+
+Applies only to agents whose manifest document is version 5. Version 4
+documents keep the v3 behaviour byte for byte: the v3 prompt hash
+`0x07cdea1d…` and policy hash `0xeba334fd…` did not move (the v4 text is
+derived from the v3 text by replacing the open action line and extending the
+Method sentence with "Open the two or three most credible results of a search
+together instead of one per turn").
+
+- An `open` action may name `urls` (one to `maxOpensPerTurn` = 3 urls, no
+  duplicates, each already seen in results or `submittedUrls`) instead of a
+  single `url`; the single-url form still works, and `from` applies to all.
+- The engine validates the whole batch first: a fourth url, a duplicate or an
+  unseen url refuses the action (`INVALID_ACTION` or `URL_NOT_SEEN` naming
+  the offending url, costs a turn, no open budget). It then charges one open
+  slot per page, fetches the allowed pages in parallel (refs follow request
+  order, not arrival order), and returns one `open_many` tool result whose
+  pages carry the usual open fields or `{url, error}` (`OPEN_FAILED`, or
+  `BUDGET_OPENS` for the pages beyond the remaining budget).
+- Transcript: one step per page with the same turn and model request id,
+  consecutive indexes, and `batch: {size, position}`; failed pages are error
+  steps with the same marker. Every v3 rule, the verifier's side counting and
+  the run view keep working unchanged; the run view addresses the
+  conversation by turn and labels each page "page N of M opened together".
+- Simplification: a page in a batch costs a slot even when it is already
+  open (a single-url re-read of an open page stays free, as in v3).
+- Bundle core v5 = core v4 with spec v4 and policy v4 (same hash formulas).
+  The verifier accepts v5 with the v4 checks plus "opens per turn within
+  policy". Manifests: the seven juror profiles get version 5 documents
+  through the same scripted, idempotent path (dry run first).
+
 ## Transparency
 
 Nothing new needs to be captured: the sealed bundle already holds every

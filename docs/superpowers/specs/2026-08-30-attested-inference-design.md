@@ -37,7 +37,8 @@ network's own rewards, not a client's audit trail.
    the network provides it the check reads "not offered by the provider".
    Draft request to send to the GonkaRouter team is at the end.
 
-2. Re-execution check (built now). `POST /api/claims/<id>/runs/<runId>/reexecute`
+2. Re-execution check (built 2026-08-30 evening, commit `9e2dd98`; the run
+   view and /verify show it as "Re-run this juror"). `POST /api/claims/<id>/runs/<runId>/reexecute`
    resends the recorded messages to the recorded model at temperature 0 and
    the recorded settings, and reports the fresh verdict, output hash, node
    ids and served model next to the recorded ones. A matching verdict is

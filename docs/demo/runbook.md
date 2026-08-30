@@ -137,6 +137,11 @@ the browser on `/verify` (Run proof tab).
    Since juror research v2 (17:10) the commit window is 330 s, so a seat
    has about 230 s of research, the advance lands ~t+360 s, the
    certificate ~t+495 s (about 8.5 min), and a round two ends ~t+860 s.
+   Under the version 5 manifests (batched opens, 21:33) claim #22
+   measured the same shape: commits by t+227 s, reveal phase t+380 s, four
+   reveals by t+411 s, certificate t+502 s (8.4 min); opening three pages
+   in one turn shortened the trails (5 to 8 steps instead of 8 to 10)
+   without lengthening the research.
 5. Model health: Kimi-K2.6 on GonkaRouter was slow or failing most of the
    night (calls longer than the seat budget), then answered in 40 to 72 s on
    claim #15 (08:05, all five seats valid); DeepSeek-V4-Flash answers in 4
@@ -157,7 +162,18 @@ the browser on `/verify` (Run proof tab).
    citations; and the full public bundle as JSON next to the recomputed
    hash checks. Jurors whose manifest is still version 3 show the v1 trail
    (one side is enough for them); the seven testnet jurors carry version
-   4 manifests since the republish of 2026-08-30. Demo claims: #21
+   5 manifests since the republish of 2026-08-30 21:33 (version 4 from
+   16:33 to 21:33). Under version 5 (policy v4) a juror may open up to
+   three pages in one turn: the trail shows each page as its own step
+   labelled "page N of M opened together". Below the hash checks, "Re-run
+   this juror" resends the revealed run's exact messages to the recorded
+   model at temperature 0 and shows the fresh verdict, output hash, served
+   model, node ids and latency next to the recorded ones (a match
+   corroborates; a difference is a reason to look closer, not proof of
+   tampering; the button costs one model call and is rate limited).
+   Demo claims: #22 `0x387a344b…` (YES 9950, certificate `0x7c2fcb4b…`,
+   the first v5 verdict: every revealed run shows pages opened together;
+   open the DeepSeek run for a three-page batch), #21
    `0x5629faca…` (YES 9750, certificate `0x8a5ab5ad…`, the first v2
    verdict: open any of its four revealed runs), #16 `0x9169c707…` (YES
    9860 under v1), #18 `0xb526116e…` and #19 `0xe46d6997…` (two-round

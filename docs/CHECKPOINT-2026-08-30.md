@@ -1,4 +1,4 @@
-# Session checkpoint, 2026-08-30 21:15 local (pre-compaction #8)
+# Session checkpoint, 2026-08-30 21:15 local (pre-compaction #8), updated 22:00 after the v5 rollout
 
 > READ THIS FIRST after a compaction. It supersedes the top sections of
 > docs/CHECKPOINT-2026-08-29.md (which keeps the full night-and-day log,
@@ -72,8 +72,24 @@
 - Costs per claim: about 10 cents cash today (all Firecrawl), 30 to 40
   cents on mainnet prices; inference is a fraction of a cent.
 
-## 2. Protocol and code state (main = `b204424`, pushed)
+## 2. Protocol and code state (main = `9e2dd98` plus the docs commit after it, pushed)
 
+- PROTOCOL V4 / MANIFEST V5 IS LIVE since 21:33 (commit `9e2dd98`,
+  deployment `db421474`): an open action may name up to three urls
+  (`maxOpensPerTurn` 3), fetched in parallel, one transcript step per page
+  with `batch {size, position}`, one `open_many` tool result; bundle core
+  v5; verifier check "opens per turn within policy"; the seven jurors
+  carry v5 manifests (prompt hash `0x7257117d…`, policy hash
+  `0x8da9ec66…`; the v3 hashes did not move). The re-execution check is
+  live: `POST /api/claims/<id>/runs/<runId>/reexecute` and the "Re-run
+  this juror" block (proven 21:38 on claim #21's DeepSeek run: YES 9500
+  again, served model matches, output hash differs as expected). First v5
+  verdict: claim #22 `0x387a344bd5b23c50638421875e0dbaa483597eb2064c05741b5059b1fa121785`
+  (YES 9950, certificate `0x7c2fcb4b…`, 8.4 min; DeepSeek run
+  `0x6b646088…` with a three-page batch passes all 14 local checks;
+  proofs saved as node_modules/.cache/proof-387a344b-{1..4}.json,
+  fetcher scratchpad/proof-scan.py, verifier
+  `pnpm exec tsx node_modules/.cache/verify-proof.mts <proof.json>`).
 - Juror research v2 is LIVE: prompt spec v3 + tool policy v3 (search
   intent support/challenge; CHALLENGE_REQUIRED, CORROBORATION_REQUIRED,
   counterEvidenceSummary; 4 searches, 5 opens, 10 turns; minCitationDomains
@@ -98,9 +114,19 @@
   `0xe46d6997…` (two-round UNRESOLVED with v2 trails); #20 `0x16539432…`
   (all seats hit the old seat deadline; the diagnosis behind the ladder).
 
-## 3. IN FLIGHT AT COMPACTION: two Codex jobs (started 21:01)
+## 3. DONE 22:00: the two Codex jobs (started 21:01) were reviewed, merged, deployed and proven live
 
-Both run inside the persistent Codex app-server; the codex-worker
+Outcome: both diffs passed review (v3 behaviour byte-identical, batch
+validated against seen urls, per-page budget, one step per page, verifier
+v5 gate, no secrets in the re-execution response, guarded route); my own
+additions were the UI type guard for v5, per-turn message addressing and
+the batch label in the trail, and a clearer "not a final answer" message.
+Gate: typecheck clean, 41 files / 403 tests, lint 0 errors, build OK.
+Rollout: commit `9e2dd98`, deployment `db421474`, manifests v5 published
+from the container at 21:33, claim #22 verdict at 21:44 (section 2). The
+history below is kept for the next protocol bump.
+
+Both ran inside the persistent Codex app-server; the codex-worker
 subagent wrappers show "idle" but the jobs continue. Companion script:
 `CO=$(ls -d ~/.claude/plugins/cache/openai-codex/codex/*/scripts/codex-companion.mjs | sort -V | tail -1)`.
 Check: `cd /Users/marcus/Projects/OpenVerdict && node "$CO" status`;
@@ -125,7 +151,7 @@ B. `task-mtftjjwe-g9du93` "independent re-execution check": new
    juror" block in components/claim/run-proof.tsx (also on /verify).
    At 21:12 it was in its verifying phase.
 
-### Review checklist for A and B (Fable reviews every worker diff)
+### Review and rollout checklist (as executed for A and B; reuse for the next protocol bump)
 1. `git status --short`; `git diff --stat`; read the diffs of loop.ts,
    run-proof.ts, reexecute.ts and the route. Check: v3 policy behaviour
    unchanged; urls validated against seen urls; budget accounting; the
@@ -161,7 +187,7 @@ only when a single job remains (max three rounds), else finish by hand.
 ## 4. Planned next (owner-approved direction)
 
 - Attestation (docs/superpowers/specs/2026-08-30-attested-inference-design.md):
-  the re-execution check is job B; the signed receipt is a request to the
+  the re-execution check is live (measure 2 done); the signed receipt is a request to the
   GonkaRouter team (draft text at the end of that spec; the owner sends
   it); the enclave (Nautilus, AWS Nitro "prompt forwarder" that signs
   request and response hashes) is the next multi-day milestone; the

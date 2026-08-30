@@ -93,6 +93,41 @@ operational proof and public deployments in flight.
   and committee diversity (three model families, so the slowest family is
   always seated). Operational: agent wallets pay for seat transactions and
   must stay funded (see the runbook checklist).
+- BATCHED OPENS + RE-EXECUTION CHECK 2026-08-30 evening (commit `9e2dd98`,
+  Railway deployment `db421474`; design in the "Protocol v4" section of
+  docs/superpowers/specs/2026-08-30-juror-research-v2-design.md and in
+  docs/superpowers/specs/2026-08-30-attested-inference-design.md): under
+  tool policy v4 an open action may name up to three urls; the engine
+  validates the batch against the urls seen in the run, fetches the pages
+  in parallel, records one transcript step per page with a batch marker
+  and returns one `open_many` tool result (prompt spec v4, manifest
+  document v5, bundle core v5, verifier check "opens per turn within
+  policy"; v3 policies unchanged byte for byte). The seven jurors carry v5
+  manifests since 21:33 (prompt hash `0x7257117d…`, policy hash
+  `0x8da9ec66…`; the v3 hashes did not move, so v4 bundles keep
+  verifying). `POST /api/claims/<id>/runs/<runId>/reexecute` (public, rate
+  limited, revealed runs only, 120 s timeout) resends a run's recorded
+  messages to the recorded model at temperature 0, and the run view's
+  "Re-run this juror" block compares the fresh verdict, output hash,
+  served model and node ids with the recorded ones: a match corroborates,
+  a difference is a reason to look closer, not proof of tampering. Proven
+  on production at 21:38: re-running claim #21's DeepSeek run
+  `0x76fe683f…` returned YES 9500 again (verdict and served model match,
+  output hash differs because the recorded hash covers the validated
+  output), answered by devshard 66624 (gateway request
+  `req-1788097096443106812-862321`, fingerprint `vllm-0.25.1-tp4-f0993dd5`)
+  in 77 s. FIRST V5 VERDICT, claim #22 (21:44, `0x387a344b…`, "The
+  Ethereum Merge, which switched Ethereum from proof of work to proof of
+  stake, took place on September 15, 2022."): four seats valid (both
+  DeepSeek, both MiniMax; the Kimi seat timed out), every run a v5 bundle
+  with batched opens (each DeepSeek seat opened three pages in one turn
+  after its support search and two after its challenge search; MiniMax two
+  per turn), commits by t+227 s, reveal phase at t+380 s, four reveals by
+  t+411 s, finalized YES with truth score 9950 at t+502 s (8.4 min from
+  POST), certificate
+  `0x7c2fcb4b71691ecd6253fd8b2cf40975a8cc66ba67520e83b9e8c68720d6d02c`.
+  DeepSeek run `0x6b646088…` and MiniMax run `0x71edbc4f…` pass all 14
+  verifier checks locally, including "opens per turn within policy".
 - JUROR RESEARCH V2 2026-08-30 afternoon (design record
   docs/superpowers/specs/2026-08-30-juror-research-v2-design.md): every
   search carries an intent (support or challenge); before a YES or NO the
