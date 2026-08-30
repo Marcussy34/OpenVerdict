@@ -192,11 +192,17 @@ only when a single job remains (max three rounds), else finish by hand.
   it); the enclave (Nautilus, AWS Nitro "prompt forwarder" that signs
   request and response hashes) is the next multi-day milestone; the
   bundle should get an optional `gateway.receipt` slot once a format exists.
-- Verdict odds: with three model families and seven agents, half of all
-  committees seat both Kimi profiles and Kimi fails most seats; a fourth
-  model family on GonkaRouter (new registrations, funding 0.6 SUI each,
-  manifests, a research quality probe) is the lever. Do not lower Kimi's
-  eligibility weight (committees without Kimi abort on the diversity rule).
+- Verdict odds (updated 22:15): GonkaRouter serves exactly three models,
+  so a fourth family is impossible; the Move rules (two seats per model at
+  most, three families, seven active agents for the draw) force at least
+  one Kimi seat per committee and forbid deactivating anyone. The lever
+  applied: Kimi profiles at selection weight 3000 (others 10000, registry
+  tx `91ir2QVb…`), simulated 16% two-Kimi committees instead of 57%, abort
+  risk 0.06% (a failed draw is retried on the next tick). Tools:
+  node_modules/.cache/set-eligibility.mjs (run inside the container when
+  the Mac's RPC times out), weights.mjs, prevtx.mjs. The registry has 32
+  records = MAX_ELIGIBLE_SNAPSHOT. Remaining option if Kimi still loses:
+  lengthen the commit window by 60 to 120 s (verdict 8.4 to about 10 min).
 - Optional: move DNS off Vercel (the last Vercel dependency); a faucet
   top-up for the operator before a long demo day.
 

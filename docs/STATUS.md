@@ -93,6 +93,22 @@ operational proof and public deployments in flight.
   and committee diversity (three model families, so the slowest family is
   always seated). Operational: agent wallets pay for seat transactions and
   must stay funded (see the runbook checklist).
+- SELECTION WEIGHTS 2026-08-30 22:15: GonkaRouter serves exactly three
+  models (`GET /v1/models`: DeepSeek-V4-Flash-0731, MiniMax-M2.7,
+  Kimi-K2.6), so a fourth model family is not available and all inference
+  stays on GonkaRouter. The committee rules (at most two seats per model,
+  three families per committee, seven active agents for the draw) put at
+  least one Kimi seat on every committee, and Kimi's calls on claim #22
+  took 60 s, 5 s and 36 s before the fourth was cut at 97 s by the seat
+  bound (a one-word probe answers in 9.4 s against 1.4 s for DeepSeek).
+  The two Kimi profiles now carry selection weight 3000 against 10000 for
+  the others (registry tx `91ir2QVbvvsi4whLbfGdkkjoXaY28EZuRrxaNvo1BZ2s`,
+  sent from inside the container because the Mac could not reach the
+  RPC), which the draw simulation puts at 16% committees with two Kimi
+  seats instead of 57%, so one lost Kimi seat no longer blocks a round.
+  The registry holds 32 eligibility records, exactly
+  `MAX_ELIGIBLE_SNAPSHOT`: retire an old profile before registering a new
+  agent.
 - BATCHED OPENS + RE-EXECUTION CHECK 2026-08-30 evening (commit `9e2dd98`,
   Railway deployment `db421474`; design in the "Protocol v4" section of
   docs/superpowers/specs/2026-08-30-juror-research-v2-design.md and in

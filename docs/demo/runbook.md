@@ -147,7 +147,19 @@ the browser on `/verify` (Run proof tab).
    claim #15 (08:05, all five seats valid); DeepSeek-V4-Flash answers in 4
    to 30 s and MiniMax-M2.7 in 5 to 35 s. Four matching reveals out of five
    are needed for a verdict in a round (`REQUIRED_MATCHING = 4`), so a
-   round survives at most one lost seat.
+   round survives at most one lost seat. GonkaRouter serves exactly three
+   models (`GET /v1/models`), and the committee rules (at most two seats
+   per model, three families per committee, seven active agents for the
+   draw) put at least one Kimi seat on every committee. Since 22:15 the
+   two Kimi profiles carry selection weight 3000 against 10000 for the
+   others (registry tx `91ir2QVb…`), which cuts committees with two Kimi
+   seats from about 57% to about 16% (simulated), so a single Kimi loss
+   no longer blocks a round. Change weights with
+   `node node_modules/.cache/set-eligibility.mjs <weight> <profileId...>`
+   (operator key in the environment; run it inside the container when the
+   Mac cannot reach the RPC) and verify with `weights.mjs`. The registry
+   holds 32 eligibility records, exactly `MAX_ELIGIBLE_SNAPSHOT`: retire
+   an inactive profile before registering a new agent.
 6. What to show on a run page (juror research v2, 2026-08-30 afternoon):
    the provenance strip (requested versus served model, devshard, vLLM
    fingerprint, gateway and Gonka request ids, tokens, latency, links to
