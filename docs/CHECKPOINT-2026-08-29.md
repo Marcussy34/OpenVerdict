@@ -613,6 +613,23 @@ then submit a fast test claim and time it.
     form without Kimi, which needs new registrations, funding, manifests
     and a quality probe (next session).
 
+53. Claim #18 round two: every seat (both DeepSeek, MiniMax, both Kimi)
+    failed with "GonkaRouter provider request failed" on six attempts each
+    between 16:43 and 16:45 and was cut at the seat deadline; finalized
+    UNRESOLVED at t+749 s with no round-two reveals, certificate
+    `0xdde86ec7bd8be318ff95d712089636b1f028db8e7e08efdcb878f07102a0eca0`.
+    Diagnosis: a router incident, not the protocol or request size. Probes
+    at 16:49 with the real v3 system prompt (3.7 KB) and inputs of 1.1 KB
+    and 4.7 KB (larger than a round-two input) answered in 2 to 8 s for
+    DeepSeek and MiniMax, DeepSeek returning a correct
+    {"action":"search","intent":"support"} first action. The example v4
+    run `0x5020bc5b…` passed all 13 verifier checks locally
+    (`recomputeRunProof` on the live proof: prompt, policy, system prompt,
+    input, output, transcript, citations, challengeSearch,
+    bothSidesOpened, citationSites 2, counterEvidenceSummary, runHash,
+    sealedCore). Claim #19 submitted 16:50 for another v2 attempt while
+    the router is healthy.
+
 ### Next steps
 - Demo claims: #16 `0x9169c707…` (YES 9860, certificate `0x62036142…`,
   v1 research) for the verdict path; #18 `0xb526116e…` for the v2
