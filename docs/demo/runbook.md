@@ -140,6 +140,21 @@ the browser on `/verify` (Run proof tab).
    to 30 s and MiniMax-M2.7 in 5 to 35 s. Four matching reveals out of five
    are needed for a verdict in a round (`REQUIRED_MATCHING = 4`), so a
    round survives at most one lost seat.
+6. What to show on a run page (juror research v2, 2026-08-30 afternoon):
+   the provenance strip (requested versus served model, devshard, vLLM
+   fingerprint, gateway and Gonka request ids, tokens, latency, links to
+   the run approval, commitment and reveal objects and transactions on
+   Suiscan, the sealed and revealed blobs on Walrus); the research trail
+   with a support search and a challenge search, the pages opened on each
+   side, and any engine refusal (`CHALLENGE_REQUIRED`,
+   `CORROBORATION_REQUIRED`) shown as an event; per turn, "what the model
+   was sent" and "what the model said" with the node that answered; the
+   system prompt and budgets with their hashes; evidence for and against
+   the claim, the reasoning trace, the counter-evidence summary and the
+   citations; and the full public bundle as JSON next to the recomputed
+   hash checks. Jurors whose manifest is still version 3 show the v1 trail
+   (one side is enough for them); the seven testnet jurors carry version
+   4 manifests since the republish of 2026-08-30.
 
 ## 5. Human end-to-end walkthrough (the user's test)
 

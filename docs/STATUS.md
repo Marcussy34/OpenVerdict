@@ -91,6 +91,22 @@ operational proof and public deployments in flight.
   and committee diversity (three model families, so the slowest family is
   always seated). Operational: agent wallets pay for seat transactions and
   must stay funded (see the runbook checklist).
+- JUROR RESEARCH V2 2026-08-30 afternoon (design record
+  docs/superpowers/specs/2026-08-30-juror-research-v2-design.md): every
+  search carries an intent (support or challenge); before a YES or NO the
+  engine requires a challenge search with one of its results opened,
+  citations from at least two sites, and a counter-evidence summary, each
+  with bounded nudges (`CHALLENGE_REQUIRED`, `CORROBORATION_REQUIRED`),
+  and UNSURE is never blocked. Prompt spec v3, tool policy v3 (4 searches,
+  5 opens, 10 turns), manifest document v4, bundle core v4; agents whose
+  manifest is still version 3 keep the v1 behaviour byte for byte, and
+  the verifier checks v4 bundles against their own policy. The run view
+  shows everything the sealed bundle records: provenance (requested versus
+  served model, devshard, fingerprint, request ids, tokens, latency, Sui
+  and Walrus links), the per-turn conversation with the node that
+  answered, the engine's refusals, the system prompt and budgets,
+  evidence for and against with the reasoning trace, every remaining
+  audit field, and the full public bundle as JSON.
 - PROOF CHAIN V2 PROVEN ON TESTNET 2026-08-29 late: the seven juror manifests
   on chain are real v2 documents on Walrus (prompt spec embedded, hashes
   match, `scripts/publish-agent-manifests.ts`), and a live canary ran under

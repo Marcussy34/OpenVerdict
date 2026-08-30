@@ -558,6 +558,29 @@ then submit a fast test claim and time it.
     fallback claim ready (#16) and the report page makes the substitution
     visible through the audit's responseModelId.
 
+51. JUROR RESEARCH V2 (15:45 to 16:45, owner: "take both sides into
+    account", "everything fully transparent", then "you make the best
+    architectural decision, I'll leave you in charge"). Design record
+    docs/superpowers/specs/2026-08-30-juror-research-v2-design.md. Two
+    Codex workers in parallel (lib/ protocol, components/ UI), reviewed
+    and gated by the lead: typecheck clean, 383 tests, build. Protocol:
+    prompt spec v3 + tool policy v3 (search intent support/challenge;
+    CHALLENGE_REQUIRED and CORROBORATION_REQUIRED nudges, at most two
+    each; counterEvidenceSummary required for YES or NO; 4 searches, 5
+    opens, 10 turns; minCitationDomains 2; minOpensPerSide 1), manifest
+    document v4, bundle core v4, verifier v4 checks; version 3 manifests
+    keep v1 behaviour. Lead's one change to the worker's rule: citation
+    sites count from the engine-opened page, so a blanked quote (URL
+    verified, quote not found verbatim) still corroborates. Finding while
+    reviewing: the sealed bundle already recorded every turn's attempt
+    (gateway request id, devshard, served model, fingerprint, tokens,
+    latency, raw reply) and the final request's full message list (the
+    accumulated conversation), so transparency was a display problem, not
+    a capture problem; the UI now renders all of it plus Sui object and
+    transaction links per run. Commit "feat(research): juror research v2".
+    Next: deploy, republish the seven manifests as v4 inside the container
+    (`railway ssh -s app`), run a live claim, record it here.
+
 ### Next steps
 - Demo claims: #16 `0x9169c707…` (YES 9860, certificate `0x62036142…`)
   for the verdict path; #15 `0xc9e0d4eb…` (UNRESOLVED, two rounds) for
