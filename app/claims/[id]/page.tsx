@@ -4,6 +4,8 @@ import { useState, useEffect, use, useCallback, useMemo } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { StateBadge } from "@/components/claim/state-badge";
+import { isStrandedDiscussion } from "@/lib/engine/claim-lifecycle";
+import { useNow } from "@/components/use-now";
 import { VerdictGauge } from "@/components/viz/verdict-gauge";
 import { ClaimTimeline } from "@/components/claim/timeline";
 import { TimeDisplay } from "@/components/time-display";
@@ -40,6 +42,8 @@ interface ClaimDetailPageProps {
 }
 
 export default function ClaimDetailPage({ params }: ClaimDetailPageProps) {
+  // Hooks run before the loading and error returns below (rules of hooks).
+  const now = useNow();
   const { id } = use(params);
 
   const [claim, setClaim] = useState<ClaimInspection | null>(null);
@@ -224,6 +228,7 @@ export default function ClaimDetailPage({ params }: ClaimDetailPageProps) {
   const revealedCount = claim.commitments?.filter((c) => c.revealed).length ?? 0;
   const sealedCount = claim.commitments?.filter((c) => c.committed).length ?? 0;
   const verification = claim.verification;
+  const stranded = now !== null && isStrandedDiscussion(claim, now);
 
   return (
     <div className="space-y-8 px-5 py-10 md:px-7 lg:py-12">
@@ -234,9 +239,16 @@ export default function ClaimDetailPage({ params }: ClaimDetailPageProps) {
         title="Claim report"
         icon={Judge}
         badges={
-          <div className="flex flex-wrap items-center gap-2">
-            <StateBadge state={claim.state} />
-            <ExperimentalTag />
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <StateBadge state={claim.state} stranded={stranded} />
+              <ExperimentalTag />
+            </div>
+            {stranded && (
+              <p className="mt-1 text-xs text-muted-foreground">
+                The discussion window closed without a second round, so this claim can no longer resolve.
+              </p>
+            )}
           </div>
         }
         actions={

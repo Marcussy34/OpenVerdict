@@ -53,8 +53,20 @@ Postgres. Tests: 431 vitest, 70 Move.
 - HOSTED ON RAILWAY 2026-08-30 (single host, web + the three engine
   workers in one service `app`): https://openverdict.info is the landing,
   https://app.openverdict.info opens the dashboard directly (`proxy.ts`
-  rewrites the root of `app.` hosts to `/app`). The DNS zone stays on Vercel
-  nameservers (apex ALIAS and www CNAME point at Railway). Since 2026-08-30
+  rewrites the root of `app.` hosts to `/app`). Since 2026-08-31 the split
+  is enforced: `www` redirects to the apex, console paths on the apex
+  (`/app`, `/claims`, `/agents`, `/verify`, `/status`, `/fact-check`,
+  `/evidence`) redirect to the app host with 308, the header's "Open app"
+  hands visitors across (`NEXT_PUBLIC_APP_URL`, a Dockerfile build ARG), the
+  header knows the console host's root is not the landing, claims list
+  newest first, stranded discussion claims show as "Expired", and every
+  page carries a title, Open Graph and Twitter cards with a generated image,
+  `robots.txt`, `sitemap.xml` and the standard security headers (HSTS,
+  nosniff, referrer policy, frame options; no CSP because wallet extensions
+  and the Enoki popup inject scripts). The DNS zone stays on Vercel
+  nameservers (apex ALIAS, www and app CNAMEs point at Railway; Let's
+  Encrypt certificates for all three; Google OAuth and the Enoki allowlist
+  cover every host). Since 2026-08-30
   15:00 the database is a Railway Postgres service in the same project
   (`Postgres`, private network only, daily and weekly volume backups). Neon
   hit its free plan's 5 GB monthly egress the same afternoon; both Neon

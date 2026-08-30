@@ -9,6 +9,8 @@ import { HashChip } from "@/components/viz/hash-chip";
 import { SeatStrip, outcomeLabel, seatStateOf } from "@/components/viz/seat-seal";
 import { MetaTag } from "@/components/viz/page-header";
 import type { ClaimInspection } from "@/lib/engine/contract";
+import { isStrandedDiscussion } from "@/lib/engine/claim-lifecycle";
+import { useNow } from "@/components/use-now";
 import { CLAIM_MODE } from "@/lib/protocol/constants";
 import { Eye, ArrowRight, DocumentText, Judge, Clock } from "@/components/icons";
 
@@ -20,6 +22,8 @@ export function ClaimCard({ claim }: ClaimCardProps) {
   const isDirectReview = claim.mode === CLAIM_MODE.DIRECT_REVIEW;
   const isTerminal = claim.state >= 9;
   const truthScore = claim.result?.truthScoreBps ?? null;
+  const now = useNow();
+  const stranded = now !== null && isStrandedDiscussion(claim, now);
 
   const seats = (claim.commitments ?? []).map((c) => ({
     state: seatStateOf(c),
@@ -34,7 +38,7 @@ export function ClaimCard({ claim }: ClaimCardProps) {
           <MetaTag tone={isDirectReview ? "chain" : "default"}>
             {isDirectReview ? "Direct review" : "Optimistic"}
           </MetaTag>
-          <StateBadge state={claim.state} size="sm" />
+          <StateBadge state={claim.state} stranded={stranded} size="sm" />
         </div>
         <span className="ov-micro ov-micro-sm text-unsure">
           Experimental

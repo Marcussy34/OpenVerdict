@@ -96,7 +96,10 @@ first. Env per
 `.env.example` (operator key, agent seed, manifest=testnet, Gonka key,
 Firecrawl key, operator token, `PORT=3000`, `OPENVERDICT_PUBLIC_WRITES=
 enabled`, `OPENVERDICT_TRUST_PROXY=1`, `WALRUS_UPLOAD_RELAY_URL`,
-`NEXT_PUBLIC_*` baked at build time through Dockerfile ARGs). Railway
+`NEXT_PUBLIC_*` baked at build time through Dockerfile ARGs, including
+`NEXT_PUBLIC_APP_URL=https://app.openverdict.info` and
+`NEXT_PUBLIC_SITE_URL=https://openverdict.info`, which drive the two-host
+redirects in `proxy.ts`, the header hand-off and the metadata). Railway
 reaches Mysten endpoints normally; the local TLS interference does not
 apply there. Deploy: from a clean checkout of the commit
 (`git checkout --detach <sha>` in a worktree) run `railway up -s app -d`,

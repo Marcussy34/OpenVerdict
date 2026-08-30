@@ -6,6 +6,8 @@ import { PageHeader, MetaTag } from "@/components/viz/page-header";
 import { Panel } from "@/components/viz/panel";
 import { StatTile } from "@/components/viz/stat-tile";
 import { StateBadge } from "@/components/claim/state-badge";
+import { isStrandedDiscussion } from "@/lib/engine/claim-lifecycle";
+import { useNow } from "@/components/use-now";
 import { Arrow } from "@/components/landing/primitives";
 import { SuiMark, GonkaMark } from "@/components/brand/logos";
 import {
@@ -86,12 +88,17 @@ export default function AppHomePage() {
   }, []);
 
   // Every number here is counted off the read-only feed; nothing is synthesised.
+  // Stranded discussion claims (window closed, no second round) are not "in
+  // deliberation"; the clock comes from a hydration-safe store.
+  const now = useNow();
   const stats = useMemo(() => {
     const settled = claims.filter((c) => c.state >= 9 && c.state !== 12).length;
-    const running = claims.filter((c) => c.state >= 3 && c.state < 9).length;
+    const running = claims.filter(
+      (c) => c.state >= 3 && c.state < 9 && (now === null || !isStrandedDiscussion(c, now)),
+    ).length;
     const seats = claims.reduce((n, c) => n + (c.commitments?.length ?? 0), 0);
     return { settled, running, seats, jurors: agents.filter((a) => a.active).length };
-  }, [claims, agents]);
+  }, [claims, agents, now]);
 
   const recent = claims.slice(0, 5);
 
@@ -168,7 +175,11 @@ export default function AppHomePage() {
                         {claim.claimId}
                       </p>
                     </div>
-                    <StateBadge state={claim.state} size="sm" />
+                    <StateBadge
+                      state={claim.state}
+                      stranded={now !== null && isStrandedDiscussion(claim, now)}
+                      size="sm"
+                    />
                   </Link>
                 </li>
               ))}

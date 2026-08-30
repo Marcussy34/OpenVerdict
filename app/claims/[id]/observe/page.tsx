@@ -13,6 +13,8 @@ import { Panel, FieldLabel } from "@/components/viz/panel";
 import { StatusPill } from "@/components/viz/live-dot";
 import { HashChip } from "@/components/viz/hash-chip";
 import { StateBadge } from "@/components/claim/state-badge";
+import { isStrandedDiscussion } from "@/lib/engine/claim-lifecycle";
+import { useNow } from "@/components/use-now";
 import { modelFamily } from "@/components/viz/model-badge";
 import { outcomeLabel, seatStateOf, type SeatState } from "@/components/viz/seat-seal";
 import { cn } from "@/lib/utils";
@@ -155,6 +157,8 @@ export default function ObservePage({ params }: ObservePageProps) {
         : status === "connecting"
           ? "Connecting"
           : status;
+  const now = useNow();
+  const stranded = claim !== null && now !== null && isStrandedDiscussion(claim, now);
 
   return (
     <div className="space-y-6 px-5 py-10 md:px-7 lg:py-12">
@@ -188,7 +192,7 @@ export default function ObservePage({ params }: ObservePageProps) {
       >
         <div className="mt-4 flex flex-wrap items-center gap-2">
           <HashChip value={id} label="claim" tone="chain" head={10} tail={8} />
-          {claim && <StateBadge state={claim.state} size="sm" />}
+          {claim && <StateBadge state={claim.state} stranded={stranded} size="sm" />}
           {claim?.committeeId && (
             <HashChip value={claim.committeeId} label="committee" tone="sealed" />
           )}

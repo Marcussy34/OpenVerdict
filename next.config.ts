@@ -1,6 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  poweredByHeader: false,
   // These ship wasm assets; keep them external to the server bundle. Being
   // listed here is also what lets the tracer follow them into the serverless
   // function, so the runtime `require` actually resolves.
@@ -12,6 +13,37 @@ const nextConfig: NextConfig = {
   // route reaches the engine through getServerEngine, so trace it globally.
   outputFileTracingIncludes: {
     "/*": ["./config/*.json"],
+  },
+  // CSP is omitted because wallet extensions and the Enoki sign-in popup
+  // inject scripts.
+  async headers() {
+    return [
+      {
+        source: "/(.*)",
+        headers: [
+          {
+            key: "Strict-Transport-Security",
+            value: "max-age=31536000",
+          },
+          {
+            key: "X-Content-Type-Options",
+            value: "nosniff",
+          },
+          {
+            key: "Referrer-Policy",
+            value: "strict-origin-when-cross-origin",
+          },
+          {
+            key: "X-Frame-Options",
+            value: "SAMEORIGIN",
+          },
+          {
+            key: "Permissions-Policy",
+            value: "camera=(), microphone=(), geolocation=()",
+          },
+        ],
+      },
+    ];
   },
 };
 

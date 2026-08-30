@@ -1,6 +1,11 @@
+import type { Metadata } from "next";
 import { PageHeader, ExperimentalTag } from "@/components/viz/page-header";
 import { Panel } from "@/components/viz/panel";
 import { Warning2, ShieldCross, Cpu, Lock, Link21 } from "@/components/icons";
+
+export const metadata: Metadata = {
+  title: "Risk disclosure",
+};
 
 const RISKS = [
   {

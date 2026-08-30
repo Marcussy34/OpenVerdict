@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { PageHeader, ExperimentalTag } from "@/components/viz/page-header";
 import { Panel, FieldLabel, Well } from "@/components/viz/panel";
@@ -14,6 +15,10 @@ import {
   ArrowRight,
   type IconComponent,
 } from "@/components/icons";
+
+export const metadata: Metadata = {
+  title: "Learn",
+};
 
 const CONTENTS = [
   { id: "pathways", label: "Resolution pathways" },

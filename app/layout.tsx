@@ -1,10 +1,14 @@
 import type { Metadata } from "next";
+import { headers } from "next/headers";
 import "./globals.css";
 import { Archivo, Archivo_Narrow, Geist_Mono } from "next/font/google";
 import { cn } from "@/lib/utils";
 import { SiteHeader } from "@/components/site-header";
 import { LandingFooter } from "@/components/landing/footer";
 import { WalletProviders } from "@/components/wallet/providers";
+
+import { SITE_URL, SITE_NAME, SITE_DESCRIPTION } from "@/lib/web/site-urls";
+import { rewritePathForHost } from "@/lib/web/host-routing";
 
 // Archivo carries every heading and paragraph; the big display sizes run at 400.
 const archivo = Archivo({ subsets: ["latin"], variable: "--font-sans" });
@@ -14,14 +18,40 @@ const archivoNarrow = Archivo_Narrow({ subsets: ["latin"], variable: "--font-nar
 const geistMono = Geist_Mono({ subsets: ["latin"], variable: "--font-mono" });
 
 export const metadata: Metadata = {
-  title: "OpenVerdict",
-  description:
-    "Decentralized intelligence verification engine — GonkaRouter AI juries coordinated and settled on Sui, evidence preserved on Walrus.",
+  metadataBase: new URL(SITE_URL),
+  title: {
+    default: SITE_NAME,
+    template: `%s | ${SITE_NAME}`,
+  },
+  description: SITE_DESCRIPTION,
+  applicationName: SITE_NAME,
+  openGraph: {
+    type: "website",
+    siteName: SITE_NAME,
+    title: SITE_NAME,
+    description: SITE_DESCRIPTION,
+    url: "/",
+    locale: "en_US",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: SITE_NAME,
+    description: SITE_DESCRIPTION,
+  },
+  robots: {
+    index: true,
+    follow: true,
+  },
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
+  // On the app host the root path is the console, not the landing; the header
+  // needs to know because the browser URL is "/" on both hosts.
+  const requestHeaders = await headers();
+  const host = requestHeaders.get("x-forwarded-host") ?? requestHeaders.get("host");
+  const consoleHost = rewritePathForHost(host, "/") !== null;
   return (
     // Light is the demo theme; every token lives in globals.css :root.
     <html
@@ -50,7 +80,7 @@ export default function RootLayout({
 
         <WalletProviders>
           <div className="relative z-10 flex min-h-screen flex-col">
-            <SiteHeader />
+            <SiteHeader consoleHost={consoleHost} />
             <main id="main" className="flex-1">
               {children}
             </main>

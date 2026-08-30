@@ -1,6 +1,11 @@
+import type { Metadata } from "next";
 import { PageHeader, ExperimentalTag } from "@/components/viz/page-header";
 import { Panel } from "@/components/viz/panel";
 import { DocumentText, Warning2 } from "@/components/icons";
+
+export const metadata: Metadata = {
+  title: "Terms of use",
+};
 
 const SECTIONS = [
   {

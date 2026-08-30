@@ -9,6 +9,8 @@ import { StatusPill } from "@/components/viz/live-dot";
 import { StateBadge } from "./state-badge";
 import { Button } from "@/components/ui/button";
 import type { ClaimInspection } from "@/lib/engine/contract";
+import { isStrandedDiscussion } from "@/lib/engine/claim-lifecycle";
+import { useNow } from "@/components/use-now";
 import { ArrowRight, Award, Eye } from "@/components/icons";
 
 /**
@@ -24,6 +26,8 @@ export function VerdictSpotlight({ claim }: { claim: ClaimInspection }) {
   }));
   const finalized = claim.state >= 9;
   const scoreBps = claim.result?.truthScoreBps ?? null;
+  const now = useNow();
+  const stranded = now !== null && isStrandedDiscussion(claim, now);
 
   return (
     <motion.aside
@@ -69,7 +73,7 @@ export function VerdictSpotlight({ claim }: { claim: ClaimInspection }) {
         </p>
 
         <div className="flex justify-center">
-          <StateBadge state={claim.state} size="sm" />
+          <StateBadge state={claim.state} stranded={stranded} size="sm" />
         </div>
 
         {seats.length > 0 && (

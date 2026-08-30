@@ -29,7 +29,7 @@ evidence and agent work preserved on Walrus.
 > | Wallet + zkLogin onboarding · T7b one-account-one-seat registration | ✅ SDK-verified signatures, pseudonymous backing hash |
 > | Observer + fact-check UI (light + Sui blue redesign) | ✅ builds, typechecks, lints |
 > | Sui testnet package | ✅ published — ids in `config/release.testnet.json` |
-> | Hosted on Railway (web + API + workers, Railway Postgres) | ✅ https://openverdict.info · app at https://app.openverdict.info |
+> | Hosted on Railway (web + API + workers, Railway Postgres) | ✅ https://openverdict.info (landing) · https://app.openverdict.info (console; www and apex console paths redirect there) |
 >
 > Full specification: [PRD.md](./PRD.md) · Live status: [docs/STATUS.md](./docs/STATUS.md) · Build plan: [docs/superpowers/plans/2026-08-26-openverdict-build.md](./docs/superpowers/plans/2026-08-26-openverdict-build.md)
 

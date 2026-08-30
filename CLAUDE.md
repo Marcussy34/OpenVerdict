@@ -48,6 +48,11 @@ pnpm e2e:localnet  # full localnet lifecycle (spawns `sui start`)
   never costs a seat; votes still fail closed on any unverifiable output.
 - Deploy only between claims: a container restart drops in-flight research
   and those seats fail closed.
+- Two hosts, one deployment: openverdict.info is the landing, app.openverdict.info
+  the console. `proxy.ts` + `lib/web/host-routing.ts` own the rules (www to
+  apex, apex console paths to the app host, app root to `/app`); they are
+  no-ops without `NEXT_PUBLIC_APP_URL`. `NEXT_PUBLIC_*` values are Dockerfile
+  build ARGs: add a new one there or it never reaches the client bundle.
 - Move or SDK work: load the `sui-dev-skills` skill first (Mysten's
   conventions for Move 2024 and `@mysten/sui` v2). The Seal policy package
   lives in `move/openverdict_seal` (`sui move test` there too).

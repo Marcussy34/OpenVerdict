@@ -18,6 +18,7 @@ import {
 
 interface StateBadgeProps {
   state: ClaimState | number | string;
+  stranded?: boolean;
   className?: string;
   size?: "sm" | "md" | "lg";
 }
@@ -42,7 +43,10 @@ const TONE_CLASS: Record<Tone, string> = {
   primary: "border-sea/35 bg-sea/10 text-primary",
 };
 
-export function getStateConfig(state: ClaimState | number | string): StateConfig {
+export function getStateConfig(
+  state: ClaimState | number | string,
+  stranded = false,
+): StateConfig {
   const numericState = typeof state === "number" ? state : Number(state);
 
   switch (numericState) {
@@ -64,6 +68,14 @@ export function getStateConfig(state: ClaimState | number | string): StateConfig
     case CLAIM_STATE.REVEAL_1:
       return { label: "Phase 1 · Reveal", short: "Revealing", icon: Unlock, tone: "chain" };
     case CLAIM_STATE.DISCUSSION:
+      if (stranded) {
+        return {
+          label: "Discussion · expired",
+          short: "Expired",
+          icon: CloseCircle,
+          tone: "neutral",
+        };
+      }
       return { label: "Discussion round", short: "Discussion", icon: Activity, tone: "warn" };
     case CLAIM_STATE.COMMIT_2:
       return { label: "Phase 2 · Sealed commit", short: "Sealed", icon: Lock, tone: "sealed" };
@@ -103,8 +115,13 @@ export function getStateConfig(state: ClaimState | number | string): StateConfig
  * StateBadge pairs colour with an explicit text label and icon per PRD §26.7 —
  * status is never communicated by colour alone.
  */
-export function StateBadge({ state, className = "", size = "md" }: StateBadgeProps) {
-  const config = getStateConfig(state);
+export function StateBadge({
+  state,
+  stranded = false,
+  className = "",
+  size = "md",
+}: StateBadgeProps) {
+  const config = getStateConfig(state, stranded);
   const Icon = config.icon;
 
   const iconSize = size === "sm" ? "12" : size === "lg" ? "16" : "13";

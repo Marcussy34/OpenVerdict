@@ -99,9 +99,15 @@ const THEME_VARS: Record<HeaderTheme, React.CSSProperties> = {
   },
 };
 
-export function SiteHeader() {
+/**
+ * `consoleHost` is decided by the root layout from the request host: on
+ * app.openverdict.info the root path is the console (proxy.ts rewrites it to
+ * /app while the browser still shows "/"), so it must not get the landing's
+ * transparent, dark-hero treatment.
+ */
+export function SiteHeader({ consoleHost = false }: { consoleHost?: boolean }) {
   const pathname = usePathname();
-  const isLanding = pathname === "/";
+  const isLanding = pathname === "/" && !consoleHost;
 
   // The landing opens on the dark hero and flips with its sections; every
   // product page is simply light. Both sides render the same first pass, so

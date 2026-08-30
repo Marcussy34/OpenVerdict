@@ -1,6 +1,11 @@
+import type { Metadata } from "next";
 import { PageHeader, ExperimentalTag } from "@/components/viz/page-header";
 import { Panel } from "@/components/viz/panel";
 import { DocumentText, InfoCircle, Lock, Global, Warning2 } from "@/components/icons";
+
+export const metadata: Metadata = {
+  title: "Privacy notice",
+};
 
 export default function PrivacyPage() {
   return (

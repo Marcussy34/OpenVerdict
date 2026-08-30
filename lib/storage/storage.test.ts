@@ -59,6 +59,66 @@ describe("storage", () => {
     expect(await repository.getClaim(claim.claimId)).toEqual(claim);
   });
 
+  it("lists claims newest first, with and without a state filter", async () => {
+    const repository = await testRepository();
+    await migrate(repository.db);
+
+    const base: ClaimRecord = {
+      claimId: "0xolder",
+      network: "localnet",
+      packageId: "0xpackage",
+      registryObjectId: "0xregistry",
+      coinType: "0x2::sui::SUI",
+      mode: 1,
+      state: 3,
+      statement: "The older claim.",
+      resolutionCriteria: "Use the frozen evidence.",
+      deadlines: {
+        evidenceCutoffMs: 1,
+        proposalDeadlineMs: 2,
+        challengeDeadlineMs: 3,
+        firstCommitDeadlineMs: 4,
+        firstRevealDeadlineMs: 5,
+        discussionDeadlineMs: 6,
+        secondCommitDeadlineMs: 7,
+        secondRevealDeadlineMs: 8,
+      },
+      committeeBudget: "10",
+      evidenceBudget: "5",
+      submittedUrls: [],
+      evidencePolicyId: "0x01",
+      createdAt: "2026-08-27T00:00:00.000Z",
+      updatedAt: "2026-08-27T00:00:00.000Z",
+    };
+    await repository.saveClaim(base);
+    await repository.saveClaim({
+      ...base,
+      claimId: "0xnewer",
+      statement: "The newer claim.",
+      createdAt: "2026-08-28T00:00:00.000Z",
+      updatedAt: "2026-08-28T00:00:00.000Z",
+    });
+    await repository.saveClaim({
+      ...base,
+      claimId: "0xsettled",
+      state: 10,
+      statement: "The settled claim.",
+      createdAt: "2026-08-29T00:00:00.000Z",
+      updatedAt: "2026-08-29T00:00:00.000Z",
+    });
+
+    // The API, the landing hero and the console home all read this order as "latest".
+    expect((await repository.listClaims()).map((record) => record.claimId)).toEqual([
+      "0xsettled",
+      "0xnewer",
+      "0xolder",
+    ]);
+    expect((await repository.listClaims(3)).map((record) => record.claimId)).toEqual([
+      "0xnewer",
+      "0xolder",
+    ]);
+  });
+
   it("round trips an inference failure through its JSONB column", async () => {
     const repository = await testRepository();
     const hash = `0x${"11".repeat(32)}` as const;

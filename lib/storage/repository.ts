@@ -80,9 +80,11 @@ export class Repository {
   }
 
   async listClaims(state?: number): Promise<ClaimRecord[]> {
+    // Newest first: the landing hero, the console home and the directory all
+    // take the API order as "latest", so the oldest claim must not lead.
     return listRecords<ClaimRecord>(
       this.db,
-      `SELECT record_json FROM claims${state === undefined ? "" : " WHERE state = $1"} ORDER BY created_at, claim_id`,
+      `SELECT record_json FROM claims${state === undefined ? "" : " WHERE state = $1"} ORDER BY created_at DESC, claim_id DESC`,
       state === undefined ? [] : [state],
     );
   }

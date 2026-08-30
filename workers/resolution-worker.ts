@@ -1,6 +1,7 @@
 import type { ClaimInspection } from "../lib/engine/contract";
 import { getServerEngine } from "../lib/engine/server";
 import { EngineStateError } from "../lib/engine/errors";
+import { isStrandedDiscussion } from "../lib/engine/claim-lifecycle";
 import { CLAIM_STATE } from "../lib/protocol";
 import {
   LIVE_CLAIM_STATES,
@@ -38,13 +39,7 @@ const TERMINAL_STATES = new Set<number>([
  * exactly when finalize is allowed.
  */
 export function isDead(claim: ClaimInspection, nowMs: number): boolean {
-  if (TERMINAL_STATES.has(claim.state)) return true;
-  if (claim.state !== CLAIM_STATE.DISCUSSION) return false;
-  if (claim.deadlines.secondCommitDeadlineMs < nowMs) return true;
-  return (
-    claim.deadlines.discussionDeadlineMs < nowMs &&
-    !claim.evidenceRoots.some((root) => root.phase === 2)
-  );
+  return TERMINAL_STATES.has(claim.state) || isStrandedDiscussion(claim, nowMs);
 }
 
 // A claim whose transaction aborts every tick (a stuck residue claim) is
