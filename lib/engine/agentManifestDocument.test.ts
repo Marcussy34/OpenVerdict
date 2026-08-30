@@ -3,7 +3,9 @@ import { describe, expect, it } from "vitest";
 import {
   DEFAULT_PROMPT_SPEC_V1,
   DEFAULT_PROMPT_SPEC_V2,
+  DEFAULT_PROMPT_SPEC_V3,
   DEFAULT_TOOL_POLICY_V2,
+  DEFAULT_TOOL_POLICY_V3,
   promptSpecHash,
   toolPolicyHash,
 } from "../gonka/promptSpec";
@@ -83,5 +85,23 @@ describe("buildAgentManifestDocument", () => {
         new TextEncoder().encode(JSON.stringify(bad)),
       ),
     ).toThrow();
+  });
+
+  it("builds and parses a v4 document with bound v3 hashes", () => {
+    const built = buildAgentManifestDocument({
+      ...base,
+      promptSpec: DEFAULT_PROMPT_SPEC_V3,
+      toolPolicy: DEFAULT_TOOL_POLICY_V3,
+    });
+
+    expect(built.document.version).toBe("4");
+    expect(built.promptHash).toBe(promptSpecHash(DEFAULT_PROMPT_SPEC_V3));
+    expect(built.toolPolicyHash).toBe(toolPolicyHash(DEFAULT_TOOL_POLICY_V3));
+    expect(parseAgentManifestDocument(built.bytes)).toEqual(built.document);
+    expect(buildAgentManifestDocument({
+      ...base,
+      promptSpec: DEFAULT_PROMPT_SPEC_V3,
+      toolPolicy: DEFAULT_TOOL_POLICY_V3,
+    }).manifestHash).toBe(built.manifestHash);
   });
 });

@@ -65,13 +65,66 @@ function normalizedHttpUrl(url: string): string | undefined {
   }
 }
 
-export type CitationContext = {
-  frozenEvidenceIds: readonly string[];
-  opened: readonly StoredPage[];
+export type CitationSiteContext = {
+  opened: readonly Pick<StoredPage, "evidenceId" | "url" | "finalUrl">[];
   origins: ReadonlyMap<string, ResearchPageOrigin>;
+};
+
+export type CitationContext = Omit<CitationSiteContext, "opened"> & {
+  opened: readonly StoredPage[];
+  frozenEvidenceIds: readonly string[];
   maximumReasonLength: number;
   evidenceManifest: OracleInferenceInput["evidenceManifest"];
 };
+
+const THREE_LABEL_SUFFIXES = new Set([
+  "co",
+  "com",
+  "org",
+  "net",
+  "gov",
+  "ac",
+  "edu",
+]);
+
+function registrableSite(url: string): string | undefined {
+  let hostname: string;
+  try {
+    hostname = new URL(url).hostname.toLowerCase().replace(/\.$/, "");
+  } catch {
+    return undefined;
+  }
+  if (hostname.startsWith("www.")) hostname = hostname.slice(4);
+  const labels = hostname.split(".").filter(Boolean);
+  if (labels.length <= 2) return hostname || undefined;
+  const secondToLast = labels.at(-2);
+  const size =
+    secondToLast !== undefined && THREE_LABEL_SUFFIXES.has(secondToLast)
+      ? 3
+      : 2;
+  return labels.slice(-size).join(".");
+}
+
+/** Count only verified citations from independently searched pages. */
+export function citationSites(
+  citations: readonly (Citation & { found: boolean })[],
+  ctx: CitationSiteContext,
+): Set<string> {
+  const pagesById = new Map(ctx.opened.map((page) => [page.evidenceId, page]));
+  const sites = new Set<string>();
+  for (const citation of citations) {
+    const page = pagesById.get(citation.evidenceId);
+    if (page === undefined || ctx.origins.get(citation.evidenceId) !== "SEARCH") {
+      continue;
+    }
+    // The site comes from the page the engine opened, not from the citation
+    // text, so a quote the engine could not find verbatim (blanked, URL still
+    // verified) still counts as corroboration, and a mismatched url never does.
+    const site = registrableSite(page.finalUrl ?? page.url);
+    if (site !== undefined) sites.add(site);
+  }
+  return sites;
+}
 
 export function validateResearchAnswer(
   output: unknown,

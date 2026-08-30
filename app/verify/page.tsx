@@ -14,11 +14,12 @@ import { computeVoteCommitment } from "@/lib/protocol/commitment";
 import { computeTruthScoreBps, agentProbabilityBps } from "@/lib/protocol/truthScore";
 import { toHex, fromHex } from "@/lib/protocol/hash";
 import { OUTCOME, type VoteOutcome } from "@/lib/protocol/constants";
-import type { PublicRunBundle, VotePreimageV1 } from "@/lib/protocol/types";
+import type { VotePreimageV1 } from "@/lib/protocol/types";
 import {
-  proofFromBundle,
-  type BrowserRunProof,
-} from "@/lib/verify/run-proof";
+  isTransparentBundle,
+  proofFromTransparentBundle,
+  type TransparentRunProof,
+} from "@/components/claim/run-proof-types";
 import {
   ShieldTick,
   Award,
@@ -46,26 +47,15 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
 
-function isPublicRunBundle(value: unknown): value is PublicRunBundle {
-  return (
-    isRecord(value) &&
-    (value.version === 2 || value.version === 3) &&
-    value.kind === "run-bundle" &&
-    typeof value.runId === "string" &&
-    isRecord(value.audit) &&
-    isRecord(value.seal)
-  );
-}
-
-function parseRunProofJson(value: string): BrowserRunProof {
+function parseRunProofJson(value: string): TransparentRunProof {
   const parsed = JSON.parse(value) as unknown;
-  if (isPublicRunBundle(parsed)) return proofFromBundle(parsed);
+  if (isTransparentBundle(parsed)) return proofFromTransparentBundle(parsed);
   if (
     isRecord(parsed) &&
     typeof parsed.runId === "string" &&
-    isPublicRunBundle(parsed.bundle)
+    isTransparentBundle(parsed.bundle)
   ) {
-    return parsed as unknown as BrowserRunProof;
+    return parsed as unknown as TransparentRunProof;
   }
   throw new Error("Paste a public run bundle or a run proof JSON object");
 }
@@ -195,7 +185,7 @@ export default function VerifyPage() {
   const [proofClaimId, setProofClaimId] = useState("");
   const [proofRunId, setProofRunId] = useState("");
   const [bundleJson, setBundleJson] = useState("");
-  const [runProof, setRunProof] = useState<BrowserRunProof | null>(null);
+  const [runProof, setRunProof] = useState<TransparentRunProof | null>(null);
   const [runProofError, setRunProofError] = useState<string | null>(null);
   const [fetchingRunProof, setFetchingRunProof] = useState(false);
 
@@ -217,7 +207,7 @@ export default function VerifyPage() {
       if (response.status === 404) throw new Error("Run proof not found");
       if (response.status === 503) throw new Error("The verification engine is not available");
       if (!response.ok) throw new Error("The run proof could not be loaded");
-      setRunProof((await response.json()) as BrowserRunProof);
+      setRunProof((await response.json()) as TransparentRunProof);
     } catch (error) {
       setRunProof(null);
       setRunProofError(error instanceof Error ? error.message : "The run proof could not be loaded");

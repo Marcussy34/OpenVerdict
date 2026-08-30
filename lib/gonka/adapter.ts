@@ -9,6 +9,7 @@ import type {
   OracleInferenceOutput,
   PromptSpecV1,
   PromptSpecV2,
+  PromptSpecV3,
   ProviderRequestRecord,
   ToolPolicyV2,
 } from "../protocol/types";
@@ -28,6 +29,7 @@ import {
 import {
   DEFAULT_PROMPT_SPEC_V1,
   DEFAULT_PROMPT_SPEC_V2,
+  DEFAULT_PROMPT_SPEC_V3,
   DEFAULT_TOOL_POLICY_V2,
   buildFallbackMessages,
   buildPrimaryMessages,
@@ -163,7 +165,7 @@ export function extractJsonObject(content: string): unknown {
     // fall through to candidate extraction
   }
   // Reasoning models (MiniMax-M2.7) emit visible <think> blocks whose drafts
-  // can themselves parse as JSON — drop them before scanning. The scan then
+  // can themselves parse as JSON. Drop them before scanning. The scan then
   // collects TOP-LEVEL balanced objects left to right (a backward scan used
   // to return the innermost final nested object, e.g. one trace entry) and
   // prefers the last candidate carrying the contract's root "outcome" key.
@@ -191,7 +193,7 @@ export function extractJsonObject(content: string): unknown {
         }
       }
     }
-    if (end === -1) break; // unbalanced tail — nothing further can close
+    if (end === -1) break; // Unbalanced tail, nothing further can close.
     let next = index + 1; // malformed span: step inside to find inner objects
     try {
       candidates.push(JSON.parse(visible.slice(index, end + 1)) as unknown);
@@ -476,7 +478,7 @@ export function createGonkaAdapterWithDependencies(
     input: OracleInferenceInput,
     manifest: AgentManifest,
     attempts: GonkaAttemptRecord[],
-    spec: PromptSpecV1 | PromptSpecV2,
+    spec: PromptSpecV1 | PromptSpecV2 | PromptSpecV3,
     requestTimeoutMs?: number,
   ): Promise<ProviderExecution> => {
     const retriesUsed = attempts.filter((attempt) => attempt.kind === "RETRY").length;
@@ -605,6 +607,9 @@ export function createGonkaAdapterWithDependencies(
   ): Promise<GonkaCompletionResult> {
     const input = oracleInferenceInputSchema.parse(request.input);
     assertManifest(request.manifest);
+    // The manifest-selected input version controls research request settings.
+    const completionSpec =
+      input.promptVersion === "3" ? DEFAULT_PROMPT_SPEC_V3 : researchSpec;
     // A seat near its commit deadline bounds the call by the time it has left.
     const callTimeoutMs =
       request.timeoutMs !== undefined && request.timeoutMs > 0
@@ -617,7 +622,7 @@ export function createGonkaAdapterWithDependencies(
       input,
       request.manifest,
       request.attempts,
-      researchSpec,
+      completionSpec,
       callTimeoutMs,
     );
     if (!provider.ok) {

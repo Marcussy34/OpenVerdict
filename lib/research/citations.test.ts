@@ -4,6 +4,7 @@ import { makeInput, makeOutput } from "../gonka/fixtures.test-utils";
 import type { ResearchPageOrigin } from "../protocol/types";
 import {
   collapseWhitespace,
+  citationSites,
   normalizeQuoteText,
   quoteFound,
   type CitationContext,
@@ -106,6 +107,64 @@ describe("citation text matching", () => {
     expect(
       quoteFound(pageText, "The reviewers confirmed it after checking."),
     ).toBe(false);
+  });
+});
+
+describe("citationSites", () => {
+  it("returns distinct registrable sites for found SEARCH citations", () => {
+    const secondSearchPage: StoredPage = {
+      ...searchPage,
+      evidenceId: "opened-search-uk",
+      ref: "p3",
+      url: "https://news.example.co.uk/report",
+      finalUrl: "https://news.example.co.uk/report",
+    };
+    const origins = new Map<string, ResearchPageOrigin>([
+      [SEARCH_ID, "SEARCH"],
+      [SUBMITTED_ID, "SUBMITTED"],
+      [secondSearchPage.evidenceId, "SEARCH"],
+    ]);
+
+    expect(
+      citationSites(
+        [
+          {
+            evidenceId: SEARCH_ID,
+            url: "https://www.source.test/report",
+            quote: SEARCH_QUOTE,
+            found: true,
+          },
+          {
+            evidenceId: secondSearchPage.evidenceId,
+            url: secondSearchPage.url,
+            quote: SEARCH_QUOTE,
+            found: true,
+          },
+          {
+            evidenceId: SUBMITTED_ID,
+            url: submittedPage.url,
+            quote: SUBMITTED_QUOTE,
+            found: true,
+          },
+          {
+            evidenceId: SEARCH_ID,
+            url: "https://ignored.test/report",
+            quote: SEARCH_QUOTE,
+            found: false,
+          },
+          {
+            evidenceId: SEARCH_ID,
+            url: "https://empty.test/report",
+            quote: "",
+            found: true,
+          },
+        ],
+        {
+          opened: [searchPage, submittedPage, secondSearchPage],
+          origins,
+        },
+      ),
+    ).toEqual(new Set(["source.test", "example.co.uk"]));
   });
 });
 

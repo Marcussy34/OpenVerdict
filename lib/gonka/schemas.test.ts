@@ -3,6 +3,7 @@ import {
   MAX_OUTPUT_ARRAY_ITEMS,
   oracleInferenceInputSchema,
   oracleInferenceOutputSchema,
+  researchActionSchema,
   validateOutputAgainstManifest,
 } from "./schemas";
 import { makeInput, makeOutput } from "./fixtures.test-utils";
@@ -147,6 +148,45 @@ describe("oracle schemas with research fields", () => {
       oracleInferenceOutputSchema.parse({
         ...output,
         citations: [{ evidenceId: "e1", url: "nope", quote: "short" }],
+      }),
+    ).toThrow();
+  });
+
+  it("accepts promptVersion 3 and the optional counter-evidence summary", () => {
+    expect(() =>
+      oracleInferenceInputSchema.parse({ ...makeInput(), promptVersion: "3" }),
+    ).not.toThrow();
+    expect(() =>
+      oracleInferenceOutputSchema.parse({
+        ...makeOutput(),
+        counterEvidenceSummary: "The strongest contrary source was considered.",
+      }),
+    ).not.toThrow();
+    expect(() =>
+      oracleInferenceOutputSchema.parse({
+        ...makeOutput(),
+        counterEvidenceSummary: "x".repeat(601),
+      }),
+    ).toThrow();
+  });
+
+  it("accepts optional search intent and rejects unknown intent values", () => {
+    expect(
+      researchActionSchema.parse({
+        action: "search",
+        query: "primary source",
+        intent: "support",
+      }),
+    ).toEqual({
+      action: "search",
+      query: "primary source",
+      intent: "support",
+    });
+    expect(() =>
+      researchActionSchema.parse({
+        action: "search",
+        query: "primary source",
+        intent: "neutral",
       }),
     ).toThrow();
   });

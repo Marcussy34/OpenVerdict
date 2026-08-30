@@ -15,6 +15,8 @@ import {
   GonkaRunError,
   canonicalJsonBytes,
   hashCanonicalJson,
+  promptSpecHash,
+  toolPolicyHash,
   type GonkaRouterAdapter,
   type GonkaRunResult,
 } from "../gonka";
@@ -31,12 +33,18 @@ import {
   toHex,
   type AgentManifest,
   type AgentManifestDocument,
+  type AgentManifestDocumentV3,
+  type AgentManifestDocumentV4,
   type InferenceRunAudit,
   type OracleInferenceInput,
   type OracleInferenceOutput,
+  type PromptSpecV2,
+  type PromptSpecV3,
   type PublicRunBundle,
   type PublicRunBundleCore,
   type SealedRunBundleV2,
+  type ToolPolicyV2,
+  type ToolPolicyV3,
   type VoteOutcome,
 } from "../protocol";
 import {
@@ -133,6 +141,18 @@ const MAX_ZKLOGIN_SIGNATURE_LENGTH = 16_384;
 const MAX_FACT_CHECK_TEXT_LENGTH = 20_000;
 const ZKLOGIN_VERIFICATION_PROVIDER = "zklogin:enoki";
 const CLAIM_STATEMENT_SOURCE_URL = "urn:openverdict:claim-statement";
+
+type SeatResearchConfig =
+  | {
+      bundleVersion: 3;
+      spec: PromptSpecV2;
+      policy: ToolPolicyV2;
+    }
+  | {
+      bundleVersion: 4;
+      spec: PromptSpecV3;
+      policy: ToolPolicyV3;
+    };
 
 class ResearchLoopError extends GonkaRunError {
   readonly status: ResearchLoopFailureStatus;
@@ -598,22 +618,62 @@ class OpenVerdictEngine implements Engine {
     const committee = await this.requiredCommittee(claimId);
     const seats = await this.#repository.listJurySeats(claimId, phase);
     if (seats.length !== 5) throw new EngineStateError("jury run requires five selected seats");
-    const liveHash = this.#gonka.promptSpecHash();
-    const liveToolPolicyHash = this.#gonka.toolPolicyHash();
+    const researchConfigs = new Map<string, SeatResearchConfig>();
     for (const seat of seats) {
       const agent = await this.requiredAgent(seat.agentProfileId);
-      const manifestHash = agent.manifest.promptHash;
-      if (manifestHash !== liveHash) {
+      if (
+        agent.manifest.version === "3" ||
+        agent.manifest.version === "4"
+      ) {
+        const document = await this.agentManifestDocument(seat.agentProfileId);
+        if (
+          document === null ||
+          document.version !== agent.manifest.version ||
+          (document.version !== "3" && document.version !== "4")
+        ) {
+          throw new EngineValidationError(
+            `agent ${seat.agentProfileId} manifest document is missing or has the wrong version`,
+          );
+        }
+        this.assertResearchManifestHashes(agent.manifest, document);
+        researchConfigs.set(
+          seat.agentProfileId,
+          document.version === "4"
+            ? {
+                bundleVersion: 4,
+                spec: document.promptSpec,
+                policy: document.toolPolicy,
+              }
+            : {
+                bundleVersion: 3,
+                spec: document.promptSpec,
+                policy: document.toolPolicy,
+              },
+        );
+        continue;
+      }
+
+      // Older synthetic manifests have no stored document. Keep their v2
+      // binding path unchanged for local fixtures and migration tooling.
+      const spec = this.#gonka.promptSpec();
+      const policy = this.#gonka.toolPolicy();
+      const liveHash = promptSpecHash(spec);
+      const liveToolPolicyHash = toolPolicyHash(policy);
+      if (agent.manifest.promptHash !== liveHash) {
         throw new EngineValidationError(
-          `agent ${seat.agentProfileId} manifest prompt hash ${manifestHash} does not match the engine prompt spec ${liveHash}; run pnpm tsx scripts/publish-agent-manifests.ts`,
+          `agent ${seat.agentProfileId} manifest prompt hash ${agent.manifest.promptHash} does not match the engine prompt spec ${liveHash}; run pnpm tsx scripts/publish-agent-manifests.ts`,
         );
       }
-      const manifestToolPolicyHash = agent.manifest.toolPolicyHash;
-      if (manifestToolPolicyHash !== liveToolPolicyHash) {
+      if (agent.manifest.toolPolicyHash !== liveToolPolicyHash) {
         throw new EngineValidationError(
-          `agent ${seat.agentProfileId} manifest tool policy hash ${manifestToolPolicyHash} does not match the engine tool policy ${liveToolPolicyHash}; run pnpm tsx scripts/publish-agent-manifests.ts`,
+          `agent ${seat.agentProfileId} manifest tool policy hash ${agent.manifest.toolPolicyHash} does not match the engine tool policy ${liveToolPolicyHash}; run pnpm tsx scripts/publish-agent-manifests.ts`,
         );
       }
+      researchConfigs.set(seat.agentProfileId, {
+        bundleVersion: 3,
+        spec,
+        policy,
+      });
     }
     const research = this.#research;
     if (!research) {
@@ -682,6 +742,12 @@ class OpenVerdictEngine implements Engine {
             (run) => run.jurySeatId === seat.jurySeatId,
           );
           if (existing !== undefined) return;
+          const researchConfig = researchConfigs.get(seat.agentProfileId);
+          if (researchConfig === undefined) {
+            throw new EngineValidationError(
+              `agent ${seat.agentProfileId} has no validated research configuration`,
+            );
+          }
           await this.runSeat(
             claim,
             committee,
@@ -692,6 +758,7 @@ class OpenVerdictEngine implements Engine {
             searchCache,
             storedPageCache,
             pageUploads,
+            researchConfig,
             seatDeadlineMs,
             commitFloorMs,
           );
@@ -1427,7 +1494,9 @@ class OpenVerdictEngine implements Engine {
     const record = await this.#repository.getAgentManifest(agentProfileId);
     if (
       !record ||
-      (record.manifest.version !== "2" && record.manifest.version !== "3")
+      (record.manifest.version !== "2" &&
+        record.manifest.version !== "3" &&
+        record.manifest.version !== "4")
     ) {
       return null;
     }
@@ -1793,12 +1862,21 @@ class OpenVerdictEngine implements Engine {
     searchCache: SearchCache,
     storedPageCache: Map<string, Promise<PageStorePage>>,
     pageUploads: Map<string, Promise<void>>,
+    researchConfig: SeatResearchConfig,
     seatDeadlineMs: number,
     commitFloorMs: number,
   ): Promise<void> {
     const agent = await this.requiredAgent(seat.agentProfileId);
     const baseRunId = deterministicId(`run:${claim.claimId}:${seat.jurySeatId}:${seat.phase}`);
-    const input = oracleInput(claim, seat, evidence, artifacts, agent.role, baseRunId);
+    const input = oracleInput(
+      claim,
+      seat,
+      evidence,
+      artifacts,
+      agent.role,
+      baseRunId,
+      researchConfig.spec.version,
+    );
     await this.emit({
       claimId: claim.claimId,
       phase: `INFERENCE_${seat.phase}`,
@@ -1964,8 +2042,8 @@ class OpenVerdictEngine implements Engine {
       const loop = await runResearchLoop({
         complete: (request) => this.#gonka.complete(request),
         provider: research,
-        policy: this.#gonka.toolPolicy(),
-        spec: this.#gonka.promptSpec(),
+        policy: researchConfig.policy,
+        spec: researchConfig.spec,
         input,
         manifest: agent.manifest,
         claimId: claim.claimId,
@@ -2045,16 +2123,25 @@ class OpenVerdictEngine implements Engine {
           completed_at_ms: audit.completedAtMs,
         }),
       );
-      const core = buildRunBundleCore({
-        promptSpec: this.#gonka.promptSpec(),
-        toolPolicy: this.#gonka.toolPolicy(),
+      const bundleParams = {
         input,
         runResult: response,
         validatedOutput: normalized.output,
         audit,
         runHash,
         transcript: loop.transcript,
-      });
+      };
+      const core = researchConfig.bundleVersion === 4
+        ? buildRunBundleCore({
+            ...bundleParams,
+            promptSpec: researchConfig.spec,
+            toolPolicy: researchConfig.policy,
+          })
+        : buildRunBundleCore({
+            ...bundleParams,
+            promptSpec: researchConfig.spec,
+            toolPolicy: researchConfig.policy,
+          });
       const bundleCore = new TextDecoder().decode(canonicalCoreBytes(core));
       const { sealed, seal } = sealRunBundle(core, { runId: audit.runId });
       const sealedUpload = await this.#walrus.put(
@@ -2549,7 +2636,7 @@ class OpenVerdictEngine implements Engine {
       owner: result.owner as `0x${string}`,
       humanAttestationHash: humanBackingHash,
       humanVerificationProvider: ZKLOGIN_VERIFICATION_PROVIDER,
-      version: "3",
+      version: built.document.version,
       manifestBlobId: manifestUpload.blobId,
       manifestHash: built.manifestHash,
       promptHash: built.promptHash,
@@ -2611,6 +2698,37 @@ class OpenVerdictEngine implements Engine {
     return manifest;
   }
 
+  private assertResearchManifestHashes(
+    manifest: AgentManifest,
+    document: AgentManifestDocumentV3 | AgentManifestDocumentV4,
+  ): void {
+    if (document.modelId !== manifest.modelId) {
+      throw new EngineValidationError(
+        `agent ${manifest.agentProfileId} manifest document model does not match the registered model`,
+      );
+    }
+    const computedPromptHash = promptSpecHash(document.promptSpec);
+    if (
+      document.promptHash.toLowerCase() !== computedPromptHash.toLowerCase() ||
+      manifest.promptHash.toLowerCase() !== computedPromptHash.toLowerCase()
+    ) {
+      throw new EngineValidationError(
+        `agent ${manifest.agentProfileId} manifest prompt hash does not match its prompt document; run pnpm tsx scripts/publish-agent-manifests.ts`,
+      );
+    }
+    const computedToolPolicyHash = toolPolicyHash(document.toolPolicy);
+    if (
+      document.toolPolicyHash.toLowerCase() !==
+        computedToolPolicyHash.toLowerCase() ||
+      manifest.toolPolicyHash.toLowerCase() !==
+        computedToolPolicyHash.toLowerCase()
+    ) {
+      throw new EngineValidationError(
+        `agent ${manifest.agentProfileId} manifest tool policy hash does not match its policy document; run pnpm tsx scripts/publish-agent-manifests.ts`,
+      );
+    }
+  }
+
   private async requiredAgent(agentProfileId: string): Promise<AgentManifestRecord> {
     const agent = await this.#repository.getAgentManifest(agentProfileId);
     if (!agent) throw new EngineStateError(`agent manifest is missing: ${agentProfileId}`);
@@ -2663,7 +2781,7 @@ class OpenVerdictEngine implements Engine {
       owner: owner as `0x${string}`,
       humanAttestationHash: humanBackingHash,
       humanVerificationProvider: "demo-allowlist",
-      version: "3",
+      version: built.document.version,
       manifestBlobId: manifestUpload.blobId,
       manifestHash: built.manifestHash,
       promptHash: built.promptHash,
@@ -3257,12 +3375,13 @@ function oracleInput(
   artifacts: EvidenceArtifactRecord[],
   role: string,
   runId: string,
+  promptVersion: "2" | "3",
 ): OracleInferenceInput {
   return {
     protocolVersion: "1.0",
     runId,
     agentRole: role,
-    promptVersion: "2",
+    promptVersion,
     submission: {
       kind:
         claim.submittedText && claim.submittedUrls.length > 0

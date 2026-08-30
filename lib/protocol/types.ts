@@ -123,7 +123,7 @@ export type OracleInferenceInput = {
   protocolVersion: "1.0";
   runId: string;
   agentRole: string;
-  promptVersion: "1" | "2";
+  promptVersion: "1" | "2" | "3";
   submission: {
     kind: "TEXT" | "URL" | "TEXT_AND_URL";
     submittedTextHash?: string;
@@ -168,6 +168,7 @@ export type OracleInferenceOutput = {
     finding: string;
   }>;
   citations?: Citation[];
+  counterEvidenceSummary?: string;
 };
 
 export type PromptSpecV1 = {
@@ -283,7 +284,8 @@ export type PromptSpecV2 = {
   maxOutputTokens: 4096;
   responseFormat: "json_object";
 };
-export type PromptSpec = PromptSpecV1 | PromptSpecV2;
+export type PromptSpecV3 = Omit<PromptSpecV2, "version"> & { version: "3" };
+export type PromptSpec = PromptSpecV1 | PromptSpecV2 | PromptSpecV3;
 
 export type ToolPolicyV1 = { version: "1"; tools: [] };
 /** Research budgets; every value is hashed into the manifest's toolPolicyHash. */
@@ -300,15 +302,26 @@ export type ToolPolicyV2 = {
   maxPageChars: number;
   maxLoopMs: number;
 };
-export type ToolPolicy = ToolPolicyV1 | ToolPolicyV2;
+export type ToolPolicyV3 = Omit<ToolPolicyV2, "version"> & {
+  version: "3";
+  requireChallengeSearch: true;
+  minCitationDomains: number;
+  minOpensPerSide: number;
+};
+export type ToolPolicy = ToolPolicyV1 | ToolPolicyV2 | ToolPolicyV3;
 
 export type AgentManifestDocumentV3 = Omit<
   AgentManifestDocumentV2,
   "version" | "promptSpec" | "toolPolicy"
 > & { version: "3"; promptSpec: PromptSpecV2; toolPolicy: ToolPolicyV2 };
+export type AgentManifestDocumentV4 = Omit<
+  AgentManifestDocumentV3,
+  "version" | "promptSpec" | "toolPolicy"
+> & { version: "4"; promptSpec: PromptSpecV3; toolPolicy: ToolPolicyV3 };
 export type AgentManifestDocument =
   | AgentManifestDocumentV2
-  | AgentManifestDocumentV3;
+  | AgentManifestDocumentV3
+  | AgentManifestDocumentV4;
 
 export type ResearchSearchResult = {
   rank: number;
@@ -332,10 +345,15 @@ export type ResearchOpenedPage = {
   canonicalWalrusBlobId: string;
   totalChars: number;
   truncated: boolean;
+  sides?: Array<"support" | "challenge">;
 };
 
 export type ResearchAction =
-  | { action: "search"; query: string }
+  | {
+      action: "search";
+      query: string;
+      intent?: "support" | "challenge";
+    }
   | { action: "open"; url: string; from?: number }
   | { action: "answer"; output: OracleInferenceOutput };
 
@@ -349,7 +367,9 @@ export type ResearchToolErrorCode =
   | "INVALID_ACTION"
   | "INVALID_ANSWER"
   /** A YES or NO answered before any page found by the model's own search was opened. */
-  | "RESEARCH_REQUIRED";
+  | "RESEARCH_REQUIRED"
+  | "CHALLENGE_REQUIRED"
+  | "CORROBORATION_REQUIRED";
 
 export type ResearchToolResult =
   | {
@@ -418,7 +438,12 @@ export type ResearchTranscriptV1 = {
   steps: ResearchTranscriptStep[];
   opened: ResearchOpenedPage[];
   citations: Array<Citation & { found: boolean }>;
-  counts: { searches: number; opens: number; turns: number };
+  counts: {
+    searches: number;
+    opens: number;
+    turns: number;
+    challengeSearches?: number;
+  };
 };
 
 export type PublicRunBundleCoreV3 = Omit<
@@ -439,5 +464,22 @@ export type PublicRunBundleCoreV3 = Omit<
 export type PublicRunBundleV3 = PublicRunBundleCoreV3 & {
   seal: RunBundleSeal;
 };
-export type PublicRunBundleCore = PublicRunBundleCoreV2 | PublicRunBundleCoreV3;
-export type PublicRunBundle = PublicRunBundleV2 | PublicRunBundleV3;
+export type PublicRunBundleCoreV4 = Omit<
+  PublicRunBundleCoreV3,
+  "version" | "promptSpec" | "toolPolicy"
+> & {
+  version: 4;
+  promptSpec: PromptSpecV3;
+  toolPolicy: ToolPolicyV3;
+};
+export type PublicRunBundleV4 = PublicRunBundleCoreV4 & {
+  seal: RunBundleSeal;
+};
+export type PublicRunBundleCore =
+  | PublicRunBundleCoreV2
+  | PublicRunBundleCoreV3
+  | PublicRunBundleCoreV4;
+export type PublicRunBundle =
+  | PublicRunBundleV2
+  | PublicRunBundleV3
+  | PublicRunBundleV4;

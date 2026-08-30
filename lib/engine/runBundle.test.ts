@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 
 import {
   DEFAULT_PROMPT_SPEC_V2,
+  DEFAULT_PROMPT_SPEC_V3,
   DEFAULT_TOOL_POLICY_V2,
+  DEFAULT_TOOL_POLICY_V3,
   composeSystemPrompt,
   promptSpecHash,
   toolPolicyHash,
@@ -11,6 +13,7 @@ import { canonicalJsonBytes } from "../gonka/canonical";
 import { blake2b256, toHex } from "../protocol";
 import type {
   PublicRunBundleCoreV3,
+  PublicRunBundleCoreV4,
   ResearchTranscriptV1,
 } from "../protocol/types";
 import { transcriptHash } from "../research";
@@ -157,6 +160,53 @@ describe("run bundle sealing", () => {
     expect(expected.verify.toolTranscriptHash).toBe(
       "blake2b256(canonicalJson(transcript))",
     );
+  });
+
+  it("builds a v4 core from a v3 prompt and policy", () => {
+    const expected = makeCore();
+    const runResult: GonkaRunResult = {
+      type: "gonka-run-result",
+      attempts: [],
+      response: expected.rawResponse,
+      request: {
+        ...expected.request,
+        messages: [
+          {
+            role: "system",
+            content: composeSystemPrompt(
+              DEFAULT_PROMPT_SPEC_V3,
+              DEFAULT_TOOL_POLICY_V3,
+            ),
+          },
+          ...expected.request.messages.slice(1),
+        ],
+      },
+      gateway: expected.gateway,
+    };
+    const core = buildRunBundleCore({
+      promptSpec: DEFAULT_PROMPT_SPEC_V3,
+      toolPolicy: DEFAULT_TOOL_POLICY_V3,
+      input: { ...expected.input, promptVersion: "3" },
+      runResult,
+      validatedOutput: expected.validatedOutput,
+      audit: {
+        ...expected.audit,
+        promptHash: promptSpecHash(DEFAULT_PROMPT_SPEC_V3),
+      },
+      runHash: expected.runHash,
+      transcript: {
+        ...expected.transcript,
+        policyHash: toolPolicyHash(DEFAULT_TOOL_POLICY_V3),
+        counts: {
+          ...expected.transcript.counts,
+          challengeSearches: 0,
+        },
+      },
+    });
+
+    expect(core.version).toBe(4);
+    expect((core as PublicRunBundleCoreV4).promptSpec.version).toBe("3");
+    expect((core as PublicRunBundleCoreV4).toolPolicy.version).toBe("3");
   });
 
   it("round-trips through AES-256-GCM and binds the core hash", () => {

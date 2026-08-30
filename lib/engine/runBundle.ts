@@ -15,21 +15,22 @@ import type {
   OracleInferenceInput,
   OracleInferenceOutput,
   PromptSpecV2,
+  PromptSpecV3,
   PublicRunBundleCore,
   PublicRunBundleCoreV3,
+  PublicRunBundleCoreV4,
   ResearchTranscriptV1,
   RunBundleSeal,
   SealedRunBundleV2,
   ToolPolicyV2,
+  ToolPolicyV3,
 } from "../protocol/types";
 
 const utf8 = new TextEncoder();
 const decoder = new TextDecoder();
 const AUTH_TAG_BYTES = 16;
 
-export type BuildRunBundleCoreParams = {
-  promptSpec: PromptSpecV2;
-  toolPolicy: ToolPolicyV2;
+type BuildRunBundleCoreCommonParams = {
   input: OracleInferenceInput;
   runResult: GonkaRunResult;
   validatedOutput: OracleInferenceOutput;
@@ -38,25 +39,51 @@ export type BuildRunBundleCoreParams = {
   transcript: ResearchTranscriptV1;
 };
 
+export type BuildRunBundleCoreParams = BuildRunBundleCoreCommonParams &
+  (
+    | { promptSpec: PromptSpecV2; toolPolicy: ToolPolicyV2 }
+    | { promptSpec: PromptSpecV3; toolPolicy: ToolPolicyV3 }
+  );
+
 export type SealRunBundleOptions = {
   runId: HexString;
   random?: (size: number) => Uint8Array;
 };
 
 export function buildRunBundleCore(
+  params: BuildRunBundleCoreCommonParams & {
+    promptSpec: PromptSpecV2;
+    toolPolicy: ToolPolicyV2;
+  },
+): PublicRunBundleCoreV3;
+export function buildRunBundleCore(
+  params: BuildRunBundleCoreCommonParams & {
+    promptSpec: PromptSpecV3;
+    toolPolicy: ToolPolicyV3;
+  },
+): PublicRunBundleCoreV4;
+export function buildRunBundleCore(
   params: BuildRunBundleCoreParams,
-): PublicRunBundleCoreV3 {
-  return {
-    version: 3,
-    kind: "run-bundle",
+): PublicRunBundleCoreV3 | PublicRunBundleCoreV4 {
+  const verify: PublicRunBundleCoreV3["verify"] = {
+    promptHash: "blake2b256(canonicalJson(promptSpec))",
+    toolPolicyHash: "blake2b256(canonicalJson(toolPolicy))",
+    inputHash: "blake2b256(canonicalJson(input))",
+    outputHash: "blake2b256(canonicalJson(validatedOutput))",
+    toolTranscriptHash: "blake2b256(canonicalJson(transcript))",
+    systemPrompt:
+      "promptSpec.systemPrompt + '\\n' + canonicalJson({budgets: toolPolicy})",
+    runHash: "blake2b256(BCS(RunRecordV1))",
+    commitment: "blake2b256(BCS(VotePreimageV1))",
+  };
+  const shared = {
+    kind: "run-bundle" as const,
     runId: params.audit.runId,
     claimId: params.audit.claimObjectId,
     phase: params.audit.phase,
     agentProfileId: params.audit.agentProfileId,
     jurySeatId: params.audit.jurySeatId,
-    promptSpec: params.promptSpec,
     promptHash: params.audit.promptHash,
-    toolPolicy: params.toolPolicy,
     toolPolicyHash: toolPolicyHash(params.toolPolicy),
     transcript: params.transcript,
     input: params.input,
@@ -69,17 +96,27 @@ export function buildRunBundleCore(
     outputHash: params.audit.outputHash,
     audit: params.audit,
     runHash: params.runHash,
-    verify: {
-      promptHash: "blake2b256(canonicalJson(promptSpec))",
-      toolPolicyHash: "blake2b256(canonicalJson(toolPolicy))",
-      inputHash: "blake2b256(canonicalJson(input))",
-      outputHash: "blake2b256(canonicalJson(validatedOutput))",
-      toolTranscriptHash: "blake2b256(canonicalJson(transcript))",
-      systemPrompt:
-        "promptSpec.systemPrompt + '\\n' + canonicalJson({budgets: toolPolicy})",
-      runHash: "blake2b256(BCS(RunRecordV1))",
-      commitment: "blake2b256(BCS(VotePreimageV1))",
-    },
+    verify,
+  };
+  if (params.promptSpec.version === "3") {
+    if (params.toolPolicy.version !== "3") {
+      throw new Error("a v3 prompt spec requires a v3 tool policy");
+    }
+    return {
+      ...shared,
+      version: 4,
+      promptSpec: params.promptSpec,
+      toolPolicy: params.toolPolicy,
+    };
+  }
+  if (params.toolPolicy.version !== "2") {
+    throw new Error("a v2 prompt spec requires a v2 tool policy");
+  }
+  return {
+    ...shared,
+    version: 3,
+    promptSpec: params.promptSpec,
+    toolPolicy: params.toolPolicy,
   };
 }
 

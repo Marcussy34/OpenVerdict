@@ -5,8 +5,10 @@ import { makeInput, makeOutput } from "../gonka/fixtures.test-utils";
 import {
   composeSystemPrompt,
   DEFAULT_PROMPT_SPEC_V2,
+  DEFAULT_PROMPT_SPEC_V3,
   DEFAULT_PROMPT_SPEC_V1,
   DEFAULT_TOOL_POLICY_V2,
+  DEFAULT_TOOL_POLICY_V3,
   promptSpecHash,
   toolPolicyHash,
 } from "../gonka/promptSpec";
@@ -17,12 +19,15 @@ import type {
   InferenceRunAudit,
   PublicRunBundleCoreV2,
   PublicRunBundleCoreV3,
+  PublicRunBundleCoreV4,
   PublicRunBundleV2,
   PublicRunBundleV3,
+  PublicRunBundleV4,
   ResearchTranscriptV1,
 } from "../protocol/types";
 import {
   isV3Bundle,
+  isV4Bundle,
   proofFromBundle,
   recomputeRunProof,
 } from "./run-proof";
@@ -262,6 +267,206 @@ function makeProofV3() {
   return { proof: proofFromBundle(bundle, sealed), sealed };
 }
 
+function makeProofV4() {
+  const base = makeCore();
+  const supportUrl = "https://support.test/source";
+  const challengeUrl = "https://challenge.test/source";
+  const supportId = "research-support";
+  const challengeId = "research-challenge";
+  const citations = [
+    {
+      evidenceId: supportId,
+      url: supportUrl,
+      quote: "The official source supports the claim as stated.",
+    },
+    {
+      evidenceId: challengeId,
+      url: challengeUrl,
+      quote: "The independent source records the strongest contrary evidence.",
+    },
+  ];
+  const policyHash = toolPolicyHash(DEFAULT_TOOL_POLICY_V3);
+  const transcript: ResearchTranscriptV1 = {
+    version: 1,
+    runId: base.runId,
+    provider: { name: "firecrawl", mode: "fake" },
+    policyHash,
+    steps: [
+      {
+        index: 0,
+        turn: 1,
+        startedAtMs: 10,
+        completedAtMs: 11,
+        modelRequestId: "support-search",
+        action: {
+          action: "search",
+          query: "official support",
+          intent: "support",
+        },
+        result: {
+          tool: "search",
+          cached: false,
+          resultsHash: `0x${"07".repeat(32)}`,
+          results: [{
+            rank: 1,
+            url: supportUrl,
+            title: "Official source",
+            snippet: "The official source supports the claim as stated.",
+          }],
+        },
+      },
+      {
+        index: 1,
+        turn: 2,
+        startedAtMs: 12,
+        completedAtMs: 13,
+        modelRequestId: "support-open",
+        action: { action: "open", url: supportUrl, from: 0 },
+        result: {
+          tool: "open",
+          cached: false,
+          evidenceId: supportId,
+          origin: "SEARCH",
+          from: 0,
+          chars: 200,
+          totalChars: 200,
+          contentHash: `0x${"08".repeat(32)}`,
+          canonicalWalrusBlobId: "walrus-support",
+        },
+      },
+      {
+        index: 2,
+        turn: 3,
+        startedAtMs: 14,
+        completedAtMs: 15,
+        modelRequestId: "challenge-search",
+        action: {
+          action: "search",
+          query: "strongest challenge",
+          intent: "challenge",
+        },
+        result: {
+          tool: "search",
+          cached: false,
+          resultsHash: `0x${"09".repeat(32)}`,
+          results: [{
+            rank: 1,
+            url: challengeUrl,
+            title: "Independent challenge",
+            snippet: "The strongest contrary evidence.",
+          }],
+        },
+      },
+      {
+        index: 3,
+        turn: 4,
+        startedAtMs: 16,
+        completedAtMs: 17,
+        modelRequestId: "challenge-open",
+        action: { action: "open", url: challengeUrl, from: 0 },
+        result: {
+          tool: "open",
+          cached: false,
+          evidenceId: challengeId,
+          origin: "SEARCH",
+          from: 0,
+          chars: 200,
+          totalChars: 200,
+          contentHash: `0x${"0a".repeat(32)}`,
+          canonicalWalrusBlobId: "walrus-challenge",
+        },
+      },
+    ],
+    opened: [
+      {
+        evidenceId: supportId,
+        ref: "p1",
+        url: supportUrl,
+        finalUrl: supportUrl,
+        origin: "SEARCH",
+        sides: ["support"],
+        contentHash: `0x${"08".repeat(32)}`,
+        canonicalHash: `0x${"18".repeat(32)}`,
+        canonicalWalrusBlobId: "walrus-support",
+        totalChars: 200,
+        truncated: false,
+      },
+      {
+        evidenceId: challengeId,
+        ref: "p2",
+        url: challengeUrl,
+        finalUrl: challengeUrl,
+        origin: "SEARCH",
+        sides: ["challenge"],
+        contentHash: `0x${"0a".repeat(32)}`,
+        canonicalHash: `0x${"1a".repeat(32)}`,
+        canonicalWalrusBlobId: "walrus-challenge",
+        totalChars: 200,
+        truncated: false,
+      },
+    ],
+    citations: citations.map((citation) => ({ ...citation, found: true })),
+    counts: { searches: 2, opens: 2, turns: 5, challengeSearches: 1 },
+  };
+  const input = { ...base.input, promptVersion: "3" as const };
+  const validatedOutput = makeOutput({
+    citations,
+    counterEvidenceSummary:
+      "The independent source raised the strongest objection, but the official record remained decisive.",
+  });
+  const promptHash = promptSpecHash(DEFAULT_PROMPT_SPEC_V3);
+  const inputHash = toHex(blake2b256(canonicalJsonBytes(input)));
+  const outputHash = toHex(blake2b256(canonicalJsonBytes(validatedOutput)));
+  const audit: InferenceRunAudit = {
+    ...base.audit,
+    promptHash,
+    inputHash,
+    outputHash,
+    toolTranscriptHash: toHex(blake2b256(canonicalJsonBytes(transcript))),
+    toolCallCount: 4,
+  };
+  const core: PublicRunBundleCoreV4 = {
+    ...base,
+    version: 4,
+    promptSpec: DEFAULT_PROMPT_SPEC_V3,
+    promptHash,
+    toolPolicy: DEFAULT_TOOL_POLICY_V3,
+    toolPolicyHash: policyHash,
+    transcript,
+    input,
+    inputHash,
+    request: {
+      ...base.request,
+      messages: [
+        {
+          role: "system",
+          content: composeSystemPrompt(
+            DEFAULT_PROMPT_SPEC_V3,
+            DEFAULT_TOOL_POLICY_V3,
+          ),
+        },
+        ...base.request.messages.slice(1),
+      ],
+    },
+    validatedOutput,
+    outputHash,
+    audit,
+    runHash: runHashFromAudit(audit),
+    verify: {
+      ...base.verify,
+      toolPolicyHash: "blake2b256(canonicalJson(toolPolicy))",
+      toolTranscriptHash: "blake2b256(canonicalJson(transcript))",
+      systemPrompt: "promptSpec.systemPrompt + '\\n' + canonicalJson({budgets: toolPolicy})",
+    },
+  };
+  const { sealed, seal } = sealRunBundle(core, { runId: core.runId });
+  const bundle: PublicRunBundleV4 = {
+    ...core,
+    seal: { ...seal, sealedBlobId: "sealed-blob" },
+  };
+  return { proof: proofFromBundle(bundle, sealed), sealed };
+}
+
 describe("browser run proof", () => {
   it("keeps verifying v2 bundles with five checks", async () => {
     const { proof } = makeProof();
@@ -285,6 +490,72 @@ describe("browser run proof", () => {
       "sealedCore",
     ]);
     expect(checks.every((check) => check.ok)).toBe(true);
+  });
+
+  it("verifies all v4 two-sided research checks", async () => {
+    const { proof } = makeProofV4();
+    const checks = await recomputeRunProof(proof);
+
+    expect(checks.map((check) => check.key)).toEqual([
+      "promptHash",
+      "toolPolicyHash",
+      "systemPrompt",
+      "inputHash",
+      "outputHash",
+      "toolTranscriptHash",
+      "citations",
+      "challengeSearch",
+      "bothSidesOpened",
+      "citationSites",
+      "counterEvidenceSummary",
+      "runHash",
+      "sealedCore",
+    ]);
+    expect(checks.every((check) => check.ok)).toBe(true);
+  });
+
+  it("flags a v4 transcript without a challenge search", async () => {
+    const { proof } = makeProofV4();
+    if (!proof.bundle || !isV4Bundle(proof.bundle)) {
+      throw new Error("Expected a v4 bundle");
+    }
+    proof.bundle.transcript.steps = proof.bundle.transcript.steps.filter(
+      (step) =>
+        step.action.action !== "search" ||
+        step.action.intent !== "challenge",
+    );
+
+    const checks = await recomputeRunProof(proof);
+    expect(checks.find((check) => check.key === "challengeSearch")?.ok).toBe(
+      false,
+    );
+  });
+
+  it("passes the new v4 checks trivially for UNSURE", async () => {
+    const { proof } = makeProofV4();
+    if (!proof.bundle || !isV4Bundle(proof.bundle)) {
+      throw new Error("Expected a v4 bundle");
+    }
+    proof.bundle.validatedOutput.outcome = "UNSURE";
+    delete proof.bundle.validatedOutput.counterEvidenceSummary;
+    proof.bundle.transcript.steps = [];
+    proof.bundle.transcript.opened = [];
+
+    const checks = await recomputeRunProof(proof);
+    const newChecks = checks.filter((check) =>
+      [
+        "challengeSearch",
+        "bothSidesOpened",
+        "citationSites",
+        "counterEvidenceSummary",
+      ].includes(check.key),
+    );
+    expect(newChecks).toHaveLength(4);
+    expect(newChecks.every((check) => check.ok)).toBe(true);
+    expect(
+      newChecks.find((check) => check.key === "counterEvidenceSummary")
+        ?.actual,
+    ).toBe("missing");
   });
 
   it("fails altered transcript and unopened citation checks", async () => {

@@ -4,7 +4,10 @@ import { createAttemptAudit } from "../gonka/audit";
 import { makeInput, makeManifest, makeOutput } from "../gonka/fixtures.test-utils";
 import {
   DEFAULT_PROMPT_SPEC_V2,
+  DEFAULT_PROMPT_SPEC_V3,
   DEFAULT_TOOL_POLICY_V2,
+  DEFAULT_TOOL_POLICY_V3,
+  composeSystemPrompt,
 } from "../gonka/promptSpec";
 import type {
   GonkaAttemptRecord,
@@ -14,8 +17,11 @@ import type {
 import { blake2b256, toHex } from "../protocol/hash";
 import type {
   HexString,
+  PromptSpecV2,
+  PromptSpecV3,
   ProviderRequestRecord,
   ToolPolicyV2,
+  ToolPolicyV3,
 } from "../protocol/types";
 import { normalizeUrl } from "./actions";
 import { createFakeResearchProvider } from "./fake";
@@ -167,6 +173,10 @@ function policy(overrides: Partial<ToolPolicyV2> = {}): ToolPolicyV2 {
   return { ...DEFAULT_TOOL_POLICY_V2, ...overrides };
 }
 
+function v3Policy(overrides: Partial<ToolPolicyV3> = {}): ToolPolicyV3 {
+  return { ...DEFAULT_TOOL_POLICY_V3, ...overrides };
+}
+
 function inputWithSubmittedUrl(url: string) {
   return makeInput({
     promptVersion: "2",
@@ -194,6 +204,7 @@ function citedAnswer(options: {
   evidenceId: string;
   url: string;
   quote: string;
+  counterEvidenceSummary?: string;
 }): string {
   const outcome = options.outcome ?? "YES";
   return action({
@@ -219,6 +230,62 @@ function citedAnswer(options: {
           quote: options.quote,
         },
       ],
+      ...(options.counterEvidenceSummary === undefined
+        ? {}
+        : { counterEvidenceSummary: options.counterEvidenceSummary }),
+    }),
+  });
+}
+
+function twoSidedAnswer(options: {
+  supportEvidenceId: string;
+  supportUrl: string;
+  supportQuote: string;
+  challengeEvidenceId: string;
+  challengeUrl: string;
+  challengeQuote: string;
+  includeChallengeCitation?: boolean;
+  counterEvidenceSummary?: string;
+}): string {
+  const citations = [
+    {
+      evidenceId: options.supportEvidenceId,
+      url: options.supportUrl,
+      quote: options.supportQuote,
+    },
+    ...(options.includeChallengeCitation === false
+      ? []
+      : [
+          {
+            evidenceId: options.challengeEvidenceId,
+            url: options.challengeUrl,
+            quote: options.challengeQuote,
+          },
+        ]),
+  ];
+  return action({
+    action: "answer",
+    output: makeOutput({
+      outcome: "YES",
+      evidenceFor: [options.supportEvidenceId],
+      evidenceAgainst: [options.challengeEvidenceId],
+      unsupportedClaims: [],
+      decisiveEvidence: [options.supportEvidenceId],
+      publicReasoningTrace: [
+        {
+          check: "Compare the strongest evidence on both sides.",
+          evidenceIds: [
+            options.supportEvidenceId,
+            options.challengeEvidenceId,
+          ],
+          assessment: "MIXED",
+          finding: "The supporting source remains more persuasive.",
+        },
+      ],
+      citations,
+      ...(options.counterEvidenceSummary === undefined
+        ? {}
+        : { counterEvidenceSummary: options.counterEvidenceSummary }),
     }),
   });
 }
@@ -243,7 +310,8 @@ function storedPage(evidenceId: string, url: string): PageStorePage {
 function loopDependencies(options: {
   complete: GonkaCompletion;
   provider?: ResearchProvider;
-  policy?: ToolPolicyV2;
+  policy?: ToolPolicyV2 | ToolPolicyV3;
+  spec?: PromptSpecV2 | PromptSpecV3;
   input?: ReturnType<typeof makeInput>;
   pages?: PageStore;
   searchCache?: SearchCache;
@@ -254,7 +322,7 @@ function loopDependencies(options: {
     complete: options.complete,
     provider: options.provider ?? createFakeResearchProvider(),
     policy: options.policy ?? policy(),
-    spec: DEFAULT_PROMPT_SPEC_V2,
+    spec: options.spec ?? DEFAULT_PROMPT_SPEC_V2,
     input: options.input ?? makeInput({ promptVersion: "2" }),
     manifest: makeManifest(),
     claimId: CLAIM_ID,
@@ -263,6 +331,36 @@ function loopDependencies(options: {
     searchCache: options.searchCache ?? createSearchCache(),
     ...(options.now === undefined ? {} : { now: options.now }),
     ...(options.deadlineMs === undefined ? {} : { deadlineMs: options.deadlineMs }),
+  };
+}
+
+function twoSiteProvider(): ResearchProvider {
+  const supportUrl = "https://support.example/report";
+  const challengeUrl = "https://challenge.example/report";
+  const pages = new Map([
+    [supportUrl, "The official record confirms the claim as stated."],
+    [challengeUrl, "The independent review identifies the strongest contrary evidence."],
+  ]);
+  return {
+    name: "fake",
+    mode: "fake",
+    search: async (query) => {
+      const challenge = query.includes("challenge");
+      const url = challenge ? challengeUrl : supportUrl;
+      return [{
+        rank: 1,
+        url,
+        title: challenge ? "Challenge source" : "Support source",
+        snippet: pages.get(url) ?? "",
+      }];
+    },
+    open: async (url) => ({
+      url,
+      finalUrl: url,
+      title: "Research source",
+      markdown: pages.get(url) ?? "Unknown page.",
+      fetchedAtMs: 0,
+    }),
   };
 }
 
@@ -642,5 +740,339 @@ describe("research loop", () => {
     expect(result.status).toBe("TIMEOUT");
     expect(result.attempts).toHaveLength(0);
     expect(result.transcript.counts.turns).toBe(0);
+  });
+
+  it("rejects a v3 search without intent without spending search budget", async () => {
+    const script = scriptedCompletion([
+      action({ action: "search", query: "missing intent" }),
+      unsureAnswer(),
+    ]);
+
+    const result = await runResearchLoop(
+      loopDependencies({
+        complete: script.complete,
+        policy: v3Policy(),
+        spec: DEFAULT_PROMPT_SPEC_V3,
+        input: makeInput({ promptVersion: "3" }),
+      }),
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.transcript.steps[0]?.result).toEqual({
+      tool: "error",
+      code: "INVALID_ACTION",
+      message: 'search needs "intent": "support" or "challenge"',
+    });
+    expect(result.transcript.counts).toEqual({
+      searches: 0,
+      opens: 0,
+      turns: 2,
+      challengeSearches: 0,
+    });
+  });
+
+  it("counts a failed v3 challenge search after it spends search budget", async () => {
+    const baseProvider = createFakeResearchProvider();
+    const provider: ResearchProvider = {
+      ...baseProvider,
+      search: async () => {
+        throw new Error("search unavailable");
+      },
+    };
+    const script = scriptedCompletion([
+      action({
+        action: "search",
+        query: "challenge unavailable",
+        intent: "challenge",
+      }),
+      unsureAnswer(),
+    ]);
+
+    const result = await runResearchLoop(
+      loopDependencies({
+        complete: script.complete,
+        provider,
+        policy: v3Policy(),
+        spec: DEFAULT_PROMPT_SPEC_V3,
+        input: makeInput({ promptVersion: "3" }),
+      }),
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.transcript.steps[0]?.result).toMatchObject({
+      tool: "error",
+      code: "SEARCH_FAILED",
+    });
+    expect(result.transcript.counts).toMatchObject({
+      searches: 1,
+      challengeSearches: 1,
+    });
+  });
+
+  it("does not let a failed challenge search satisfy a decisive answer", async () => {
+    const baseProvider = createFakeResearchProvider();
+    const provider: ResearchProvider = {
+      ...baseProvider,
+      search: async (query, options) => {
+        if (query.includes("challenge")) {
+          throw new Error("search unavailable");
+        }
+        return baseProvider.search(query, options);
+      },
+    };
+    const supportUrl = "https://fake.evidence.test/support-source/1";
+    const supportId = discoveredEvidenceId(
+      CLAIM_ID,
+      PHASE,
+      normalizeUrl(supportUrl),
+    );
+    const script = scriptedCompletion([
+      action({ action: "search", query: "support source", intent: "support" }),
+      action({ action: "open", url: supportUrl }),
+      action({
+        action: "search",
+        query: "challenge unavailable",
+        intent: "challenge",
+      }),
+      citedAnswer({
+        evidenceId: supportId,
+        url: supportUrl,
+        quote: "This page discusses support-source in detail.",
+        counterEvidenceSummary: "The failed challenge search produced no evidence.",
+      }),
+      unsureAnswer(),
+    ]);
+
+    const result = await runResearchLoop(
+      loopDependencies({
+        complete: script.complete,
+        provider,
+        policy: v3Policy({ minCitationDomains: 1 }),
+        spec: DEFAULT_PROMPT_SPEC_V3,
+        input: makeInput({ promptVersion: "3" }),
+      }),
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.transcript.steps[3]?.result).toMatchObject({
+      tool: "error",
+      code: "CHALLENGE_REQUIRED",
+    });
+    expect(result.transcript.counts.challengeSearches).toBe(1);
+  });
+
+  it("nudges for challenge research and accepts after its result is opened", async () => {
+    const supportQuery = "support evidence";
+    const challengeQuery = "challenge evidence";
+    const supportUrl = "https://fake.evidence.test/support-evidence/1";
+    const challengeUrl = "https://fake.evidence.test/challenge-evidence/1";
+    const supportId = discoveredEvidenceId(
+      CLAIM_ID,
+      PHASE,
+      normalizeUrl(supportUrl),
+    );
+    const script = scriptedCompletion([
+      action({ action: "search", query: supportQuery, intent: "support" }),
+      action({ action: "open", url: supportUrl }),
+      citedAnswer({
+        evidenceId: supportId,
+        url: supportUrl,
+        quote: "This page discusses support-evidence in detail.",
+        counterEvidenceSummary: "No contrary source has changed the verdict.",
+      }),
+      action({ action: "search", query: challengeQuery, intent: "challenge" }),
+      action({ action: "open", url: challengeUrl }),
+      citedAnswer({
+        evidenceId: supportId,
+        url: supportUrl,
+        quote: "This page discusses support-evidence in detail.",
+        counterEvidenceSummary: "The challenge page was weaker than the supporting record.",
+      }),
+    ]);
+
+    const result = await runResearchLoop(
+      loopDependencies({
+        complete: script.complete,
+        policy: v3Policy({ minCitationDomains: 1 }),
+        spec: DEFAULT_PROMPT_SPEC_V3,
+        input: makeInput({ promptVersion: "3" }),
+      }),
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.transcript.steps[2]?.result).toMatchObject({
+      tool: "error",
+      code: "CHALLENGE_REQUIRED",
+    });
+    expect(result.transcript.opened.map((page) => page.sides)).toEqual([
+      ["support"],
+      ["challenge"],
+    ]);
+    expect(result.transcript.counts.challengeSearches).toBe(1);
+  });
+
+  it("nudges until citations span the required number of sites", async () => {
+    const supportUrl = "https://support.example/report";
+    const challengeUrl = "https://challenge.example/report";
+    const supportId = discoveredEvidenceId(CLAIM_ID, PHASE, supportUrl);
+    const challengeId = discoveredEvidenceId(CLAIM_ID, PHASE, challengeUrl);
+    const answerOptions = {
+      supportEvidenceId: supportId,
+      supportUrl,
+      supportQuote: "The official record confirms the claim as stated.",
+      challengeEvidenceId: challengeId,
+      challengeUrl,
+      challengeQuote: "The independent review identifies the strongest contrary evidence.",
+      counterEvidenceSummary: "The independent review raised the strongest objection, but the official record remained decisive.",
+    };
+    const script = scriptedCompletion([
+      action({ action: "search", query: "support source", intent: "support" }),
+      action({ action: "open", url: supportUrl }),
+      action({ action: "search", query: "challenge source", intent: "challenge" }),
+      action({ action: "open", url: challengeUrl }),
+      twoSidedAnswer({ ...answerOptions, includeChallengeCitation: false }),
+      twoSidedAnswer(answerOptions),
+    ]);
+
+    const result = await runResearchLoop(
+      loopDependencies({
+        complete: script.complete,
+        provider: twoSiteProvider(),
+        policy: v3Policy(),
+        spec: DEFAULT_PROMPT_SPEC_V3,
+        input: makeInput({ promptVersion: "3" }),
+      }),
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.transcript.steps[4]?.result).toMatchObject({
+      tool: "error",
+      code: "CORROBORATION_REQUIRED",
+    });
+    expect(result.output.citations).toHaveLength(2);
+  });
+
+  it("repairs a decisive v3 answer without counterEvidenceSummary", async () => {
+    const supportUrl = "https://support.example/report";
+    const challengeUrl = "https://challenge.example/report";
+    const answerOptions = {
+      supportEvidenceId: discoveredEvidenceId(CLAIM_ID, PHASE, supportUrl),
+      supportUrl,
+      supportQuote: "The official record confirms the claim as stated.",
+      challengeEvidenceId: discoveredEvidenceId(CLAIM_ID, PHASE, challengeUrl),
+      challengeUrl,
+      challengeQuote: "The independent review identifies the strongest contrary evidence.",
+    };
+    const script = scriptedCompletion([
+      action({ action: "search", query: "support source", intent: "support" }),
+      action({ action: "open", url: supportUrl }),
+      action({ action: "search", query: "challenge source", intent: "challenge" }),
+      action({ action: "open", url: challengeUrl }),
+      twoSidedAnswer(answerOptions),
+      twoSidedAnswer({
+        ...answerOptions,
+        counterEvidenceSummary: "The contrary review was considered but did not outweigh the official record.",
+      }),
+    ]);
+
+    const result = await runResearchLoop(
+      loopDependencies({
+        complete: script.complete,
+        provider: twoSiteProvider(),
+        policy: v3Policy(),
+        spec: DEFAULT_PROMPT_SPEC_V3,
+        input: makeInput({ promptVersion: "3" }),
+      }),
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.transcript.steps[4]?.result).toMatchObject({
+      tool: "answer",
+      valid: false,
+      errors: ["counterEvidenceSummary is required for YES or NO"],
+    });
+    expect(script.requests[5]?.attemptKind).toBe("REPAIR");
+  });
+
+  it("allows v3 UNSURE without challenge, corroboration, or a summary", async () => {
+    const script = scriptedCompletion([unsureAnswer()]);
+
+    const result = await runResearchLoop(
+      loopDependencies({
+        complete: script.complete,
+        policy: v3Policy(),
+        spec: DEFAULT_PROMPT_SPEC_V3,
+        input: makeInput({ promptVersion: "3" }),
+      }),
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.transcript.steps).toHaveLength(1);
+    expect(result.transcript.steps[0]?.result).toEqual({
+      tool: "answer",
+      valid: true,
+      errors: [],
+    });
+  });
+
+  it("keeps v2 searches without intent unchanged", async () => {
+    const script = scriptedCompletion([
+      action({ action: "search", query: "legacy search" }),
+      unsureAnswer(),
+    ]);
+
+    const result = await runResearchLoop(
+      loopDependencies({ complete: script.complete }),
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.transcript.steps[0]?.result.tool).toBe("search");
+    expect(result.transcript.counts).toEqual({
+      searches: 1,
+      opens: 0,
+      turns: 2,
+    });
+  });
+
+  it("keeps the v3 manifest system prompt exact during JSON fallback", async () => {
+    const script = scriptedCompletion([
+      { status: "PROVIDER_ERROR", responseFormatUnsupported: true },
+      unsureAnswer(),
+    ]);
+
+    const result = await runResearchLoop(
+      loopDependencies({
+        complete: script.complete,
+        policy: v3Policy(),
+        spec: DEFAULT_PROMPT_SPEC_V3,
+        input: makeInput({ promptVersion: "3" }),
+      }),
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.request.responseFormat).toBe("none");
+    expect(result.request.messages[0]?.content).toBe(
+      composeSystemPrompt(DEFAULT_PROMPT_SPEC_V3, DEFAULT_TOOL_POLICY_V3),
+    );
+  });
+
+  it("keeps the existing v2 JSON fallback suffix", async () => {
+    const script = scriptedCompletion([
+      { status: "PROVIDER_ERROR", responseFormatUnsupported: true },
+      unsureAnswer(),
+    ]);
+
+    const result = await runResearchLoop(
+      loopDependencies({ complete: script.complete }),
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.request.messages[0]?.content).toBe(
+      `${composeSystemPrompt(DEFAULT_PROMPT_SPEC_V2, DEFAULT_TOOL_POLICY_V2)}${DEFAULT_PROMPT_SPEC_V2.jsonFallbackSuffix}`,
+    );
   });
 });

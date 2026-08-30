@@ -30,7 +30,7 @@ export const oracleInferenceInputSchema: z.ZodType<OracleInferenceInput> = z
     protocolVersion: z.literal("1.0"),
     runId: z.string().min(1).max(256),
     agentRole: z.string().min(1).max(256),
-    promptVersion: z.enum(["1", "2"]),
+    promptVersion: z.enum(["1", "2", "3"]),
     submission: z
       .object({
         kind: z.enum(["TEXT", "URL", "TEXT_AND_URL"]),
@@ -88,6 +88,36 @@ export const citationSchema = z
   })
   .strict();
 
+const researchSearchActionSchema = z
+  .object({
+    action: z.literal("search"),
+    query: z.string().min(3).max(200),
+    intent: z.enum(["support", "challenge"]).optional(),
+  })
+  .strict();
+
+const researchOpenActionSchema = z
+  .object({
+    action: z.literal("open"),
+    url: z.string().url(),
+    from: z.number().int().min(0).optional(),
+  })
+  .strict();
+
+const researchAnswerActionSchema = z
+  .object({
+    action: z.literal("answer"),
+    output: z.unknown(),
+  })
+  .strict();
+
+/** V3 adds search intent while keeping the action envelope strict. */
+export const researchActionSchema = z.discriminatedUnion("action", [
+  researchSearchActionSchema,
+  researchOpenActionSchema,
+  researchAnswerActionSchema,
+]);
+
 export const oracleInferenceOutputSchema: z.ZodType<OracleInferenceOutput> = z
   .object({
     outcome: z.enum(["YES", "NO", "UNSURE"]),
@@ -104,6 +134,7 @@ export const oracleInferenceOutputSchema: z.ZodType<OracleInferenceOutput> = z
       .min(1)
       .max(MAX_TRACE_ENTRIES),
     citations: z.array(citationSchema).max(16).optional(),
+    counterEvidenceSummary: z.string().max(600).optional(),
   })
   .strict();
 

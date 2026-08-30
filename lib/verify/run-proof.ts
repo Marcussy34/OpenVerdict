@@ -1,5 +1,6 @@
 import { canonicalJsonBytes, canonicalJsonString } from "../gonka/canonical";
 import { composeSystemPrompt } from "../gonka/promptSpec";
+import { citationSites } from "../research/citations";
 import { RunRecordV1Bcs } from "../protocol/bcs";
 import { blake2b256, fromHex, toHex } from "../protocol/hash";
 import type { RunProof } from "../engine/contract";
@@ -7,6 +8,7 @@ import type {
   HexString,
   PublicRunBundle,
   PublicRunBundleV3,
+  PublicRunBundleV4,
   SealedRunBundleV2,
 } from "../protocol/types";
 
@@ -27,6 +29,10 @@ export type RunProofCheck = {
     | "outputHash"
     | "toolTranscriptHash"
     | "citations"
+    | "challengeSearch"
+    | "bothSidesOpened"
+    | "citationSites"
+    | "counterEvidenceSummary"
     | "runHash"
     | "sealedCore";
   label: string;
@@ -75,6 +81,18 @@ export function isV3Bundle(
   bundle: PublicRunBundle,
 ): bundle is PublicRunBundleV3 {
   return bundle.version === 3;
+}
+
+export function isV4Bundle(
+  bundle: PublicRunBundle,
+): bundle is PublicRunBundleV4 {
+  return bundle.version === 4;
+}
+
+function isResearchBundle(
+  bundle: PublicRunBundle,
+): bundle is PublicRunBundleV3 | PublicRunBundleV4 {
+  return bundle.version === 3 || bundle.version === 4;
 }
 
 /** Mirror the engine run identifier used for one claim seat and phase. */
@@ -156,7 +174,7 @@ export async function recomputeRunProof(
     },
   ];
 
-  if (isV3Bundle(bundle)) {
+  if (isResearchBundle(bundle)) {
     const actualToolPolicyHash = canonicalHash(bundle.toolPolicy);
     const expectedSystemPrompt = composeSystemPrompt(
       bundle.promptSpec,
@@ -204,7 +222,7 @@ export async function recomputeRunProof(
     },
   );
 
-  if (isV3Bundle(bundle)) {
+  if (isResearchBundle(bundle)) {
     const actualTranscriptHash = canonicalHash(bundle.transcript);
     const actualToolCallCount =
       bundle.transcript.counts.searches + bundle.transcript.counts.opens;
@@ -270,6 +288,93 @@ export async function recomputeRunProof(
             }),
       },
     );
+
+    if (isV4Bundle(bundle)) {
+      const challengeSearchSteps = bundle.transcript.steps.filter(
+        (step) =>
+          step.action.action === "search" &&
+          step.action.intent === "challenge",
+      );
+      const challengeSearchResults = challengeSearchSteps.filter(
+        (step) => step.result.tool === "search",
+      );
+      const challengeReturnedNoResults =
+        challengeSearchResults.length > 0 &&
+        challengeSearchResults.every(
+          (step) =>
+            step.result.tool === "search" && step.result.results.length === 0,
+        );
+      const supportOpens = bundle.transcript.opened.filter((page) =>
+        page.sides?.includes("support"),
+      ).length;
+      const challengeOpens = bundle.transcript.opened.filter((page) =>
+        page.sides?.includes("challenge"),
+      ).length;
+      const foundOutputCitations = outputCitations.map((citation) => ({
+        ...citation,
+        found:
+          recordedById.get(`${citation.evidenceId}|${citation.url}`)?.found ===
+          true,
+      }));
+      const sites = citationSites(foundOutputCitations, {
+        opened: bundle.transcript.opened,
+        origins: new Map(
+          bundle.transcript.opened.map((page) => [
+            page.evidenceId,
+            page.origin,
+          ]),
+        ),
+      });
+      const challengeSearchOk =
+        !needsSearchCitation || challengeSearchSteps.length > 0;
+      const bothSidesOpenedOk =
+        !needsSearchCitation ||
+        (supportOpens >= bundle.toolPolicy.minOpensPerSide &&
+          (challengeOpens >= bundle.toolPolicy.minOpensPerSide ||
+            challengeReturnedNoResults));
+      const citationSitesOk =
+        !needsSearchCitation ||
+        sites.size >= bundle.toolPolicy.minCitationDomains;
+      const hasCounterEvidenceSummary =
+        (bundle.validatedOutput.counterEvidenceSummary?.trim().length ?? 0) >
+        0;
+      const counterEvidenceSummaryOk =
+        !needsSearchCitation || hasCounterEvidenceSummary;
+
+      checks.push(
+        {
+          key: "challengeSearch",
+          label: "Challenge search present",
+          expected: "At least one challenge search for YES or NO",
+          actual: `${challengeSearchSteps.length} challenge searches`,
+          ok: challengeSearchOk,
+        },
+        {
+          key: "bothSidesOpened",
+          label: "Both sides opened",
+          expected: `${bundle.toolPolicy.minOpensPerSide} opens per side`,
+          actual: `${supportOpens} support, ${challengeOpens} challenge`,
+          ok: bothSidesOpenedOk,
+          ...(challengeReturnedNoResults
+            ? { detail: "Every challenge search returned zero results" }
+            : {}),
+        },
+        {
+          key: "citationSites",
+          label: `Citations span ${bundle.toolPolicy.minCitationDomains} sites`,
+          expected: `${bundle.toolPolicy.minCitationDomains} distinct sites`,
+          actual: `${sites.size} distinct sites`,
+          ok: citationSitesOk,
+        },
+        {
+          key: "counterEvidenceSummary",
+          label: "Counter-evidence summary present",
+          expected: "Non-empty for YES or NO",
+          actual: hasCounterEvidenceSummary ? "present" : "missing",
+          ok: counterEvidenceSummaryOk,
+        },
+      );
+    }
   }
 
   checks.push({

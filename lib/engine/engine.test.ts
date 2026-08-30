@@ -6,7 +6,9 @@ import { Ed25519Keypair } from "@mysten/sui/keypairs/ed25519";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   DEFAULT_PROMPT_SPEC_V2,
+  DEFAULT_PROMPT_SPEC_V3,
   DEFAULT_TOOL_POLICY_V2,
+  DEFAULT_TOOL_POLICY_V3,
   createFakeGonkaAdapter,
   promptSpecHash,
   toolPolicyHash,
@@ -41,6 +43,7 @@ import {
 import { createLocalWalrusStore, type WalrusStore } from "../walrus";
 import {
   EVIDENCE_POLICY_V1_LABEL,
+  buildAgentManifestDocument,
   parseAgentManifestDocument,
 } from "./agentManifestDocument";
 import { openSealedRunBundle } from "./runBundle";
@@ -222,6 +225,56 @@ describe("headless engine", () => {
     expect(thrown).toBeInstanceOf(EngineValidationError);
     expect((thrown as Error).message).toContain("prompt hash");
     expect((thrown as Error).message).toContain("publish-agent-manifests");
+    expect(setup.gonkaComplete).not.toHaveBeenCalled();
+  });
+
+  it("fails closed before provider calls when a v4 document prompt hash differs", async () => {
+    const setup = await engineSetup(new FakeSuiGateway(), 5);
+    const { claimId } = await setup.engine.factCheckStart({
+      claim: "A v4 manifest document must bind its prompt hash.",
+      text: "Local evidence.",
+      urls: [],
+    });
+    await setup.engine.selectCommittee(claimId);
+    await setup.engine.evidenceFreeze(claimId, 1);
+    const repository = createRepository(setup.db);
+    const agents = await repository.listAgentManifests();
+
+    for (const [index, agent] of agents.entries()) {
+      const built = buildAgentManifestDocument({
+        network: "localnet",
+        backingKind: "TESTNET_DEMO_ALLOWLIST",
+        humanBackingHash: agent.manifest.humanAttestationHash,
+        humanVerificationProvider: agent.manifest.humanVerificationProvider,
+        operationalOwner: agent.manifest.owner,
+        role: agent.role,
+        modelId: agent.manifest.modelId,
+        promptSpec: DEFAULT_PROMPT_SPEC_V3,
+        toolPolicy: DEFAULT_TOOL_POLICY_V3,
+        evidencePolicyId: EVIDENCE_POLICY_V1_LABEL,
+      });
+      const upload = await setup.walrus.put(built.bytes, {
+        identifier: `agent-${index}-manifest-v4.json`,
+      });
+      await repository.saveAgentManifest({
+        ...agent,
+        manifest: {
+          ...agent.manifest,
+          version: built.document.version,
+          manifestBlobId: upload.blobId,
+          manifestHash: built.manifestHash,
+          promptHash:
+            index === 0 ? `0x${"ab".repeat(32)}` : built.promptHash,
+          toolPolicyHash: built.toolPolicyHash,
+          evidencePolicyHash: built.document.evidencePolicyHash,
+          registeredCheckpoint: agent.manifest.registeredCheckpoint + 1,
+        },
+      });
+    }
+
+    await expect(setup.engine.juryRun(claimId, 1)).rejects.toThrow(
+      /manifest prompt hash does not match its prompt document/,
+    );
     expect(setup.gonkaComplete).not.toHaveBeenCalled();
   });
 

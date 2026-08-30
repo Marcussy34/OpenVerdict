@@ -1,8 +1,12 @@
+import { z } from "zod";
+
+import { extractJsonObject } from "../gonka/adapter";
 import {
   buildResearchMessages,
   composeSystemPrompt,
   toolPolicyHash,
 } from "../gonka/promptSpec";
+import { researchActionSchema } from "../gonka/schemas";
 import type {
   GonkaAttemptKind,
   GonkaAttemptRecord,
@@ -17,6 +21,7 @@ import type {
   OracleInferenceInput,
   OracleInferenceOutput,
   PromptSpecV2,
+  PromptSpecV3,
   ProviderRequestRecord,
   ResearchAction,
   ResearchPageOrigin,
@@ -24,6 +29,7 @@ import type {
   ResearchTranscriptV1,
   ResearchToolErrorCode,
   ToolPolicyV2,
+  ToolPolicyV3,
 } from "../protocol/types";
 import {
   errorToolResult,
@@ -33,7 +39,7 @@ import {
   searchToolResult,
   toolResultContent,
 } from "./actions";
-import { validateResearchAnswer } from "./citations";
+import { citationSites, validateResearchAnswer } from "./citations";
 import type { OpenedPage, ResearchProvider, SearchResult } from "./provider";
 import {
   discoveredEvidenceId,
@@ -112,22 +118,53 @@ function visibleSearchResults(
 
 const RESEARCH_REQUIRED_MESSAGE =
   "The independence rule: YES or NO must cite a page you found with your own search and opened in this run. Search now, open the most relevant result, then answer. UNSURE needs no citation.";
+const CHALLENGE_REQUIRED_MESSAGE =
+  "Weigh the other side: run a search with intent challenge that looks for evidence AGAINST the claim and open its most credible result before answering YES or NO. UNSURE needs no further research.";
+const CORROBORATION_REQUIRED_MESSAGE =
+  "Corroborate: cite pages from at least two different sites (open another site's page) before answering YES or NO. UNSURE needs no further research.";
+const SEARCH_INTENT_REQUIRED_MESSAGE =
+  'search needs "intent": "support" or "challenge"';
 
 /** Premature YES/NO answers refused before the usual validation and repair take over. */
 const MAX_RESEARCH_NUDGES = 2;
 
 function isCitationFailure(errors: readonly string[]): boolean {
-  return errors.some(
-    (error) => error.includes("citation") || error.includes("independence"),
-  );
+  return errors.some((error) => {
+    const normalized = error.toLowerCase();
+    return (
+      normalized.includes("citation") ||
+      normalized.includes("independence") ||
+      normalized.includes("challenge") ||
+      normalized.includes("corroborate")
+    );
+  });
+}
+
+function parseAction(
+  content: string,
+  policy: ToolPolicyV2 | ToolPolicyV3,
+): { ok: true; action: ResearchAction } | { ok: false; error: string } {
+  if (policy.version === "2") return parseResearchAction(content);
+  let decoded: unknown;
+  try {
+    decoded = extractJsonObject(content);
+  } catch {
+    return { ok: false, error: "no parseable JSON object" };
+  }
+  const parsed = researchActionSchema.safeParse(decoded);
+  if (!parsed.success) {
+    return { ok: false, error: z.prettifyError(parsed.error) };
+  }
+  // The answer stays opaque until citation-aware validation below.
+  return { ok: true, action: parsed.data as ResearchAction };
 }
 
 export async function runResearchLoop(
   deps: {
     complete: GonkaCompletion;
     provider: ResearchProvider;
-    policy: ToolPolicyV2;
-    spec: PromptSpecV2;
+    policy: ToolPolicyV2 | ToolPolicyV3;
+    spec: PromptSpecV2 | PromptSpecV3;
     input: OracleInferenceInput;
     manifest: AgentManifest;
     claimId: string;
@@ -157,6 +194,12 @@ export async function runResearchLoop(
     deps.input.submission.submittedUrls.map((url) => normalizeUrl(url)),
   );
   const foundBySearch = new Set<string>();
+  const resultSides = new Map<
+    string,
+    Set<"support" | "challenge">
+  >();
+  const openedUrls = new Map<string, string>();
+  const challengeResultUrls = new Set<string>();
   const opened: StoredPage[] = [];
   const origins = new Map<string, ResearchPageOrigin>();
   const steps: ResearchTranscriptStep[] = [];
@@ -167,6 +210,10 @@ export async function runResearchLoop(
   let jsonMode = true;
   let repaired = false;
   let researchNudges = 0;
+  let challengeNudges = 0;
+  let corroborationNudges = 0;
+  let challengeSearches = 0;
+  let completedChallengeSearches = 0;
 
   const transcript = (
     citations: Array<Citation & { found: boolean }> = [],
@@ -176,21 +223,32 @@ export async function runResearchLoop(
     provider: { name: deps.provider.name, mode: deps.provider.mode },
     policyHash: toolPolicyHash(policy),
     steps,
-    opened: opened.map((page) => ({
-      evidenceId: page.evidenceId,
-      ref: page.ref,
-      url: page.url,
-      finalUrl: page.finalUrl,
-      origin: origins.get(page.evidenceId) ?? "SUBMITTED",
-      ...(page.title === undefined ? {} : { title: page.title }),
-      contentHash: page.contentHash,
-      canonicalHash: page.canonicalHash,
-      canonicalWalrusBlobId: page.canonicalWalrusBlobId,
-      totalChars: page.totalChars,
-      truncated: page.truncated,
-    })),
+    opened: opened.map((page) => {
+      const sides = (["support", "challenge"] as const).filter(
+        (side): side is "support" | "challenge" =>
+          resultSides.get(openedUrls.get(page.evidenceId) ?? "")?.has(side) ===
+          true,
+      );
+      return {
+        evidenceId: page.evidenceId,
+        ref: page.ref,
+        url: page.url,
+        finalUrl: page.finalUrl,
+        origin: origins.get(page.evidenceId) ?? "SUBMITTED",
+        ...(page.title === undefined ? {} : { title: page.title }),
+        contentHash: page.contentHash,
+        canonicalHash: page.canonicalHash,
+        canonicalWalrusBlobId: page.canonicalWalrusBlobId,
+        totalChars: page.totalChars,
+        truncated: page.truncated,
+        ...(policy.version === "3" && sides.length > 0 ? { sides } : {}),
+      };
+    }),
     citations,
-    counts: { ...counts },
+    counts: {
+      ...counts,
+      ...(policy.version === "3" ? { challengeSearches } : {}),
+    },
   });
 
   const fail = (
@@ -282,7 +340,10 @@ export async function runResearchLoop(
       jsonMode = false;
       messages[0] = {
         role: "system",
-        content: `${composeSystemPrompt(deps.spec, policy)}${deps.spec.jsonFallbackSuffix}`,
+        content:
+          policy.version === "3"
+            ? composeSystemPrompt(deps.spec, policy)
+            : `${composeSystemPrompt(deps.spec, policy)}${deps.spec.jsonFallbackSuffix}`,
       };
       completion = await deps.complete({
         manifest: deps.manifest,
@@ -301,7 +362,7 @@ export async function runResearchLoop(
     const modelRequestId = completion.gonkaRequestId;
     messages.push({ role: "assistant", content: completion.content });
     const stepStart = now();
-    const parsed = parseResearchAction(completion.content);
+    const parsed = parseAction(completion.content, policy);
 
     if (!parsed.ok) {
       completion.attempt.audit.status = "INVALID_SCHEMA";
@@ -333,6 +394,18 @@ export async function runResearchLoop(
 
     const researchAction = parsed.action;
     if (researchAction.action === "search") {
+      if (policy.version === "3" && researchAction.intent === undefined) {
+        completion.attempt.audit.status = "INVALID_SCHEMA";
+        recordToolError({
+          turn,
+          startedAtMs: stepStart,
+          modelRequestId,
+          action: researchAction,
+          code: "INVALID_ACTION",
+          message: SEARCH_INTENT_REQUIRED_MESSAGE,
+        });
+        continue;
+      }
       completion.attempt.audit.status = "SCHEMA_VALID";
       if (counts.searches >= policy.maxSearches) {
         recordToolError({
@@ -347,6 +420,12 @@ export async function runResearchLoop(
       }
 
       counts.searches += 1;
+      if (
+        policy.version === "3" &&
+        researchAction.intent === "challenge"
+      ) {
+        challengeSearches += 1;
+      }
       const key = `${deps.phase}:${researchAction.query.trim().toLowerCase()}`;
       try {
         const resolved = await deps.searchCache.resolve(key, () =>
@@ -359,10 +438,26 @@ export async function runResearchLoop(
           resolved.results,
           policy.snippetChars,
         );
+        if (
+          policy.version === "3" &&
+          researchAction.intent === "challenge"
+        ) {
+          completedChallengeSearches += 1;
+        }
         for (const result of results) {
           const normalized = normalizeUrl(result.url);
           seen.add(normalized);
           foundBySearch.add(normalized);
+          if (policy.version === "3") {
+            const intent = researchAction.intent;
+            if (intent === undefined) {
+              return fail("INVALID_SCHEMA", SEARCH_INTENT_REQUIRED_MESSAGE);
+            }
+            const sides = resultSides.get(normalized) ?? new Set();
+            sides.add(intent);
+            resultSides.set(normalized, sides);
+            if (intent === "challenge") challengeResultUrls.add(normalized);
+          }
         }
         recordStep(turn, stepStart, modelRequestId, researchAction, {
           tool: "search",
@@ -482,6 +577,7 @@ export async function runResearchLoop(
         ? "SEARCH"
         : "SUBMITTED";
       origins.set(evidenceId, origin);
+      openedUrls.set(evidenceId, normalized);
 
       const from = researchAction.from ?? 0;
       const toolResult = openToolResult(
@@ -524,9 +620,10 @@ export async function runResearchLoop(
     const researchedPageOpened = opened.some(
       (page) => origins.get(page.evidenceId) === "SEARCH",
     );
+    const decisiveOutcome = researchAction.output.outcome !== "UNSURE";
+    const researchRequired = decisiveOutcome && !researchedPageOpened;
     if (
-      researchAction.output.outcome !== "UNSURE" &&
-      !researchedPageOpened &&
+      researchRequired &&
       researchNudges < MAX_RESEARCH_NUDGES &&
       turn < policy.maxTurns
     ) {
@@ -543,6 +640,34 @@ export async function runResearchLoop(
       continue;
     }
 
+    const openedResultUrls = new Set(openedUrls.values());
+    const challengeRequired =
+      policy.version === "3" &&
+      decisiveOutcome &&
+      !researchRequired &&
+      (completedChallengeSearches === 0 ||
+        (challengeResultUrls.size > 0 &&
+          ![...challengeResultUrls].some((url) =>
+            openedResultUrls.has(url),
+          )));
+    if (
+      challengeRequired &&
+      challengeNudges < MAX_RESEARCH_NUDGES &&
+      turn < policy.maxTurns
+    ) {
+      challengeNudges += 1;
+      completion.attempt.audit.status = "CITATION_INVALID";
+      recordToolError({
+        turn,
+        startedAtMs: stepStart,
+        modelRequestId,
+        action: researchAction,
+        code: "CHALLENGE_REQUIRED",
+        message: CHALLENGE_REQUIRED_MESSAGE,
+      });
+      continue;
+    }
+
     const validation = validateResearchAnswer(researchAction.output, {
       frozenEvidenceIds,
       opened,
@@ -550,7 +675,53 @@ export async function runResearchLoop(
       maximumReasonLength: deps.input.outputContract.maximumReasonLength,
       evidenceManifest: deps.input.evidenceManifest,
     });
-    if (validation.ok) {
+    const ruleErrors: string[] = [];
+    if (challengeRequired) ruleErrors.push(CHALLENGE_REQUIRED_MESSAGE);
+
+    let corroborationRequired = false;
+    if (
+      validation.ok &&
+      policy.version === "3" &&
+      decisiveOutcome &&
+      !researchRequired &&
+      !challengeRequired
+    ) {
+      const sites = citationSites(validation.citations, { opened, origins });
+      corroborationRequired = sites.size < policy.minCitationDomains;
+      if (
+        corroborationRequired &&
+        corroborationNudges < MAX_RESEARCH_NUDGES &&
+        turn < policy.maxTurns
+      ) {
+        corroborationNudges += 1;
+        completion.attempt.audit.status = "CITATION_INVALID";
+        recordToolError({
+          turn,
+          startedAtMs: stepStart,
+          modelRequestId,
+          action: researchAction,
+          code: "CORROBORATION_REQUIRED",
+          message: CORROBORATION_REQUIRED_MESSAGE,
+        });
+        continue;
+      }
+      if (corroborationRequired) {
+        ruleErrors.push(CORROBORATION_REQUIRED_MESSAGE);
+      }
+    }
+
+    if (
+      policy.version === "3" &&
+      decisiveOutcome &&
+      !researchRequired &&
+      !challengeRequired &&
+      !corroborationRequired &&
+      (researchAction.output.counterEvidenceSummary?.trim().length ?? 0) === 0
+    ) {
+      ruleErrors.push("counterEvidenceSummary is required for YES or NO");
+    }
+
+    if (validation.ok && ruleErrors.length === 0) {
       completion.attempt.audit.status = "SCHEMA_VALID";
       recordStep(turn, stepStart, modelRequestId, researchAction, {
         tool: "answer",
@@ -569,8 +740,11 @@ export async function runResearchLoop(
       };
     }
 
+    const validationErrors = validation.ok
+      ? ruleErrors
+      : [...validation.errors, ...ruleErrors];
     const status: ResearchLoopFailureStatus = isCitationFailure(
-      validation.errors,
+      validationErrors,
     )
       ? "CITATION_INVALID"
       : "INVALID_SCHEMA";
@@ -578,7 +752,7 @@ export async function runResearchLoop(
     recordStep(turn, stepStart, modelRequestId, researchAction, {
       tool: "answer",
       valid: false,
-      errors: validation.errors,
+      errors: validationErrors,
     });
     if (!repaired && turn < policy.maxTurns) {
       repaired = true;
@@ -587,14 +761,14 @@ export async function runResearchLoop(
           errorToolResult(
             "INVALID_ANSWER",
             deps.spec.repairSystemPrompt,
-            validation.errors,
+            validationErrors,
           ),
         ),
       );
       forceAnswerBeforeLastTurn(turn);
       continue;
     }
-    return fail(status, validation.errors.join("; "));
+    return fail(status, validationErrors.join("; "));
   }
 
   return fail("INVALID_SCHEMA", "no answer within maxTurns");

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Publish deterministic v3 manifests for the seven existing testnet agents.
+ * Publish deterministic v4 manifests for the seven existing testnet agents.
  *
  * Dry run:
  *   SUI_OPERATOR_SECRET_KEY=<secret> OPENVERDICT_AGENT_SEED=<seed> DATABASE_URL=<url> OPENVERDICT_SUI_GRPC_URL=<url> pnpm tsx scripts/publish-agent-manifests.ts --dry-run
@@ -14,8 +14,8 @@ import { SuiGrpcClient } from "@mysten/sui/grpc";
 
 import { buildAgentManifestDocument } from "../lib/engine";
 import {
-  DEFAULT_PROMPT_SPEC_V2,
-  DEFAULT_TOOL_POLICY_V2,
+  DEFAULT_PROMPT_SPEC_V3,
+  DEFAULT_TOOL_POLICY_V3,
 } from "../lib/gonka";
 import {
   blake2b256,
@@ -118,8 +118,8 @@ async function main(): Promise<void> {
         operationalOwner: agent.owner,
         role,
         modelId,
-        promptSpec: DEFAULT_PROMPT_SPEC_V2,
-        toolPolicy: DEFAULT_TOOL_POLICY_V2,
+        promptSpec: DEFAULT_PROMPT_SPEC_V3,
+        toolPolicy: DEFAULT_TOOL_POLICY_V3,
         evidencePolicyId: EVIDENCE_POLICY_ID,
       });
       const row = {
@@ -145,7 +145,7 @@ async function main(): Promise<void> {
       }
 
       const upload = await walrus.put(built.bytes, {
-        identifier: `testnet-agent-${agent.index}-manifest-v3.json`,
+        identifier: `testnet-agent-${agent.index}-manifest-v4.json`,
       });
       const modelHash = blake2b256(encoder.encode(modelId));
       const roleHash = blake2b256(encoder.encode(`OPENVERDICT_ROLE_${role}`));
@@ -173,7 +173,7 @@ async function main(): Promise<void> {
           owner: agent.owner,
           humanAttestationHash: agent.humanBackingHash,
           humanVerificationProvider: "testnet-demo-allowlist",
-          version: "3",
+          version: built.document.version,
           manifestBlobId: upload.blobId,
           manifestHash: built.manifestHash,
           promptHash: built.promptHash,

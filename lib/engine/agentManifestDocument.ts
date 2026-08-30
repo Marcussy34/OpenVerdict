@@ -8,11 +8,14 @@ import type {
   AgentManifestDocument,
   AgentManifestDocumentV2,
   AgentManifestDocumentV3,
+  AgentManifestDocumentV4,
   HexString,
   PromptSpec,
   PromptSpecV1,
   PromptSpecV2,
+  PromptSpecV3,
   ToolPolicyV2,
+  ToolPolicyV3,
 } from "../protocol/types";
 
 const utf8 = new TextEncoder();
@@ -56,6 +59,10 @@ const promptSpecV2Schema = z
   })
   .strict() satisfies z.ZodType<PromptSpecV2>;
 
+const promptSpecV3Schema = promptSpecV2Schema
+  .extend({ version: z.literal("3") })
+  .strict() satisfies z.ZodType<PromptSpecV3>;
+
 const toolPolicyV2Schema = z
   .object({
     version: z.literal("2"),
@@ -71,6 +78,15 @@ const toolPolicyV2Schema = z
     maxLoopMs: z.number().int().positive(),
   })
   .strict() satisfies z.ZodType<ToolPolicyV2>;
+
+const toolPolicyV3Schema = toolPolicyV2Schema
+  .extend({
+    version: z.literal("3"),
+    requireChallengeSearch: z.literal(true),
+    minCitationDomains: z.number().int().positive(),
+    minOpensPerSide: z.number().int().positive(),
+  })
+  .strict() satisfies z.ZodType<ToolPolicyV3>;
 
 const agentManifestDocumentV2Schema = z
   .object({
@@ -117,9 +133,18 @@ const agentManifestDocumentV3Schema = z
   })
   .strict() satisfies z.ZodType<AgentManifestDocumentV3>;
 
+const agentManifestDocumentV4Schema = agentManifestDocumentV3Schema
+  .extend({
+    version: z.literal("4"),
+    promptSpec: promptSpecV3Schema,
+    toolPolicy: toolPolicyV3Schema,
+  })
+  .strict() satisfies z.ZodType<AgentManifestDocumentV4>;
+
 const agentManifestDocumentSchema = z.discriminatedUnion("version", [
   agentManifestDocumentV2Schema,
   agentManifestDocumentV3Schema,
+  agentManifestDocumentV4Schema,
 ]);
 
 export type BuildAgentManifestDocumentParams = {
@@ -131,7 +156,7 @@ export type BuildAgentManifestDocumentParams = {
   role: string;
   modelId: string;
   promptSpec: PromptSpec;
-  toolPolicy?: ToolPolicyV2;
+  toolPolicy?: ToolPolicyV2 | ToolPolicyV3;
   evidencePolicyId: string;
 };
 
@@ -153,8 +178,30 @@ export function buildAgentManifestDocument(
   let document: AgentManifestDocument;
   let policyHash: HexString;
 
-  if (params.promptSpec.version === "2") {
-    if (params.toolPolicy === undefined) {
+  if (params.promptSpec.version === "3") {
+    if (params.toolPolicy?.version !== "3") {
+      throw new Error("a v3 prompt spec requires a v3 tool policy");
+    }
+    policyHash = toolPolicyHash(params.toolPolicy);
+    document = {
+      version: "4",
+      network: params.network,
+      backingKind: params.backingKind,
+      humanBackingHash: params.humanBackingHash,
+      humanVerificationProvider: params.humanVerificationProvider,
+      operationalOwner: params.operationalOwner,
+      role: params.role,
+      modelId: params.modelId,
+      providerId: "gonkarouter",
+      promptSpec: params.promptSpec,
+      promptHash,
+      toolPolicy: params.toolPolicy,
+      toolPolicyHash: policyHash,
+      evidencePolicyId: params.evidencePolicyId,
+      evidencePolicyHash,
+    };
+  } else if (params.promptSpec.version === "2") {
+    if (params.toolPolicy?.version !== "2") {
       throw new Error("a v2 prompt spec requires a tool policy");
     }
     policyHash = toolPolicyHash(params.toolPolicy);
