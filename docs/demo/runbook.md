@@ -141,7 +141,21 @@ the browser on `/verify` (Run proof tab).
    measured the same shape: commits by t+227 s, reveal phase t+380 s, four
    reveals by t+411 s, certificate t+502 s (8.4 min); opening three pages
    in one turn shortened the trails (5 to 8 steps instead of 8 to 10)
-   without lengthening the research.
+   without lengthening the research. Since 22:26 (commit `bb79bec`; the
+   owner keeps every juror at equal selection weight and accepts slower
+   verdicts so that Kimi finishes) the commit window is 450 s: a seat has
+   about 350 s of research, commits start at the acceptance midpoint
+   (~t+245 s), the advance lands ~t+480 s, the certificate ~t+620 s
+   (about 10 min), and a round two ends ~t+980 s. Measured on claim #24
+   (22:27, "The Bitcoin block reward halved to 3.125 BTC in April 2024"):
+   reveal phase t+531 s, round two opened after the discussion window,
+   final state t+977 s (16.3 min) as UNRESOLVED with truth score 9667:
+   both rounds revealed only three of five seats (round one lost the Kimi
+   seat to a 113 s call cut at the seat bound after four calls of 20, 21,
+   48 and 53 s, and a MiniMax seat to "no answer within maxTurns"), so the
+   longer window is not a cure for a slow node, only more room. Do not
+   redeploy while a claim is live: a container restart drops every
+   in-flight research run (those seats fail closed).
 5. Model health: Kimi-K2.6 on GonkaRouter was slow or failing most of the
    night (calls longer than the seat budget), then answered in 40 to 72 s on
    claim #15 (08:05, all five seats valid); DeepSeek-V4-Flash answers in 4

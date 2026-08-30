@@ -96,9 +96,13 @@
   2; minOpensPerSide 1), manifest document v4, bundle core v4, verifier v4
   checks. The seven jurors carry v4 manifests (published 16:33 from inside
   the container with `scripts/publish-agent-manifests.ts`, dry run first).
-- Ladder (lib/engine/engine.ts defaultDeadlines, hosted): cutoff +60 s,
-  commit +330 s, reveal +450 s, discussion +510 s, second round +690/+810 s
-  (measured from create_claim). Seat deadline = commit minus 60 s.
+- Ladder (lib/engine/engine.ts defaultDeadlines, hosted, since 22:26,
+  commit `bb79bec`, deployment `327c8364`): cutoff +60 s, commit +450 s,
+  reveal +570 s, discussion +630 s, second round +810/+930 s (measured
+  from create_claim; before 22:26 it was 330/450/510/690/810 s). Seat
+  deadline = commit minus 60 s. Reason: the owner keeps all jurors at equal
+  selection weight (Kimi weights restored, registry tx `A7BEYRdu…`) and
+  accepts about 10 min per verdict so that Kimi finishes its four turns.
 - Transparency UI live: components/claim/run-proof.tsx,
   run-proof-research.tsx, run-proof-transparency.tsx, run-proof-types.ts;
   the proof route adds `sui` artifacts (run approval, commitment, reveal).
