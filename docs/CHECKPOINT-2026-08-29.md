@@ -451,17 +451,42 @@ then submit a fast test claim and time it.
     when finalize is allowed, so the worker skipped it. Fix (commit after
     `6852480`): dead means terminal, or DISCUSSION past its deadline
     without phase-two evidence; every other stuck claim gets exponential
-    backoff (30 s doubling to 10 min) after a failed tick. Gate green,
-    deployed with `6852480` at ~08:24; claim #16 follows.
+    backoff (30 s doubling to 10 min) after a failed tick. `664ad42`
+    deployed 08:21 (deployment fe839f0a) together with `6852480`; the
+    restarted worker finalized claim #15 at once: UNRESOLVED, truth score
+    10000, certificate
+    `0x3a5f337d0f9ce49af9eb2eef70594ac8365a2d61add1c7774957322a78524144`
+    at t+1035 s. Claim #16
+    `0x9169c7071801cbed58537ee6bed024b908581d723bcdc745001c4eb62c713286`
+    submitted 08:22:08 on the 120 s reveal window build.
+46. FIRST HOSTED VERDICT (08:28): claim #16 `0x9169c707…` ("Bitcoin's
+    fourth block subsidy halving took place in April 2024, reducing the
+    block reward to 3.125 BTC"): committee t+67 s, frozen t+101 s, all
+    five seats valid (DeepSeek 4 s and 26 s, MiniMax 10 s, Kimi 29 s and
+    21 s of research), five commits by t+201 s, REVEAL_1 at t+269 s, all
+    five reveals by t+337 s (five YES, confidence 9500 to 10000),
+    finalized YES with truth score 9860 at t+404 s (6.7 min from POST),
+    certificate
+    `0x62036142117e5dc3b1c6949ff338d55c2a0da5b5396ccfcc68428a2cefe49ecc`
+    (digest BcyfNxWW9ygmjx1cKJV7VNP6jsf5DhaHxgra1Uvqv6qo). Balances at
+    08:10: operator 5.12 SUI / 3.27 WAL (about 0.5 SUI and 0.2 WAL per
+    claim), agents 0.60 to 0.61 SUI each.
 
 ### Next steps
-- Measure claim #15 to a certificate (monitor `canary18.log` in the
-  scratchpad); then STATUS.md/runbook with the numbers and demo claim ids.
-- Residue on testnet: `0x1936ddd3…` (orphan), `0xdb9c7bae…` (REVEAL_1 with
-  no roots, will settle UNRESOLVED after its reveal deadline). The workers
-  now skip such claims instead of walking them every tick.
-- Memory: add the pooler lock lesson, the DNS layout, the percent-encoded
-  gRPC lesson and the dead-claim triage lesson.
+- Demo claims: #16 `0x9169c707…` (YES 9860, certificate `0x62036142…`)
+  for the verdict path; #15 `0xc9e0d4eb…` (UNRESOLVED, two rounds) for
+  the discussion and round-two path. Report page, proof endpoints and
+  `/verify` all work from these ids.
+- Sub-5-minute resolution, if wanted: publish reveal bundles as soon as no
+  further commit is possible (needs the blob object id and end epoch
+  persisted per run), then shrink the reveal window back to 60 s (about
+  5.4 min) or overlap it with the commit window (about 4.5 min).
+- Operator top-up before a long demo day: 5 SUI lasts about ten claims;
+  the faucet must be reached from a host other than the developer Mac.
+- Residue on testnet (`0x1936ddd3…`, `0xdb9c7bae…`, `0x790eaa97…`,
+  `0x66e6f6cd…`, `0xbb127254…`, `0x2dbea96c…`) is skipped or backed off by
+  the workers; harmless.
+- Memory is current through the reveal-window lesson (08:20).
 
 ## STATE AT COMPACTION #6 (2026-08-30 ~03:05 local): epoch fix + Railway cutover mid-flight
 

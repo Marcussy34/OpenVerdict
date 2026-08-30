@@ -65,11 +65,16 @@ operational proof and public deployments in flight.
   so a live claim's reveal window is never spent on dead ones. Observed on claim #15 (08:05): POST returns after ~45 s,
   committee t+57 s, freeze t+74 s, research 5 to 72 s per seat with all
   five seats valid, commits t+174 to t+208 s, advance t+275 s; a reveal
-  costs ~20 s, so the reveal window is now 120 s and the certificate lands
-  at the reveal floor (~t+385 s, about 6.4 min). Hosted certificates
-  so far: `0xfb68f1ff…`, `0x677ec538…`, `0x82684a50…`, `0xb554098e…`,
-  `0xef4383de…` (all UNRESOLVED: three agreeing YES reveals per round, one
-  short of the on-chain rule). Two chain rules shape the outcome:
+  costs ~20 s, so the reveal window is now 120 s. FIRST HOSTED VERDICT,
+  claim #16 (08:22, `0x9169c707…`): five valid seats (research 4 to 29 s),
+  commits by t+201 s, REVEAL_1 at t+269 s, all five reveals by t+337 s,
+  finalized YES with truth score 9860 at t+404 s (6.7 min from POST),
+  certificate
+  `0x62036142117e5dc3b1c6949ff338d55c2a0da5b5396ccfcc68428a2cefe49ecc`.
+  Earlier hosted certificates: `0xfb68f1ff…`, `0x677ec538…`, `0x82684a50…`, `0xb554098e…`,
+  `0xef4383de…`, `0x9f58e980…`, `0xfbdab9dd…`, `0x3dc599e7…`, `0x3a5f337d…`
+  (all UNRESOLVED: fewer than four matching reveals per round, first for
+  lost seats, then for reveals that missed a 60 s window). Two chain rules shape the outcome:
   `REQUIRED_MATCHING = 4` (four matching reveals of five resolve a round)
   and committee diversity (three model families, so the slowest family is
   always seated). Operational: agent wallets pay for seat transactions and
