@@ -65,10 +65,11 @@
   adapter fails such runs closed).
 - Firecrawl: the APP key (same in `.env` and Railway, sha256 fingerprint
   edf48c293213) belongs to the account with 957 credits, refreshing
-  Sep 29, about 30 credits per claim. The CLI key in my shell env
-  (fingerprint bc0ede425993) is a DIFFERENT, exhausted account; the owner
-  is creating a new key for my terminal lookups (do not print it; set it
-  as FIRECRAWL_API_KEY for the session when told where it is).
+  Sep 29, about 30 credits per claim. The CLI key for terminal lookups
+  was replaced 2026-08-30 23:15 by the owner's new key (fingerprint
+  3cdcdc21054f, 1,400 credits): it lives in `~/.zshenv` as
+  FIRECRAWL_API_KEY (every zsh picks it up) and in the scratchpad file
+  `firecrawl.key`; never print it. The old CLI key (bc0ede425993) is gone.
 - Costs per claim: about 10 cents cash today (all Firecrawl), 30 to 40
   cents on mainnet prices; inference is a fraction of a cent.
 

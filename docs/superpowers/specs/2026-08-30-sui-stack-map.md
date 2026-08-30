@@ -37,9 +37,14 @@ Firecrawl key is available.
    would fetch proofs from the observer or accept pasted bundles (it does
    both today). Verify: current site-builder release and testnet portal.
 
-3. Nautilus attested engine (owner deferred): the AWS Nitro "prompt
-   forwarder" that signs what was sent to GonkaRouter and what came back,
-   verified on Sui. Needs an AWS account; two to four days.
+3. Nautilus attested engine (owner deferred): the Nitro "prompt forwarder"
+   that signs what was sent to GonkaRouter and what came back, verified on
+   Sui. Two hosting paths per docs.sui.io (read 2026-08-30 23:20): a
+   self-managed AWS Nitro Enclave (needs an AWS account), or Marlin Oyster,
+   which runs a Dockerized Nautilus app on operator-provisioned enclaves,
+   paid per job in stablecoin, with no AWS account and the same
+   attestation guarantees (reference: marlinprotocol/sui-oyster-demo).
+   Two to four days either way.
 
 4. Move Registry (MVR) name for the package (for example
    `@openverdict/core`), so transaction targets and manifests read as

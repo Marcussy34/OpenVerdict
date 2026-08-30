@@ -93,11 +93,14 @@ commitments), so a low threshold is acceptable on testnet.
    }
    ```
 
-   To confirm against the Seal docs: the policy function must be named
-   `seal_approve*`, take the identity bytes as its first parameter, abort
-   when access is denied, and be evaluated by dry run (no side effects);
-   the transaction sent to the key servers is built with
-   `onlyTransactionKind: true`. These match the SDK guide's shape.
+   Confirmed 2026-08-30 23:20 against seal-docs.wal.app/UsingSeal: policy
+   functions are named `seal_approve*`, take the requested identity
+   without the package prefix as their first parameter (`id: vector<u8>`),
+   are best declared as non-public `entry` functions, are evaluated on
+   full nodes with `dry_run_transaction_block`, must be side-effect free,
+   and the request transaction is built with `onlyTransactionKind: true`
+   and may call only `seal_approve*` functions. The published module does
+   exactly this.
 
 3. Engine (commit path, `engine.ts` around `sealRunBundle`): after sealing,
    `client.seal.encrypt({threshold, packageId: seal.packageId, id, data:

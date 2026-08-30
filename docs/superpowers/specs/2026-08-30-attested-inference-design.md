@@ -46,7 +46,17 @@ network's own rewards, not a client's audit trail.
    proof of tampering, because machines on a decentralized network are not
    bit-for-bit identical. Public, rate limited, only for revealed runs.
 
-3. Attested engine (next milestone). Run the request path inside a trusted
+3. Attested engine (next milestone; owner deferred it on 2026-08-30).
+   Hosting, confirmed from docs.sui.io/sui-stack/nautilus on 2026-08-30
+   23:20: Nautilus supports self-managed AWS Nitro Enclaves and, through
+   the community tool Marlin Oyster, Dockerized Nautilus apps deployed
+   with only a Docker image, the Oyster CLI and Sui: Oyster operators
+   provision the Nitro enclave and the attestation, jobs are paid in
+   stablecoin, no AWS account is needed, and the cryptographic guarantees
+   are the same (Sui documents the workflow and a reference app,
+   github.com/marlinprotocol/sui-oyster-demo). Nautilus-Ops is a CLI for
+   the self-managed path (build and deploy enclave images, register on
+   chain, verify signatures). Run the request path inside a trusted
    enclave using Sui's Nautilus pattern (AWS Nitro Enclave; the enclave's
    attestation document is verified on chain and its signing key
    registered). The smallest useful enclave is a "prompt forwarder": the
