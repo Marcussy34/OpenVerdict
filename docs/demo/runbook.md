@@ -152,10 +152,17 @@ the browser on `/verify` (Run proof tab).
    final state t+977 s (16.3 min) as UNRESOLVED with truth score 9667:
    both rounds revealed only three of five seats (round one lost the Kimi
    seat to a 113 s call cut at the seat bound after four calls of 20, 21,
-   48 and 53 s, and a MiniMax seat to "no answer within maxTurns"), so the
-   longer window is not a cure for a slow node, only more room. Do not
-   redeploy while a claim is live: a container restart drops every
-   in-flight research run (those seats fail closed).
+   48 and 53 s, and a MiniMax seat to "no answer within maxTurns"; round
+   two lost a MiniMax and a Kimi seat to the round-two seat bound 30 s and
+   7 s into a call), so the longer window is not a cure for a slow node,
+   only more room. Finding from #24: round two has always been a 120 s
+   sprint (second commit deadline minus 60 s minus the discussion
+   deadline) against about 350 s in round one, which is why every
+   two-round claim so far (#18, #19, #24) ended UNRESOLVED; the fix is a
+   second commit deadline at +1080 s and a second reveal at +1200 s
+   (two-round claims then take about 21 min, one-round verdicts stay at
+   about 10 min). Do not redeploy while a claim is live: a container
+   restart drops every in-flight research run (those seats fail closed).
 5. Model health: Kimi-K2.6 on GonkaRouter was slow or failing most of the
    night (calls longer than the seat budget), then answered in 40 to 72 s on
    claim #15 (08:05, all five seats valid); DeepSeek-V4-Flash answers in 4

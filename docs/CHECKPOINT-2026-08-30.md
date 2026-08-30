@@ -188,6 +188,52 @@ If a job failed or produced a bad diff: fix inline for small issues, or
 resend feedback with `node "$CO" task --write --resume-last "<feedback>"`
 only when a single job remains (max three rounds), else finish by hand.
 
+## 3b. IN FLIGHT 22:50: Seal escrow build (three Codex jobs), plus queued fixes
+
+Owner's evening decisions: all jurors keep equal selection weight; slower
+verdicts are fine so Kimi can finish (commit window 450 s live since 22:26);
+Nautilus is deferred; "what about Seal, and the rest of the Sui stack" led
+to docs/superpowers/specs/2026-08-30-seal-escrow-design.md (build now) and
+docs/superpowers/specs/2026-08-30-sui-stack-map.md (ranked options). The
+Mysten skills are installed at ~/.claude/skills/sui-dev-skills (use the
+`sui-dev-skills` skill for any Move or SDK work). `@mysten/seal` 1.4.6 is a
+dependency; lib/seal/identity.ts (+test) is the shared identity seam
+(commit `2a917aa`).
+
+Three Codex jobs started 22:48 through codex-worker subagents named
+seal-move, seal-engine, seal-ui; prompts saved verbatim in the scratchpad
+as prompt-seal-move.txt, prompt-seal-engine.txt, prompt-seal-ui.txt. File
+ownership: move/openverdict_seal/** + scripts/publish-seal-policy.ts
+(move); lib/protocol/types.ts, lib/sui/manifest.ts, lib/seal/escrow.ts,
+lib/engine/{engine,contract,server,runBundle}.ts, lib/verify/run-proof.ts,
+the proof route and their tests (engine); lib/verify/seal-recovery.ts,
+components/claim/run-proof-seal.tsx, run-proof-types.ts, a mount in
+run-proof.tsx (ui). Review checklist: identity bound to claim, seat, phase
+and the claim's reveal deadline; escrow failure never costs a seat; the
+verifier adds the check only when an escrow exists; the browser uses an
+ephemeral keypair and `onlyTransactionKind: true`; no secrets anywhere.
+
+After the jobs land: gate, commit; `cd move/openverdict_seal && sui move
+build && sui move test`; publish the policy package on testnet with
+`pnpm tsx scripts/publish-seal-policy.ts` (operator key from .env; if the
+Mac's RPC writes time out again, run it inside the container with
+`--bytecode move/openverdict_seal/bytecode.json`); put `seal: { packageId,
+threshold: 1, keyServers: [committee 0xb012378c… with aggregatorUrl
+https://seal-aggregator-testnet.mystenlabs.com, independent 0x73d05d62…] }`
+into config/release.testnet.json (ids from the SDK's own guide); deploy
+between claims; run a claim; confirm `sealed.escrow` on a run proof, the
+local verifier's `sealEscrow` check, and "Open through Seal" on a revealed
+run after its deadline; then open an unrevealed seat of an older claim.
+
+Queued after the engine worker releases engine.ts: round two needs the
+same research room as round one (today 120 s: second commit +810 s minus
+60 s minus discussion +630 s), so set secondCommitDeadlineMs to +1080 s
+and secondRevealDeadlineMs to +1200 s in defaultDeadlines (hosted), update
+the runbook and STATUS ladder lines, deploy between claims. Also queued:
+persist the research transcript of a FAILED seat (steps only) and show
+"why this seat failed" on the claim page (claim #24 lost a MiniMax seat to
+"no answer within maxTurns" and nothing of its trail survives today).
+
 ## 4. Planned next (owner-approved direction)
 
 - Attestation (docs/superpowers/specs/2026-08-30-attested-inference-design.md):
