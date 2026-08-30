@@ -203,9 +203,19 @@ UpgradeCap `0xbc0f64f8…`, digest `6LnGu71K…`. End-to-end probe
 parsed object id == expected full id, share indices 1 and 2, key
 recovered in 3.3 s after a past deadline, future deadline refused.
 `seal` section added to config/release.testnet.json. Round-two window fix
-applied in engine.ts (+1080 s / +1200 s). Remaining: full gate, commit,
-deploy between claims, live claim with an escrow, verifier check, docs.
-The paragraph below is the pre-landing plan, kept for the record.
+applied in engine.ts (+1080 s / +1200 s). Gate green (44 files / 420
+tests), commit `b7ff700`, deployment `72ff9baf` live 23:13:46. PROVEN
+LIVE on claim #25 `0xbdab0011…` (YES 9860, 5 of 5 seats, 10.4 min): every
+sealed bundle carried an escrow, recovery refused before the deadline and
+succeeded after it (3.5 s, key equal to the revealed key, core hash
+matches), the local verifier passes 15 checks including `sealEscrow`.
+Tools: scratchpad proof-escrow-scan.py (proofs of every committed seat),
+node_modules/.cache/seal-recover-proof.mts <proof.json> (recovery through
+the key servers from the Mac via the public JSON-RPC endpoint). Still to
+do for this feature: a human click on "Open through Seal" in a browser
+(my extension is not connected), and the round-two window has not been
+exercised live yet. The paragraph below is the pre-landing plan, kept for
+the record.
 
 Owner's evening decisions: all jurors keep equal selection weight; slower
 verdicts are fine so Kimi can finish (commit window 450 s live since 22:26);

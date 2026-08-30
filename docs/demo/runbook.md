@@ -213,7 +213,11 @@ the browser on `/verify` (Run proof tab).
    its hash checked against the sealed core hash. Before the deadline the
    key servers refuse ("The key servers refuse until the reveal deadline
    passes"), which is the point.
-   Demo claims: #22 `0x387a344b…` (YES 9950, certificate `0x7c2fcb4b…`,
+   Demo claims: #25 `0xbdab0011…` (YES 9860, certificate `0xff3191bc…`,
+   the first claim with Seal escrows and the first 5-of-5 with both Kimi
+   seats under the 450 s window: open any run for the Seal block; its
+   escrows opened at 2026-08-30 15:24:09Z, so "Open through Seal" works
+   on every seat), #22 `0x387a344b…` (YES 9950, certificate `0x7c2fcb4b…`,
    the first v5 verdict: every revealed run shows pages opened together;
    open the DeepSeek run for a three-page batch), #21
    `0x5629faca…` (YES 9750, certificate `0x8a5ab5ad…`, the first v2

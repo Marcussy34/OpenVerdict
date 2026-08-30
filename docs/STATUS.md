@@ -122,10 +122,23 @@ operational proof and public deployments in flight.
   key, or opens a never-revealed seat's core. Proven end to end on testnet
   before deploy with the real package: a key escrowed under a past
   deadline was recovered in 3.3 s and matched, a future deadline was
-  refused by the key servers. Second-round window fixed in the same
+  refused by the key servers. PROVEN LIVE on claim #25 (23:14,
+  `0xbdab0011dadff49d2ec814368b23b5db1e58a7edefb141c1d6a7e22c8ee4502b`,
+  "The first Bitcoin halving took place in November 2012."): finalized
+  YES with truth score 9860 at t+624 s (10.4 min), certificate
+  `0xff3191bc…`, ALL FIVE seats committed and revealed including both Kimi
+  seats (their last calls took 115 s and 125 s and still fit the 450 s
+  window). Every sealed bundle carried an escrow bound to the claim's
+  first reveal deadline; before the deadline the key servers refused a
+  recovery ("The key servers refuse until the reveal deadline passes");
+  after it the DeepSeek run `0xbb1440b8…` passed all 15 local checks
+  (including `sealEscrow`) and its key was recovered through Seal in
+  3.5 s, equal to the revealed key, and the sealed core opened with a
+  matching hash; a proof captured before the reveal (the "never revealed"
+  case) opened the same way in 2.3 s. Second-round window fixed in the same
   release: the second commit deadline moves from +810 s to +1080 s
   (second reveal +1200 s) so round two gets the same research room as
-  round one.
+  round one (not yet exercised live: #25 needed no round two).
 - SELECTION WEIGHTS 2026-08-30 22:15: GonkaRouter serves exactly three
   models (`GET /v1/models`: DeepSeek-V4-Flash-0731, MiniMax-M2.7,
   Kimi-K2.6), so a fourth model family is not available and all inference
