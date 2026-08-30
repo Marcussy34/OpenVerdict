@@ -290,8 +290,15 @@ engine job's work was complete and reviewed and is committed with the
 hedge as `85ce5ad` (gate: 44 files / 431 tests, lint clean), deploying
 now; the UI panel was re-dispatched on a fresh session (subagent
 failed-ui-2, prompt-failed-ui-2.txt; run-proof-types.ts already carries
-the failure types). After the UI job lands: gate, commit, deploy between
-claims, run a claim, then update STATUS/runbook/memory. Also
+the failure types). Update 00:50: the fresh UI job also died after a
+verification shell call (same pattern, third time; lesson in memory); its
+files were complete for the panel, the mount and the seat state, and I
+finished the page wiring by hand (engine.inspect now puts
+`failureStatus` on each failed seat's commitment; seatStateOf reads it).
+Gate green (44 files / 431 tests, build OK), committed and deployed;
+claim #26 (NO 200, 5 of 5, 10.2 min) proved the hedge live with five
+hedged calls and one HEDGE-winning Kimi verdict; failed-seat panels will
+appear on the next seat that fails. Also
 still open: a human click on "Open through Seal" and "Re-run this juror";
 the round-two window unexercised live; the submission package once the
 owner names the format; Nautilus via Marlin Oyster if the owner wants it.

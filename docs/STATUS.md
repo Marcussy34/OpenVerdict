@@ -107,8 +107,12 @@ operational proof and public deployments in flight.
   (`InferenceFailureV1`: status, message, time, transcript, attempts,
   best-effort Walrus copy) under the seat's derived run id, and the proof
   route returns them as a failure proof (no bundle, `revealed: false`),
-  so the claim page can show "Seat failed before commit" with the full
-  research trail up to the failure (UI panel deploying next). Hedged
+  so the claim page shows "Seat failed before commit" with the status in
+  plain English, the engine message, the Walrus copy and the full
+  research trail up to the failure; the seat strip and seat cards show a
+  "Failed" state from a `failureStatus` the claim inspection now carries
+  (deployed 2026-08-31 00:50; applies to seats that fail from now on,
+  earlier failures kept no record). Hedged
   requests: on GonkaRouter the same model answers in seconds or in one
   to two minutes depending on the node (two other teams in the
   GonkaRouter chat report the same for Kimi-K2.6), so when a model call
