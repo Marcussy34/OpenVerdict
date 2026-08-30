@@ -2,9 +2,10 @@ import { existsSync } from "node:fs";
 import type { Signer } from "@mysten/sui/cryptography";
 import {
   createFakeGonkaAdapter,
-  createGonkaAdapter,
   type GonkaRouterAdapter,
 } from "../gonka";
+import { createGonkaAdapterWithDependencies } from "../gonka/adapter";
+import { createRedactingLogger } from "../gonka/logger";
 import { blake2b256, toHex, type AgentManifest, type OracleInferenceInput } from "../protocol";
 import { createFirecrawlProvider } from "../research";
 import { createDb } from "../storage";
@@ -104,16 +105,26 @@ async function buildServerEngine(): Promise<Engine> {
   const gonka =
     manifest.gonka.mode === "fake"
       ? createDynamicFakeAdapter()
-      : createGonkaAdapter({
-          // Same blank-vs-absent hazard: a blank override must not erase the
-          // manifest's own base URL.
-          baseUrl: readEnv(process.env.GONKA_ROUTER_BASE_URL, manifest.gonka.baseUrl),
-          apiKey: process.env.GONKA_ROUTER_API_KEY ?? "",
-          timeoutMs: numberEnv("GONKA_REQUEST_TIMEOUT_MS", 120_000),
-          // Research turns carry a growing conversation; give them longer.
-          researchTimeoutMs: numberEnv("GONKA_RESEARCH_TIMEOUT_MS", 240_000),
-          maxRetries: numberEnv("GONKA_MAX_RETRIES", 1),
-        });
+      : createGonkaAdapterWithDependencies(
+          {
+            // Same blank-vs-absent hazard: a blank override must not erase the
+            // manifest's own base URL.
+            baseUrl: readEnv(process.env.GONKA_ROUTER_BASE_URL, manifest.gonka.baseUrl),
+            apiKey: process.env.GONKA_ROUTER_API_KEY ?? "",
+            timeoutMs: numberEnv("GONKA_REQUEST_TIMEOUT_MS", 120_000),
+            // Research turns carry a growing conversation; give them longer.
+            researchTimeoutMs: numberEnv("GONKA_RESEARCH_TIMEOUT_MS", 240_000),
+            maxRetries: numberEnv("GONKA_MAX_RETRIES", 1),
+          },
+          {
+            // Without a sink the adapter's attempt log (error category, HTTP
+            // status, request ids) is dropped, which left today's lost seats
+            // undiagnosable; the redacting logger strips secrets before stderr.
+            logger: createRedactingLogger((level, entry) => {
+              process.stderr.write(`gonka-attempt ${level} ${JSON.stringify(entry)}\n`);
+            }),
+          },
+        );
   const research = manifest.gonka.mode === "live"
     ? createFirecrawlProvider({
         apiKey: firecrawlApiKey ?? "",
