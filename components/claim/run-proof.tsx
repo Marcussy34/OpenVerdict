@@ -28,6 +28,7 @@ import {
 import type { ReexecuteRunResult } from "@/lib/verify/reexecute";
 import { cn } from "@/lib/utils";
 import { ResearchTrail } from "@/components/claim/run-proof-research";
+import { RunProofSeal } from "@/components/claim/run-proof-seal";
 import {
   EverythingElse,
   EvidenceSidesPanel,
@@ -409,10 +410,12 @@ export function RunProofDetails({ proof }: { proof: TransparentRunProof }) {
             proof={proof}
             bundle={bundle}
           />
-
-          <EverythingElse bundle={bundle} />
         </>
       )}
+
+      <RunProofSeal proof={proof} />
+
+      {bundle && <EverythingElse bundle={bundle} />}
     </div>
   );
 }

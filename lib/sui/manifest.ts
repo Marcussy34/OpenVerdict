@@ -54,6 +54,24 @@ export const releaseManifestSchema = z
       })
       .strict()
       .optional(),
+    seal: z
+      .object({
+        packageId: requiredObjectId,
+        threshold: z.number().int().positive(),
+        keyServers: z
+          .array(
+            z
+              .object({
+                objectId: requiredObjectId,
+                weight: z.number().int().positive(),
+                aggregatorUrl: z.string().url().optional(),
+              })
+              .strict(),
+          )
+          .min(1),
+      })
+      .strict()
+      .optional(),
     explorerTxTemplate: z.string(),
   })
   // Strip (don't reject) unknown top-level keys: deploy scripts persist

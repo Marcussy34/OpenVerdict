@@ -63,7 +63,8 @@ operational proof and public deployments in flight.
 - FAST MODE 2026-08-30 (measured through eleven hosted claims overnight):
   the hosted ladder is measured from the `create_claim` transaction
   (evidence cutoff +60 s, commit +450 s, reveal +570 s, discussion +630 s,
-  second round +810 / +930 s since 22:26, commit `bb79bec`: the owner keeps
+  second round +1080 / +1200 s since the Seal release, +810 / +930 s from
+  22:26 until then, commit `bb79bec`: the owner keeps
   every juror at equal selection weight and accepts a verdict about 10 min
   after the POST so that Kimi's slower calls finish; first claim under it,
   #24 `0xaad14670…`, ended UNRESOLVED at 16.3 min with three of five seats
@@ -99,6 +100,32 @@ operational proof and public deployments in flight.
   and committee diversity (three model families, so the slowest family is
   always seated). Operational: agent wallets pay for seat transactions and
   must stay funded (see the runbook checklist).
+- SEAL ESCROW OF REVEAL KEYS 2026-08-30 late evening (design
+  docs/superpowers/specs/2026-08-30-seal-escrow-design.md): at commit time
+  the engine now escrows each run's AES reveal key under a Mysten Seal
+  time-lock policy, so after the phase's reveal deadline anyone can obtain
+  the key from Seal's key servers and open the sealed bundle without the
+  operator (committed evidence can no longer be lost with the engine).
+  Policy package `openverdict_seal::reveal_lock` on testnet at
+  `0xf54eb61116372f8506ca332457b2fee61231a559e44923429f54fab355d0f0c5`
+  (`seal_approve(id, &Clock)` peels claim, seat, phase, deadline and
+  requires clock >= deadline; publish digest `6LnGu71K…`, UpgradeCap
+  `0xbc0f64f8…` held by the operator). Key servers: Mysten's testnet
+  committee server `0xb012378c…` (through its aggregator) and the
+  independent `mysten-v1-1` `0x73d05d62…`, threshold 1. The escrow record
+  (`SealEscrowV1`) rides as an unhashed field of the sealed blob the chain
+  already cites; the verifier adds "Seal escrow binds this run" (identity
+  = this claim, seat, phase and the claim's reveal deadline; package, key
+  servers and the parsed encrypted object match); the run view and /verify
+  gain an "Open through Seal" block (ephemeral keypair, no wallet) that
+  recovers the key after the deadline and compares it with the revealed
+  key, or opens a never-revealed seat's core. Proven end to end on testnet
+  before deploy with the real package: a key escrowed under a past
+  deadline was recovered in 3.3 s and matched, a future deadline was
+  refused by the key servers. Second-round window fixed in the same
+  release: the second commit deadline moves from +810 s to +1080 s
+  (second reveal +1200 s) so round two gets the same research room as
+  round one.
 - SELECTION WEIGHTS 2026-08-30 22:15: GonkaRouter serves exactly three
   models (`GET /v1/models`: DeepSeek-V4-Flash-0731, MiniMax-M2.7,
   Kimi-K2.6), so a fourth model family is not available and all inference

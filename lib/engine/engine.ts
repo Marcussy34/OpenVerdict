@@ -87,6 +87,7 @@ import {
   type ReleaseManifest,
   type SuiGateway,
 } from "../sui";
+import type { SealEscrowService } from "../seal/escrow";
 import { serializePublicEvent } from "../events";
 import type { WalrusStore, WalrusPutResult } from "../walrus";
 import type {
@@ -199,9 +200,12 @@ interface EngineDependencies {
   eventPollIntervalMs: number;
   zkLoginVerifier: ZkLoginVerifier;
   operationalAgentSlots: readonly { address: string; index: number }[];
+  sealEscrow: SealEscrowService | undefined;
 }
 
-export async function createEngine(config: EngineConfig): Promise<Engine> {
+export async function createEngine(
+  config: EngineConfig & { sealEscrow?: SealEscrowService },
+): Promise<Engine> {
   const manifest = await loadReleaseManifest(config.manifestPath);
   if (manifest.network !== config.network) {
     throw new EngineValidationError(
@@ -228,6 +232,7 @@ export async function createEngine(config: EngineConfig): Promise<Engine> {
     eventPollIntervalMs: config.eventPollIntervalMs ?? 1_000,
     zkLoginVerifier: config.zkLoginVerifier ?? createDefaultZkLoginVerifier(config),
     operationalAgentSlots,
+    sealEscrow: config.sealEscrow,
   });
   await engine.initialize(config.initialAgents ?? []);
   return engine;
@@ -248,6 +253,7 @@ class OpenVerdictEngine implements Engine {
   readonly #eventPollIntervalMs: number;
   readonly #zkLoginVerifier: ZkLoginVerifier;
   readonly #operationalAgentSlots: readonly { address: string; index: number }[];
+  readonly #sealEscrow: SealEscrowService | undefined;
   #registrationTail: Promise<void> = Promise.resolve();
 
   constructor(dependencies: EngineDependencies) {
@@ -263,6 +269,7 @@ class OpenVerdictEngine implements Engine {
     this.#eventPollIntervalMs = dependencies.eventPollIntervalMs;
     this.#zkLoginVerifier = dependencies.zkLoginVerifier;
     this.#operationalAgentSlots = dependencies.operationalAgentSlots;
+    this.#sealEscrow = dependencies.sealEscrow;
   }
 
   async initialize(agents: EngineAgentConfig[]): Promise<void> {
@@ -1450,6 +1457,7 @@ class OpenVerdictEngine implements Engine {
   }
 
   async runProof(claimId: string, runId: string): Promise<RunProof> {
+    const claim = await this.claim(claimId);
     const run = (await this.#repository.listInferenceRuns(claimId)).find(
       (candidate) => candidate.runId === runId,
     );
@@ -1503,6 +1511,22 @@ class OpenVerdictEngine implements Engine {
       revealedBlobId,
       revealed: revealedBlobId !== null,
       bundle,
+      claimDeadlines: {
+        firstRevealDeadlineMs: claim.deadlines.firstRevealDeadlineMs,
+        secondRevealDeadlineMs: claim.deadlines.secondRevealDeadlineMs,
+      },
+      ...(this.#manifest.seal === undefined
+        ? {}
+        : {
+            sealPolicy: {
+              packageId: this.#manifest.seal.packageId as `0x${string}`,
+              threshold: this.#manifest.seal.threshold,
+              keyServers: this.#manifest.seal.keyServers.map((server) => ({
+                ...server,
+                objectId: server.objectId as `0x${string}`,
+              })),
+            },
+          }),
     };
   }
 
@@ -2172,8 +2196,33 @@ class OpenVerdictEngine implements Engine {
       }
       const bundleCore = new TextDecoder().decode(canonicalCoreBytes(core));
       const { sealed, seal } = sealRunBundle(core, { runId: audit.runId });
+      let sealedDocument = sealed;
+      if (this.#sealEscrow) {
+        const deadlineMs =
+          seat.phase === 1
+            ? claim.deadlines.firstRevealDeadlineMs
+            : claim.deadlines.secondRevealDeadlineMs;
+        try {
+          const escrow = await this.#sealEscrow.escrowKey({
+            claimId: claim.claimId as `0x${string}`,
+            jurySeatId: seat.jurySeatId as `0x${string}`,
+            phase: seat.phase,
+            deadlineMs,
+            runId: audit.runId,
+            keyBytes: fromHex(seal.keyHex),
+          });
+          sealedDocument = { ...sealed, escrow };
+        } catch (error) {
+          // Escrow is insurance and must never cost a jury seat.
+          process.stderr.write(
+            `seal-escrow failed: claim ${claim.claimId} seat ${seat.jurySeatId}: ${
+              error instanceof Error ? error.message : String(error)
+            }\n`,
+          );
+        }
+      }
       const sealedUpload = await this.#walrus.put(
-        canonicalJsonBytes(sealed),
+        canonicalJsonBytes(sealedDocument),
         { identifier: `${baseRunId}-sealed-run-bundle.json` },
       );
       const retainedUntil =
@@ -3237,8 +3286,14 @@ function defaultDeadlines(
   // trail under policy v4 is four turns) was cut at 97 s by the seat
   // bound, so the commit window grows from 330 s to 450 s (about 350 s of
   // research; a certificate lands about 10 min after the POST). The reveal
-  // window, the discussion window and the round-two spacing keep their
-  // lengths and shift with it.
+  // window and the discussion window keep their lengths and shift with it.
+  // 2026-08-30 23:00: round two used to get only 120 s of research (its
+  // commit deadline minus the 60 s seat margin minus the discussion
+  // deadline), a sprint that cut two seats of claim #24 mid-call and left
+  // every two-round claim UNRESOLVED, so the second commit window is now
+  // as long as the first (450 s after the discussion deadline) and the
+  // second reveal window stays 120 s: a two-round claim ends about 21 min
+  // after the POST, a one-round verdict still at about 10 min.
   const second = 1_000;
   return {
     evidenceCutoffMs: now + 60 * second,
@@ -3247,8 +3302,8 @@ function defaultDeadlines(
     firstCommitDeadlineMs: now + 450 * second,
     firstRevealDeadlineMs: now + 570 * second,
     discussionDeadlineMs: now + 630 * second,
-    secondCommitDeadlineMs: now + 810 * second,
-    secondRevealDeadlineMs: now + 930 * second,
+    secondCommitDeadlineMs: now + 1080 * second,
+    secondRevealDeadlineMs: now + 1200 * second,
   };
 }
 

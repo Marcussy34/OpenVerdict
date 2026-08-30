@@ -200,6 +200,53 @@ export type TransparentBundle = {
   [key: string]: unknown;
 };
 
+export type TransparentSealKeyServer = {
+  objectId?: string;
+  weight?: number;
+  aggregatorUrl?: string;
+  [key: string]: unknown;
+};
+
+/** Proof JSON is untrusted, so every Seal field stays optional until checked. */
+export type TransparentSealEscrow = {
+  version?: number;
+  provider?: string;
+  packageId?: string;
+  identityHex?: string;
+  deadlineMs?: number;
+  threshold?: number;
+  keyServers?: TransparentSealKeyServer[];
+  encryptedObjectBase64?: string;
+  aad?: string;
+  [key: string]: unknown;
+};
+
+export type TransparentSealedBundle = {
+  version?: number;
+  kind?: string;
+  runId?: string;
+  algorithm?: string;
+  ivHex?: string;
+  aad?: string;
+  coreHash?: string;
+  ciphertextBase64?: string;
+  escrow?: TransparentSealEscrow;
+  [key: string]: unknown;
+};
+
+export type TransparentClaimDeadlines = {
+  firstRevealDeadlineMs?: number;
+  secondRevealDeadlineMs?: number;
+  [key: string]: unknown;
+};
+
+export type TransparentSealPolicy = {
+  packageId?: string;
+  threshold?: number;
+  keyServers?: TransparentSealKeyServer[];
+  [key: string]: unknown;
+};
+
 export type SuiRunArtifact = {
   objectId?: string;
   transactionDigest?: string;
@@ -214,8 +261,14 @@ export type SuiRunProof = {
   reveal?: SuiRunArtifact;
 };
 
-export type TransparentRunProof = Omit<BrowserRunProof, "bundle"> & {
+export type TransparentRunProof = Omit<
+  BrowserRunProof,
+  "bundle" | "sealed" | "claimDeadlines" | "sealPolicy"
+> & {
   bundle: TransparentBundle | null;
+  sealed?: TransparentSealedBundle | null;
+  claimDeadlines?: TransparentClaimDeadlines;
+  sealPolicy?: TransparentSealPolicy;
   sui?: SuiRunProof;
 };
 

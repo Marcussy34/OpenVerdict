@@ -3,6 +3,11 @@ import { composeSystemPrompt } from "../gonka/promptSpec";
 import { citationSites } from "../research/citations";
 import { RunRecordV1Bcs } from "../protocol/bcs";
 import { blake2b256, fromHex, toHex } from "../protocol/hash";
+import {
+  expectedFullIdHex,
+  parseEscrowObject,
+} from "../seal/escrow";
+import { parseSealIdentity } from "../seal/identity";
 import type { RunProof } from "../engine/contract";
 import type {
   HexString,
@@ -16,9 +21,14 @@ import type {
 const utf8 = new TextEncoder();
 const decoder = new TextDecoder();
 
-export type BrowserRunProof = Omit<RunProof, "bundle" | "sealed"> & {
+export type BrowserRunProof = Omit<
+  RunProof,
+  "bundle" | "sealed" | "claimDeadlines" | "sealPolicy"
+> & {
   bundle: PublicRunBundle | null;
   sealed?: SealedRunBundleV2 | null;
+  claimDeadlines?: RunProof["claimDeadlines"];
+  sealPolicy?: RunProof["sealPolicy"];
 };
 
 export type RunProofCheck = {
@@ -36,6 +46,7 @@ export type RunProofCheck = {
     | "counterEvidenceSummary"
     | "opensPerTurn"
     | "runHash"
+    | "sealEscrow"
     | "sealedCore";
   label: string;
   expected: string;
@@ -77,6 +88,181 @@ function coreFromBundle(bundle: PublicRunBundle) {
 
 function matchesAll(actual: string, expected: string[]): boolean {
   return expected.every((value) => sameHex(actual, value));
+}
+
+function shortHex(value: string): string {
+  return value.length > 10 ? `${value.slice(0, 6)}…` : value;
+}
+
+function deadlineText(deadlineMs: number): string {
+  try {
+    return new Date(deadlineMs).toISOString().replace(".000Z", "Z");
+  } catch {
+    return `${deadlineMs} ms`;
+  }
+}
+
+function describeEscrowBinding(input: {
+  claimId: string;
+  jurySeatId: string;
+  phase: 1 | 2;
+  deadlineMs: number;
+  packageId: string;
+  threshold: number;
+  keyServerIds: string[];
+}): string {
+  const servers = input.keyServerIds.map(shortHex).join(", ") || "none";
+  return `claim ${shortHex(input.claimId)}, seat ${shortHex(input.jurySeatId)}, phase ${input.phase}, opens ${deadlineText(input.deadlineMs)}; package ${shortHex(input.packageId)}, threshold ${input.threshold}, servers ${servers}`;
+}
+
+function sameKeyServerPolicy(
+  left: Array<{ objectId: string; weight: number }>,
+  right: Array<{ objectId: string; weight: number }>,
+): boolean {
+  const normalized = (servers: Array<{ objectId: string; weight: number }>) =>
+    servers
+      .map((server) => `${server.objectId.toLowerCase()}:${server.weight}`)
+      .sort();
+  return JSON.stringify(normalized(left)) === JSON.stringify(normalized(right));
+}
+
+function servicesMatchEscrow(
+  services: Array<{ objectId: string; shareIndex: number }>,
+  keyServers: Array<{ objectId: string; weight: number }>,
+): boolean {
+  const expected = new Map<string, number>();
+  for (const server of keyServers) {
+    if (!Number.isSafeInteger(server.weight) || server.weight <= 0) return false;
+    const objectId = server.objectId.toLowerCase();
+    expected.set(objectId, (expected.get(objectId) ?? 0) + server.weight);
+  }
+  const actual = new Map<string, number>();
+  for (const service of services) {
+    const objectId = service.objectId.toLowerCase();
+    actual.set(objectId, (actual.get(objectId) ?? 0) + 1);
+  }
+  const indicesMatch = services.every(
+    (service, index) => service.shareIndex === index + 1,
+  );
+  return (
+    indicesMatch &&
+    JSON.stringify([...actual.entries()].sort()) ===
+      JSON.stringify([...expected.entries()].sort())
+  );
+}
+
+function sealEscrowCheck(
+  proof: BrowserRunProof,
+  bundle: PublicRunBundle,
+  escrow: NonNullable<SealedRunBundleV2["escrow"]>,
+): RunProofCheck {
+  let expected = `claim ${shortHex(bundle.claimId)}, seat ${shortHex(bundle.jurySeatId)}, phase ${bundle.phase}`;
+
+  try {
+    const expectedDeadline = proof.claimDeadlines
+      ? bundle.phase === 1
+        ? proof.claimDeadlines.firstRevealDeadlineMs
+        : proof.claimDeadlines.secondRevealDeadlineMs
+      : escrow.deadlineMs;
+    const expectedPolicy = proof.sealPolicy ?? escrow;
+    expected = describeEscrowBinding({
+      claimId: bundle.claimId,
+      jurySeatId: bundle.jurySeatId,
+      phase: bundle.phase,
+      deadlineMs: expectedDeadline,
+      packageId: expectedPolicy.packageId,
+      threshold: expectedPolicy.threshold,
+      keyServerIds: expectedPolicy.keyServers.map((server) => server.objectId),
+    });
+    const identity = parseSealIdentity(escrow.identityHex);
+    const encryptedObject = parseEscrowObject(escrow);
+    const issues: string[] = [];
+    if (escrow.version !== 1 || escrow.provider !== "seal") {
+      issues.push("The escrow record version or provider is invalid");
+    }
+    if (
+      !sameHex(identity.claimId, bundle.claimId) ||
+      !sameHex(identity.jurySeatId, bundle.jurySeatId) ||
+      identity.phase !== bundle.phase
+    ) {
+      issues.push("The Seal identity does not name this bundle");
+    }
+    if (identity.deadlineMs !== escrow.deadlineMs) {
+      issues.push("The escrow record deadline differs from its identity");
+    }
+    if (
+      proof.claimDeadlines &&
+      identity.deadlineMs !== expectedDeadline
+    ) {
+      issues.push("The Seal identity deadline differs from the claim deadline");
+    }
+    if (escrow.aad !== proof.runId || escrow.aad !== bundle.runId) {
+      issues.push("The escrow AAD does not name this run");
+    }
+    if (
+      proof.sealPolicy &&
+      (!sameHex(escrow.packageId, proof.sealPolicy.packageId) ||
+        escrow.threshold !== proof.sealPolicy.threshold ||
+        !sameKeyServerPolicy(escrow.keyServers, proof.sealPolicy.keyServers))
+    ) {
+      issues.push("The escrow record differs from the release Seal policy");
+    }
+    if (!sameHex(encryptedObject.packageId, escrow.packageId)) {
+      issues.push("The encrypted object package differs from the escrow record");
+    }
+    if (
+      !sameHex(
+        encryptedObject.id,
+        expectedFullIdHex(escrow.packageId, escrow.identityHex),
+      )
+    ) {
+      issues.push("The encrypted object identity differs from the escrow record");
+    }
+    if (encryptedObject.threshold !== escrow.threshold) {
+      issues.push("The encrypted object threshold differs from the escrow record");
+    }
+    if (!servicesMatchEscrow(encryptedObject.services, escrow.keyServers)) {
+      issues.push("The encrypted object services differ from the escrow record");
+    }
+
+    const actual = describeEscrowBinding({
+      claimId: identity.claimId,
+      jurySeatId: identity.jurySeatId,
+      phase: identity.phase,
+      deadlineMs: identity.deadlineMs,
+      packageId: encryptedObject.packageId,
+      threshold: encryptedObject.threshold,
+      keyServerIds: [...new Set(
+        encryptedObject.services.map((service) => service.objectId),
+      )],
+    });
+    const notes = [
+      ...issues,
+      ...(proof.claimDeadlines
+        ? []
+        : ["Claim reveal deadlines were not provided; identity binding was checked"]),
+    ];
+    return {
+      key: "sealEscrow",
+      label: "Seal escrow binds this run",
+      expected,
+      actual,
+      ok: issues.length === 0,
+      ...(notes.length === 0 ? {} : { detail: notes.join("; ") }),
+    };
+  } catch (error) {
+    return {
+      key: "sealEscrow",
+      label: "Seal escrow binds this run",
+      expected,
+      actual: null,
+      ok: false,
+      detail:
+        error instanceof Error
+          ? error.message
+          : "The Seal escrow could not be verified",
+    };
+  }
 }
 
 export function isV3Bundle(
@@ -424,6 +610,9 @@ export async function recomputeRunProof(
   });
 
   const sealed = proof.sealed ?? null;
+  if (sealed?.escrow) {
+    checks.push(sealEscrowCheck(proof, bundle, sealed.escrow));
+  }
   if (!sealed) {
     checks.push({
       key: "sealedCore",

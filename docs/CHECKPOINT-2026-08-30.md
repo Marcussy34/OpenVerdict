@@ -98,8 +98,9 @@
   the container with `scripts/publish-agent-manifests.ts`, dry run first).
 - Ladder (lib/engine/engine.ts defaultDeadlines, hosted, since 22:26,
   commit `bb79bec`, deployment `327c8364`): cutoff +60 s, commit +450 s,
-  reveal +570 s, discussion +630 s, second round +810/+930 s (measured
-  from create_claim; before 22:26 it was 330/450/510/690/810 s). Seat
+  reveal +570 s, discussion +630 s, second round +1080/+1200 s since the
+  Seal release (was +810/+930 s from 22:26 to then, and
+  330/450/510/690/810 s before 22:26; measured from create_claim). Seat
   deadline = commit minus 60 s. Reason: the owner keeps all jurors at equal
   selection weight (Kimi weights restored, registry tx `A7BEYRdu…`) and
   accepts about 10 min per verdict so that Kimi finishes its four turns.
@@ -188,7 +189,22 @@ If a job failed or produced a bad diff: fix inline for small issues, or
 resend feedback with `node "$CO" task --write --resume-last "<feedback>"`
 only when a single job remains (max three rounds), else finish by hand.
 
-## 3b. IN FLIGHT 22:50: Seal escrow build (three Codex jobs), plus queued fixes
+## 3b. Seal escrow build: jobs landed 23:07, reviewed, package published 23:12
+
+Result: all three diffs accepted (Move package builds, 4 Move tests pass
+under my own run; lib suite 406 green with the engine work; the browser
+recovery helper uses an ephemeral keypair and `onlyTransactionKind`).
+Policy package published from inside the container (script and bytecode
+injected over ssh; the Mac cannot reach the fullnode):
+`0xf54eb61116372f8506ca332457b2fee61231a559e44923429f54fab355d0f0c5`,
+UpgradeCap `0xbc0f64f8…`, digest `6LnGu71K…`. End-to-end probe
+(node_modules/.cache/seal-e2e-probe.mts, JSON-RPC client injected):
+parsed object id == expected full id, share indices 1 and 2, key
+recovered in 3.3 s after a past deadline, future deadline refused.
+`seal` section added to config/release.testnet.json. Round-two window fix
+applied in engine.ts (+1080 s / +1200 s). Remaining: full gate, commit,
+deploy between claims, live claim with an escrow, verifier check, docs.
+The paragraph below is the pre-landing plan, kept for the record.
 
 Owner's evening decisions: all jurors keep equal selection weight; slower
 verdicts are fine so Kimi can finish (commit window 450 s live since 22:26);

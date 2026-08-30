@@ -203,7 +203,16 @@ the browser on `/verify` (Run proof tab).
    model at temperature 0 and shows the fresh verdict, output hash, served
    model, node ids and latency next to the recorded ones (a match
    corroborates; a difference is a reason to look closer, not proof of
-   tampering; the button costs one model call and is rate limited).
+   tampering; the button costs one model call and is rate limited). Below
+   it, "Seal escrow" (runs sealed after the Seal release): the policy
+   package, the two Mysten key servers, the identity (claim, seat, phase)
+   and the deadline the escrow opens at; "Open through Seal" recovers the
+   AES key from the key servers with a throwaway keypair (no wallet, no
+   gas) once the deadline has passed, and shows "Matches the revealed key"
+   or, for a seat that never revealed, the recovered core's outcome with
+   its hash checked against the sealed core hash. Before the deadline the
+   key servers refuse ("The key servers refuse until the reveal deadline
+   passes"), which is the point.
    Demo claims: #22 `0x387a344b…` (YES 9950, certificate `0x7c2fcb4b…`,
    the first v5 verdict: every revealed run shows pages opened together;
    open the DeepSeek run for a three-page batch), #21

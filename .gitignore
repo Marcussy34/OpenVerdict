@@ -39,3 +39,4 @@ move/openverdict/build/
 
 # Billable media-generation intermediates; only selected web assets are tracked.
 artifacts/landing-video/
+move/openverdict_seal/build/

@@ -28,6 +28,8 @@ import {
   type SealedRunBundleV2,
 } from "../protocol";
 import { transcriptHash } from "../research";
+import type { SealEscrowService } from "../seal/escrow";
+import { parseSealIdentity, sealIdentityHex } from "../seal/identity";
 import {
   createDb,
   createRepository,
@@ -609,18 +611,48 @@ describe("headless engine", () => {
     const gateway = new FakeSuiGateway();
     const approve = vi.spyOn(gateway, "approveRun");
     const reveal = vi.spyOn(gateway, "revealVote");
-    const setup = await engineSetup(gateway, 5);
+    const sealPolicy: SealEscrowService["policy"] = {
+      packageId: `0x${"77".repeat(32)}`,
+      threshold: 1,
+      keyServers: [{ objectId: `0x${"88".repeat(32)}`, weight: 1 }],
+    };
+    const escrowKey = vi.fn<SealEscrowService["escrowKey"]>(async (params) => ({
+      version: 1,
+      provider: "seal",
+      packageId: sealPolicy.packageId,
+      identityHex: sealIdentityHex(params),
+      deadlineMs: params.deadlineMs,
+      threshold: sealPolicy.threshold,
+      keyServers: sealPolicy.keyServers,
+      encryptedObjectBase64: "c2VhbC1lbmNyeXB0ZWQ=",
+      aad: params.runId,
+    }));
+    const setup = await engineSetup(gateway, 5, {
+      seal: sealPolicy,
+      sealEscrow: { policy: sealPolicy, escrowKey },
+    });
     const put = vi.spyOn(setup.walrus, "put");
     const { claimId } = await setup.engine.factCheckStart({
       claim: "The run proof exposes every bound hash.",
       text: "Local evidence.",
       urls: [],
     });
+    const claim = await setup.engine.inspect(claimId);
     await setup.engine.selectCommittee(claimId);
     await setup.engine.evidenceFreeze(claimId, 1);
     const jury = await setup.engine.juryRun(claimId, 1);
     const run = jury.runs[0];
     if (!run) throw new Error("expected a jury run");
+    expect(escrowKey).toHaveBeenCalledTimes(5);
+    expect(escrowKey).toHaveBeenCalledWith(
+      expect.objectContaining({
+        claimId,
+        phase: 1,
+        deadlineMs: claim.deadlines.firstRevealDeadlineMs,
+        runId: run.runId,
+        keyBytes: expect.any(Uint8Array),
+      }),
+    );
 
     const record = (await createRepository(setup.db).listInferenceRuns(claimId, 1))
       .find((candidate) => candidate.runId === run.runId);
@@ -675,10 +707,20 @@ describe("headless engine", () => {
       revealedBlobId: null,
       revealed: false,
       bundle: null,
+      claimDeadlines: {
+        firstRevealDeadlineMs: claim.deadlines.firstRevealDeadlineMs,
+        secondRevealDeadlineMs: claim.deadlines.secondRevealDeadlineMs,
+      },
+      sealPolicy,
       sealed: {
         version: 2,
         kind: "sealed-run-bundle",
         runId: run.runId,
+        escrow: {
+          provider: "seal",
+          deadlineMs: claim.deadlines.firstRevealDeadlineMs,
+          aad: run.runId,
+        },
       },
       gateway: {
         gatewayRequestId: expect.stringMatching(/^request_/),
@@ -694,6 +736,18 @@ describe("headless engine", () => {
       kind: "sealed-run-bundle",
       runId: run.runId,
       coreHash: record.coreHash,
+      escrow: {
+        packageId: sealPolicy.packageId,
+        threshold: sealPolicy.threshold,
+        keyServers: sealPolicy.keyServers,
+      },
+    });
+    if (!sealed.escrow) throw new Error("expected a Seal escrow");
+    expect(parseSealIdentity(sealed.escrow.identityHex)).toEqual({
+      claimId,
+      jurySeatId: record.jurySeatId,
+      phase: 1,
+      deadlineMs: claim.deadlines.firstRevealDeadlineMs,
     });
     expect(
       openSealedRunBundle(sealed, {
@@ -747,6 +801,53 @@ describe("headless engine", () => {
         ),
       ),
     ).toEqual(proofAfterReveal.bundle);
+  });
+
+  it("keeps a seat when Seal escrow encryption fails", async () => {
+    const gateway = new FakeSuiGateway();
+    const sealPolicy: SealEscrowService["policy"] = {
+      packageId: `0x${"77".repeat(32)}`,
+      threshold: 1,
+      keyServers: [{ objectId: `0x${"88".repeat(32)}`, weight: 1 }],
+    };
+    const escrowKey = vi.fn<SealEscrowService["escrowKey"]>(async () => {
+      throw new Error("key server unavailable");
+    });
+    const stderr = vi.spyOn(process.stderr, "write").mockReturnValue(true);
+
+    try {
+      const setup = await engineSetup(gateway, 1, {
+        seal: sealPolicy,
+        sealEscrow: { policy: sealPolicy, escrowKey },
+      });
+      const { claimId } = await setup.engine.factCheckStart({
+        claim: "Seal outages must not cost a jury seat.",
+        text: "Local evidence.",
+        urls: [],
+      });
+      await setup.engine.selectCommittee(claimId);
+      await setup.engine.evidenceFreeze(claimId, 1);
+      const jury = await setup.engine.juryRun(claimId, 1);
+      const run = jury.runs.find(
+        (candidate) => candidate.status === "SCHEMA_VALID",
+      );
+      if (!run) throw new Error("expected a jury run");
+
+      expect(escrowKey).toHaveBeenCalledOnce();
+      expect(
+        (await setup.engine.runProof(claimId, run.runId)).sealed?.escrow,
+      ).toBeUndefined();
+      expect(
+        stderr.mock.calls.some(
+          ([message]) =>
+            String(message).includes(
+              `seal-escrow failed: claim ${claimId} seat `,
+            ) && String(message).includes("key server unavailable"),
+        ),
+      ).toBe(true);
+    } finally {
+      stderr.mockRestore();
+    }
   });
 
   it("leaves a seat retryable when plaintext publication fails", async () => {
@@ -1242,10 +1343,15 @@ async function engineSetup(
     decisiveEvidence?: string[];
     /** Replaces the local store (for example a store with a retention clock). */
     walrus?: WalrusStore;
+    seal?: NonNullable<ReleaseManifest["seal"]>;
+    sealEscrow?: SealEscrowService;
   } = {},
 ) {
   const directory = await mkdtemp(join(tmpdir(), "openverdict-engine-"));
-  const manifest = testManifest();
+  const manifest: ReleaseManifest = {
+    ...testManifest(),
+    ...(options.seal === undefined ? {} : { seal: options.seal }),
+  };
   const manifestPath = join(directory, "release.json");
   await writeFile(manifestPath, JSON.stringify(manifest));
   const db = createDb({ dataDir: "memory://" });
@@ -1291,6 +1397,9 @@ async function engineSetup(
     gonka,
     suiGateway: gateway,
     initialAgents,
+    ...(options.sealEscrow === undefined
+      ? {}
+      : { sealEscrow: options.sealEscrow }),
     now: () => Date.parse("2026-08-27T00:00:00.000Z"),
     eventPollIntervalMs: 5,
   });

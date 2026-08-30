@@ -5,6 +5,7 @@ import type {
   InferenceRunAudit,
   OracleInferenceOutput,
   PublicRunBundle,
+  SealEscrowV1,
   SealedRunBundleV2,
 } from "../protocol/types";
 import type { ClaimMode, ClaimState, VoteOutcome } from "../protocol/constants";
@@ -137,6 +138,15 @@ export type RunProof = {
   revealedBlobId: string | null;
   revealed: boolean;
   bundle: PublicRunBundle | null;
+  claimDeadlines?: {
+    firstRevealDeadlineMs: number;
+    secondRevealDeadlineMs: number;
+  };
+  sealPolicy?: {
+    packageId: HexString;
+    threshold: number;
+    keyServers: SealEscrowV1["keyServers"];
+  };
 };
 
 export type FinalizeReport = {

@@ -8,6 +8,7 @@ import { createGonkaAdapterWithDependencies } from "../gonka/adapter";
 import { createRedactingLogger } from "../gonka/logger";
 import { blake2b256, toHex, type AgentManifest, type OracleInferenceInput } from "../protocol";
 import { createFirecrawlProvider } from "../research";
+import { createSealEscrowService } from "../seal/escrow";
 import { createDb } from "../storage";
 import {
   SignerRegistry,
@@ -89,6 +90,17 @@ async function buildServerEngine(): Promise<Engine> {
 
   const signers = SignerRegistry.fromEnv(process.env, 7);
   const suiClient = createSuiClients(manifest);
+  const sealEscrow = manifest.seal
+    ? createSealEscrowService({
+        suiClient,
+        packageId: manifest.seal.packageId as `0x${string}`,
+        threshold: manifest.seal.threshold,
+        keyServers: manifest.seal.keyServers.map((server) => ({
+          ...server,
+          objectId: server.objectId as `0x${string}`,
+        })),
+      })
+    : undefined;
   // Without DATABASE_URL this falls back to embedded PGlite, which needs a
   // writable directory. Serverless roots are read-only (mkdir '/var/task/
   // .pglite' fails with EROFS), so the data dir is overridable. Note the
@@ -143,6 +155,7 @@ async function buildServerEngine(): Promise<Engine> {
     ...(research === undefined ? {} : { research }),
     suiClient,
     signers,
+    ...(sealEscrow === undefined ? {} : { sealEscrow }),
     ...(process.env.OPENVERDICT_ZKLOGIN_GRAPHQL_URL?.trim()
       ? { zkLoginGraphqlUrl: process.env.OPENVERDICT_ZKLOGIN_GRAPHQL_URL.trim() }
       : {}),

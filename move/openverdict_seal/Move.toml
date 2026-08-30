@@ -1,0 +1,12 @@
+[package]
+name = "openverdict_seal"
+edition = "2024.beta"
+
+[dependencies]
+
+[addresses]
+openverdict_seal = "0x0"
+
+[dev-dependencies]
+
+[dev-addresses]

@@ -260,6 +260,22 @@ export type RunBundleSeal = {
 
 export type PublicRunBundleV2 = PublicRunBundleCoreV2 & { seal: RunBundleSeal };
 
+export type SealEscrowV1 = {
+  version: 1;
+  provider: "seal";
+  packageId: HexString;
+  identityHex: HexString;
+  deadlineMs: number;
+  threshold: number;
+  keyServers: Array<{
+    objectId: HexString;
+    weight: number;
+    aggregatorUrl?: string;
+  }>;
+  encryptedObjectBase64: string;
+  aad: string;
+};
+
 export type SealedRunBundleV2 = {
   version: 2;
   kind: "sealed-run-bundle";
@@ -269,6 +285,8 @@ export type SealedRunBundleV2 = {
   aad: string;
   coreHash: HexString;
   ciphertextBase64: string;
+  /** Unhashed insurance in the cited blob; core hashes and commitments stay unchanged. */
+  escrow?: SealEscrowV1;
 };
 
 /** A page quote a juror cites; evidenceId must be a page opened in the same run. */

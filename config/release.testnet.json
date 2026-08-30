@@ -27,6 +27,21 @@
     "maxSeatsPerModel": 2,
     "minDistinctModels": 3
   },
+  "seal": {
+    "packageId": "0xf54eb61116372f8506ca332457b2fee61231a559e44923429f54fab355d0f0c5",
+    "threshold": 1,
+    "keyServers": [
+      {
+        "objectId": "0xb012378c9f3799fb5b1a7083da74a4069e3c3f1c93de0b27212a5799ce1e1e98",
+        "weight": 1,
+        "aggregatorUrl": "https://seal-aggregator-testnet.mystenlabs.com"
+      },
+      {
+        "objectId": "0x73d05d62c18d9374e3ea529e8e0ed6161da1a141a94d3f76ae3fe4e99356db75",
+        "weight": 1
+      }
+    ]
+  },
   "explorerTxTemplate": "https://suiscan.xyz/testnet/tx/{digest}",
   "adminCapObjectId": "0x525aed2830743f7016bfd63d508ac1ed513e83779936167472cac61d1d4720f8",
   "pauseCapObjectId": "0xfeb0bb178f5baac6dfb057ecb1dbd7c3e0319369d0e28a256d100f676f699104",

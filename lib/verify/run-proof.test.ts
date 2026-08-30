@@ -1,3 +1,5 @@
+import { EncryptedObject } from "@mysten/seal";
+import { toBase64 } from "@mysten/sui/utils";
 import { describe, expect, it } from "vitest";
 
 import { canonicalJsonBytes } from "../gonka/canonical";
@@ -17,6 +19,7 @@ import {
 import { sealRunBundle } from "../engine/runBundle";
 import { computeRunHash } from "../protocol/commitment";
 import { blake2b256, fromHex, toHex } from "../protocol/hash";
+import { sealIdentityHex, sealInnerId } from "../seal/identity";
 import type {
   InferenceRunAudit,
   PublicRunBundleCoreV2,
@@ -28,6 +31,7 @@ import type {
   PublicRunBundleV4,
   PublicRunBundleV5,
   ResearchTranscriptV1,
+  SealEscrowV1,
 } from "../protocol/types";
 import {
   isV3Bundle,
@@ -143,6 +147,64 @@ function makeProof() {
     seal: { ...seal, sealedBlobId: "sealed-blob" },
   };
   return { proof: proofFromBundle(bundle, sealed), sealed };
+}
+
+function makeEscrowProof() {
+  const { proof } = makeProof();
+  if (!proof.bundle || !proof.sealed) {
+    throw new Error("Expected a revealed and sealed bundle");
+  }
+  const packageId = `0x${"71".repeat(32)}` as const;
+  const keyServerId = `0x${"72".repeat(32)}` as const;
+  const deadlineMs = Date.parse("2026-08-30T13:52:07.000Z");
+  const identityHex = sealIdentityHex({
+    claimId: proof.bundle.claimId,
+    jurySeatId: proof.bundle.jurySeatId,
+    phase: proof.bundle.phase,
+    deadlineMs,
+  });
+  const encryptedObject = EncryptedObject.serialize({
+    version: 0,
+    packageId,
+    id: sealInnerId(identityHex),
+    services: [[keyServerId, 1]],
+    threshold: 1,
+    encryptedShares: {
+      BonehFranklinBLS12381: {
+        nonce: new Uint8Array(96),
+        encryptedShares: [new Uint8Array(32)],
+        encryptedRandomness: new Uint8Array(32),
+      },
+    },
+    ciphertext: {
+      Aes256Gcm: {
+        blob: new Uint8Array([1, 2, 3]),
+        aad: new TextEncoder().encode(proof.runId),
+      },
+    },
+  }).toBytes();
+  const escrow: SealEscrowV1 = {
+    version: 1,
+    provider: "seal",
+    packageId,
+    identityHex,
+    deadlineMs,
+    threshold: 1,
+    keyServers: [{ objectId: keyServerId, weight: 1 }],
+    encryptedObjectBase64: toBase64(encryptedObject),
+    aad: proof.runId,
+  };
+  proof.sealed.escrow = escrow;
+  proof.claimDeadlines = {
+    firstRevealDeadlineMs: deadlineMs,
+    secondRevealDeadlineMs: deadlineMs + 1_000,
+  };
+  proof.sealPolicy = {
+    packageId,
+    threshold: 1,
+    keyServers: escrow.keyServers,
+  };
+  return { proof, escrow };
 }
 
 function makeProofV3() {
@@ -552,6 +614,52 @@ describe("browser run proof", () => {
     const checks = await recomputeRunProof(proof);
     expect(checks).toHaveLength(5);
     expect(checks.every((check) => check.ok)).toBe(true);
+  });
+
+  it("adds no Seal escrow check when the sealed bundle has no escrow", async () => {
+    const { proof } = makeProof();
+    const checks = await recomputeRunProof(proof);
+
+    expect(checks.some((check) => check.key === "sealEscrow")).toBe(false);
+  });
+
+  it("verifies an escrow that binds the run, deadline, policy, and SDK object", async () => {
+    const { proof } = makeEscrowProof();
+    const checks = await recomputeRunProof(proof);
+
+    expect(checks.find((check) => check.key === "sealEscrow")).toMatchObject({
+      label: "Seal escrow binds this run",
+      ok: true,
+    });
+    expect(checks.every((check) => check.ok)).toBe(true);
+  });
+
+  it("rejects a Seal escrow with a mismatched reveal deadline", async () => {
+    const { proof } = makeEscrowProof();
+    if (!proof.claimDeadlines) throw new Error("Expected claim deadlines");
+    proof.claimDeadlines.firstRevealDeadlineMs += 1;
+
+    const checks = await recomputeRunProof(proof);
+    expect(checks.find((check) => check.key === "sealEscrow")?.ok).toBe(false);
+  });
+
+  it("rejects a Seal escrow with a mismatched package ID", async () => {
+    const { proof, escrow } = makeEscrowProof();
+    escrow.packageId = `0x${"73".repeat(32)}`;
+
+    const checks = await recomputeRunProof(proof);
+    expect(checks.find((check) => check.key === "sealEscrow")?.ok).toBe(false);
+  });
+
+  it("explains when claim deadlines are unavailable without failing identity", async () => {
+    const { proof } = makeEscrowProof();
+    delete proof.claimDeadlines;
+
+    const checks = await recomputeRunProof(proof);
+    expect(checks.find((check) => check.key === "sealEscrow")).toMatchObject({
+      ok: true,
+      detail: expect.stringContaining("Claim reveal deadlines were not provided"),
+    });
   });
 
   it("verifies a v3 bundle: nine checks all ok", async () => {
