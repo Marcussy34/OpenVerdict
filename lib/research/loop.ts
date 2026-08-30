@@ -237,6 +237,7 @@ export async function runResearchLoop(
     pages: PageStore;
     searchCache: SearchCache;
     now?: () => number;
+    onStep?: (info: { kind: "search" | "open"; ordinal: number }) => void;
     /**
      * Wall-clock point (ms) after which this seat cannot commit in time. The
      * loop stops with TIMEOUT before a turn that would start past it and
@@ -339,8 +340,9 @@ export async function runResearchLoop(
     result: ResearchTranscriptStep["result"],
     batch?: NonNullable<ResearchTranscriptStep["batch"]>,
   ): void => {
+    const ordinal = steps.length;
     steps.push({
-      index: steps.length,
+      index: ordinal,
       turn,
       startedAtMs,
       completedAtMs: now(),
@@ -349,6 +351,14 @@ export async function runResearchLoop(
       action,
       result,
     });
+    if (action.action === "search" || action.action === "open") {
+      // Activity observers receive no research content and cannot affect the run.
+      try {
+        deps.onStep?.({ kind: action.action, ordinal });
+      } catch {
+        // The transcript remains the source of truth when an observer fails.
+      }
+    }
   };
 
   const forceAnswerBeforeLastTurn = (turn: number): void => {

@@ -180,6 +180,37 @@ describe("headless engine", () => {
     });
   });
 
+  it("publishes content-free research ticks through the engine event stream", async () => {
+    const statement = "Research ticks must never reveal this query.";
+    const setup = await engineSetup(new FakeSuiGateway(), 5);
+    const { claimId } = await setup.engine.factCheckStart({
+      claim: statement,
+      text: "Local evidence.",
+      urls: [],
+    });
+    await setup.engine.selectCommittee(claimId);
+    await setup.engine.evidenceFreeze(claimId, 1);
+    await setup.engine.juryRun(claimId, 1);
+
+    const repository = createRepository(setup.db);
+    const events = await repository.listResolutionEvents(claimId, 1);
+    const ticks = events.filter((event) => event.kind === "RESEARCH_TICK");
+
+    expect(ticks).toHaveLength(10);
+    for (const tick of ticks) {
+      expect(tick.source).toBe("ENGINE");
+      expect(tick.visibility).toBe("PUBLIC_NOW");
+      expect(Object.keys(tick.payload).sort()).toEqual([
+        "jurySeatId",
+        "kind",
+        "ordinal",
+      ]);
+      const values = Object.values(tick.payload).map(String);
+      expect(values.some((value) => value.includes(statement))).toBe(false);
+      expect(values.some((value) => /https?:\/\//i.test(value))).toBe(false);
+    }
+  });
+
   it("uses a typed error when evidence freeze has no accepted artifact", async () => {
     const setup = await engineSetup(new FakeSuiGateway(), 5);
     const start = Date.parse("2026-08-27T00:00:00.000Z");

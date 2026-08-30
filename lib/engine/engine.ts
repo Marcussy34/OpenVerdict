@@ -1665,14 +1665,16 @@ class OpenVerdictEngine implements Engine {
     const ladder = (): ClaimCreateRequest["deadlines"] =>
       request.deadlines ?? defaultDeadlines(this.#now(), this.#manifest.network);
     validateClaimCreateRequest({ ...request, deadlines: ladder() });
-    const statementUpload = await this.#walrus.put(
-      new TextEncoder().encode(request.statement),
-      { identifier: "claim-statement.txt" },
-    );
-    const criteriaUpload = await this.#walrus.put(
-      new TextEncoder().encode(request.resolutionCriteria),
-      { identifier: "resolution-criteria.txt" },
-    );
+    const [statementUpload, criteriaUpload] = await Promise.all([
+      this.#walrus.put(
+        new TextEncoder().encode(request.statement),
+        { identifier: "claim-statement.txt" },
+      ),
+      this.#walrus.put(
+        new TextEncoder().encode(request.resolutionCriteria),
+        { identifier: "resolution-criteria.txt" },
+      ),
+    ]);
     const policyId = evidencePolicyId(this.#manifest);
     const contentHash = blake2b256(
       canonicalJsonBytes({
@@ -2130,6 +2132,19 @@ class OpenVerdictEngine implements Engine {
         searchCache,
         now: this.#now,
         deadlineMs: seatDeadlineMs,
+        onStep: ({ kind, ordinal }) => {
+          // Public ticks expose activity shape only and cannot fail the seat.
+          void this.emit({
+            claimId: claim.claimId,
+            phase: `INFERENCE_${seat.phase}`,
+            kind: "RESEARCH_TICK",
+            source: "ENGINE",
+            visibility: "PUBLIC_NOW",
+            actorId: seat.agentProfileId,
+            runId: baseRunId,
+            payload: { jurySeatId: seat.jurySeatId, kind, ordinal },
+          }).catch(() => undefined);
+        },
       });
       if (!loop.ok) {
         throw new ResearchLoopError(

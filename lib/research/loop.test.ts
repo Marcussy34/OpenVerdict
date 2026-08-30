@@ -325,6 +325,7 @@ function loopDependencies(options: {
   searchCache?: SearchCache;
   now?: () => number;
   deadlineMs?: number;
+  onStep?: (info: { kind: "search" | "open"; ordinal: number }) => void;
 }) {
   return {
     complete: options.complete,
@@ -339,6 +340,7 @@ function loopDependencies(options: {
     searchCache: options.searchCache ?? createSearchCache(),
     ...(options.now === undefined ? {} : { now: options.now }),
     ...(options.deadlineMs === undefined ? {} : { deadlineMs: options.deadlineMs }),
+    ...(options.onStep === undefined ? {} : { onStep: options.onStep }),
   };
 }
 
@@ -373,6 +375,36 @@ function twoSiteProvider(): ResearchProvider {
 }
 
 describe("research loop", () => {
+  it("reports each recorded research action with exact keys and stable ordinals", async () => {
+    const query = "callback research";
+    const url = "https://fake.evidence.test/callback-research/1";
+    const script = scriptedCompletion([
+      action({ action: "search", query }),
+      action({ action: "open", url }),
+      unsureAnswer(),
+    ]);
+    const calls: Array<{ kind: "search" | "open"; ordinal: number }> = [];
+
+    const result = await runResearchLoop(
+      loopDependencies({
+        complete: script.complete,
+        onStep: (info) => {
+          calls.push(info);
+          if (info.ordinal === 0) throw new Error("observer failure");
+        },
+      }),
+    );
+
+    expect(result.ok).toBe(true);
+    expect(calls).toEqual([
+      { kind: "search", ordinal: 0 },
+      { kind: "open", ordinal: 1 },
+    ]);
+    for (const info of calls) {
+      expect(Object.keys(info).sort()).toEqual(["kind", "ordinal"]);
+    }
+  });
+
   it("searches, opens, and returns a cited answer with faithful messages", async () => {
     const query = "independent research";
     const url = "https://fake.evidence.test/independent-research/1";
