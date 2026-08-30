@@ -99,7 +99,9 @@ checks.
 - Each seat spends one or two more page opens: roughly 20 to 40 s more per
   seat. DeepSeek and MiniMax fit the 140 s research budget; Kimi (40 to 72 s
   per run) fails closed more often. With `REQUIRED_MATCHING = 4` a round
-  tolerates one lost seat, so the ladder is unchanged.
+  tolerates one lost seat, so the ladder is unchanged. (Superseded the same
+  evening: the commit window is 450 s since 22:26 with about 350 s of
+  research, and calls are hedged since 2026-08-31.)
 - Router-side model substitution (seen on claim #17) still costs seats; the
   adapter's fail-closed model check stays.
 - Old bundles verify under their own policy; new checks apply to v4 only.

@@ -190,11 +190,13 @@ Postgres. Tests: 431 vitest, 70 Move.
   least one Kimi seat on every committee, and Kimi's calls on claim #22
   took 60 s, 5 s and 36 s before the fourth was cut at 97 s by the seat
   bound (a one-word probe answers in 9.4 s against 1.4 s for DeepSeek).
-  The two Kimi profiles now carry selection weight 3000 against 10000 for
-  the others (registry tx `91ir2QVbvvsi4whLbfGdkkjoXaY28EZuRrxaNvo1BZ2s`,
-  sent from inside the container because the Mac could not reach the
-  RPC), which the draw simulation puts at 16% committees with two Kimi
-  seats instead of 57%, so one lost Kimi seat no longer blocks a round.
+  For five minutes (22:15 to 22:20) the two Kimi profiles carried
+  selection weight 3000 against 10000 (registry tx
+  `91ir2QVbvvsi4whLbfGdkkjoXaY28EZuRrxaNvo1BZ2s`, sent from inside the
+  container because the Mac could not reach the RPC; the draw simulation
+  put two-Kimi committees at 16% instead of 57%), then the owner chose
+  equal weights for every juror and they were restored (tx `A7BEYRdu…`);
+  the longer commit window and hedged requests carry the load instead.
   The registry holds 32 eligibility records, exactly
   `MAX_ELIGIBLE_SNAPSHOT`: retire an old profile before registering a new
   agent.
@@ -231,8 +233,9 @@ Postgres. Tests: 431 vitest, 70 Move.
   t+411 s, finalized YES with truth score 9950 at t+502 s (8.4 min from
   POST), certificate
   `0x7c2fcb4b71691ecd6253fd8b2cf40975a8cc66ba67520e83b9e8c68720d6d02c`.
-  DeepSeek run `0x6b646088…` and MiniMax run `0x71edbc4f…` pass all 14
-  verifier checks locally, including "opens per turn within policy".
+  DeepSeek run `0x6b646088…` and MiniMax run `0x71edbc4f…` passed all 14
+  verifier checks of that build locally, including "opens per turn within
+  policy" (15 checks since the Seal escrow check was added).
 - JUROR RESEARCH V2 2026-08-30 afternoon (design record
   docs/superpowers/specs/2026-08-30-juror-research-v2-design.md): every
   search carries an intent (support or challenge); before a YES or NO the
@@ -240,7 +243,9 @@ Postgres. Tests: 431 vitest, 70 Move.
   citations from at least two sites, and a counter-evidence summary, each
   with bounded nudges (`CHALLENGE_REQUIRED`, `CORROBORATION_REQUIRED`),
   and UNSURE is never blocked. Prompt spec v3, tool policy v3 (4 searches,
-  5 opens, 10 turns), manifest document v4, bundle core v4; agents whose
+  5 opens, 10 turns), manifest document v4, bundle core v4 (superseded the
+  same evening by prompt spec v4, policy v4, manifest v5 and bundle v5, see
+  the batched-opens bullet; the loop rules still apply); agents whose
   manifest is still version 3 keep the v1 behaviour byte for byte, and
   the verifier checks v4 bundles against their own policy. The run view
   shows everything the sealed bundle records: provenance (requested versus

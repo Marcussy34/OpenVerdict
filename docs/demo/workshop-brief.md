@@ -78,7 +78,7 @@ engine — malformed model output can never become a vote.
   - Operator (testnet, live objects incl. ResolutionCertificates):
     suiscan.xyz/testnet/account/0xff3538d73840319aa0439ca047118b584a423b48c94ac0776f6cef25d73b9e1a
   - Package: suiscan.xyz/testnet/object/0xb411210a52dad799b9b4a53e3a44b30c3c8b8a3b1981795f830166533a474c1d
-  - Numbers: 234/234 TS tests, 66/66 Move tests, byte-identical TS↔Move
+  - Numbers: 431/431 TS tests, 70/70 Move tests (66 protocol, 4 Seal policy), byte-identical TS↔Move
     commitment parity, full lifecycle E2E exit 0, live juries with real
     `devshard-…` request ids across 3 model families.
 - Honest framings that build trust: zkLogin backing is authentication and a

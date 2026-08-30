@@ -272,9 +272,9 @@ Per PRD §29: `POST /api/fact-checks`, `POST/GET /api/claims`, `GET /api/claims/
 
 ### Task 8 (T8, orchestrator): Docs, env, release manifests, final review — EXPANDED
 
-- [ ] **Public deployment (user-directed, 2026-08-27):** Railway as primary target — one persistent service runs Next.js + engine singleton + workers with managed Postgres (`DATABASE_URL`), which our SSE streams, background workers, and process-wide engine need; Vercel's serverless model breaks all three (no persistent process, pglite non-durable). Steps: Railway project + Postgres, env config (operator key, manifest=testnet, GONKA key when available), deploy, verify /status + live fact-check; publish URL in README. Observer-only Vercel deploy is the fallback if Railway blocks.
+- [x] (done 2026-08-30: Railway is the only host, with Railway Postgres; the Vercel project was deleted, only the DNS zone remains there) **Public deployment (user-directed, 2026-08-27):** Railway as primary target — one persistent service runs Next.js + engine singleton + workers with managed Postgres (`DATABASE_URL`), which our SSE streams, background workers, and process-wide engine need; Vercel's serverless model breaks all three (no persistent process, pglite non-durable). Steps: Railway project + Postgres, env config (operator key, manifest=testnet, GONKA key when available), deploy, verify /status + live fact-check; publish URL in README. Observer-only Vercel deploy is the fallback if Railway blocks.
 
-- [ ] README: add real Getting Started (install, localnet e2e, live-mode env), architecture pointers, limitations; keep PRD as spec of record.
+- [x] README: add real Getting Started (install, localnet e2e, live-mode env), architecture pointers, limitations; keep PRD as spec of record. (done; synced 2026-08-31)
 - [ ] `.env.example` complete; docker-compose (postgres) optional-but-working; `openverdict fact-check start` documented with a sample `fact-check.json`.
 - [ ] Full verification sweep (superpowers:verification-before-completion): typecheck, lint, vitest, move tests, build, e2e:localnet — all green, outputs captured.
 

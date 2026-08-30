@@ -11,7 +11,7 @@ Node ≥22, pnpm, Sui CLI ≥1.52. `pnpm install` at the repo root.
 ## 1. Offline proof (no network, no keys)
 
 ```bash
-pnpm test && pnpm test:move   # 234 TS + 66 Move
+pnpm test && pnpm test:move   # 431 TS + 70 Move (66 protocol, 4 Seal policy)
 pnpm e2e:localnet             # spawns a local Sui network, deploys, runs 3 full
                               # lifecycles + sponsored deposit, exits 0 on success
 ```
@@ -134,7 +134,7 @@ against the recorded model, or opened through Seal after the deadline.
    and run `node node_modules/.cache/fund-agents.mjs 0.6 <owner...>` with
    `SUI_OPERATOR_SECRET_KEY` in the environment.
 2. Operator: `suix_getAllBalances` for the operator address; keep a few SUI
-   and a few WAL (every claim costs roughly 0.1 SUI plus Walrus storage).
+   and a few WAL (every claim costs about 0.26 SUI plus 0.06 WAL).
    The testnet faucet (`faucet.testnet.sui.io`) is not reachable from the
    developer Mac (`*.sui.io` TLS); use the faucet web UI or a host that can.
 3. `/api/status` reports suiHealthy, dbHealthy, gonkaMode live, walrusMode
@@ -150,8 +150,8 @@ against the recorded model, or opened through Seal after the deadline.
    the commit deadline (t+269 s), five reveals inside the 120 s reveal
    window (bundle writes are serialized on the operator lane, ~15 s each,
    then the reveal transactions go out in parallel: all five by t+337 s),
-   certificate ~20 s after the reveal floor (t+404 s, 6.7 min). No
-   threshold in round one adds a round two: certificate at ~t+765 s.
+   certificate ~20 s after the reveal floor (t+404 s, 6.7 min). Under that
+   ladder a round two ended at ~t+765 s (about t+1220 s today).
    From juror research v2 (17:10) until 22:26 the commit window was 330 s
    (about 230 s of research, the advance ~t+360 s, the certificate ~t+495 s,
    about 8.5 min, a round two ending ~t+860 s).
@@ -164,7 +164,8 @@ against the recorded model, or opened through Seal after the deadline.
    verdicts so that Kimi finishes) the commit window is 450 s: a seat has
    about 350 s of research, commits start at the acceptance midpoint
    (~t+245 s), the advance lands ~t+480 s, the certificate ~t+620 s
-   (about 10 min), and a round two ends ~t+980 s. Measured on claim #24
+   (about 10 min), and a round two ends ~t+1220 s, about 21 min, since the
+   Seal release (it was ~t+980 s before the round-two fix). Measured on claim #24
    (22:27, "The Bitcoin block reward halved to 3.125 BTC in April 2024"):
    reveal phase t+531 s, round two opened after the discussion window,
    final state t+977 s (16.3 min) as UNRESOLVED with truth score 9667:
@@ -176,10 +177,11 @@ against the recorded model, or opened through Seal after the deadline.
    only more room. Finding from #24: round two has always been a 120 s
    sprint (second commit deadline minus 60 s minus the discussion
    deadline) against about 350 s in round one, which is why every
-   two-round claim so far (#18, #19, #24) ended UNRESOLVED; the fix is a
-   second commit deadline at +1080 s and a second reveal at +1200 s
-   (two-round claims then take about 21 min, one-round verdicts stay at
-   about 10 min). Do not redeploy while a claim is live: a container
+   two-round claim so far (#18, #19, #24) ended UNRESOLVED; the fix, a
+   second commit deadline at +1080 s and a second reveal at +1200 s, is
+   live since the Seal release of 23:13 (two-round claims take about
+   21 min, one-round verdicts stay at about 10 min; no live claim has
+   needed a second round since). Do not redeploy while a claim is live: a container
    restart drops every in-flight research run (those seats fail closed).
 5. Model health: Kimi-K2.6 on GonkaRouter was slow or failing most of the
    night (calls longer than the seat budget), then answered in 40 to 72 s on
@@ -189,11 +191,12 @@ against the recorded model, or opened through Seal after the deadline.
    round survives at most one lost seat. GonkaRouter serves exactly three
    models (`GET /v1/models`), and the committee rules (at most two seats
    per model, three families per committee, seven active agents for the
-   draw) put at least one Kimi seat on every committee. Since 22:15 the
-   two Kimi profiles carry selection weight 3000 against 10000 for the
-   others (registry tx `91ir2QVb…`), which cuts committees with two Kimi
-   seats from about 57% to about 16% (simulated), so a single Kimi loss
-   no longer blocks a round. Change weights with
+   draw) put at least one Kimi seat on every committee. Every juror has
+   the same selection weight (10000) by the owner's decision; a
+   five-minute trial of 3000 for the Kimi profiles on 2026-08-30 was
+   reverted (txs `91ir2QVb…` and `A7BEYRdu…`); the simulation showed 3000
+   would cut two-Kimi committees from about 57% to 16% if that lever is
+   ever wanted. Change weights with
    `node node_modules/.cache/set-eligibility.mjs <weight> <profileId...>`
    (operator key in the environment; run it inside the container when the
    Mac cannot reach the RPC) and verify with `weights.mjs`. The registry

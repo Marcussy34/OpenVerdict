@@ -602,7 +602,7 @@ export default function VerifyPage() {
                 <Textarea
                   value={bundleJson}
                   onChange={(event) => setBundleJson(event.target.value)}
-                  placeholder='{"version":3,"kind":"run-bundle"}'
+                  placeholder='{"version":5,"kind":"run-bundle"}'
                   className="min-h-56 resize-y font-mono text-xs"
                   aria-label="Public run bundle JSON"
                   autoComplete="off"

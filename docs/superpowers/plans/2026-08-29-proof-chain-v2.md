@@ -385,11 +385,11 @@ Mirror the columns in `schema.ts` and the record mapping in `repository.ts`. Add
 
 Environment facts for the rollout (verified 2026-08-29):
 - Operator `0xff3538d7…9e1a` now holds 5.000 WAL (testnet) from the official exchange, tx `5wsBonnaCKCvtRJpoDjsjK62EgphV4U1AWbFYAKJwGm1`; before this it held none, so every hosted Walrus write would have failed.
-- On this machine `*.sui.io` fails the TLS handshake ("wrong version number"); use `https://public-rpc.sui-testnet.mystenlabs.com` as the gRPC base URL for local scripts (`OPENVERDICT_SUI_GRPC_URL`). Vercel reaches `fullnode.testnet.sui.io` normally.
+- On this machine `*.sui.io` fails the TLS handshake ("wrong version number"); use `https://public-rpc.sui-testnet.mystenlabs.com` as the gRPC base URL for local scripts (`OPENVERDICT_SUI_GRPC_URL`). The hosted container reaches `fullnode.testnet.sui.io` normally (the app moved from Vercel to Railway on 2026-08-30).
 - A raw testnet Walrus write of a 53-byte blob took about 29 s; a quilt write about 28 to 43 s.
 
-- [ ] Full gate: `pnpm test`, `pnpm test:move` (unchanged, sanity), `pnpm typecheck`, `pnpm lint`, `pnpm build`.
-- [ ] `pnpm tsx scripts/publish-agent-manifests.ts --dry-run`, then live against testnet + Neon; verify 7/7 profiles carry the new `manifest_hash` via `sui_getObject`; run `scripts/seed-testnet-agents.ts` to confirm it reconstructs the same rows.
-- [ ] Redeploy Vercel; confirm `/api/agents` shows version "2" manifests and `/api/status` stays healthy.
-- [ ] `scripts/testnet-canary.ts` with short explicit deadlines: full lifecycle with live GonkaRouter; inspect one sealed blob (pre-commit) and one revealed bundle; run the browser recompute on the report page.
+- [x] Full gate: `pnpm test`, `pnpm test:move` (unchanged, sanity), `pnpm typecheck`, `pnpm lint`, `pnpm build`. (done 2026-08-29)
+- [x] (done 2026-08-29; the database moved from Neon to Railway Postgres on 2026-08-30 and manifests are version 5 since 2026-08-30 21:33) `pnpm tsx scripts/publish-agent-manifests.ts --dry-run`, then live against testnet; verify 7/7 profiles carry the new `manifest_hash` via `sui_getObject`; run `scripts/seed-testnet-agents.ts` to confirm it reconstructs the same rows.
+- [x] Redeploy (done; the app deploys on Railway since 2026-08-30) and confirm `/api/agents` shows the current manifest version and `/api/status` stays healthy.
+- [x] (done 2026-08-29 late, see docs/STATUS.md) `scripts/testnet-canary.ts` with short explicit deadlines: full lifecycle with live GonkaRouter; inspect one sealed blob (pre-commit) and one revealed bundle; run the browser recompute on the report page.
 - [ ] Update the checkpoint with the certificate id and blob ids.

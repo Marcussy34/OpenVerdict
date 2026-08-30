@@ -99,16 +99,18 @@
   again, served model matches, output hash differs as expected). First v5
   verdict: claim #22 `0x387a344bd5b23c50638421875e0dbaa483597eb2064c05741b5059b1fa121785`
   (YES 9950, certificate `0x7c2fcb4b…`, 8.4 min; DeepSeek run
-  `0x6b646088…` with a three-page batch passes all 14 local checks;
+  `0x6b646088…` with a three-page batch passed all 14 local checks of that build (15 since the Seal escrow check);
   proofs saved as node_modules/.cache/proof-387a344b-{1..4}.json,
   fetcher scratchpad/proof-scan.py, verifier
   `pnpm exec tsx node_modules/.cache/verify-proof.mts <proof.json>`).
-- Juror research v2 is LIVE: prompt spec v3 + tool policy v3 (search
-  intent support/challenge; CHALLENGE_REQUIRED, CORROBORATION_REQUIRED,
+- Juror research v2 (prompt spec v3 + tool policy v3: search intent
+  support/challenge; CHALLENGE_REQUIRED, CORROBORATION_REQUIRED,
   counterEvidenceSummary; 4 searches, 5 opens, 10 turns; minCitationDomains
-  2; minOpensPerSide 1), manifest document v4, bundle core v4, verifier v4
-  checks. The seven jurors carry v4 manifests (published 16:33 from inside
-  the container with `scripts/publish-agent-manifests.ts`, dry run first).
+  2; minOpensPerSide 1; manifest document v4, bundle core v4, verifier v4
+  checks) was live from 16:33 to 21:33 and is superseded by the v5 line
+  above; its loop rules still apply under policy v4. The jurors carried v4
+  manifests from 16:33 (published inside the container with
+  `scripts/publish-agent-manifests.ts`, dry run first) and v5 since 21:33.
 - Ladder (lib/engine/engine.ts defaultDeadlines, hosted, since 22:26,
   commit `bb79bec`, deployment `327c8364`): cutoff +60 s, commit +450 s,
   reveal +570 s, discussion +630 s, second round +1080/+1200 s since the
@@ -264,14 +266,12 @@ between claims; run a claim; confirm `sealed.escrow` on a run proof, the
 local verifier's `sealEscrow` check, and "Open through Seal" on a revealed
 run after its deadline; then open an unrevealed seat of an older claim.
 
-Queued after the engine worker releases engine.ts: round two needs the
-same research room as round one (today 120 s: second commit +810 s minus
-60 s minus discussion +630 s), so set secondCommitDeadlineMs to +1080 s
-and secondRevealDeadlineMs to +1200 s in defaultDeadlines (hosted), update
-the runbook and STATUS ladder lines, deploy between claims. Also queued:
-persist the research transcript of a FAILED seat (steps only) and show
-"why this seat failed" on the claim page (claim #24 lost a MiniMax seat to
-"no answer within maxTurns" and nothing of its trail survives today).
+Applied in the Seal release (`b7ff700`): round two now has the same
+research room as round one (second commit +1080 s, second reveal +1200 s;
+it had 120 s, +810 s minus 60 s minus discussion +630 s); runbook and
+STATUS ladder lines updated. Also done later that night (section 3c): a
+FAILED seat keeps its research transcript and attempts, and the claim page
+shows "Seat failed before commit".
 
 ## 3c. IN FLIGHT 23:40: failed-seat transparency (two Codex jobs) and same-model hedging (one job)
 
@@ -326,14 +326,15 @@ owner names the format; Nautilus via Marlin Oyster if the owner wants it.
 - Verdict odds (updated 22:15): GonkaRouter serves exactly three models,
   so a fourth family is impossible; the Move rules (two seats per model at
   most, three families, seven active agents for the draw) force at least
-  one Kimi seat per committee and forbid deactivating anyone. The lever
-  applied: Kimi profiles at selection weight 3000 (others 10000, registry
-  tx `91ir2QVb…`), simulated 16% two-Kimi committees instead of 57%, abort
-  risk 0.06% (a failed draw is retried on the next tick). Tools:
+  one Kimi seat per committee and forbid deactivating anyone. The weight
+  lever (Kimi at 3000, simulated 16% two-Kimi committees instead of 57%,
+  abort risk 0.06%) was tried for five minutes and reverted at the owner's
+  request: every juror is at 10000 (tx `A7BEYRdu…`). Tools:
   node_modules/.cache/set-eligibility.mjs (run inside the container when
   the Mac's RPC times out), weights.mjs, prevtx.mjs. The registry has 32
-  records = MAX_ELIGIBLE_SNAPSHOT. Remaining option if Kimi still loses:
-  lengthen the commit window by 60 to 120 s (verdict 8.4 to about 10 min).
+  records = MAX_ELIGIBLE_SNAPSHOT. What carries the load instead: the
+  450 s commit window since 22:26 (verdict about 10 min) and same-model
+  hedging since 00:15, both proven on claims #25 and #26 (5 of 5 seats).
 - Optional: move DNS off Vercel (the last Vercel dependency); a faucet
   top-up for the operator before a long demo day.
 

@@ -287,20 +287,44 @@ export default function AgentDetailPage({ params }: AgentDetailPageProps) {
               )}
             </div>
 
-            <div className={cn("grid gap-4", manifest.version === "3" && "lg:grid-cols-2")}>
-              {manifest.version === "3" && (
+            <div className={cn("grid gap-4", manifest.version !== "2" && "lg:grid-cols-2")}>
+              {(manifest.version === "3" ||
+                manifest.version === "4" ||
+                manifest.version === "5") && (
                 <div className="space-y-1.5">
                   <FieldLabel>Tool policy budgets</FieldLabel>
                   <dl className="grid gap-2 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
-                    {[
-                      ["Provider", manifest.toolPolicy.provider],
-                      ["Searches", String(manifest.toolPolicy.maxSearches)],
-                      ["Opens", String(manifest.toolPolicy.maxOpens)],
-                      ["Turns", String(manifest.toolPolicy.maxTurns)],
-                      ["Results per search", String(manifest.toolPolicy.resultsPerSearch)],
-                      ["Page slice chars", String(manifest.toolPolicy.pageSliceChars)],
-                      ["Max page chars", String(manifest.toolPolicy.maxPageChars)],
-                    ].map(([label, value]) => (
+                    {(() => {
+                      // Every research policy version (v2 to v4) shares the base
+                      // budgets; v3 adds the two-sided rules, v4 the batch size.
+                      const policy = manifest.toolPolicy as Record<string, unknown>;
+                      const rows: Array<[string, string]> = [
+                        ["Provider", String(policy.provider)],
+                        ["Policy version", String(policy.version)],
+                        ["Searches", String(policy.maxSearches)],
+                        ["Opens", String(policy.maxOpens)],
+                        ["Turns", String(policy.maxTurns)],
+                        ["Results per search", String(policy.resultsPerSearch)],
+                        ["Page slice chars", String(policy.pageSliceChars)],
+                        ["Max page chars", String(policy.maxPageChars)],
+                      ];
+                      if ("maxOpensPerTurn" in policy) {
+                        rows.splice(4, 0, ["Opens per turn", String(policy.maxOpensPerTurn)]);
+                      }
+                      if ("requireChallengeSearch" in policy) {
+                        rows.push([
+                          "Challenge search",
+                          policy.requireChallengeSearch ? "required" : "optional",
+                        ]);
+                      }
+                      if ("minCitationDomains" in policy) {
+                        rows.push(["Citation sites (min)", String(policy.minCitationDomains)]);
+                      }
+                      if ("minOpensPerSide" in policy) {
+                        rows.push(["Opens per side (min)", String(policy.minOpensPerSide)]);
+                      }
+                      return rows;
+                    })().map(([label, value]) => (
                       <div key={label} className="rounded-lg border border-border bg-surface p-2.5">
                         <dt className="text-[10px] font-semibold tracking-wide text-muted-foreground uppercase">
                           {label}

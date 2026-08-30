@@ -38,8 +38,10 @@ export default function PrivacyPage() {
         <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
           Submitted claims and sanitized evidence text are transmitted to LLM inference providers
           via GonkaRouter for jury deliberation. Inference prompts and model outputs are public
-          and audited to prevent adversarial prompt injection. Models never receive URLs, API
-          keys or transaction authority, and salts never leave the engine.
+          and audited to prevent adversarial prompt injection. Models never fetch anything
+          themselves and never receive API keys or transaction authority: every web search and
+          page open a juror requests is executed by the engine, recorded and hashed, and salts
+          and seal keys never leave the engine.
         </p>
       </Panel>
 

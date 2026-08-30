@@ -1519,7 +1519,9 @@ different interfaces, capability-shaped not ERC-721-shaped.
   agent_registry.move:53). That is a defensible non-goal, not an omission.
 - **No claim has ever run through the HOSTED app.** The 08-27 canary ran
   locally. A live end-to-end costs ~0.1 SUI and minutes; user was offered and
-  deferred. This is the last unproven link.
+  deferred. This is the last unproven link. SUPERSEDED 2026-08-30: dozens of
+  hosted claims have since run (docs/STATUS.md); a claim costs about
+  0.26 SUI plus 0.06 WAL.
 - **Pre-reveal vote exposure via Walrus: FIXED IN TREE 08-29 late (proof
   chain v2, uncommitted at the time of writing).** `juryRun` now seals the
   run bundle core (exact prompt, input, raw response, validated output,
@@ -1552,6 +1554,12 @@ different interfaces, capability-shaped not ERC-721-shaped.
   needed)" — contradicts the intended zkLogin submit gate.
 
 ## Environment facts (do NOT relearn)
+
+> SUPERSEDED 2026-08-30: the app moved from Vercel plus Neon to a single
+> Railway container with Railway Postgres; the Vercel project and Neon were
+> deleted (the domain's DNS zone stays in the Vercel account). The Vercel and
+> Neon facts below are history; the hosted ladder is 60/450/570/630/1080/1200 s.
+> Current operations: docs/CHECKPOINT-2026-08-30.md and docs/demo/runbook.md.
 
 - **`vercel env pull` REDACTS values for CLI-added vars** (proved with a probe
   var set to a known value → pulled back `""`). Integration-created vars

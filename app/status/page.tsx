@@ -142,7 +142,7 @@ export default function StatusPage() {
               <Row label="Modules">claim · jury · settlement · evidence</Row>
             </Panel>
             <Panel label="GonkaRouter inference" icon={Cpu} tone="primary">
-              <Row label="Catalog models">DeepSeek-V4 · Kimi-K2.6 · MiniMax-M2.7</Row>
+              <Row label="Catalog models">DeepSeek-V4-Flash · Kimi-K2.6 · MiniMax-M2.7</Row>
               <Row label="Diversity">≥3 model families required per jury</Row>
               <Row label="Max output tokens">4096</Row>
             </Panel>
@@ -222,7 +222,7 @@ export default function StatusPage() {
               tone="primary"
               action={<StatusPill tone="chain" label={`Mode ${status.gonkaMode}`} pulse={false} />}
             >
-              <Row label="Catalog models">DeepSeek-V4 · Kimi-K2.6 · MiniMax-M2.7</Row>
+              <Row label="Catalog models">DeepSeek-V4-Flash · Kimi-K2.6 · MiniMax-M2.7</Row>
               <Row label="Jury parallelism">5 concurrent agents</Row>
               <Row label="Adapter">Temperature 0 · strict JSON schema</Row>
               <Row label="Fail mode">Closed — malformed output never becomes a vote</Row>

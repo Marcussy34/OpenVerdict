@@ -148,7 +148,8 @@ export default function EvidenceDetailPage({ params }: EvidenceDetailPageProps) 
             All evidence is ingested through DNS-pinned, SSRF-safe proxies enforcing
             private-subnet blocks, size caps (≤2 MB) and HTML-to-text canonicalization before
             being committed to Walrus and referenced in jury inference prompts. Models never
-            receive URLs, keys or transaction authority.
+            fetch pages themselves and never receive keys or transaction authority; the pages
+            a juror asks to open are fetched, recorded and hashed by the engine.
           </p>
         </div>
       </div>

@@ -10,12 +10,12 @@ the two facts taken from memory are marked "to confirm".
 
 ## What our "sealing" is today, and what Seal is
 
-Today every juror run bundle is sealed by the engine with AES-256-GCM under a
-random per-run key (`lib/engine/runBundle.ts`, `SealedRunBundleV2`). The
+Before this design (until 2026-08-30 23:13) every juror run bundle was sealed
+only by the engine with AES-256-GCM under a random per-run key (`lib/engine/runBundle.ts`, `SealedRunBundleV2`). The
 sealed blob goes to Walrus before the commit; the commitment binds the bundle
 core; at reveal the engine publishes the key (`RunBundleSeal.keyHex`) and the
 verifier decrypts the sealed blob and compares it with the revealed core.
-This is our own envelope encryption, not Mysten's Seal.
+That is our own envelope encryption, not Mysten's Seal; it stays as it is, and the escrow below was added on top of it.
 
 Mysten Seal is decentralized secrets management: identity-based threshold
 encryption (Boneh-Franklin over BLS12-381) where independent key servers
