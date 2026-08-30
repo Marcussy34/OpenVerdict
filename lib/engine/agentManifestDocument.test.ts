@@ -4,8 +4,10 @@ import {
   DEFAULT_PROMPT_SPEC_V1,
   DEFAULT_PROMPT_SPEC_V2,
   DEFAULT_PROMPT_SPEC_V3,
+  DEFAULT_PROMPT_SPEC_V4,
   DEFAULT_TOOL_POLICY_V2,
   DEFAULT_TOOL_POLICY_V3,
+  DEFAULT_TOOL_POLICY_V4,
   promptSpecHash,
   toolPolicyHash,
 } from "../gonka/promptSpec";
@@ -103,5 +105,25 @@ describe("buildAgentManifestDocument", () => {
       promptSpec: DEFAULT_PROMPT_SPEC_V3,
       toolPolicy: DEFAULT_TOOL_POLICY_V3,
     }).manifestHash).toBe(built.manifestHash);
+  });
+
+  it("round-trips a v5 document with bound v4 hashes", () => {
+    const built = buildAgentManifestDocument({
+      ...base,
+      promptSpec: DEFAULT_PROMPT_SPEC_V4,
+      toolPolicy: DEFAULT_TOOL_POLICY_V4,
+    });
+
+    expect(built.document.version).toBe("5");
+    expect(built.promptHash).toBe(promptSpecHash(DEFAULT_PROMPT_SPEC_V4));
+    expect(built.toolPolicyHash).toBe(toolPolicyHash(DEFAULT_TOOL_POLICY_V4));
+    expect(parseAgentManifestDocument(built.bytes)).toEqual(built.document);
+    expect(
+      buildAgentManifestDocument({
+        ...base,
+        promptSpec: DEFAULT_PROMPT_SPEC_V4,
+        toolPolicy: DEFAULT_TOOL_POLICY_V4,
+      }).manifestHash,
+    ).toBe(built.manifestHash);
   });
 });

@@ -2,6 +2,13 @@
 
 import { useCallback, useState } from "react";
 import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { HashChip } from "@/components/viz/hash-chip";
 import { FieldLabel } from "@/components/viz/panel";
 import {
@@ -18,6 +25,7 @@ import {
   type BrowserRunProof,
   type RunProofCheck,
 } from "@/lib/verify/run-proof";
+import type { ReexecuteRunResult } from "@/lib/verify/reexecute";
 import { cn } from "@/lib/utils";
 import { ResearchTrail } from "@/components/claim/run-proof-research";
 import {
@@ -26,7 +34,10 @@ import {
   ProvenanceStrip,
   SystemPromptAndBudgets,
 } from "@/components/claim/run-proof-transparency";
-import type { TransparentRunProof } from "@/components/claim/run-proof-types";
+import type {
+  TransparentBundle,
+  TransparentRunProof,
+} from "@/components/claim/run-proof-types";
 
 function ProofValue({
   label,
@@ -99,6 +110,211 @@ function walrusAggregatorUrl(blobId: string): string | null {
     return `https://aggregator.walrus-mainnet.walrus.space/v1/blobs/${encodeURIComponent(blobId)}`;
   }
   return null;
+}
+
+async function reexecutionErrorMessage(response: Response): Promise<string> {
+  let message: string | undefined;
+  try {
+    const payload = (await response.json()) as { message?: unknown };
+    if (typeof payload.message === "string" && payload.message.trim()) {
+      message = payload.message;
+    }
+  } catch {
+    // Stable status-specific copy below is enough when the body is unavailable.
+  }
+
+  if (response.status === 409) return "This run has not been revealed yet";
+  if (response.status === 502) {
+    return message ?? "The model provider could not complete the re-run";
+  }
+  if (response.status === 403) {
+    return "Independent re-execution is disabled on this deployment";
+  }
+  if (response.status === 429) {
+    return "Too many re-execution requests. Try again shortly";
+  }
+  if (response.status === 404) return "This run proof is no longer available";
+  if (response.status === 503) return "The verification engine is not available";
+  return message ?? "The juror could not be re-run";
+}
+
+function verdictLabel(outcome: string | undefined, confidenceBps?: number) {
+  if (!outcome) return "Not recorded";
+  if (confidenceBps === undefined) return outcome;
+  return `${outcome} (${(confidenceBps / 100).toFixed(2)}%)`;
+}
+
+function ReexecuteRunBlock({
+  proof,
+  bundle,
+}: {
+  proof: TransparentRunProof;
+  bundle: TransparentBundle;
+}) {
+  const [result, setResult] = useState<ReexecuteRunResult | null>(null);
+  const [running, setRunning] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const reexecute = useCallback(async () => {
+    setRunning(true);
+    setError(null);
+    setResult(null);
+    try {
+      const response = await fetch(
+        `/api/claims/${encodeURIComponent(proof.claimId)}/runs/${encodeURIComponent(proof.runId)}/reexecute`,
+        { method: "POST", cache: "no-store" },
+      );
+      if (!response.ok) {
+        throw new Error(await reexecutionErrorMessage(response));
+      }
+      setResult((await response.json()) as ReexecuteRunResult);
+    } catch (reexecuteError) {
+      setError(
+        reexecuteError instanceof Error
+          ? reexecuteError.message
+          : "The juror could not be re-run",
+      );
+    } finally {
+      setRunning(false);
+    }
+  }, [proof.claimId, proof.runId]);
+
+  const canReexecute = Boolean(proof.claimId && proof.runId);
+
+  return (
+    <section
+      aria-labelledby={`reexecute-${proof.runId}`}
+      className="space-y-3 rounded-xl border border-border bg-surface p-3"
+    >
+      <div className="flex flex-wrap items-start gap-3">
+        <div className="min-w-0 flex-1">
+          <h3
+            id={`reexecute-${proof.runId}`}
+            className="text-sm font-semibold text-ocean"
+          >
+            Re-run this juror
+          </h3>
+          <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+            Send the revealed messages to the recorded model again at the same
+            recorded settings.
+          </p>
+        </div>
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => void reexecute()}
+          disabled={running || !canReexecute}
+          aria-busy={running}
+          className="min-h-[40px] font-semibold"
+        >
+          <Refresh
+            size="15"
+            variant="Bold"
+            className={cn(running && "motion-safe:animate-spin")}
+          />
+          {running ? "Re-running juror" : "Re-run this juror"}
+        </Button>
+      </div>
+
+      {!canReexecute && (
+        <p className="text-xs text-muted-foreground">
+          Claim and run ids are required for independent re-execution.
+        </p>
+      )}
+
+      {error && (
+        <div
+          role="alert"
+          className="flex items-start gap-2 rounded-lg border border-no/25 bg-no/6 p-3 text-xs text-no"
+        >
+          <Warning2 size="15" variant="Bold" className="mt-px shrink-0" />
+          {error}
+        </div>
+      )}
+
+      {result && (
+        <Card
+          size="sm"
+          className={cn(
+            result.matches.outcome
+              ? "ring-yes/30"
+              : "ring-unsure/35",
+          )}
+        >
+          <CardHeader>
+            <CardTitle
+              className={cn(
+                "flex items-center gap-2",
+                result.matches.outcome ? "text-yes" : "text-unsure",
+              )}
+            >
+              {result.matches.outcome ? (
+                <TickCircle size="16" variant="Bold" />
+              ) : (
+                <Warning2 size="16" variant="Bold" />
+              )}
+              {result.matches.outcome
+                ? "Matches the recorded verdict"
+                : "Differs from the recorded verdict"}
+            </CardTitle>
+            <CardDescription className="text-xs leading-relaxed">
+              A matching verdict is strong corroboration. A differing verdict is
+              a reason to look closer, not proof of tampering.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="grid gap-2 sm:grid-cols-2">
+              <div className="rounded-lg border border-border bg-surface p-2.5">
+                <FieldLabel>Recorded verdict</FieldLabel>
+                <p className="mt-1 text-sm font-semibold text-ocean">
+                  {verdictLabel(
+                    bundle.validatedOutput?.outcome,
+                    bundle.validatedOutput?.confidenceBps,
+                  )}
+                </p>
+              </div>
+              <div className="rounded-lg border border-border bg-surface p-2.5">
+                <FieldLabel>Fresh verdict</FieldLabel>
+                <p className="mt-1 text-sm font-semibold text-ocean">
+                  {verdictLabel(result.outcome, result.confidenceBps)}
+                </p>
+              </div>
+              <ProofValue
+                label="Recorded output hash"
+                value={proof.outputHash}
+                tone="chain"
+              />
+              <ProofValue
+                label="Fresh output hash"
+                value={result.outputHash}
+                tone={result.matches.outputHash ? "yes" : "muted"}
+              />
+              <ProofValue
+                label="Fresh served model"
+                value={result.servedModel}
+                tone={result.matches.servedModel ? "yes" : "muted"}
+              />
+              <ProofValue
+                label="Fresh gateway request id"
+                value={result.gatewayRequestId}
+              />
+              <ProofValue label="Fresh devshard id" value={result.devshardId} />
+              <ProofValue
+                label="Fresh system fingerprint"
+                value={result.systemFingerprint}
+              />
+              <div className="rounded-lg border border-border bg-card p-2.5 sm:col-span-2">
+                <FieldLabel>Fresh latency</FieldLabel>
+                <p className="mt-1 font-mono text-xs font-semibold text-ocean">
+                  {new Intl.NumberFormat("en-US").format(result.latencyMs)} ms
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+    </section>
+  );
 }
 
 export function RunProofDetails({ proof }: { proof: TransparentRunProof }) {
@@ -187,6 +403,12 @@ export function RunProofDetails({ proof }: { proof: TransparentRunProof }) {
               ))}
             </ul>
           )}
+
+          <ReexecuteRunBlock
+            key={proof.runId}
+            proof={proof}
+            bundle={bundle}
+          />
 
           <EverythingElse bundle={bundle} />
         </>

@@ -7,11 +7,14 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   DEFAULT_PROMPT_SPEC_V2,
   DEFAULT_PROMPT_SPEC_V3,
+  DEFAULT_PROMPT_SPEC_V4,
   DEFAULT_TOOL_POLICY_V2,
   DEFAULT_TOOL_POLICY_V3,
+  DEFAULT_TOOL_POLICY_V4,
   createFakeGonkaAdapter,
   promptSpecHash,
   toolPolicyHash,
+  type FakeAction,
   type FakeFailure,
 } from "../gonka";
 import {
@@ -21,6 +24,7 @@ import {
   toHex,
   type AgentManifest,
   type PublicRunBundleCoreV3,
+  type PublicRunBundleCoreV5,
   type SealedRunBundleV2,
 } from "../protocol";
 import { transcriptHash } from "../research";
@@ -276,6 +280,74 @@ describe("headless engine", () => {
       /manifest prompt hash does not match its prompt document/,
     );
     expect(setup.gonkaComplete).not.toHaveBeenCalled();
+  });
+
+  it("selects v4 research from v5 documents and seals bundle core v5", async () => {
+    const gateway = new FakeSuiGateway();
+    const outcomes = Array.from(
+      { length: 5 },
+      () => "UNSURE" as const,
+    );
+    const setup = await engineSetup(gateway, [outcomes], {
+      actions: [],
+      decisiveEvidence: [],
+    });
+    const { claimId } = await setup.engine.factCheckStart({
+      claim: "A v5 manifest selects batched research policy v4.",
+      text: "Local evidence.",
+      urls: [],
+    });
+    await setup.engine.selectCommittee(claimId);
+    await setup.engine.evidenceFreeze(claimId, 1);
+    const repository = createRepository(setup.db);
+    const agents = await repository.listAgentManifests();
+
+    for (const [index, agent] of agents.entries()) {
+      const built = buildAgentManifestDocument({
+        network: "localnet",
+        backingKind: "TESTNET_DEMO_ALLOWLIST",
+        humanBackingHash: agent.manifest.humanAttestationHash,
+        humanVerificationProvider: agent.manifest.humanVerificationProvider,
+        operationalOwner: agent.manifest.owner,
+        role: agent.role,
+        modelId: agent.manifest.modelId,
+        promptSpec: DEFAULT_PROMPT_SPEC_V4,
+        toolPolicy: DEFAULT_TOOL_POLICY_V4,
+        evidencePolicyId: EVIDENCE_POLICY_V1_LABEL,
+      });
+      const upload = await setup.walrus.put(built.bytes, {
+        identifier: `agent-${index}-manifest-v5.json`,
+      });
+      await repository.saveAgentManifest({
+        ...agent,
+        manifest: {
+          ...agent.manifest,
+          version: built.document.version,
+          manifestBlobId: upload.blobId,
+          manifestHash: built.manifestHash,
+          promptHash: built.promptHash,
+          toolPolicyHash: built.toolPolicyHash,
+          evidencePolicyHash: built.document.evidencePolicyHash,
+          registeredCheckpoint: agent.manifest.registeredCheckpoint + 1,
+        },
+      });
+    }
+
+    const jury = await setup.engine.juryRun(claimId, 1);
+    expect(jury.runs).toHaveLength(5);
+    expect(jury.runs.every((run) => run.status === "SCHEMA_VALID")).toBe(true);
+    const records = await repository.listInferenceRuns(claimId, 1);
+    const cores = records.map((record) =>
+      JSON.parse(record.audit.bundleCore ?? "null") as PublicRunBundleCoreV5,
+    );
+    expect(cores.every((core) => core.version === 5)).toBe(true);
+    expect(cores.every((core) => core.promptSpec.version === "4")).toBe(true);
+    expect(cores.every((core) => core.toolPolicy.version === "4")).toBe(true);
+    expect(
+      setup.gonkaComplete.mock.calls.every(
+        ([request]) => request.input.promptVersion === "4",
+      ),
+    ).toBe(true);
   });
 
   it("fails closed when a manifest tool policy hash differs", async () => {
@@ -1166,6 +1238,8 @@ async function engineSetup(
     promptHash?: `0x${string}`;
     toolPolicyHash?: `0x${string}`;
     failures?: Partial<Record<number, FakeFailure>>;
+    actions?: FakeAction[];
+    decisiveEvidence?: string[];
     /** Replaces the local store (for example a store with a retention clock). */
     walrus?: WalrusStore;
   } = {},
@@ -1186,6 +1260,10 @@ async function engineSetup(
           agentProfileId: agent.agentProfileId as `0x${string}`,
           outcome: "YES" as const,
           confidenceBps: 8_000,
+          ...(options.actions === undefined ? {} : { actions: options.actions }),
+          ...(options.decisiveEvidence === undefined
+            ? {}
+            : { decisiveEvidence: options.decisiveEvidence }),
           ...(options.failures?.[index] === undefined
             ? {}
             : { failure: options.failures[index] }),
@@ -1196,6 +1274,10 @@ async function engineSetup(
             agentProfileId: agent.agentProfileId as `0x${string}`,
             outcome: round[index] ?? "UNSURE",
             confidenceBps: 8_000,
+            ...(options.actions === undefined ? {} : { actions: options.actions }),
+            ...(options.decisiveEvidence === undefined
+              ? {}
+              : { decisiveEvidence: options.decisiveEvidence }),
           })),
         );
   const gonka = createFakeGonkaAdapter(fixtures);

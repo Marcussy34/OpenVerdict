@@ -6,7 +6,10 @@ import {
   composeSystemPrompt,
   toolPolicyHash,
 } from "../gonka/promptSpec";
-import { researchActionSchema } from "../gonka/schemas";
+import {
+  researchActionSchema,
+  researchActionV3Schema,
+} from "../gonka/schemas";
 import type {
   GonkaAttemptKind,
   GonkaAttemptRecord,
@@ -22,14 +25,17 @@ import type {
   OracleInferenceOutput,
   PromptSpecV2,
   PromptSpecV3,
+  PromptSpecV4,
   ProviderRequestRecord,
   ResearchAction,
   ResearchPageOrigin,
   ResearchTranscriptStep,
   ResearchTranscriptV1,
   ResearchToolErrorCode,
+  ResearchToolResult,
   ToolPolicyV2,
   ToolPolicyV3,
+  ToolPolicyV4,
 } from "../protocol/types";
 import {
   errorToolResult,
@@ -75,6 +81,39 @@ export interface PageStore {
     },
   ): Promise<PageStorePage>;
 }
+
+type ResearchPolicy = ToolPolicyV2 | ToolPolicyV3 | ToolPolicyV4;
+type ResearchSpec = PromptSpecV2 | PromptSpecV3 | PromptSpecV4;
+
+type BatchOpenTarget = {
+  requestedUrl: string;
+  normalized: string;
+  evidenceId: string;
+};
+
+type BatchOpenLookup = BatchOpenTarget &
+  (
+    | {
+        ok: true;
+        cached: boolean;
+        page: StoredPage | PageStorePage | undefined;
+      }
+    | { ok: false; code: "OPEN_FAILED"; message: string }
+  );
+
+type BatchOpenResolution = BatchOpenTarget &
+  (
+    | {
+        ok: true;
+        cached: boolean;
+        page: StoredPage | PageStorePage;
+      }
+    | {
+        ok: false;
+        code: "BUDGET_OPENS" | "OPEN_FAILED";
+        message: string;
+      }
+  );
 
 export type ResearchLoopFailureStatus =
   | "INVALID_SCHEMA"
@@ -140,9 +179,15 @@ function isCitationFailure(errors: readonly string[]): boolean {
   });
 }
 
+function isTwoSidedPolicy(
+  policy: ResearchPolicy,
+): policy is ToolPolicyV3 | ToolPolicyV4 {
+  return policy.version === "3" || policy.version === "4";
+}
+
 function parseAction(
   content: string,
-  policy: ToolPolicyV2 | ToolPolicyV3,
+  policy: ResearchPolicy,
 ): { ok: true; action: ResearchAction } | { ok: false; error: string } {
   if (policy.version === "2") return parseResearchAction(content);
   let decoded: unknown;
@@ -151,7 +196,27 @@ function parseAction(
   } catch {
     return { ok: false, error: "no parseable JSON object" };
   }
-  const parsed = researchActionSchema.safeParse(decoded);
+  if (
+    policy.version === "4" &&
+    typeof decoded === "object" &&
+    decoded !== null &&
+    "action" in decoded &&
+    decoded.action === "open" &&
+    "urls" in decoded &&
+    Array.isArray(decoded.urls)
+  ) {
+    const limit = Math.min(3, policy.maxOpensPerTurn);
+    if (decoded.urls.length > limit) {
+      return {
+        ok: false,
+        error: `open action exceeds maxOpensPerTurn; offending URL: ${String(decoded.urls[limit])}`,
+      };
+    }
+  }
+  const schema = policy.version === "3"
+    ? researchActionV3Schema
+    : researchActionSchema;
+  const parsed = schema.safeParse(decoded);
   if (!parsed.success) {
     return { ok: false, error: z.prettifyError(parsed.error) };
   }
@@ -163,8 +228,8 @@ export async function runResearchLoop(
   deps: {
     complete: GonkaCompletion;
     provider: ResearchProvider;
-    policy: ToolPolicyV2 | ToolPolicyV3;
-    spec: PromptSpecV2 | PromptSpecV3;
+    policy: ResearchPolicy;
+    spec: ResearchSpec;
     input: OracleInferenceInput;
     manifest: AgentManifest;
     claimId: string;
@@ -241,13 +306,13 @@ export async function runResearchLoop(
         canonicalWalrusBlobId: page.canonicalWalrusBlobId,
         totalChars: page.totalChars,
         truncated: page.truncated,
-        ...(policy.version === "3" && sides.length > 0 ? { sides } : {}),
+        ...(isTwoSidedPolicy(policy) && sides.length > 0 ? { sides } : {}),
       };
     }),
     citations,
     counts: {
       ...counts,
-      ...(policy.version === "3" ? { challengeSearches } : {}),
+      ...(isTwoSidedPolicy(policy) ? { challengeSearches } : {}),
     },
   });
 
@@ -272,6 +337,7 @@ export async function runResearchLoop(
     modelRequestId: string,
     action: ResearchTranscriptStep["action"],
     result: ResearchTranscriptStep["result"],
+    batch?: NonNullable<ResearchTranscriptStep["batch"]>,
   ): void => {
     steps.push({
       index: steps.length,
@@ -279,6 +345,7 @@ export async function runResearchLoop(
       startedAtMs,
       completedAtMs: now(),
       modelRequestId,
+      ...(batch === undefined ? {} : { batch }),
       action,
       result,
     });
@@ -341,7 +408,7 @@ export async function runResearchLoop(
       messages[0] = {
         role: "system",
         content:
-          policy.version === "3"
+          isTwoSidedPolicy(policy)
             ? composeSystemPrompt(deps.spec, policy)
             : `${composeSystemPrompt(deps.spec, policy)}${deps.spec.jsonFallbackSuffix}`,
       };
@@ -394,7 +461,7 @@ export async function runResearchLoop(
 
     const researchAction = parsed.action;
     if (researchAction.action === "search") {
-      if (policy.version === "3" && researchAction.intent === undefined) {
+      if (isTwoSidedPolicy(policy) && researchAction.intent === undefined) {
         completion.attempt.audit.status = "INVALID_SCHEMA";
         recordToolError({
           turn,
@@ -421,7 +488,7 @@ export async function runResearchLoop(
 
       counts.searches += 1;
       if (
-        policy.version === "3" &&
+        isTwoSidedPolicy(policy) &&
         researchAction.intent === "challenge"
       ) {
         challengeSearches += 1;
@@ -439,7 +506,7 @@ export async function runResearchLoop(
           policy.snippetChars,
         );
         if (
-          policy.version === "3" &&
+          isTwoSidedPolicy(policy) &&
           researchAction.intent === "challenge"
         ) {
           completedChallengeSearches += 1;
@@ -448,7 +515,7 @@ export async function runResearchLoop(
           const normalized = normalizeUrl(result.url);
           seen.add(normalized);
           foundBySearch.add(normalized);
-          if (policy.version === "3") {
+          if (isTwoSidedPolicy(policy)) {
             const intent = researchAction.intent;
             if (intent === undefined) {
               return fail("INVALID_SCHEMA", SEARCH_INTENT_REQUIRED_MESSAGE);
@@ -483,9 +550,256 @@ export async function runResearchLoop(
 
     if (researchAction.action === "open") {
       completion.attempt.audit.status = "SCHEMA_VALID";
+      if (policy.version === "4" && researchAction.urls !== undefined) {
+        const requestedUrls = researchAction.urls;
+        if (requestedUrls.length > policy.maxOpensPerTurn) {
+          completion.attempt.audit.status = "INVALID_SCHEMA";
+          recordToolError({
+            turn,
+            startedAtMs: stepStart,
+            modelRequestId,
+            action: researchAction,
+            code: "INVALID_ACTION",
+            message: `open batch exceeds maxOpensPerTurn; offending URL: ${String(requestedUrls[policy.maxOpensPerTurn])}`,
+          });
+          continue;
+        }
+
+        const targets: BatchOpenTarget[] = [];
+        const normalizedInBatch = new Set<string>();
+        let invalidBatch:
+          | { code: "INVALID_ACTION" | "URL_NOT_SEEN"; message: string }
+          | undefined;
+        for (const requestedUrl of requestedUrls) {
+          let normalized: string;
+          try {
+            normalized = normalizeUrl(requestedUrl);
+          } catch {
+            invalidBatch = {
+              code: "URL_NOT_SEEN",
+              message: `URL was not seen in this run: ${requestedUrl}`,
+            };
+            break;
+          }
+          if (normalizedInBatch.has(normalized)) {
+            invalidBatch = {
+              code: "INVALID_ACTION",
+              message: `duplicate open URL: ${requestedUrl}`,
+            };
+            break;
+          }
+          if (!seen.has(normalized)) {
+            invalidBatch = {
+              code: "URL_NOT_SEEN",
+              message: `URL was not seen in this run: ${requestedUrl}`,
+            };
+            break;
+          }
+          normalizedInBatch.add(normalized);
+          targets.push({
+            requestedUrl,
+            normalized,
+            evidenceId: discoveredEvidenceId(
+              deps.claimId,
+              deps.phase,
+              normalized,
+            ),
+          });
+        }
+        if (invalidBatch !== undefined) {
+          if (invalidBatch.code === "INVALID_ACTION") {
+            completion.attempt.audit.status = "INVALID_SCHEMA";
+          }
+          recordToolError({
+            turn,
+            startedAtMs: stepStart,
+            modelRequestId,
+            action: researchAction,
+            code: invalidBatch.code,
+            message: invalidBatch.message,
+          });
+          continue;
+        }
+
+        // Every requested page consumes one v4 open slot before fetching.
+        const remainingOpens = Math.max(0, policy.maxOpens - counts.opens);
+        const allowedCount = Math.min(targets.length, remainingOpens);
+        const allowedTargets = targets.slice(0, allowedCount);
+        counts.opens += allowedTargets.length;
+
+        const lookups = await Promise.all(
+          allowedTargets.map(async (target): Promise<BatchOpenLookup> => {
+            const page = opened.find(
+              (candidate) => candidate.evidenceId === target.evidenceId,
+            );
+            if (page !== undefined) {
+              return { ...target, ok: true, cached: true, page };
+            }
+            try {
+              const storedPage = await deps.pages.lookup(target.evidenceId);
+              return {
+                ...target,
+                ok: true,
+                cached: storedPage !== undefined,
+                page: storedPage,
+              };
+            } catch {
+              return {
+                ...target,
+                ok: false,
+                code: "OPEN_FAILED",
+                message: `research page lookup failed: ${target.requestedUrl}`,
+              };
+            }
+          }),
+        );
+
+        // Provider opens start together; Promise.all preserves request order.
+        const attempted = await Promise.all(
+          lookups.map(async (lookup): Promise<BatchOpenResolution> => {
+            if (!lookup.ok) return lookup;
+            if (lookup.page !== undefined) {
+              return { ...lookup, page: lookup.page };
+            }
+            try {
+              const providerPage = await deps.provider.open(
+                lookup.requestedUrl,
+                { timeoutMs: 60_000 },
+              );
+              const page = await deps.pages.store(providerPage, {
+                evidenceId: lookup.evidenceId,
+                normalizedUrl: lookup.normalized,
+                maxPageChars: policy.maxPageChars,
+              });
+              return { ...lookup, page };
+            } catch {
+              return {
+                requestedUrl: lookup.requestedUrl,
+                normalized: lookup.normalized,
+                evidenceId: lookup.evidenceId,
+                ok: false,
+                code: "OPEN_FAILED",
+                message: `research page open failed: ${lookup.requestedUrl}`,
+              };
+            }
+          }),
+        );
+        const resolutions: BatchOpenResolution[] = [
+          ...attempted,
+          ...targets.slice(allowedCount).map((target) => ({
+            ...target,
+            ok: false as const,
+            code: "BUDGET_OPENS" as const,
+            message: `open budget exhausted: ${target.requestedUrl}`,
+          })),
+        ];
+        const openManyPages: Extract<
+          ResearchToolResult,
+          { tool: "open_many" }
+        >["pages"] = [];
+        const from = researchAction.from ?? 0;
+
+        for (const [index, resolution] of resolutions.entries()) {
+          const batch = { size: requestedUrls.length, position: index + 1 };
+          if (!resolution.ok) {
+            recordStep(
+              turn,
+              stepStart,
+              modelRequestId,
+              researchAction,
+              {
+                tool: "error",
+                code: resolution.code,
+                message: resolution.message,
+              },
+              batch,
+            );
+            openManyPages.push({
+              url: resolution.requestedUrl,
+              error: resolution.code,
+            });
+            continue;
+          }
+
+          let page: StoredPage;
+          if ("ref" in resolution.page) {
+            page = resolution.page;
+          } else {
+            // Refs follow request order even when network responses race.
+            page = {
+              ...resolution.page,
+              ref: `p${opened.length + 1}`,
+            };
+            opened.push(page);
+          }
+          const origin: ResearchPageOrigin = foundBySearch.has(
+            resolution.normalized,
+          )
+            ? "SEARCH"
+            : "SUBMITTED";
+          origins.set(resolution.evidenceId, origin);
+          openedUrls.set(resolution.evidenceId, resolution.normalized);
+
+          const toolResult = openToolResult(
+            {
+              url: page.url,
+              evidenceId: resolution.evidenceId,
+              ref: page.ref,
+              text: page.text,
+              totalChars: page.totalChars,
+              truncated: page.truncated,
+            },
+            from,
+            policy.pageSliceChars,
+          );
+          if (toolResult.tool !== "open") {
+            return fail(
+              "INVALID_SCHEMA",
+              "open tool result had an invalid shape",
+            );
+          }
+          recordStep(
+            turn,
+            stepStart,
+            modelRequestId,
+            researchAction,
+            {
+              tool: "open",
+              cached: resolution.cached,
+              evidenceId: resolution.evidenceId,
+              origin,
+              from,
+              chars: toolResult.chars,
+              totalChars: page.totalChars,
+              contentHash: page.contentHash,
+              canonicalWalrusBlobId: page.canonicalWalrusBlobId,
+            },
+            batch,
+          );
+          openManyPages.push({
+            url: toolResult.url,
+            evidenceId: toolResult.evidenceId,
+            ref: toolResult.ref,
+            from: toolResult.from,
+            chars: toolResult.chars,
+            totalChars: toolResult.totalChars,
+            truncated: toolResult.truncated,
+            text: toolResult.text,
+          });
+        }
+
+        push(toolResultContent({ tool: "open_many", pages: openManyPages }));
+        forceAnswerBeforeLastTurn(turn);
+        continue;
+      }
+
+      if (researchAction.url === undefined) {
+        return fail("INVALID_SCHEMA", "single open action omitted its URL");
+      }
+      const requestedUrl = researchAction.url;
       let normalized: string;
       try {
-        normalized = normalizeUrl(researchAction.url);
+        normalized = normalizeUrl(requestedUrl);
       } catch {
         recordToolError({
           turn,
@@ -493,7 +807,10 @@ export async function runResearchLoop(
           modelRequestId,
           action: researchAction,
           code: "URL_NOT_SEEN",
-          message: "URL was not seen in this run",
+          message:
+            policy.version === "4"
+              ? `URL was not seen in this run: ${requestedUrl}`
+              : "URL was not seen in this run",
         });
         continue;
       }
@@ -504,7 +821,10 @@ export async function runResearchLoop(
           modelRequestId,
           action: researchAction,
           code: "URL_NOT_SEEN",
-          message: "URL was not seen in this run",
+          message:
+            policy.version === "4"
+              ? `URL was not seen in this run: ${requestedUrl}`
+              : "URL was not seen in this run",
         });
         continue;
       }
@@ -547,7 +867,7 @@ export async function runResearchLoop(
           }
           counts.opens += 1;
           try {
-            const providerPage = await deps.provider.open(researchAction.url, {
+            const providerPage = await deps.provider.open(requestedUrl, {
               timeoutMs: 60_000,
             });
             storedPage = await deps.pages.store(providerPage, {
@@ -642,7 +962,7 @@ export async function runResearchLoop(
 
     const openedResultUrls = new Set(openedUrls.values());
     const challengeRequired =
-      policy.version === "3" &&
+      isTwoSidedPolicy(policy) &&
       decisiveOutcome &&
       !researchRequired &&
       (completedChallengeSearches === 0 ||
@@ -681,7 +1001,7 @@ export async function runResearchLoop(
     let corroborationRequired = false;
     if (
       validation.ok &&
-      policy.version === "3" &&
+      isTwoSidedPolicy(policy) &&
       decisiveOutcome &&
       !researchRequired &&
       !challengeRequired
@@ -711,7 +1031,7 @@ export async function runResearchLoop(
     }
 
     if (
-      policy.version === "3" &&
+      isTwoSidedPolicy(policy) &&
       decisiveOutcome &&
       !researchRequired &&
       !challengeRequired &&

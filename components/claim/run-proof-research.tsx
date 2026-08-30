@@ -162,12 +162,20 @@ function ResearchStepCard({
   const assistantMessages = messages.filter(
     (message) => message.role === "assistant",
   );
-  const modelInput = userMessages[stepIndex]?.content;
+  // A batch open (bundle v5) records one step per page, so the conversation
+  // is addressed by the recorded turn, not the step position.
+  const batch =
+    typeof step.batch?.size === "number" && typeof step.batch?.position === "number"
+      ? { size: step.batch.size, position: step.batch.position }
+      : null;
+  const turnIndex =
+    typeof step.turn === "number" && step.turn > 0 ? step.turn - 1 : stepIndex;
+  const modelInput = userMessages[turnIndex]?.content;
   const attemptResponse = attempt?.response ?? attempt?.rawResponse;
   const rawResponse =
     attemptResponse ?? (stepIndex === stepCount - 1 ? finalRawResponse : undefined);
   const modelOutput =
-    assistantMessages[stepIndex]?.content ?? responseContent(rawResponse);
+    assistantMessages[turnIndex]?.content ?? responseContent(rawResponse);
   const intent =
     typeof action.intent === "string"
       ? action.intent
@@ -207,6 +215,7 @@ function ResearchStepCard({
         </div>
         <CardDescription className="font-mono text-[11px] break-all">
           Turn {step.turn ?? stepIndex + 1}, request {step.modelRequestId || "not recorded"}
+          {batch && `, page ${batch.position} of ${batch.size} opened together`}
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3 py-3">

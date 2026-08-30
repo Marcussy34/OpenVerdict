@@ -3,8 +3,10 @@ import { describe, expect, it } from "vitest";
 import {
   DEFAULT_PROMPT_SPEC_V2,
   DEFAULT_PROMPT_SPEC_V3,
+  DEFAULT_PROMPT_SPEC_V4,
   DEFAULT_TOOL_POLICY_V2,
   DEFAULT_TOOL_POLICY_V3,
+  DEFAULT_TOOL_POLICY_V4,
   composeSystemPrompt,
   promptSpecHash,
   toolPolicyHash,
@@ -14,6 +16,7 @@ import { blake2b256, toHex } from "../protocol";
 import type {
   PublicRunBundleCoreV3,
   PublicRunBundleCoreV4,
+  PublicRunBundleCoreV5,
   ResearchTranscriptV1,
 } from "../protocol/types";
 import { transcriptHash } from "../research";
@@ -207,6 +210,54 @@ describe("run bundle sealing", () => {
     expect(core.version).toBe(4);
     expect((core as PublicRunBundleCoreV4).promptSpec.version).toBe("3");
     expect((core as PublicRunBundleCoreV4).toolPolicy.version).toBe("3");
+  });
+
+  it("builds a v5 core from a v4 prompt and policy", () => {
+    const expected = makeCore();
+    const runResult: GonkaRunResult = {
+      type: "gonka-run-result",
+      attempts: [],
+      response: expected.rawResponse,
+      request: {
+        ...expected.request,
+        messages: [
+          {
+            role: "system",
+            content: composeSystemPrompt(
+              DEFAULT_PROMPT_SPEC_V4,
+              DEFAULT_TOOL_POLICY_V4,
+            ),
+          },
+          ...expected.request.messages.slice(1),
+        ],
+      },
+      gateway: expected.gateway,
+    };
+    const core = buildRunBundleCore({
+      promptSpec: DEFAULT_PROMPT_SPEC_V4,
+      toolPolicy: DEFAULT_TOOL_POLICY_V4,
+      input: { ...expected.input, promptVersion: "4" },
+      runResult,
+      validatedOutput: expected.validatedOutput,
+      audit: {
+        ...expected.audit,
+        promptHash: promptSpecHash(DEFAULT_PROMPT_SPEC_V4),
+      },
+      runHash: expected.runHash,
+      transcript: {
+        ...expected.transcript,
+        policyHash: toolPolicyHash(DEFAULT_TOOL_POLICY_V4),
+        counts: {
+          ...expected.transcript.counts,
+          challengeSearches: 0,
+        },
+      },
+    });
+
+    expect(core.version).toBe(5);
+    expect((core as PublicRunBundleCoreV5).promptSpec.version).toBe("4");
+    expect((core as PublicRunBundleCoreV5).toolPolicy.version).toBe("4");
+    expect((core as PublicRunBundleCoreV5).toolPolicy.maxOpensPerTurn).toBe(3);
   });
 
   it("round-trips through AES-256-GCM and binds the core hash", () => {

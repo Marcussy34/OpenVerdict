@@ -6,9 +6,11 @@ import {
   composeSystemPrompt,
   DEFAULT_PROMPT_SPEC_V2,
   DEFAULT_PROMPT_SPEC_V3,
+  DEFAULT_PROMPT_SPEC_V4,
   DEFAULT_PROMPT_SPEC_V1,
   DEFAULT_TOOL_POLICY_V2,
   DEFAULT_TOOL_POLICY_V3,
+  DEFAULT_TOOL_POLICY_V4,
   promptSpecHash,
   toolPolicyHash,
 } from "../gonka/promptSpec";
@@ -20,14 +22,17 @@ import type {
   PublicRunBundleCoreV2,
   PublicRunBundleCoreV3,
   PublicRunBundleCoreV4,
+  PublicRunBundleCoreV5,
   PublicRunBundleV2,
   PublicRunBundleV3,
   PublicRunBundleV4,
+  PublicRunBundleV5,
   ResearchTranscriptV1,
 } from "../protocol/types";
 import {
   isV3Bundle,
   isV4Bundle,
+  isV5Bundle,
   proofFromBundle,
   recomputeRunProof,
 } from "./run-proof";
@@ -467,6 +472,80 @@ function makeProofV4() {
   return { proof: proofFromBundle(bundle, sealed), sealed };
 }
 
+function makeProofV5() {
+  const { proof: v4Proof } = makeProofV4();
+  if (!v4Proof.bundle || !isV4Bundle(v4Proof.bundle)) {
+    throw new Error("Expected a v4 bundle");
+  }
+  const v4Bundle = v4Proof.bundle;
+  const transcript = structuredClone(v4Bundle.transcript);
+  const openSteps = transcript.steps.filter(
+    (step) => step.action.action === "open",
+  );
+  openSteps.forEach((step, index) => {
+    step.turn = 4;
+    step.modelRequestId = "batched-open";
+    step.batch = { size: openSteps.length, position: index + 1 };
+  });
+  transcript.policyHash = toolPolicyHash(DEFAULT_TOOL_POLICY_V4);
+  const input = { ...v4Bundle.input, promptVersion: "4" as const };
+  const promptHash = promptSpecHash(DEFAULT_PROMPT_SPEC_V4);
+  const inputHash = toHex(blake2b256(canonicalJsonBytes(input)));
+  const outputHash = toHex(
+    blake2b256(canonicalJsonBytes(v4Bundle.validatedOutput)),
+  );
+  const audit: InferenceRunAudit = {
+    ...v4Bundle.audit,
+    promptHash,
+    inputHash,
+    outputHash,
+    toolTranscriptHash: toHex(blake2b256(canonicalJsonBytes(transcript))),
+  };
+  const core: PublicRunBundleCoreV5 = {
+    version: 5,
+    kind: v4Bundle.kind,
+    runId: v4Bundle.runId,
+    claimId: v4Bundle.claimId,
+    phase: v4Bundle.phase,
+    agentProfileId: v4Bundle.agentProfileId,
+    jurySeatId: v4Bundle.jurySeatId,
+    promptSpec: DEFAULT_PROMPT_SPEC_V4,
+    promptHash,
+    toolPolicy: DEFAULT_TOOL_POLICY_V4,
+    toolPolicyHash: toolPolicyHash(DEFAULT_TOOL_POLICY_V4),
+    transcript,
+    input,
+    inputHash,
+    request: {
+      ...v4Bundle.request,
+      messages: [
+        {
+          role: "system",
+          content: composeSystemPrompt(
+            DEFAULT_PROMPT_SPEC_V4,
+            DEFAULT_TOOL_POLICY_V4,
+          ),
+        },
+        ...v4Bundle.request.messages.slice(1),
+      ],
+    },
+    attempts: v4Bundle.attempts,
+    rawResponse: v4Bundle.rawResponse,
+    gateway: v4Bundle.gateway,
+    validatedOutput: v4Bundle.validatedOutput,
+    outputHash,
+    audit,
+    runHash: runHashFromAudit(audit),
+    verify: v4Bundle.verify,
+  };
+  const { sealed, seal } = sealRunBundle(core, { runId: core.runId });
+  const bundle: PublicRunBundleV5 = {
+    ...core,
+    seal: { ...seal, sealedBlobId: "sealed-blob" },
+  };
+  return { proof: proofFromBundle(bundle, sealed), sealed };
+}
+
 describe("browser run proof", () => {
   it("keeps verifying v2 bundles with five checks", async () => {
     const { proof } = makeProof();
@@ -512,6 +591,58 @@ describe("browser run proof", () => {
       "sealedCore",
     ]);
     expect(checks.every((check) => check.ok)).toBe(true);
+  });
+
+  it("verifies v5 research and opens-per-turn checks", async () => {
+    const { proof } = makeProofV5();
+    const checks = await recomputeRunProof(proof);
+
+    expect(checks.map((check) => check.key)).toEqual([
+      "promptHash",
+      "toolPolicyHash",
+      "systemPrompt",
+      "inputHash",
+      "outputHash",
+      "toolTranscriptHash",
+      "citations",
+      "challengeSearch",
+      "bothSidesOpened",
+      "citationSites",
+      "counterEvidenceSummary",
+      "opensPerTurn",
+      "runHash",
+      "sealedCore",
+    ]);
+    expect(checks.every((check) => check.ok)).toBe(true);
+  });
+
+  it("flags a v5 turn with more open steps than policy allows", async () => {
+    const { proof } = makeProofV5();
+    if (!proof.bundle || !isV5Bundle(proof.bundle)) {
+      throw new Error("Expected a v5 bundle");
+    }
+    const openStep = proof.bundle.transcript.steps.find(
+      (step) => step.action.action === "open",
+    );
+    if (openStep === undefined) throw new Error("Expected an open step");
+    proof.bundle.transcript.steps.push(
+      {
+        ...structuredClone(openStep),
+        index: proof.bundle.transcript.steps.length,
+        batch: { size: 4, position: 3 },
+      },
+      {
+        ...structuredClone(openStep),
+        index: proof.bundle.transcript.steps.length + 1,
+        batch: { size: 4, position: 4 },
+      },
+    );
+
+    const checks = await recomputeRunProof(proof);
+    expect(checks.find((check) => check.key === "opensPerTurn")).toMatchObject({
+      label: "Opens per turn within policy",
+      ok: false,
+    });
   });
 
   it("flags a v4 transcript without a challenge search", async () => {

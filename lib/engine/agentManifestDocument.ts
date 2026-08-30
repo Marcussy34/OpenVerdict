@@ -9,13 +9,16 @@ import type {
   AgentManifestDocumentV2,
   AgentManifestDocumentV3,
   AgentManifestDocumentV4,
+  AgentManifestDocumentV5,
   HexString,
   PromptSpec,
   PromptSpecV1,
   PromptSpecV2,
   PromptSpecV3,
+  PromptSpecV4,
   ToolPolicyV2,
   ToolPolicyV3,
+  ToolPolicyV4,
 } from "../protocol/types";
 
 const utf8 = new TextEncoder();
@@ -63,6 +66,10 @@ const promptSpecV3Schema = promptSpecV2Schema
   .extend({ version: z.literal("3") })
   .strict() satisfies z.ZodType<PromptSpecV3>;
 
+const promptSpecV4Schema = promptSpecV2Schema
+  .extend({ version: z.literal("4") })
+  .strict() satisfies z.ZodType<PromptSpecV4>;
+
 const toolPolicyV2Schema = z
   .object({
     version: z.literal("2"),
@@ -87,6 +94,13 @@ const toolPolicyV3Schema = toolPolicyV2Schema
     minOpensPerSide: z.number().int().positive(),
   })
   .strict() satisfies z.ZodType<ToolPolicyV3>;
+
+const toolPolicyV4Schema = toolPolicyV3Schema
+  .extend({
+    version: z.literal("4"),
+    maxOpensPerTurn: z.number().int().positive(),
+  })
+  .strict() satisfies z.ZodType<ToolPolicyV4>;
 
 const agentManifestDocumentV2Schema = z
   .object({
@@ -141,10 +155,19 @@ const agentManifestDocumentV4Schema = agentManifestDocumentV3Schema
   })
   .strict() satisfies z.ZodType<AgentManifestDocumentV4>;
 
+const agentManifestDocumentV5Schema = agentManifestDocumentV4Schema
+  .extend({
+    version: z.literal("5"),
+    promptSpec: promptSpecV4Schema,
+    toolPolicy: toolPolicyV4Schema,
+  })
+  .strict() satisfies z.ZodType<AgentManifestDocumentV5>;
+
 const agentManifestDocumentSchema = z.discriminatedUnion("version", [
   agentManifestDocumentV2Schema,
   agentManifestDocumentV3Schema,
   agentManifestDocumentV4Schema,
+  agentManifestDocumentV5Schema,
 ]);
 
 export type BuildAgentManifestDocumentParams = {
@@ -156,7 +179,7 @@ export type BuildAgentManifestDocumentParams = {
   role: string;
   modelId: string;
   promptSpec: PromptSpec;
-  toolPolicy?: ToolPolicyV2 | ToolPolicyV3;
+  toolPolicy?: ToolPolicyV2 | ToolPolicyV3 | ToolPolicyV4;
   evidencePolicyId: string;
 };
 
@@ -178,7 +201,29 @@ export function buildAgentManifestDocument(
   let document: AgentManifestDocument;
   let policyHash: HexString;
 
-  if (params.promptSpec.version === "3") {
+  if (params.promptSpec.version === "4") {
+    if (params.toolPolicy?.version !== "4") {
+      throw new Error("a v4 prompt spec requires a v4 tool policy");
+    }
+    policyHash = toolPolicyHash(params.toolPolicy);
+    document = {
+      version: "5",
+      network: params.network,
+      backingKind: params.backingKind,
+      humanBackingHash: params.humanBackingHash,
+      humanVerificationProvider: params.humanVerificationProvider,
+      operationalOwner: params.operationalOwner,
+      role: params.role,
+      modelId: params.modelId,
+      providerId: "gonkarouter",
+      promptSpec: params.promptSpec,
+      promptHash,
+      toolPolicy: params.toolPolicy,
+      toolPolicyHash: policyHash,
+      evidencePolicyId: params.evidencePolicyId,
+      evidencePolicyHash,
+    };
+  } else if (params.promptSpec.version === "3") {
     if (params.toolPolicy?.version !== "3") {
       throw new Error("a v3 prompt spec requires a v3 tool policy");
     }

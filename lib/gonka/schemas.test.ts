@@ -170,6 +170,12 @@ describe("oracle schemas with research fields", () => {
     ).toThrow();
   });
 
+  it("accepts promptVersion 4", () => {
+    expect(() =>
+      oracleInferenceInputSchema.parse({ ...makeInput(), promptVersion: "4" }),
+    ).not.toThrow();
+  });
+
   it("accepts optional search intent and rejects unknown intent values", () => {
     expect(
       researchActionSchema.parse({
@@ -189,6 +195,58 @@ describe("oracle schemas with research fields", () => {
         intent: "neutral",
       }),
     ).toThrow();
+  });
+
+  it("accepts exactly one of url or urls for open actions", () => {
+    expect(
+      researchActionSchema.parse({
+        action: "open",
+        url: "https://example.com/one",
+        from: 0,
+      }),
+    ).toEqual({
+      action: "open",
+      url: "https://example.com/one",
+      from: 0,
+    });
+    expect(
+      researchActionSchema.parse({
+        action: "open",
+        urls: [
+          "https://example.com/one",
+          "https://example.com/two",
+          "https://example.com/three",
+        ],
+      }),
+    ).toMatchObject({ action: "open", urls: expect.any(Array) });
+
+    for (const invalid of [
+      { action: "open" },
+      {
+        action: "open",
+        url: "https://example.com/one",
+        urls: ["https://example.com/two"],
+      },
+      { action: "open", urls: [] },
+      {
+        action: "open",
+        urls: [
+          "https://example.com/one",
+          "https://example.com/two",
+          "https://example.com/three",
+          "https://example.com/four",
+        ],
+      },
+      {
+        action: "open",
+        urls: [
+          "https://example.com/one",
+          "https://example.com/one",
+        ],
+      },
+    ]) {
+      expect(() => researchActionSchema.parse(invalid)).toThrow();
+    }
   });
 
   it("allows ids from the extra allowed set (pages opened in the run)", () => {

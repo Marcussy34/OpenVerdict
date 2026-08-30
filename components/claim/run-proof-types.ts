@@ -56,6 +56,8 @@ export type TransparentResearchAction = {
   action?: string;
   query?: string;
   url?: string;
+  /** Policy v4 batch open: up to three urls opened in one turn. */
+  urls?: string[];
   from?: number;
   intent?: string;
   sides?: string[] | string;
@@ -95,6 +97,8 @@ export type TransparentResearchStep = {
   startedAtMs?: number;
   completedAtMs?: number;
   modelRequestId?: string;
+  /** Set on every page step of a batch open (bundle v5): its place in the batch. */
+  batch?: { size?: number; position?: number };
   action?: TransparentResearchAction;
   result?: TransparentResearchResult;
   [key: string]: unknown;
@@ -222,7 +226,11 @@ export function isProofRecord(value: unknown): value is ProofRecord {
 export function isTransparentBundle(value: unknown): value is TransparentBundle {
   if (!isProofRecord(value)) return false;
   return (
-    (value.version === 2 || value.version === 3 || value.version === 4) &&
+    // Bundle core v5 (batched opens) has the same shape plus batch markers.
+    (value.version === 2 ||
+      value.version === 3 ||
+      value.version === 4 ||
+      value.version === 5) &&
     value.kind === "run-bundle" &&
     typeof value.runId === "string"
   );

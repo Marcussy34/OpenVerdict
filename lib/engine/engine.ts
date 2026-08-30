@@ -35,16 +35,19 @@ import {
   type AgentManifestDocument,
   type AgentManifestDocumentV3,
   type AgentManifestDocumentV4,
+  type AgentManifestDocumentV5,
   type InferenceRunAudit,
   type OracleInferenceInput,
   type OracleInferenceOutput,
   type PromptSpecV2,
   type PromptSpecV3,
+  type PromptSpecV4,
   type PublicRunBundle,
   type PublicRunBundleCore,
   type SealedRunBundleV2,
   type ToolPolicyV2,
   type ToolPolicyV3,
+  type ToolPolicyV4,
   type VoteOutcome,
 } from "../protocol";
 import {
@@ -152,6 +155,11 @@ type SeatResearchConfig =
       bundleVersion: 4;
       spec: PromptSpecV3;
       policy: ToolPolicyV3;
+    }
+  | {
+      bundleVersion: 5;
+      spec: PromptSpecV4;
+      policy: ToolPolicyV4;
     };
 
 class ResearchLoopError extends GonkaRunError {
@@ -623,33 +631,43 @@ class OpenVerdictEngine implements Engine {
       const agent = await this.requiredAgent(seat.agentProfileId);
       if (
         agent.manifest.version === "3" ||
-        agent.manifest.version === "4"
+        agent.manifest.version === "4" ||
+        agent.manifest.version === "5"
       ) {
         const document = await this.agentManifestDocument(seat.agentProfileId);
         if (
           document === null ||
           document.version !== agent.manifest.version ||
-          (document.version !== "3" && document.version !== "4")
+          (document.version !== "3" &&
+            document.version !== "4" &&
+            document.version !== "5")
         ) {
           throw new EngineValidationError(
             `agent ${seat.agentProfileId} manifest document is missing or has the wrong version`,
           );
         }
         this.assertResearchManifestHashes(agent.manifest, document);
-        researchConfigs.set(
-          seat.agentProfileId,
-          document.version === "4"
-            ? {
-                bundleVersion: 4,
-                spec: document.promptSpec,
-                policy: document.toolPolicy,
-              }
-            : {
-                bundleVersion: 3,
-                spec: document.promptSpec,
-                policy: document.toolPolicy,
-              },
-        );
+        let researchConfig: SeatResearchConfig;
+        if (document.version === "5") {
+          researchConfig = {
+            bundleVersion: 5,
+            spec: document.promptSpec,
+            policy: document.toolPolicy,
+          };
+        } else if (document.version === "4") {
+          researchConfig = {
+            bundleVersion: 4,
+            spec: document.promptSpec,
+            policy: document.toolPolicy,
+          };
+        } else {
+          researchConfig = {
+            bundleVersion: 3,
+            spec: document.promptSpec,
+            policy: document.toolPolicy,
+          };
+        }
+        researchConfigs.set(seat.agentProfileId, researchConfig);
         continue;
       }
 
@@ -1496,7 +1514,8 @@ class OpenVerdictEngine implements Engine {
       !record ||
       (record.manifest.version !== "2" &&
         record.manifest.version !== "3" &&
-        record.manifest.version !== "4")
+        record.manifest.version !== "4" &&
+        record.manifest.version !== "5")
     ) {
       return null;
     }
@@ -2131,17 +2150,26 @@ class OpenVerdictEngine implements Engine {
         runHash,
         transcript: loop.transcript,
       };
-      const core = researchConfig.bundleVersion === 4
-        ? buildRunBundleCore({
-            ...bundleParams,
-            promptSpec: researchConfig.spec,
-            toolPolicy: researchConfig.policy,
-          })
-        : buildRunBundleCore({
-            ...bundleParams,
-            promptSpec: researchConfig.spec,
-            toolPolicy: researchConfig.policy,
-          });
+      let core: PublicRunBundleCore;
+      if (researchConfig.bundleVersion === 5) {
+        core = buildRunBundleCore({
+          ...bundleParams,
+          promptSpec: researchConfig.spec,
+          toolPolicy: researchConfig.policy,
+        });
+      } else if (researchConfig.bundleVersion === 4) {
+        core = buildRunBundleCore({
+          ...bundleParams,
+          promptSpec: researchConfig.spec,
+          toolPolicy: researchConfig.policy,
+        });
+      } else {
+        core = buildRunBundleCore({
+          ...bundleParams,
+          promptSpec: researchConfig.spec,
+          toolPolicy: researchConfig.policy,
+        });
+      }
       const bundleCore = new TextDecoder().decode(canonicalCoreBytes(core));
       const { sealed, seal } = sealRunBundle(core, { runId: audit.runId });
       const sealedUpload = await this.#walrus.put(
@@ -2700,7 +2728,10 @@ class OpenVerdictEngine implements Engine {
 
   private assertResearchManifestHashes(
     manifest: AgentManifest,
-    document: AgentManifestDocumentV3 | AgentManifestDocumentV4,
+    document:
+      | AgentManifestDocumentV3
+      | AgentManifestDocumentV4
+      | AgentManifestDocumentV5,
   ): void {
     if (document.modelId !== manifest.modelId) {
       throw new EngineValidationError(
@@ -3379,7 +3410,7 @@ function oracleInput(
   artifacts: EvidenceArtifactRecord[],
   role: string,
   runId: string,
-  promptVersion: "2" | "3",
+  promptVersion: "2" | "3" | "4",
 ): OracleInferenceInput {
   return {
     protocolVersion: "1.0",

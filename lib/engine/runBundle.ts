@@ -16,14 +16,17 @@ import type {
   OracleInferenceOutput,
   PromptSpecV2,
   PromptSpecV3,
+  PromptSpecV4,
   PublicRunBundleCore,
   PublicRunBundleCoreV3,
   PublicRunBundleCoreV4,
+  PublicRunBundleCoreV5,
   ResearchTranscriptV1,
   RunBundleSeal,
   SealedRunBundleV2,
   ToolPolicyV2,
   ToolPolicyV3,
+  ToolPolicyV4,
 } from "../protocol/types";
 
 const utf8 = new TextEncoder();
@@ -43,6 +46,7 @@ export type BuildRunBundleCoreParams = BuildRunBundleCoreCommonParams &
   (
     | { promptSpec: PromptSpecV2; toolPolicy: ToolPolicyV2 }
     | { promptSpec: PromptSpecV3; toolPolicy: ToolPolicyV3 }
+    | { promptSpec: PromptSpecV4; toolPolicy: ToolPolicyV4 }
   );
 
 export type SealRunBundleOptions = {
@@ -63,8 +67,14 @@ export function buildRunBundleCore(
   },
 ): PublicRunBundleCoreV4;
 export function buildRunBundleCore(
+  params: BuildRunBundleCoreCommonParams & {
+    promptSpec: PromptSpecV4;
+    toolPolicy: ToolPolicyV4;
+  },
+): PublicRunBundleCoreV5;
+export function buildRunBundleCore(
   params: BuildRunBundleCoreParams,
-): PublicRunBundleCoreV3 | PublicRunBundleCoreV4 {
+): PublicRunBundleCoreV3 | PublicRunBundleCoreV4 | PublicRunBundleCoreV5 {
   const verify: PublicRunBundleCoreV3["verify"] = {
     promptHash: "blake2b256(canonicalJson(promptSpec))",
     toolPolicyHash: "blake2b256(canonicalJson(toolPolicy))",
@@ -98,6 +108,17 @@ export function buildRunBundleCore(
     runHash: params.runHash,
     verify,
   };
+  if (params.promptSpec.version === "4") {
+    if (params.toolPolicy.version !== "4") {
+      throw new Error("a v4 prompt spec requires a v4 tool policy");
+    }
+    return {
+      ...shared,
+      version: 5,
+      promptSpec: params.promptSpec,
+      toolPolicy: params.toolPolicy,
+    };
+  }
   if (params.promptSpec.version === "3") {
     if (params.toolPolicy.version !== "3") {
       throw new Error("a v3 prompt spec requires a v3 tool policy");

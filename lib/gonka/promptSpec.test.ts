@@ -4,8 +4,10 @@ import {
   DEFAULT_PROMPT_SPEC_V1,
   DEFAULT_PROMPT_SPEC_V2,
   DEFAULT_PROMPT_SPEC_V3,
+  DEFAULT_PROMPT_SPEC_V4,
   DEFAULT_TOOL_POLICY_V2,
   DEFAULT_TOOL_POLICY_V3,
+  DEFAULT_TOOL_POLICY_V4,
   buildPrimaryMessages,
   buildRepairMessages,
   buildResearchMessages,
@@ -169,5 +171,52 @@ describe("prompt spec v3 and tool policy v3", () => {
     expect(toolPolicyHash(DEFAULT_TOOL_POLICY_V3)).toMatch(
       /^0x[0-9a-f]{64}$/,
     );
+  });
+});
+
+describe("prompt spec v4 and tool policy v4", () => {
+  it("changes only the batched-open method and repair instructions", () => {
+    expect(DEFAULT_PROMPT_SPEC_V4.systemPrompt).toContain(
+      '{"action":"open","urls":["<up to three urls you already saw in results or in submittedUrls>"],"from":0} opens those pages in one turn; you receive {"tool":"open_many","pages":[{"evidenceId","ref","url","from","chars","totalChars","truncated","text"} or {"url","error"}]}; a single {"action":"open","url":"<url>","from":0} still works; use "from" to read further into a long page.',
+    );
+    expect(DEFAULT_PROMPT_SPEC_V4.systemPrompt).toContain(
+      "Open the two or three most credible results of a search together instead of one per turn.",
+    );
+    expect(DEFAULT_PROMPT_SPEC_V4.repairSystemPrompt).toBe(
+      `${DEFAULT_PROMPT_SPEC_V3.repairSystemPrompt} An open action names either one url or up to three urls.`,
+    );
+  });
+
+  it("binds stable v3 and v4 prompt and policy hashes", () => {
+    expect(promptSpecHash(DEFAULT_PROMPT_SPEC_V3)).toBe(
+      "0x07cdea1d5b6bbbca7d2d2a11c6a18d6d009ccb8ab2bdd88239ee92ba4404998b",
+    );
+    expect(toolPolicyHash(DEFAULT_TOOL_POLICY_V3)).toBe(
+      "0xeba334fdf0b1ca19d3ce7961ff6f1bb100f2e3e798df4def5edb33a37e60d40d",
+    );
+    expect(promptSpecHash(DEFAULT_PROMPT_SPEC_V4)).toBe(
+      "0x7257117d5b4d02b8c8de5e70d62f6856143d7f20225084a111645f3557a40b14",
+    );
+    expect(toolPolicyHash(DEFAULT_TOOL_POLICY_V4)).toBe(
+      "0x8da9ec666479f784378c079cef16246ff0d29e8b789be66fc64853c1365c2e7c",
+    );
+  });
+
+  it("composes the v4 prompt with a three-page turn limit", () => {
+    expect(DEFAULT_TOOL_POLICY_V4).toMatchObject({
+      version: "4",
+      maxOpensPerTurn: 3,
+    });
+    const composed = composeSystemPrompt(
+      DEFAULT_PROMPT_SPEC_V4,
+      DEFAULT_TOOL_POLICY_V4,
+    );
+    expect(
+      buildResearchMessages(
+        DEFAULT_PROMPT_SPEC_V4,
+        DEFAULT_TOOL_POLICY_V4,
+        makeInput({ promptVersion: "4" }),
+      )[0]?.content,
+    ).toBe(composed);
   });
 });

@@ -231,10 +231,10 @@ export default function VerifyPage() {
       <PageHeader
         eyebrow="Zero server trust"
         title="Independent verifier"
-        description="Recompute vote commitments, run hashes, sealed bundles, and consensus Truth Scores inside your browser. Only run proof fetching calls the engine."
+        description="Recompute vote commitments, run hashes, sealed bundles, and consensus Truth Scores inside your browser. Proof fetching and optional juror re-runs use the observer API."
         icon={ShieldTick}
         badges={<ExperimentalTag />}
-        actions={<MetaTag tone="chain">Runs client-side</MetaTag>}
+        actions={<MetaTag tone="chain">Core checks run client-side</MetaTag>}
       />
 
       <Tabs defaultValue="commitment" className="space-y-5">

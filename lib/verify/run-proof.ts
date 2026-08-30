@@ -9,6 +9,7 @@ import type {
   PublicRunBundle,
   PublicRunBundleV3,
   PublicRunBundleV4,
+  PublicRunBundleV5,
   SealedRunBundleV2,
 } from "../protocol/types";
 
@@ -33,6 +34,7 @@ export type RunProofCheck = {
     | "bothSidesOpened"
     | "citationSites"
     | "counterEvidenceSummary"
+    | "opensPerTurn"
     | "runHash"
     | "sealedCore";
   label: string;
@@ -89,10 +91,22 @@ export function isV4Bundle(
   return bundle.version === 4;
 }
 
+export function isV5Bundle(
+  bundle: PublicRunBundle,
+): bundle is PublicRunBundleV5 {
+  return bundle.version === 5;
+}
+
 function isResearchBundle(
   bundle: PublicRunBundle,
-): bundle is PublicRunBundleV3 | PublicRunBundleV4 {
-  return bundle.version === 3 || bundle.version === 4;
+): bundle is PublicRunBundleV3 | PublicRunBundleV4 | PublicRunBundleV5 {
+  return bundle.version === 3 || bundle.version === 4 || bundle.version === 5;
+}
+
+function isTwoSidedResearchBundle(
+  bundle: PublicRunBundle,
+): bundle is PublicRunBundleV4 | PublicRunBundleV5 {
+  return bundle.version === 4 || bundle.version === 5;
 }
 
 /** Mirror the engine run identifier used for one claim seat and phase. */
@@ -289,7 +303,7 @@ export async function recomputeRunProof(
       },
     );
 
-    if (isV4Bundle(bundle)) {
+    if (isTwoSidedResearchBundle(bundle)) {
       const challengeSearchSteps = bundle.transcript.steps.filter(
         (step) =>
           step.action.action === "search" &&
@@ -374,6 +388,30 @@ export async function recomputeRunProof(
           ok: counterEvidenceSummaryOk,
         },
       );
+
+      if (isV5Bundle(bundle)) {
+        const opensByTurn = new Map<number, number>();
+        for (const step of bundle.transcript.steps) {
+          if (step.action.action !== "open") continue;
+          opensByTurn.set(step.turn, (opensByTurn.get(step.turn) ?? 0) + 1);
+        }
+        const violatingTurns = [...opensByTurn.entries()].filter(
+          ([, count]) => count > bundle.toolPolicy.maxOpensPerTurn,
+        );
+        const maximumObserved = Math.max(0, ...opensByTurn.values());
+        checks.push({
+          key: "opensPerTurn",
+          label: "Opens per turn within policy",
+          expected: `At most ${bundle.toolPolicy.maxOpensPerTurn} open steps per turn`,
+          actual: `${maximumObserved} maximum open steps in one turn`,
+          ok: violatingTurns.length === 0,
+          ...(violatingTurns.length === 0
+            ? {}
+            : {
+                detail: `Turns over policy: ${violatingTurns.map(([turn]) => turn).join(", ")}`,
+              }),
+        });
+      }
     }
   }
 

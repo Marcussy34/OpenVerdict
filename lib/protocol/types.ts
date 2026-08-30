@@ -123,7 +123,7 @@ export type OracleInferenceInput = {
   protocolVersion: "1.0";
   runId: string;
   agentRole: string;
-  promptVersion: "1" | "2" | "3";
+  promptVersion: "1" | "2" | "3" | "4";
   submission: {
     kind: "TEXT" | "URL" | "TEXT_AND_URL";
     submittedTextHash?: string;
@@ -285,7 +285,12 @@ export type PromptSpecV2 = {
   responseFormat: "json_object";
 };
 export type PromptSpecV3 = Omit<PromptSpecV2, "version"> & { version: "3" };
-export type PromptSpec = PromptSpecV1 | PromptSpecV2 | PromptSpecV3;
+export type PromptSpecV4 = Omit<PromptSpecV3, "version"> & { version: "4" };
+export type PromptSpec =
+  | PromptSpecV1
+  | PromptSpecV2
+  | PromptSpecV3
+  | PromptSpecV4;
 
 export type ToolPolicyV1 = { version: "1"; tools: [] };
 /** Research budgets; every value is hashed into the manifest's toolPolicyHash. */
@@ -308,7 +313,15 @@ export type ToolPolicyV3 = Omit<ToolPolicyV2, "version"> & {
   minCitationDomains: number;
   minOpensPerSide: number;
 };
-export type ToolPolicy = ToolPolicyV1 | ToolPolicyV2 | ToolPolicyV3;
+export type ToolPolicyV4 = Omit<ToolPolicyV3, "version"> & {
+  version: "4";
+  maxOpensPerTurn: number;
+};
+export type ToolPolicy =
+  | ToolPolicyV1
+  | ToolPolicyV2
+  | ToolPolicyV3
+  | ToolPolicyV4;
 
 export type AgentManifestDocumentV3 = Omit<
   AgentManifestDocumentV2,
@@ -318,10 +331,15 @@ export type AgentManifestDocumentV4 = Omit<
   AgentManifestDocumentV3,
   "version" | "promptSpec" | "toolPolicy"
 > & { version: "4"; promptSpec: PromptSpecV3; toolPolicy: ToolPolicyV3 };
+export type AgentManifestDocumentV5 = Omit<
+  AgentManifestDocumentV4,
+  "version" | "promptSpec" | "toolPolicy"
+> & { version: "5"; promptSpec: PromptSpecV4; toolPolicy: ToolPolicyV4 };
 export type AgentManifestDocument =
   | AgentManifestDocumentV2
   | AgentManifestDocumentV3
-  | AgentManifestDocumentV4;
+  | AgentManifestDocumentV4
+  | AgentManifestDocumentV5;
 
 export type ResearchSearchResult = {
   rank: number;
@@ -354,7 +372,8 @@ export type ResearchAction =
       query: string;
       intent?: "support" | "challenge";
     }
-  | { action: "open"; url: string; from?: number }
+  | { action: "open"; url: string; urls?: never; from?: number }
+  | { action: "open"; url?: never; urls: string[]; from?: number }
   | { action: "answer"; output: OracleInferenceOutput };
 
 export type ResearchToolErrorCode =
@@ -371,6 +390,22 @@ export type ResearchToolErrorCode =
   | "CHALLENGE_REQUIRED"
   | "CORROBORATION_REQUIRED";
 
+export type ResearchOpenToolPage = {
+  url: string;
+  evidenceId: string;
+  ref: string;
+  from: number;
+  chars: number;
+  totalChars: number;
+  truncated: boolean;
+  text: string;
+};
+
+export type ResearchOpenToolPageError = {
+  url: string;
+  error: ResearchToolErrorCode;
+};
+
 export type ResearchToolResult =
   | {
       tool: "search";
@@ -383,16 +418,10 @@ export type ResearchToolResult =
         publishedAt?: string;
       }>;
     }
+  | ({ tool: "open" } & ResearchOpenToolPage)
   | {
-      tool: "open";
-      url: string;
-      evidenceId: string;
-      ref: string;
-      from: number;
-      chars: number;
-      totalChars: number;
-      truncated: boolean;
-      text: string;
+      tool: "open_many";
+      pages: Array<ResearchOpenToolPage | ResearchOpenToolPageError>;
     }
   | {
       tool: "error";
@@ -407,6 +436,7 @@ export type ResearchTranscriptStep = {
   startedAtMs: number;
   completedAtMs: number;
   modelRequestId: string;
+  batch?: { size: number; position: number };
   action: ResearchAction | { action: "invalid"; content: string };
   result:
     | {
@@ -475,11 +505,24 @@ export type PublicRunBundleCoreV4 = Omit<
 export type PublicRunBundleV4 = PublicRunBundleCoreV4 & {
   seal: RunBundleSeal;
 };
+export type PublicRunBundleCoreV5 = Omit<
+  PublicRunBundleCoreV4,
+  "version" | "promptSpec" | "toolPolicy"
+> & {
+  version: 5;
+  promptSpec: PromptSpecV4;
+  toolPolicy: ToolPolicyV4;
+};
+export type PublicRunBundleV5 = PublicRunBundleCoreV5 & {
+  seal: RunBundleSeal;
+};
 export type PublicRunBundleCore =
   | PublicRunBundleCoreV2
   | PublicRunBundleCoreV3
-  | PublicRunBundleCoreV4;
+  | PublicRunBundleCoreV4
+  | PublicRunBundleCoreV5;
 export type PublicRunBundle =
   | PublicRunBundleV2
   | PublicRunBundleV3
-  | PublicRunBundleV4;
+  | PublicRunBundleV4
+  | PublicRunBundleV5;

@@ -5,8 +5,10 @@ import { makeInput, makeManifest, makeOutput } from "../gonka/fixtures.test-util
 import {
   DEFAULT_PROMPT_SPEC_V2,
   DEFAULT_PROMPT_SPEC_V3,
+  DEFAULT_PROMPT_SPEC_V4,
   DEFAULT_TOOL_POLICY_V2,
   DEFAULT_TOOL_POLICY_V3,
+  DEFAULT_TOOL_POLICY_V4,
   composeSystemPrompt,
 } from "../gonka/promptSpec";
 import type {
@@ -19,9 +21,11 @@ import type {
   HexString,
   PromptSpecV2,
   PromptSpecV3,
+  PromptSpecV4,
   ProviderRequestRecord,
   ToolPolicyV2,
   ToolPolicyV3,
+  ToolPolicyV4,
 } from "../protocol/types";
 import { normalizeUrl } from "./actions";
 import { createFakeResearchProvider } from "./fake";
@@ -177,6 +181,10 @@ function v3Policy(overrides: Partial<ToolPolicyV3> = {}): ToolPolicyV3 {
   return { ...DEFAULT_TOOL_POLICY_V3, ...overrides };
 }
 
+function v4Policy(overrides: Partial<ToolPolicyV4> = {}): ToolPolicyV4 {
+  return { ...DEFAULT_TOOL_POLICY_V4, ...overrides };
+}
+
 function inputWithSubmittedUrl(url: string) {
   return makeInput({
     promptVersion: "2",
@@ -310,8 +318,8 @@ function storedPage(evidenceId: string, url: string): PageStorePage {
 function loopDependencies(options: {
   complete: GonkaCompletion;
   provider?: ResearchProvider;
-  policy?: ToolPolicyV2 | ToolPolicyV3;
-  spec?: PromptSpecV2 | PromptSpecV3;
+  policy?: ToolPolicyV2 | ToolPolicyV3 | ToolPolicyV4;
+  spec?: PromptSpecV2 | PromptSpecV3 | PromptSpecV4;
   input?: ReturnType<typeof makeInput>;
   pages?: PageStore;
   searchCache?: SearchCache;
@@ -1015,6 +1023,286 @@ describe("research loop", () => {
       valid: true,
       errors: [],
     });
+  });
+
+  it("opens three v4 pages in parallel and returns one ordered open_many result", async () => {
+    const query = "batch sources";
+    const urls = Array.from(
+      { length: 3 },
+      (_, index) => `https://fake.evidence.test/batch-sources/${index + 1}`,
+    );
+    const baseProvider = createFakeResearchProvider();
+    let activeOpens = 0;
+    let maximumActiveOpens = 0;
+    const open = vi.fn(async (url: string, options: { timeoutMs: number }) => {
+      activeOpens += 1;
+      maximumActiveOpens = Math.max(maximumActiveOpens, activeOpens);
+      await Promise.resolve();
+      try {
+        return await baseProvider.open(url, options);
+      } finally {
+        activeOpens -= 1;
+      }
+    });
+    const provider: ResearchProvider = { ...baseProvider, open };
+    const script = scriptedCompletion([
+      action({ action: "search", query, intent: "support" }),
+      action({ action: "open", urls, from: 0 }),
+      unsureAnswer(),
+    ]);
+
+    const result = await runResearchLoop(
+      loopDependencies({
+        complete: script.complete,
+        provider,
+        policy: v4Policy(),
+        spec: DEFAULT_PROMPT_SPEC_V4,
+        input: makeInput({ promptVersion: "4" }),
+      }),
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(open).toHaveBeenCalledTimes(3);
+    expect(maximumActiveOpens).toBe(3);
+    expect(result.transcript.steps.slice(1, 4).map((step) => step.batch)).toEqual([
+      { size: 3, position: 1 },
+      { size: 3, position: 2 },
+      { size: 3, position: 3 },
+    ]);
+    expect(result.transcript.steps.slice(1, 4).map((step) => step.turn)).toEqual([
+      2,
+      2,
+      2,
+    ]);
+    expect(
+      new Set(
+        result.transcript.steps
+          .slice(1, 4)
+          .map((step) => step.modelRequestId),
+      ).size,
+    ).toBe(1);
+    expect(result.transcript.opened.map((page) => page.sides)).toEqual([
+      ["support"],
+      ["support"],
+      ["support"],
+    ]);
+    expect(result.transcript.counts).toEqual({
+      searches: 1,
+      opens: 3,
+      turns: 3,
+      challengeSearches: 0,
+    });
+    const openManyMessage = script.requests[2]?.messages.findLast(
+      (message) =>
+        message.role === "user" && message.content.includes('"tool":"open_many"'),
+    );
+    expect(JSON.parse(openManyMessage?.content ?? "null")).toMatchObject({
+      tool: "open_many",
+      pages: [
+        { url: urls[0], ref: "p1" },
+        { url: urls[1], ref: "p2" },
+        { url: urls[2], ref: "p3" },
+      ],
+    });
+  });
+
+  it("refuses a fourth v4 URL without spending open budget", async () => {
+    const query = "four sources";
+    const urls = Array.from(
+      { length: 4 },
+      (_, index) => `https://fake.evidence.test/four-sources/${index + 1}`,
+    );
+    const fourthUrl = urls[3];
+    if (fourthUrl === undefined) throw new Error("expected a fourth URL");
+    const baseProvider = createFakeResearchProvider();
+    const open = vi.fn(baseProvider.open);
+    const script = scriptedCompletion([
+      action({ action: "search", query, intent: "support" }),
+      action({ action: "open", urls }),
+      unsureAnswer(),
+    ]);
+
+    const result = await runResearchLoop(
+      loopDependencies({
+        complete: script.complete,
+        provider: { ...baseProvider, open },
+        policy: v4Policy(),
+        spec: DEFAULT_PROMPT_SPEC_V4,
+        input: makeInput({ promptVersion: "4" }),
+      }),
+    );
+
+    expect(result.ok).toBe(true);
+    expect(open).not.toHaveBeenCalled();
+    expect(result.transcript.steps[1]?.result).toMatchObject({
+      tool: "error",
+      code: "INVALID_ACTION",
+      message: expect.stringContaining(fourthUrl),
+    });
+    expect(result.transcript.counts.opens).toBe(0);
+  });
+
+  it("opens only the v4 batch pages allowed by the remaining budget", async () => {
+    const query = "budgeted sources";
+    const urls = Array.from(
+      { length: 3 },
+      (_, index) => `https://fake.evidence.test/budgeted-sources/${index + 1}`,
+    );
+    const baseProvider = createFakeResearchProvider();
+    const open = vi.fn(baseProvider.open);
+    const script = scriptedCompletion([
+      action({ action: "search", query, intent: "support" }),
+      action({ action: "open", urls }),
+      unsureAnswer(),
+    ]);
+
+    const result = await runResearchLoop(
+      loopDependencies({
+        complete: script.complete,
+        provider: { ...baseProvider, open },
+        policy: v4Policy({ maxOpens: 2 }),
+        spec: DEFAULT_PROMPT_SPEC_V4,
+        input: makeInput({ promptVersion: "4" }),
+      }),
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(open).toHaveBeenCalledTimes(2);
+    expect(result.opened).toHaveLength(2);
+    expect(result.transcript.counts.opens).toBe(2);
+    expect(result.transcript.steps[3]?.result).toMatchObject({
+      tool: "error",
+      code: "BUDGET_OPENS",
+    });
+    const openManyMessage = script.requests[2]?.messages.findLast(
+      (message) =>
+        message.role === "user" && message.content.includes('"tool":"open_many"'),
+    );
+    expect(JSON.parse(openManyMessage?.content ?? "null")).toMatchObject({
+      tool: "open_many",
+      pages: [
+        { url: urls[0], ref: "p1" },
+        { url: urls[1], ref: "p2" },
+        { url: urls[2], error: "BUDGET_OPENS" },
+      ],
+    });
+  });
+
+  it("keeps a single v4 URL on the existing open result path", async () => {
+    const query = "single v4 source";
+    const url = "https://fake.evidence.test/single-v4-source/1";
+    const script = scriptedCompletion([
+      action({ action: "search", query, intent: "support" }),
+      action({ action: "open", url, from: 0 }),
+      unsureAnswer(),
+    ]);
+
+    const result = await runResearchLoop(
+      loopDependencies({
+        complete: script.complete,
+        policy: v4Policy(),
+        spec: DEFAULT_PROMPT_SPEC_V4,
+        input: makeInput({ promptVersion: "4" }),
+      }),
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.transcript.steps[1]?.batch).toBeUndefined();
+    expect(result.transcript.steps[1]?.result.tool).toBe("open");
+    const openMessage = script.requests[2]?.messages.findLast(
+      (message) =>
+        message.role === "user" && message.content.includes('"tool":"open"'),
+    );
+    expect(JSON.parse(openMessage?.content ?? "null")).toMatchObject({
+      tool: "open",
+      url,
+      ref: "p1",
+    });
+  });
+
+  it("rejects duplicate and unseen v4 batches before spending budget", async () => {
+    const submittedUrl = "https://fake.evidence.test/submitted/1";
+    const unseenUrl = "https://fake.evidence.test/unseen/1";
+    const cases = [
+      {
+        urls: [submittedUrl, `${submittedUrl}/`],
+        code: "INVALID_ACTION",
+        offending: `${submittedUrl}/`,
+      },
+      {
+        urls: [submittedUrl, unseenUrl],
+        code: "URL_NOT_SEEN",
+        offending: unseenUrl,
+      },
+    ] as const;
+
+    for (const testCase of cases) {
+      const baseProvider = createFakeResearchProvider();
+      const open = vi.fn(baseProvider.open);
+      const script = scriptedCompletion([
+        action({ action: "open", urls: testCase.urls }),
+        unsureAnswer(),
+      ]);
+      const result = await runResearchLoop(
+        loopDependencies({
+          complete: script.complete,
+          provider: { ...baseProvider, open },
+          policy: v4Policy(),
+          spec: DEFAULT_PROMPT_SPEC_V4,
+          input: makeInput({
+            promptVersion: "4",
+            submission: { kind: "URL", submittedUrls: [submittedUrl] },
+          }),
+        }),
+      );
+
+      expect(result.ok).toBe(true);
+      expect(open).not.toHaveBeenCalled();
+      expect(result.transcript.steps[0]?.result).toMatchObject({
+        tool: "error",
+        code: testCase.code,
+        message: expect.stringContaining(testCase.offending),
+      });
+      expect(result.transcript.counts.opens).toBe(0);
+    }
+  });
+
+  it("keeps v3 policy on the single-url open envelope", async () => {
+    const query = "legacy v3 batch";
+    const baseProvider = createFakeResearchProvider();
+    const open = vi.fn(baseProvider.open);
+    const script = scriptedCompletion([
+      action({ action: "search", query, intent: "support" }),
+      action({
+        action: "open",
+        urls: [
+          "https://fake.evidence.test/legacy-v3-batch/1",
+          "https://fake.evidence.test/legacy-v3-batch/2",
+        ],
+      }),
+      unsureAnswer(),
+    ]);
+
+    const result = await runResearchLoop(
+      loopDependencies({
+        complete: script.complete,
+        provider: { ...baseProvider, open },
+        policy: v3Policy(),
+        spec: DEFAULT_PROMPT_SPEC_V3,
+        input: makeInput({ promptVersion: "3" }),
+      }),
+    );
+
+    expect(result.ok).toBe(true);
+    expect(open).not.toHaveBeenCalled();
+    expect(result.transcript.steps[1]?.result).toMatchObject({
+      tool: "error",
+      code: "INVALID_ACTION",
+    });
+    expect(result.transcript.counts.opens).toBe(0);
   });
 
   it("keeps v2 searches without intent unchanged", async () => {

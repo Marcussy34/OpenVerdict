@@ -6,10 +6,12 @@ import type {
   PromptSpecV1,
   PromptSpecV2,
   PromptSpecV3,
+  PromptSpecV4,
   ProviderRequestRecord,
   ToolPolicy,
   ToolPolicyV2,
   ToolPolicyV3,
+  ToolPolicyV4,
 } from "../protocol/types";
 import { canonicalJsonBytes, canonicalJsonString } from "./canonical";
 
@@ -85,6 +87,11 @@ export const DEFAULT_TOOL_POLICY_V2: ToolPolicyV2 = {
   maxLoopMs: 600_000,
 };
 
+const PROMPT_SPEC_V3_OPEN_ACTION =
+  '{"action":"open","url":"<a url you already saw in results or in submittedUrls>","from":0} opens a page; you receive {"tool":"open","evidenceId","ref","url","from","chars","totalChars","truncated","text"}; use "from" to read further into a long page.';
+const PROMPT_SPEC_V3_METHOD =
+  "Method: run at least one support search and at least one challenge search, open the most credible result of each side, prefer primary sources (official announcements, original documents, block explorers, court or government records) over aggregators and blogs, corroborate with pages from at least two different sites, and answer UNSURE when credible sources conflict or the evidence is insufficient.";
+
 export const DEFAULT_PROMPT_SPEC_V3: PromptSpecV3 = {
   version: "3",
   providerId: "gonkarouter",
@@ -93,9 +100,9 @@ export const DEFAULT_PROMPT_SPEC_V3: PromptSpecV3 = {
     "You are one juror on a five-seat fact-checking committee. You receive a claim, its resolution criteria, and any submitter-provided evidence excerpts as JSON.",
     "Reply with EXACTLY ONE JSON object per turn and nothing else. Three actions exist:",
     '{"action":"search","query":"<3 to 200 characters>","intent":"support" or "challenge"} runs a web search: intent "support" looks for evidence that the claim is true as stated, intent "challenge" looks for evidence that it is false, disputed, outdated, or misstated; you receive {"tool":"search","results":[{"n","title","url","snippet"}]}.',
-    '{"action":"open","url":"<a url you already saw in results or in submittedUrls>","from":0} opens a page; you receive {"tool":"open","evidenceId","ref","url","from","chars","totalChars","truncated","text"}; use "from" to read further into a long page.',
+    PROMPT_SPEC_V3_OPEN_ACTION,
     '{"action":"answer","output":{...}} ends your research.',
-    "Method: run at least one support search and at least one challenge search, open the most credible result of each side, prefer primary sources (official announcements, original documents, block explorers, court or government records) over aggregators and blogs, corroborate with pages from at least two different sites, and answer UNSURE when credible sources conflict or the evidence is insufficient.",
+    PROMPT_SPEC_V3_METHOD,
     'The output object must contain EXACTLY these keys: "outcome","confidenceBps","evidenceFor","evidenceAgainst","unsupportedClaims","decisiveEvidence","reasoning","publicReasoningTrace","citations","counterEvidenceSummary".',
     'outcome MUST be one of "YES","NO","UNSURE". confidenceBps MUST be an integer from 0 to 10000.',
     "evidenceFor/evidenceAgainst/unsupportedClaims/decisiveEvidence are arrays of evidence ids taken ONLY from the supplied evidence manifest or from the evidenceId of pages you opened. Put every page that supports the claim in evidenceFor and every page that disputes or weakens it in evidenceAgainst.",
@@ -133,6 +140,26 @@ export const DEFAULT_TOOL_POLICY_V3: ToolPolicyV3 = {
   minOpensPerSide: 1,
 };
 
+const PROMPT_SPEC_V4_OPEN_ACTION =
+  '{"action":"open","urls":["<up to three urls you already saw in results or in submittedUrls>"],"from":0} opens those pages in one turn; you receive {"tool":"open_many","pages":[{"evidenceId","ref","url","from","chars","totalChars","truncated","text"} or {"url","error"}]}; a single {"action":"open","url":"<url>","from":0} still works; use "from" to read further into a long page.';
+const PROMPT_SPEC_V4_METHOD = `${PROMPT_SPEC_V3_METHOD} Open the two or three most credible results of a search together instead of one per turn.`;
+
+/** V4 changes only the batched-open instructions in the immutable v3 text. */
+export const DEFAULT_PROMPT_SPEC_V4: PromptSpecV4 = {
+  ...DEFAULT_PROMPT_SPEC_V3,
+  version: "4",
+  systemPrompt: DEFAULT_PROMPT_SPEC_V3.systemPrompt
+    .replace(PROMPT_SPEC_V3_OPEN_ACTION, PROMPT_SPEC_V4_OPEN_ACTION)
+    .replace(PROMPT_SPEC_V3_METHOD, PROMPT_SPEC_V4_METHOD),
+  repairSystemPrompt: `${DEFAULT_PROMPT_SPEC_V3.repairSystemPrompt} An open action names either one url or up to three urls.`,
+};
+
+export const DEFAULT_TOOL_POLICY_V4: ToolPolicyV4 = {
+  ...DEFAULT_TOOL_POLICY_V3,
+  version: "4",
+  maxOpensPerTurn: 3,
+};
+
 type PromptMessages = ProviderRequestRecord["messages"];
 
 export function promptSpecHash(spec: PromptSpec): HexString {
@@ -145,15 +172,15 @@ export function toolPolicyHash(policy: ToolPolicy): HexString {
 
 /** The literal system message: both halves are separately hashed documents. */
 export function composeSystemPrompt(
-  spec: PromptSpecV2 | PromptSpecV3,
-  policy: ToolPolicyV2 | ToolPolicyV3,
+  spec: PromptSpecV2 | PromptSpecV3 | PromptSpecV4,
+  policy: ToolPolicyV2 | ToolPolicyV3 | ToolPolicyV4,
 ): string {
   return `${spec.systemPrompt}\n${canonicalJsonString({ budgets: policy })}`;
 }
 
 export function buildResearchMessages(
-  spec: PromptSpecV2 | PromptSpecV3,
-  policy: ToolPolicyV2 | ToolPolicyV3,
+  spec: PromptSpecV2 | PromptSpecV3 | PromptSpecV4,
+  policy: ToolPolicyV2 | ToolPolicyV3 | ToolPolicyV4,
   input: OracleInferenceInput,
 ): PromptMessages {
   return [

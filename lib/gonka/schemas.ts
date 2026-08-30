@@ -30,7 +30,7 @@ export const oracleInferenceInputSchema: z.ZodType<OracleInferenceInput> = z
     protocolVersion: z.literal("1.0"),
     runId: z.string().min(1).max(256),
     agentRole: z.string().min(1).max(256),
-    promptVersion: z.enum(["1", "2", "3"]),
+    promptVersion: z.enum(["1", "2", "3", "4"]),
     submission: z
       .object({
         kind: z.enum(["TEXT", "URL", "TEXT_AND_URL"]),
@@ -96,13 +96,41 @@ const researchSearchActionSchema = z
   })
   .strict();
 
-const researchOpenActionSchema = z
+const researchOpenActionV3Schema = z
   .object({
     action: z.literal("open"),
     url: z.string().url(),
     from: z.number().int().min(0).optional(),
   })
   .strict();
+
+const researchOpenActionSchema = z
+  .object({
+    action: z.literal("open"),
+    url: z.string().url().optional(),
+    urls: z.array(z.string().url()).min(1).max(3).optional(),
+    from: z.number().int().min(0).optional(),
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    if ((value.url === undefined) === (value.urls === undefined)) {
+      ctx.addIssue({
+        code: "custom",
+        message: "open action needs exactly one of url or urls",
+      });
+    }
+    const seen = new Set<string>();
+    for (const [index, url] of (value.urls ?? []).entries()) {
+      if (seen.has(url)) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["urls", index],
+          message: `duplicate open URL: ${url}`,
+        });
+      }
+      seen.add(url);
+    }
+  });
 
 const researchAnswerActionSchema = z
   .object({
@@ -111,8 +139,15 @@ const researchAnswerActionSchema = z
   })
   .strict();
 
-/** V3 adds search intent while keeping the action envelope strict. */
-export const researchActionSchema = z.discriminatedUnion("action", [
+/** Keep v3 parsing byte-compatible with its single-url open envelope. */
+export const researchActionV3Schema = z.discriminatedUnion("action", [
+  researchSearchActionSchema,
+  researchOpenActionV3Schema,
+  researchAnswerActionSchema,
+]);
+
+/** V4 accepts either one URL or one bounded URL batch. */
+export const researchActionSchema = z.union([
   researchSearchActionSchema,
   researchOpenActionSchema,
   researchAnswerActionSchema,

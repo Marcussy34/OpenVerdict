@@ -10,6 +10,7 @@ import type {
   PromptSpecV1,
   PromptSpecV2,
   PromptSpecV3,
+  PromptSpecV4,
   ProviderRequestRecord,
   ToolPolicyV2,
 } from "../protocol/types";
@@ -30,6 +31,7 @@ import {
   DEFAULT_PROMPT_SPEC_V1,
   DEFAULT_PROMPT_SPEC_V2,
   DEFAULT_PROMPT_SPEC_V3,
+  DEFAULT_PROMPT_SPEC_V4,
   DEFAULT_TOOL_POLICY_V2,
   buildFallbackMessages,
   buildPrimaryMessages,
@@ -478,7 +480,7 @@ export function createGonkaAdapterWithDependencies(
     input: OracleInferenceInput,
     manifest: AgentManifest,
     attempts: GonkaAttemptRecord[],
-    spec: PromptSpecV1 | PromptSpecV2 | PromptSpecV3,
+    spec: PromptSpecV1 | PromptSpecV2 | PromptSpecV3 | PromptSpecV4,
     requestTimeoutMs?: number,
   ): Promise<ProviderExecution> => {
     const retriesUsed = attempts.filter((attempt) => attempt.kind === "RETRY").length;
@@ -609,7 +611,11 @@ export function createGonkaAdapterWithDependencies(
     assertManifest(request.manifest);
     // The manifest-selected input version controls research request settings.
     const completionSpec =
-      input.promptVersion === "3" ? DEFAULT_PROMPT_SPEC_V3 : researchSpec;
+      input.promptVersion === "4"
+        ? DEFAULT_PROMPT_SPEC_V4
+        : input.promptVersion === "3"
+          ? DEFAULT_PROMPT_SPEC_V3
+          : researchSpec;
     // A seat near its commit deadline bounds the call by the time it has left.
     const callTimeoutMs =
       request.timeoutMs !== undefined && request.timeoutMs > 0
