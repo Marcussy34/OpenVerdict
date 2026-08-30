@@ -113,8 +113,9 @@ the browser on `/verify` (Run proof tab).
    The testnet faucet (`faucet.testnet.sui.io`) is not reachable from the
    developer Mac (`*.sui.io` TLS); use the faucet web UI or a host that can.
 3. `/api/status` reports suiHealthy, dbHealthy, gonkaMode live, walrusMode
-   testnet; `railway logs -s app -d --lines 200` shows only per-tick noise
-   for dead residue claims.
+   testnet; `railway logs -s app -d --lines 200` is quiet between claims
+   (the workers skip finished and stuck claims, so a tick never spends a
+   live claim's reveal window on dead ones).
 4. Timeline of a hosted fact-check with the fast ladder (measured
    2026-08-30): POST returns after ~45 s (statement and criteria on Walrus,
    create_claim, statement artifact), committee at once, freeze ~t+65 s,
@@ -122,10 +123,12 @@ the browser on `/verify` (Run proof tab).
    (~t+140 s), advance right after the commit floor (~t+235 s), reveals
    within ~30 s, certificate at the reveal floor (~t+290 s). No threshold in
    round one adds a round two: certificate at ~t+570 s.
-5. Model health: Kimi-K2.6 on GonkaRouter was slow or failing all night
-   (calls longer than the seat budget); DeepSeek-V4-Flash answered in 4 to
-   30 s and MiniMax-M2.7 in 5 to 35 s. Three valid agreeing seats out of five
-   are needed for a verdict in a round.
+5. Model health: Kimi-K2.6 on GonkaRouter was slow or failing most of the
+   night (calls longer than the seat budget), then answered in 40 to 72 s on
+   claim #15 (08:05, all five seats valid); DeepSeek-V4-Flash answers in 4
+   to 30 s and MiniMax-M2.7 in 5 to 35 s. Four matching reveals out of five
+   are needed for a verdict in a round (`REQUIRED_MATCHING = 4`), so a
+   round survives at most one lost seat.
 
 ## 5. Human end-to-end walkthrough (the user's test)
 

@@ -878,24 +878,54 @@ class OpenVerdictEngine implements Engine {
       }),
     );
 
-    for (const [index, { votePackage, run, output }] of pending.entries()) {
-      const argumentUpload = uploads[index];
-      if (!argumentUpload) continue;
-      const result = await this.#gateway.revealVote({
-        jurySeatId: votePackage.jurySeatId,
-        roundTallyId: tally.roundTallyId,
-        agentProfileId: votePackage.agentProfileId,
-        outcome: votePackage.outcome,
-        confidenceBps: votePackage.confidenceBps,
-        outputHash: fromHex(votePackage.outputHash),
-        runHash: fromHex(votePackage.runHash),
-        salt: fromHex(votePackage.saltHex),
-        argumentBlobId: argumentUpload.blobId,
-        argumentBlobObjectId: argumentUpload.objectId ?? ZERO_OBJECT_ID,
-        argumentWalrusEndEpoch: await this.chainRetentionEpoch(
-          argumentUpload.endEpoch,
-        ),
-      });
+    // Reveal on chain in parallel: every seat transaction is signed and paid
+    // by its own agent, so seats never contend on gas (two seats of one
+    // agent stay sequential), and a failed reveal must not stop its
+    // siblings; the shared bookkeeping below runs in order afterwards.
+    type RevealWork = (typeof pending)[number] & {
+      upload: WalrusPutResult | undefined;
+      result?: Awaited<ReturnType<SuiGateway["revealVote"]>>;
+    };
+    const work: RevealWork[] = pending.map((entry, index) => ({
+      ...entry,
+      upload: uploads[index],
+    }));
+    const byAgent = new Map<string, RevealWork[]>();
+    for (const item of work) {
+      if (!item.upload) continue;
+      const list = byAgent.get(item.votePackage.agentProfileId) ?? [];
+      list.push(item);
+      byAgent.set(item.votePackage.agentProfileId, list);
+    }
+    const failures: unknown[] = [];
+    await Promise.all(
+      [...byAgent.values()].map(async (items) => {
+        for (const item of items) {
+          const { votePackage, upload } = item;
+          if (!upload) continue;
+          try {
+            item.result = await this.#gateway.revealVote({
+              jurySeatId: votePackage.jurySeatId,
+              roundTallyId: tally.roundTallyId,
+              agentProfileId: votePackage.agentProfileId,
+              outcome: votePackage.outcome,
+              confidenceBps: votePackage.confidenceBps,
+              outputHash: fromHex(votePackage.outputHash),
+              runHash: fromHex(votePackage.runHash),
+              salt: fromHex(votePackage.saltHex),
+              argumentBlobId: upload.blobId,
+              argumentBlobObjectId: upload.objectId ?? ZERO_OBJECT_ID,
+              argumentWalrusEndEpoch: await this.chainRetentionEpoch(upload.endEpoch),
+            });
+          } catch (error) {
+            failures.push(error);
+          }
+        }
+      }),
+    );
+
+    for (const { votePackage, run, output, upload: argumentUpload, result } of work) {
+      if (!argumentUpload || !result) continue;
       const timestamp = this.isoNow();
       await this.#repository.saveInferenceRun({
         ...run,
@@ -1000,6 +1030,8 @@ class OpenVerdictEngine implements Engine {
       });
       results.push(result);
     }
+    // Surface a lost seat only after every other seat's reveal is recorded.
+    if (failures.length > 0) throw failures[0];
     return results;
   }
 
@@ -3042,17 +3074,20 @@ function defaultDeadlines(
   // E_INSUFFICIENT_DIVERSE_AGENTS) and a round needs four matching reveals
   // of five (REQUIRED_MATCHING), so the slowest family must usually make it:
   // Kimi-K2.6 answered in 33 to 100 s on 2026-08-30. The commit window
-  // leaves seats about 140 s of research.
+  // leaves seats about 140 s of research. The reveal window must hold the
+  // advance (about 15 s after the commit deadline) plus five reveal-bundle
+  // writes, which run one at a time on the operator lane at about 15 s
+  // each: a 60 s window lost every reveal of claim #15, so it is 120 s.
   const second = 1_000;
   return {
     evidenceCutoffMs: now + 60 * second,
     proposalDeadlineMs: now + 65 * second,
     challengeDeadlineMs: now + 70 * second,
     firstCommitDeadlineMs: now + 240 * second,
-    firstRevealDeadlineMs: now + 300 * second,
-    discussionDeadlineMs: now + 360 * second,
-    secondCommitDeadlineMs: now + 540 * second,
-    secondRevealDeadlineMs: now + 600 * second,
+    firstRevealDeadlineMs: now + 360 * second,
+    discussionDeadlineMs: now + 420 * second,
+    secondCommitDeadlineMs: now + 600 * second,
+    secondRevealDeadlineMs: now + 720 * second,
   };
 }
 

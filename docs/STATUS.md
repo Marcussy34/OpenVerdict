@@ -53,13 +53,16 @@ operational proof and public deployments in flight.
   see docs/CHECKPOINT-2026-08-29.md for the latest claim ids and results.
 - FAST MODE 2026-08-30 (measured through eleven hosted claims overnight):
   the hosted ladder is measured from the `create_claim` transaction
-  (evidence cutoff +60 s, commit +240 s, reveal +300 s, discussion +360 s,
-  second round +540 / +600 s). Seats commit as they finish (a per-claim
-  commit pump from the chain's acceptance floor), reveal bundles publish in
-  parallel, research page writes run off the model's critical path, every
-  operator-signed operation of a process runs on one lane, and the
-  resolution worker waits for each Move deadline floor instead of sending
-  aborting transactions. Observed: POST returns after ~45 s, freeze ~t+65 s,
+  (evidence cutoff +60 s, commit +240 s, reveal +360 s, discussion +420 s,
+  second round +600 / +720 s). Seats commit as they finish (a per-claim
+  commit pump from the chain's acceptance floor), reveal bundles publish
+  one at a time on the operator lane (about 15 s each, which is why the
+  reveal window is 120 s) and the five agent-signed reveal transactions
+  then go out in parallel, research page writes run off the model's
+  critical path, every operator-signed operation of a process runs on one
+  lane, the resolution worker waits for each Move deadline floor instead
+  of sending aborting transactions, and it skips finished or stuck claims
+  so a live claim's reveal window is never spent on dead ones. Observed: POST returns after ~45 s, freeze ~t+65 s,
   research 4 to 40 s per seat (Kimi-K2.6 up to 100 s), commits from ~t+140 s,
   reveals within ~30 s, certificate at the reveal floor. Hosted certificates
   so far: `0xfb68f1ff…`, `0x677ec538…`, `0x82684a50…`, `0xb554098e…`,

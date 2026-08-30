@@ -403,15 +403,38 @@ then submit a fast test claim and time it.
     errorText/errorMessage decodeURIComponent before matching; test with
     the encoded wording. Gate 357 tests, lint, build. Chain deploys after
     claim #13 (or 07:33), then claim #14.
+43. `470299c` deployed 07:30 (deployment 607c5904). Claim #14
+    `0x2dbea96ca7d68acaeb1a6bf65de02e4e4a1fba80bd3a8b5e9059aa5816f66184`
+    (07:31:34): the retry fix held, FIVE of five seats committed by t+181 s
+    (first time all night), REVEAL_1 at t+272 s. Then zero reveals: every
+    resolution tick logged `jury::reveal_vote` abort code 7
+    (E_DEADLINE_PASSED) from 23:36:29Z. Two worker defects. (a) Each tick
+    walked every dead residue claim first (ten of them, a dry-run abort
+    each, seconds apiece), so it reached the live claim 18 s after its
+    one-minute reveal window had closed. (b) `votesReveal` throws on the
+    first aborted reveal, and the REVEAL branch runs finalize/advance only
+    after it, so the claim could not even open discussion. Fix `a830d58`
+    (workers/resolution-worker.ts + test): skip claims that can never
+    change on chain (terminal states, every deadline passed, DISCUSSION past
+    its deadline without phase-two evidence), sort REVEAL states before
+    COMMIT/selection before the rest, and log a failed reveal instead of
+    letting it block the transition. Gate: typecheck, 360 tests, lint (one
+    pre-existing warning in components/wallet/connect-button.tsx), build.
+    Deployed 08:05 (deployment ae0cdba4); worker logs went quiet (no more
+    per-tick residue noise). Claim #15
+    `0xc9e0d4eb8a77c4b336548b4cfe280325ca0bba374d0f0557fa9d706cfb88b40a`
+    submitted 08:05:47 via `POST /api/fact-checks` (the public route uses
+    the hosted ladder; the operator `POST /api/claims` requires explicit
+    deadlines): committee at t+57 s, frozen at t+74 s.
 
 ### Next steps
-- Measure claim #14 (retries now actually run on validator rejections);
-  then STATUS.md/runbook with the numbers and the demo claim ids.
-- Then deploy `c55949a` (clean worktree checkout, `railway up -s app -d`),
-  submit a fast claim, time it, and record timings here and in STATUS.md.
+- Measure claim #15 to a certificate (monitor `canary18.log` in the
+  scratchpad); then STATUS.md/runbook with the numbers and demo claim ids.
 - Residue on testnet: `0x1936ddd3…` (orphan), `0xdb9c7bae…` (REVEAL_1 with
-  no roots, will settle UNRESOLVED after its reveal deadline).
-- Memory: add the pooler lock lesson and the DNS layout.
+  no roots, will settle UNRESOLVED after its reveal deadline). The workers
+  now skip such claims instead of walking them every tick.
+- Memory: add the pooler lock lesson, the DNS layout, the percent-encoded
+  gRPC lesson and the dead-claim triage lesson.
 
 ## STATE AT COMPACTION #6 (2026-08-30 ~03:05 local): epoch fix + Railway cutover mid-flight
 
