@@ -40,7 +40,7 @@
   `git -C <tree> checkout -q --detach <sha> && cd <tree> && railway up -s app -d`,
   then poll `railway deployment list -s app --json` until SUCCESS (about
   3 to 4 minutes; run `railway` commands from the linked repo directory).
-  Latest deployment `ab06e557` = commit `2bbb33f` (2026-08-31 00:46).
+  Latest deployment `a6cc3ad2` = commit `af2e77c` (2026-08-31 01:56, the docs sync).
   Never redeploy while a claim is live.
 - Service `Postgres` (id b31b2b5f…, private host postgres.railway.internal,
   volume instance 41608886…, daily + weekly backups scheduled). The app's
