@@ -116,13 +116,16 @@ the browser on `/verify` (Run proof tab).
    testnet; `railway logs -s app -d --lines 200` is quiet between claims
    (the workers skip finished and stuck claims, so a tick never spends a
    live claim's reveal window on dead ones).
-4. Timeline of a hosted fact-check with the fast ladder (measured
-   2026-08-30): POST returns after ~45 s (statement and criteria on Walrus,
-   create_claim, statement artifact), committee at once, freeze ~t+65 s,
-   research runs 5 to 60 s per seat, commits from the acceptance floor
-   (~t+140 s), advance right after the commit floor (~t+235 s), reveals
-   within ~30 s, certificate at the reveal floor (~t+290 s). No threshold in
-   round one adds a round two: certificate at ~t+570 s.
+4. Timeline of a hosted fact-check with the fast ladder (measured on claim
+   #15, 2026-08-30 08:05, then the reveal window was doubled): POST returns
+   after ~45 s (statement and criteria on Walrus, create_claim at ~t+20 s,
+   statement artifact), committee at ~t+57 s, freeze ~t+74 s, research
+   runs 5 to 72 s per seat, commits from the acceptance floor (~t+150 s)
+   to ~t+210 s, advance ~15 s after the commit deadline (~t+275 s), five
+   reveals at ~20 s each (bundle writes are serialized on the operator
+   lane) inside the 120 s reveal window, certificate at the reveal floor
+   (~t+385 s, about 6.4 min). No threshold in round one adds a round two:
+   certificate at ~t+745 s.
 5. Model health: Kimi-K2.6 on GonkaRouter was slow or failing most of the
    night (calls longer than the seat budget), then answered in 40 to 72 s on
    claim #15 (08:05, all five seats valid); DeepSeek-V4-Flash answers in 4

@@ -426,6 +426,33 @@ then submit a fast test claim and time it.
     submitted 08:05:47 via `POST /api/fact-checks` (the public route uses
     the hosted ladder; the operator `POST /api/claims` requires explicit
     deadlines): committee at t+57 s, frozen at t+74 s.
+44. Claim #15 measured (create_claim at t+21 s, so chain deadlines were
+    commit t+261 s, reveal t+321 s, discussion t+381 s, second round
+    t+561/t+621 s): ALL FIVE seats valid (DeepSeek 7 s and 21 s, Kimi 40 s
+    and 72 s, MiniMax 5 s of research), commits t+174 to t+208 s, advance
+    t+275 s, and then zero reveals before t+321 s: a reveal costs about
+    20 s (its bundle write is serialized on the operator lane, then the
+    agent-signed reveal_vote), so five never fit a 60 s window even with
+    the tick arriving on time. The fix from item 43 held: the failed
+    reveals were logged, discussion opened at t+342 s with the phase-two
+    freeze done at once, round two committed four seats by t+492 s,
+    REVEAL_2 at t+576 s, and exactly two reveals landed before t+621 s.
+    Fix `6852480`: hosted ladder reveal +360 s, discussion +420 s, second
+    round +600/+720 s (120 s reveal windows), and `votesReveal` sends the
+    reveal transactions in parallel grouped by agent (each seat pays its
+    own gas), rethrowing the first failure only after every other reveal
+    is recorded. Expected certificate about 6.4 min after POST. The next
+    lever, if sub-5-minute resolution is required, is publishing the
+    reveal bundles as soon as no further commit is possible (all seats
+    committed or the commit deadline passed), which needs the blob object
+    id and end epoch persisted per run before the reveal transaction.
+45. Bug in item 43's triage, caught on claim #15 at t+660 s: "every
+    deadline passed" marked a REVEAL_2 claim dead, but that is exactly
+    when finalize is allowed, so the worker skipped it. Fix (commit after
+    `6852480`): dead means terminal, or DISCUSSION past its deadline
+    without phase-two evidence; every other stuck claim gets exponential
+    backoff (30 s doubling to 10 min) after a failed tick. Gate green,
+    deployed with `6852480` at ~08:24; claim #16 follows.
 
 ### Next steps
 - Measure claim #15 to a certificate (monitor `canary18.log` in the

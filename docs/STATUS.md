@@ -62,9 +62,11 @@ operational proof and public deployments in flight.
   critical path, every operator-signed operation of a process runs on one
   lane, the resolution worker waits for each Move deadline floor instead
   of sending aborting transactions, and it skips finished or stuck claims
-  so a live claim's reveal window is never spent on dead ones. Observed: POST returns after ~45 s, freeze ~t+65 s,
-  research 4 to 40 s per seat (Kimi-K2.6 up to 100 s), commits from ~t+140 s,
-  reveals within ~30 s, certificate at the reveal floor. Hosted certificates
+  so a live claim's reveal window is never spent on dead ones. Observed on claim #15 (08:05): POST returns after ~45 s,
+  committee t+57 s, freeze t+74 s, research 5 to 72 s per seat with all
+  five seats valid, commits t+174 to t+208 s, advance t+275 s; a reveal
+  costs ~20 s, so the reveal window is now 120 s and the certificate lands
+  at the reveal floor (~t+385 s, about 6.4 min). Hosted certificates
   so far: `0xfb68f1ff…`, `0x677ec538…`, `0x82684a50…`, `0xb554098e…`,
   `0xef4383de…` (all UNRESOLVED: three agreeing YES reveals per round, one
   short of the on-chain rule). Two chain rules shape the outcome:
