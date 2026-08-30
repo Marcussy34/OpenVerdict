@@ -315,6 +315,56 @@ still open: a human click on "Open through Seal" and "Re-run this juror";
 the round-two window unexercised live; the submission package once the
 owner names the format; Nautilus via Marlin Oyster if the owner wants it.
 
+## 3d. CLOSING STATE 2026-08-31 02:00 (pre-compaction #9): read this and continue as if nothing happened
+
+Everything built tonight is committed, pushed, deployed and proven; the
+tree is clean; no Codex job, monitor or background task is running.
+
+- main = `3428469` (docs sync; code last changed in `af2e77c` for UI copy,
+  `2bbb33f` failed-seat panel, `85ce5ad` hedge + failure records,
+  `b7ff700` Seal escrow + round-two window, `9e2dd98` batched opens +
+  re-execution). Live deployment `a6cc3ad2` (SUCCESS 01:53, healthy).
+- Owner decisions in force: all inference on GonkaRouter only (three
+  models exist, no fourth family); every juror at equal selection weight
+  (10000); slower verdicts are fine so Kimi can finish (450 s commit
+  window, second round +1080/+1200 s); Nautilus deferred (Marlin Oyster
+  is the no-AWS path when wanted); hedging approved and live; docs synced
+  at the owner's request (a proposed improvement list was declined for
+  now: judges' guide, e2e:localnet regression run, uptime alert, Walrus
+  Sites verifier, permissionless reveal, keys at rest).
+- Waiting on the owner: (1) a browser click on "Open through Seal" and
+  "Re-run this juror" (claims #25 `0xbdab0011…` or #26 `0x089c6c7c…`);
+  (2) sending the GonkaRouter message (signed receipts, request lookup,
+  Kimi capacity, substitution, fourth model; drafted in chat, the formal
+  version at the end of the attested-inference spec); (3) the submission
+  format and deadline; (4) whether to pursue Nautilus via Marlin Oyster.
+- Demo claims: #26 NO 200 (hedge), #25 YES 9860 (Seal, 5 of 5), #23 NO
+  140, #22 YES 9950 (batched opens), #21 YES 9750, #24 UNRESOLVED (two
+  failed seats per round, before the round-two fix). Not yet exercised
+  live: the round-two window, the failed-seat panel (needs a future
+  failed seat).
+- Balances 01:35: operator 1.95 SUI / 2.41 WAL (about seven claims),
+  agents about 0.59 SUI. Firecrawl app key about 800 credits; CLI key in
+  `~/.zshenv` (fingerprint 3cdcdc21054f). Sui CLI 1.52.2.
+- Scratchpad tools (`/private/tmp/claude-501/-Users-marcus-Projects/ea697832-244e-426b-a971-ef1e18dba18e/scratchpad`):
+  claim-state.py, proof-scan.py (revealed runs), proof-escrow-scan.py (all
+  committed seats), prompt-*.txt (worker briefs), firecrawl.key,
+  railway-tree (deploy worktree), gate-*.log; repo-ignored
+  node_modules/.cache: verify-proof.mts <proof.json> (local verifier),
+  seal-recover-proof.mts <proof.json> (recovery through the key servers
+  from the Mac via JSON-RPC), seal-e2e-probe.mts, seal-servers.mts,
+  hashes.mts, balances.mts, coins.mts, weights.mjs, prevtx.mjs,
+  set-eligibility.mjs, manifest-check.mts, proof-*.json.
+- Lessons: Codex turns die silently after verification shell commands
+  (cancel, keep files, finish by hand; brief workers to verify once at the
+  end; stagger dispatches); railway commands need the linked repo cwd; the
+  Mac cannot reach fullnode.testnet.sui.io (use publicnode JSON-RPC or run
+  inside the container); never redeploy during a live claim; an Explore
+  agent fed the current facts finds stale docs fast.
+- Memory (mcp memory) entities "OpenVerdict juror research v1" and
+  "OpenVerdict production topology" hold the same facts as dated
+  observations; the newest is "DOCS AUDIT APPLIED 2026-08-31 02:05".
+
 ## 4. Planned next (owner-approved direction)
 
 - Attestation (docs/superpowers/specs/2026-08-30-attested-inference-design.md):
