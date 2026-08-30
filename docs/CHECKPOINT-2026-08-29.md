@@ -472,6 +472,41 @@ then submit a fast test claim and time it.
     08:10: operator 5.12 SUI / 3.27 WAL (about 0.5 SUI and 0.2 WAL per
     claim), agents 0.60 to 0.61 SUI each.
 
+47. DATABASE MOVED TO RAILWAY (14:30 to 15:10, owner: "host it within
+    railway"). Neon's free plan alerted at 90 % of its 5 GB monthly public
+    egress (its docs: at 100 % the compute is suspended until the next
+    billing period, and always-on polling would also exhaust the 100
+    CU-hours/month). Neon only existed because the first production build
+    ran on Vercel. Done: `railway add --database postgres --service
+    postgres` in project openverdict-workers (service `Postgres`, private
+    host `postgres.railway.internal:5432/railway`, 50 GB volume, no public
+    access); the copy ran INSIDE the app container over the private
+    network (`railway ssh -s app`, after `ssh-keyscan ssh.railway.com >>
+    ~/.ssh/known_hosts` fixed "Host key verification failed"): scratchpad
+    `copy-db.ts` piped in via stdin, `migrate()` on the target, then every
+    public table copied in one transaction with matching counts (16
+    tables: 826 events, 120 runs, 150 seats, 53 packages, 41 reveals, 20
+    claims, 10 certificates). Then `DATABASE_URL=${{Postgres.DATABASE_URL}}`
+    on the app service (the temporary `TARGET_DATABASE_URL` reference
+    deleted; note `railway variable delete KEY --service app`, not
+    `--unset`), redeploy, verified: /api/status dbHealthy, docket 20/10
+    finalized, claim #16 page, report and proof all 200. Backups: daily
+    and weekly schedules on the volume instance via the GraphQL API
+    (`railway api -f -` with `volumeInstanceBackupScheduleUpdate`).
+    Railway bills no egress for private-network traffic; the Postgres
+    service costs a few dollars a month of RAM/CPU. Neon and the Vercel
+    project are now unused: keep Neon a day as fallback, then delete
+    both (the local `.env`/scratchpad `rollout.env` still hold the Neon
+    URL for `dump-runs.cjs`; point them at a Railway public proxy or
+    `railway ssh` instead).
+48. POLLING REDUCTION (commit after `b2164d9`): workers inspect only the
+    six live states (`listLiveClaims`, `LIVE_CLAIM_STATES` in
+    workers/runtime.ts), poll every 2 s only while a claim is in flight
+    and every 15 s otherwise (`OPENVERDICT_WORKER_IDLE_POLL_MS`), and
+    the two claim-creating routes touch a wake file (lib/engine/wake.ts,
+    `OPENVERDICT_WAKE_FILE`, default `<tmpdir>/openverdict-wake`) that
+    ends an idle wait within a second. Gate: 362 tests, lint, build.
+
 ### Next steps
 - Demo claims: #16 `0x9169c707…` (YES 9860, certificate `0x62036142…`)
   for the verdict path; #15 `0xc9e0d4eb…` (UNRESOLVED, two rounds) for

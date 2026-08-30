@@ -67,13 +67,17 @@ Operator address (generated 2026-08-27, key held in local .env only):
 Single host (2026-08-30): the website, its API and the three engine workers
 run together on Railway, project `openverdict-workers`, service `app`
 (Dockerfile build, `scripts/start-production.mjs` launches the web plus the
-evidence, inference and resolution workers; Neon Postgres via the pooled
-`DATABASE_URL`). Hosts: https://openverdict.info (landing, plus www) and
-https://app.openverdict.info (dashboard; `proxy.ts` rewrites the root of
-`app.` hosts to `/app`). DNS: the zone stays on Vercel nameservers; apex
-ALIAS, www CNAME and app CNAME point at the Railway domain targets, and
-Railway ownership is proven by `_railway-verify` TXT records. The Vercel
-project keeps only the Neon integration (no domains). Env per
+evidence, inference and resolution workers). The database is the Railway
+Postgres service `Postgres` in the same project, reached over the private
+network (`DATABASE_URL` is the reference `${{Postgres.DATABASE_URL}}`; no
+public access; daily and weekly volume backups are scheduled; to reach it
+from a laptop use `railway ssh -s app` or add a public TCP proxy in the
+service's networking settings). Hosts: https://openverdict.info (landing,
+plus www) and https://app.openverdict.info (dashboard; `proxy.ts` rewrites
+the root of `app.` hosts to `/app`). DNS: the zone stays on Vercel
+nameservers; apex ALIAS, www CNAME and app CNAME point at the Railway
+domain targets, and Railway ownership is proven by `_railway-verify` TXT
+records. Neon and the Vercel project are no longer used. Env per
 `.env.example` (operator key, agent seed, manifest=testnet, Gonka key,
 Firecrawl key, operator token, `PORT=3000`, `OPENVERDICT_PUBLIC_WRITES=
 enabled`, `OPENVERDICT_TRUST_PROXY=1`, `WALRUS_UPLOAD_RELAY_URL`,

@@ -42,9 +42,15 @@ operational proof and public deployments in flight.
   workers in one service `app`): https://openverdict.info is the landing,
   https://app.openverdict.info opens the dashboard directly (`proxy.ts`
   rewrites the root of `app.` hosts to `/app`). The DNS zone stays on Vercel
-  nameservers (apex ALIAS and www CNAME point at Railway; the Vercel project
-  keeps only the Neon integration). `/api/status` reports suiHealthy,
-  gonkaMode live, walrusMode testnet, dbHealthy. Two hosted-only bugs found
+  nameservers (apex ALIAS and www CNAME point at Railway). Since 2026-08-30
+  15:00 the database is a Railway Postgres service in the same project
+  (`Postgres`, private network only, daily and weekly volume backups); Neon
+  was retired after its free plan hit 90 % of its 5 GB monthly egress, and
+  the Vercel project is no longer needed. The workers inspect only live
+  claims, poll every 2 s while a claim is in flight and every 15 s
+  otherwise, and a submission wakes them at once through a shared wake
+  file. `/api/status` reports suiHealthy, gonkaMode live, walrusMode
+  testnet, dbHealthy. Two hosted-only bugs found
   and fixed the same night: retention epochs were sent to Move as Walrus
   epochs (E_RETENTION_EXPIRED on every freeze; now converted to Sui epochs,
   `lib/sui/retention-epoch.ts`), and the worker tick lock was a session
