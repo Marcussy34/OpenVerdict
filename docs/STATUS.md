@@ -118,6 +118,15 @@ operational proof and public deployments in flight.
   recorded as `HEDGE_ABANDONED`, and the winning backup carries attempt
   kind `HEDGE`. Same model, both attempts in the bundle, retries
   unchanged; DeepSeek and MiniMax rarely trigger it, Kimi usually does.
+  PROVEN LIVE on claim #26 (00:17, `0x089c6c7c…`, "Ethereum switched from
+  proof of work to proof of stake in 2021."): finalized NO with truth
+  score 200 at t+609 s (10.2 min), certificate `0x975b3ae1…`, all five
+  seats revealed with both Kimi seats, every seat committed by t+331 s
+  (about 80 s earlier than claim #25); five hedges fired (four Kimi, one
+  MiniMax), the abandoned originals had run 7 to 74 s, and one Kimi
+  seat's final verdict came from a backup call (its bundle's request
+  record shows attempt kind HEDGE). The hedged bundles pass every local
+  verifier check.
 - SEAL ESCROW OF REVEAL KEYS 2026-08-30 late evening (design
   docs/superpowers/specs/2026-08-30-seal-escrow-design.md): at commit time
   the engine now escrows each run's AES reveal key under a Mysten Seal

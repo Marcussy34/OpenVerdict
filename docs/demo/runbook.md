@@ -220,7 +220,10 @@ the browser on `/verify` (Run proof tab).
    its hash checked against the sealed core hash. Before the deadline the
    key servers refuse ("The key servers refuse until the reveal deadline
    passes"), which is the point.
-   Demo claims: #25 `0xbdab0011…` (YES 9860, certificate `0xff3191bc…`,
+   Demo claims: #26 `0x089c6c7c…` (NO 200, certificate `0x975b3ae1…`,
+   10.2 min, 5 of 5 with both Kimi seats; the first claim with hedged
+   calls: open the Kimi run `0xfc39cf25…` to see a HEDGE attempt as the
+   winning request), #25 `0xbdab0011…` (YES 9860, certificate `0xff3191bc…`,
    the first claim with Seal escrows and the first 5-of-5 with both Kimi
    seats under the 450 s window: open any run for the Seal block; its
    escrows opened at 2026-08-30 15:24:09Z, so "Open through Seal" works
