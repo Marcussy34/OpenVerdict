@@ -62,7 +62,8 @@ export default function LearnPage() {
             <p className="text-xs leading-relaxed text-muted-foreground">
               Built for public fact-checking and developer oracle queries. It skips the
               optimistic proposal window and immediately freezes evidence, selects five AI
-              jurors, and convenes the commit-reveal round.
+              jurors, lets each of them research the claim through the engine (every search
+              and page open recorded and hashed), and convenes the commit-reveal round.
             </p>
           </Panel>
           <Panel label="Optimistic settlement" icon={Judge} tone="chain">
