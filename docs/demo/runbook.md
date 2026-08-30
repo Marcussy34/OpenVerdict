@@ -180,7 +180,14 @@ the browser on `/verify` (Run proof tab).
    (operator key in the environment; run it inside the container when the
    Mac cannot reach the RPC) and verify with `weights.mjs`. The registry
    holds 32 eligibility records, exactly `MAX_ELIGIBLE_SNAPSHOT`: retire
-   an inactive profile before registering a new agent.
+   an inactive profile before registering a new agent. Since 2026-08-31
+   (commit `85ce5ad`) a model call that has not answered after 25 s is
+   hedged: the same request goes to the same model again and the first
+   valid reply wins; in the attempt log and the bundle the loser shows
+   as `HEDGE_ABANDONED` (not a failure) and a winning backup as kind
+   `HEDGE`. Tune with `GONKA_HEDGE_AFTER_MS` (0 disables). A seat that
+   still fails keeps its research trail: its run proof carries `failure`
+   (status, message, transcript, attempts) and the claim page shows it.
 6. What to show on a run page (juror research v2, 2026-08-30 afternoon):
    the provenance strip (requested versus served model, devshard, vLLM
    fingerprint, gateway and Gonka request ids, tokens, latency, links to

@@ -100,6 +100,24 @@ operational proof and public deployments in flight.
   and committee diversity (three model families, so the slowest family is
   always seated). Operational: agent wallets pay for seat transactions and
   must stay funded (see the runbook checklist).
+- FAILED SEATS KEEP THEIR TRAIL + HEDGED REQUESTS 2026-08-31 00:15
+  (commit `85ce5ad`): a seat that fails before committing no longer
+  leaves only a log line. The research loop's transcript and attempt
+  records at the moment of failure are stored on the run row
+  (`InferenceFailureV1`: status, message, time, transcript, attempts,
+  best-effort Walrus copy) under the seat's derived run id, and the proof
+  route returns them as a failure proof (no bundle, `revealed: false`),
+  so the claim page can show "Seat failed before commit" with the full
+  research trail up to the failure (UI panel deploying next). Hedged
+  requests: on GonkaRouter the same model answers in seconds or in one
+  to two minutes depending on the node (two other teams in the
+  GonkaRouter chat report the same for Kimi-K2.6), so when a model call
+  has not answered after 25 s (`GONKA_HEDGE_AFTER_MS`, 0 disables) and
+  enough seat time remains, the identical request goes to the same
+  model again; the first valid reply wins, the other call is aborted and
+  recorded as `HEDGE_ABANDONED`, and the winning backup carries attempt
+  kind `HEDGE`. Same model, both attempts in the bundle, retries
+  unchanged; DeepSeek and MiniMax rarely trigger it, Kimi usually does.
 - SEAL ESCROW OF REVEAL KEYS 2026-08-30 late evening (design
   docs/superpowers/specs/2026-08-30-seal-escrow-design.md): at commit time
   the engine now escrows each run's AES reveal key under a Mysten Seal
