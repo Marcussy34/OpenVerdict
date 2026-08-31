@@ -301,6 +301,17 @@ describe("deliberation graph", () => {
       "step:run-batch:0->step:run-batch:2",
       "step:run-batch:1->step:run-batch:3",
     ]);
+    // Every search is its own branch from the juror; steps never chain.
+    expect(
+      graph.edges
+        .filter((edge) => edge.kind === "action" && edge.from.startsWith("seat:"))
+        .map((edge) => edge.to),
+    ).toEqual(["step:run-batch:0", "step:run-batch:1"]);
+    expect(
+      graph.edges.some(
+        (edge) => edge.from === "step:run-batch:0" && edge.to === "step:run-batch:1",
+      ),
+    ).toBe(false);
     expect(
       graph.edges
         .filter((edge) => edge.kind === "citation")

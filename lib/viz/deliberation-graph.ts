@@ -430,7 +430,6 @@ export function buildDeliberationGraph(input: {
       searchResultUrls: Set<string>;
     }> = [];
     const usedStepIds = new Set<string>();
-    let previousId = `seat:${proof.jurySeatId}`;
 
     for (const [position, step] of steps.entries()) {
       const nodeId = `step:${proof.runId}:${step.index}`;
@@ -500,8 +499,11 @@ export function buildDeliberationGraph(input: {
           },
         });
       }
-      addEdge("action", previousId, nodeId);
-      previousId = nodeId;
+      // Every search is its own action by the juror, so it branches from the
+      // seat; pages attach to the search that surfaced them (below).
+      if (step.action.action === "search") {
+        addEdge("action", `seat:${proof.jurySeatId}`, nodeId);
+      }
       builtSteps.push({
         step,
         nodeId,
@@ -518,11 +520,16 @@ export function buildDeliberationGraph(input: {
       (built) => built.step.action.action === "open",
     );
     for (const page of pageSteps) {
-      for (const search of searchSteps) {
-        if (search.step.index > page.step.index) continue;
-        if (hasIntersection(search.searchResultUrls, page.urls)) {
-          addEdge("result", search.nodeId, page.nodeId);
-        }
+      // A page hangs off the most recent earlier search that surfaced its
+      // URL; a direct open with no matching search branches from the juror.
+      const source = [...searchSteps]
+        .filter((search) => search.step.index < page.step.index)
+        .reverse()
+        .find((search) => hasIntersection(search.searchResultUrls, page.urls));
+      if (source !== undefined) {
+        addEdge("result", source.nodeId, page.nodeId);
+      } else {
+        addEdge("action", `seat:${proof.jurySeatId}`, page.nodeId);
       }
     }
 
