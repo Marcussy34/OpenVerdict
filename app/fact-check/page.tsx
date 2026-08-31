@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, Suspense } from "react";
+import type { CSSProperties } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -294,7 +295,19 @@ function FactCheckContent() {
       {/* Hero: explorer style, almost no words on screen. */}
       <div className="mx-auto max-w-3xl space-y-4 text-center">
         <h1 className="ov-display text-5xl text-ocean md:text-6xl">
-          Verify any <span className="ov-wave-word">claim</span>
+          Verify any{" "}
+          <span aria-label="claim" className="ov-wave-word">
+            {"claim".split("").map((letter, index) => (
+              <span
+                key={index}
+                aria-hidden="true"
+                className="ov-wave-letter"
+                style={{ "--i": index } as CSSProperties}
+              >
+                {letter}
+              </span>
+            ))}
+          </span>
         </h1>
       </div>
 
