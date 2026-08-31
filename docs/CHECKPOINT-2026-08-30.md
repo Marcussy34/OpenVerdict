@@ -818,6 +818,15 @@ Two deploys, live: `5f8841f9` (main `95f4441`). Earlier `f614929e`.
   lead-owned. NEVER blind --resume-last on the bridge.
 - Icons question answered: all iconsax via @/components/icons, zero
   emoji in UI trees, avatars are generated PNGs.
+- /learn rewritten plain-English (7ddd94e, deploy 8b84c26a) on the
+  owner's Limitless reference: Get started header, One-question
+  overview, pipeline as how-it-works, commit-reveal as Lock/Wait/Open
+  (struct code removed), friendly invariant cards, Truth Score in
+  percent (bps gone), no-account section, 6-row Key facts table,
+  ~747 words total. Pipeline stage 03 title softened to "Sealed votes"
+  (0280bf3, deploy 0f8e877f, shared with /fact-check). Verified live:
+  jargon regex (canonicalise|SSRF|preimage|Blake2b|bps|BCS) fully
+  clean, nav Learn active.
 
 ## 4. Planned next (owner-approved direction)
 
