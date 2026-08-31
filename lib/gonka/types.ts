@@ -81,6 +81,8 @@ export type GonkaCompletionRequest = {
   attempts: GonkaAttemptRecord[];
   /** Upper bound for this single model call (the seat's remaining time), in ms. */
   timeoutMs?: number;
+  /** Optional smaller output cap for stateless utility completions. */
+  maxOutputTokens?: number;
 };
 
 export type GonkaCompletionResult =

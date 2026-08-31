@@ -1,6 +1,10 @@
 import { existsSync } from "node:fs";
 import type { Signer } from "@mysten/sui/cryptography";
 import {
+  retrieveEvidence,
+  type RetrievalPolicy,
+} from "../evidence";
+import {
   createFakeGonkaAdapter,
   type GonkaRouterAdapter,
 } from "../gonka";
@@ -20,9 +24,10 @@ import {
 import { createLocalWalrusStore } from "../walrus/local";
 import type { WalrusStore } from "../walrus/store";
 import type { Engine } from "./contract";
-import { createEngine } from "./engine";
+import { createEngine, manifestEvidencePolicy } from "./engine";
 
 let singleton: Promise<Engine> | undefined;
+let claimExtractionSingleton: Promise<ServerClaimExtractionRuntime> | undefined;
 
 /**
  * Read an env var, treating blank as unset.
@@ -56,22 +61,41 @@ export async function getServerEngine(): Promise<Engine> {
   return singleton;
 }
 
-async function buildServerEngine(): Promise<Engine> {
-  const manifestPath = readEnv(
-    process.env.OPENVERDICT_RELEASE_MANIFEST,
-    "config/release.localnet.json",
+export interface ServerClaimExtractionRuntime {
+  modelId: string;
+  adapter: GonkaRouterAdapter;
+  fetcher: typeof retrieveEvidence;
+  retrievalPolicy: RetrievalPolicy;
+}
+
+/** Build one stateless fetch and inference runtime for claim extraction. */
+export async function getServerClaimExtractionRuntime(
+): Promise<ServerClaimExtractionRuntime> {
+  claimExtractionSingleton ??= buildServerClaimExtractionRuntime().catch(
+    (error: unknown) => {
+      claimExtractionSingleton = undefined;
+      throw error;
+    },
   );
-  if (!existsSync(/* turbopackIgnore: true */ manifestPath)) {
-    throw new EngineNotWiredError(`release manifest is missing: ${manifestPath}`);
+  return claimExtractionSingleton;
+}
+
+async function buildServerClaimExtractionRuntime(): Promise<ServerClaimExtractionRuntime> {
+  const { manifest } = await loadConfiguredManifest();
+  const modelId = manifest.gonka.models[0];
+  if (modelId === undefined) {
+    throw new EngineNotWiredError("release manifest has no Gonka models");
   }
-  const manifest = await loadReleaseManifest(manifestPath);
-  try {
-    assertDeployedManifest(manifest);
-  } catch {
-    throw new EngineNotWiredError(
-      `release manifest ${manifestPath} has no deployed packageId or registryObjectId`,
-    );
-  }
+  return {
+    modelId,
+    adapter: createServerGonkaAdapter(manifest),
+    fetcher: retrieveEvidence,
+    retrievalPolicy: manifestEvidencePolicy(manifest),
+  };
+}
+
+async function buildServerEngine(): Promise<Engine> {
+  const { manifestPath, manifest } = await loadConfiguredManifest();
   if (!process.env.SUI_OPERATOR_SECRET_KEY?.trim()) {
     throw new EngineNotWiredError("SUI_OPERATOR_SECRET_KEY is required");
   }
@@ -114,30 +138,7 @@ async function buildServerEngine(): Promise<Engine> {
     manifest.walrus.mode === "local"
       ? createLocalWalrusStore(manifest.walrus.localDir ?? ".localnet/walrus-local")
       : await createRuntimeRealWalrusStore(manifest, signers.getOperator());
-  const gonka =
-    manifest.gonka.mode === "fake"
-      ? createDynamicFakeAdapter()
-      : createGonkaAdapterWithDependencies(
-          {
-            // Same blank-vs-absent hazard: a blank override must not erase the
-            // manifest's own base URL.
-            baseUrl: readEnv(process.env.GONKA_ROUTER_BASE_URL, manifest.gonka.baseUrl),
-            apiKey: process.env.GONKA_ROUTER_API_KEY ?? "",
-            timeoutMs: numberEnv("GONKA_REQUEST_TIMEOUT_MS", 120_000),
-            // Research turns carry a growing conversation; give them longer.
-            researchTimeoutMs: numberEnv("GONKA_RESEARCH_TIMEOUT_MS", 240_000),
-            hedgeAfterMs: numberEnv("GONKA_HEDGE_AFTER_MS", 25_000),
-            maxRetries: numberEnv("GONKA_MAX_RETRIES", 1),
-          },
-          {
-            // Without a sink the adapter's attempt log (error category, HTTP
-            // status, request ids) is dropped, which left today's lost seats
-            // undiagnosable; the redacting logger strips secrets before stderr.
-            logger: createRedactingLogger((level, entry) => {
-              process.stderr.write(`gonka-attempt ${level} ${JSON.stringify(entry)}\n`);
-            }),
-          },
-        );
+  const gonka = createServerGonkaAdapter(manifest);
   const research = manifest.gonka.mode === "live"
     ? createFirecrawlProvider({
         apiKey: firecrawlApiKey ?? "",
@@ -161,6 +162,53 @@ async function buildServerEngine(): Promise<Engine> {
       ? { zkLoginGraphqlUrl: process.env.OPENVERDICT_ZKLOGIN_GRAPHQL_URL.trim() }
       : {}),
   });
+}
+
+async function loadConfiguredManifest(): Promise<{
+  manifestPath: string;
+  manifest: ReleaseManifest;
+}> {
+  const manifestPath = readEnv(
+    process.env.OPENVERDICT_RELEASE_MANIFEST,
+    "config/release.localnet.json",
+  );
+  if (!existsSync(/* turbopackIgnore: true */ manifestPath)) {
+    throw new EngineNotWiredError(`release manifest is missing: ${manifestPath}`);
+  }
+  const manifest = await loadReleaseManifest(manifestPath);
+  try {
+    assertDeployedManifest(manifest);
+  } catch {
+    throw new EngineNotWiredError(
+      `release manifest ${manifestPath} has no deployed packageId or registryObjectId`,
+    );
+  }
+  return { manifestPath, manifest };
+}
+
+function createServerGonkaAdapter(manifest: ReleaseManifest): GonkaRouterAdapter {
+  if (manifest.gonka.mode === "fake") return createDynamicFakeAdapter();
+  const apiKey = process.env.GONKA_ROUTER_API_KEY?.trim();
+  if (!apiKey) {
+    throw new EngineNotWiredError("GONKA_ROUTER_API_KEY is required in live mode");
+  }
+  return createGonkaAdapterWithDependencies(
+    {
+      // A blank override must not erase the release manifest's base URL.
+      baseUrl: readEnv(process.env.GONKA_ROUTER_BASE_URL, manifest.gonka.baseUrl),
+      apiKey,
+      timeoutMs: numberEnv("GONKA_REQUEST_TIMEOUT_MS", 120_000),
+      researchTimeoutMs: numberEnv("GONKA_RESEARCH_TIMEOUT_MS", 240_000),
+      hedgeAfterMs: numberEnv("GONKA_HEDGE_AFTER_MS", 25_000),
+      maxRetries: numberEnv("GONKA_MAX_RETRIES", 1),
+    },
+    {
+      // Keep provider diagnostics useful without ever logging credentials.
+      logger: createRedactingLogger((level, entry) => {
+        process.stderr.write(`gonka-attempt ${level} ${JSON.stringify(entry)}\n`);
+      }),
+    },
+  );
 }
 
 /** Keep optional Walrus WASM out of local-only Next route bundles. */

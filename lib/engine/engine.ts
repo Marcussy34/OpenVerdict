@@ -3286,7 +3286,7 @@ function resolveGateway(config: EngineConfig, manifest: ReleaseManifest): SuiGat
   });
 }
 
-function manifestEvidencePolicy(manifest: ReleaseManifest): RetrievalPolicy {
+export function manifestEvidencePolicy(manifest: ReleaseManifest): RetrievalPolicy {
   return manifest.evidencePolicy
     ? {
         maxBytes: manifest.evidencePolicy.maxBytes,

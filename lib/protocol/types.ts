@@ -216,7 +216,7 @@ export type GatewayResponseMeta = {
 export type ProviderRequestRecord = {
   model: string;
   temperature: 0;
-  maxTokens: 4096;
+  maxTokens: number;
   responseFormat: "json_object" | "none";
   attemptKind: "PRIMARY" | "RETRY" | "HEDGE" | "JSON_PROMPT_FALLBACK" | "REPAIR";
   messages: Array<{

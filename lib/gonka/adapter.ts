@@ -564,8 +564,13 @@ export function createGonkaAdapterWithDependencies(
     manifest: AgentManifest,
     attempts: GonkaAttemptRecord[],
     spec: PromptSpecV1 | PromptSpecV2 | PromptSpecV3 | PromptSpecV4,
-    requestTimeoutMs?: number,
+    options: {
+      requestTimeoutMs?: number;
+      maxOutputTokens?: number;
+    } = {},
   ): Promise<ProviderExecution> => {
+    const requestTimeoutMs = options.requestTimeoutMs;
+    const maxOutputTokens = options.maxOutputTokens ?? spec.maxOutputTokens;
     const retriesUsed = attempts.filter((attempt) => attempt.kind === "RETRY").length;
     const retriesRemaining = Math.max(0, maxRetries - retriesUsed);
     const deadlineMs = requestTimeoutMs === undefined
@@ -577,7 +582,7 @@ export function createGonkaAdapterWithDependencies(
     const requestBody = {
       model: manifest.modelId,
       temperature: spec.temperature,
-      max_tokens: spec.maxOutputTokens,
+      max_tokens: maxOutputTokens,
       messages,
       ...(includeResponseFormat
         ? { response_format: { type: spec.responseFormat } }
@@ -735,7 +740,7 @@ export function createGonkaAdapterWithDependencies(
           request: {
             model: manifest.modelId,
             temperature: spec.temperature,
-            maxTokens: spec.maxOutputTokens,
+            maxTokens: maxOutputTokens,
             responseFormat: includeResponseFormat ? spec.responseFormat : "none",
             attemptKind: success.kind,
             messages: messages.map((message) => ({ ...message })),
@@ -810,6 +815,16 @@ export function createGonkaAdapterWithDependencies(
       request.timeoutMs !== undefined && request.timeoutMs > 0
         ? Math.min(researchTimeoutMs, request.timeoutMs)
         : researchTimeoutMs;
+    const maxOutputTokens = request.maxOutputTokens ?? completionSpec.maxOutputTokens;
+    if (
+      !Number.isInteger(maxOutputTokens) ||
+      maxOutputTokens <= 0 ||
+      maxOutputTokens > completionSpec.maxOutputTokens
+    ) {
+      throw new RangeError(
+        `maxOutputTokens must be between 1 and ${completionSpec.maxOutputTokens}`,
+      );
+    }
     const provider = await execute(
       request.kind,
       request.messages,
@@ -818,7 +833,7 @@ export function createGonkaAdapterWithDependencies(
       request.manifest,
       request.attempts,
       completionSpec,
-      callTimeoutMs,
+      { requestTimeoutMs: callTimeoutMs, maxOutputTokens },
     );
     if (!provider.ok) {
       return {

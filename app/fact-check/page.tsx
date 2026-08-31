@@ -19,6 +19,7 @@ import {
   ArrowDown2,
   ArrowRight,
   ArrowRight2,
+  Global,
   Refresh,
   SearchNormal1,
   ShieldSearch,
@@ -43,6 +44,22 @@ const OUTCOME_CHIP: Record<string, string> = {
   UNSURE: "bg-unsure/10 text-unsure",
   UNRESOLVED: "bg-muted text-muted-foreground",
 };
+
+/** Friendly copy for the extraction endpoint's error codes. */
+const EXTRACT_ERRORS: Record<string, string> = {
+  INVALID_URL: "That does not look like a reachable page URL.",
+  NO_CLAIM_FOUND: "No checkable factual claim found on that page; state it as text instead.",
+  FETCH_FAILED: "Could not read that page safely; paste the claim as text instead.",
+  ENGINE_NOT_WIRED: "The engine is offline; extraction is unavailable right now.",
+};
+
+function hostOf(url: string): string {
+  try {
+    return new URL(url).hostname;
+  } catch {
+    return url;
+  }
+}
 
 function shortClaimId(claimId: string): string {
   return claimId.length <= 14
@@ -210,8 +227,63 @@ function FactCheckContent() {
   // page and the landing footer's one-line form behave identically.
   const { submit, submitting, errorMessage, isEngineOffline } = useClaimSubmission();
 
+  // URL-shaped input flips the bar into extraction mode: the engine reads
+  // the page on Gonka and proposes the checkable claim (track requirement:
+  // "input a URL, tweet, or text snippet").
+  const [extracting, setExtracting] = useState(false);
+  const [extractError, setExtractError] = useState<string | null>(null);
+  const [extraction, setExtraction] = useState<{
+    sourceUrl: string;
+    modelId: string;
+    requestId?: string;
+  } | null>(null);
+  const isUrlInput = /^https?:\/\/\S+$/i.test(claim.trim());
+
+  const extract = async () => {
+    setExtracting(true);
+    setExtractError(null);
+    try {
+      const response = await fetch("/api/extract-claim", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: claim.trim() }),
+      });
+      const data = (await response.json().catch(() => ({}))) as {
+        claim?: string;
+        sourceUrl?: string;
+        modelId?: string;
+        gonkaRequestId?: string;
+        gatewayRequestId?: string;
+        error?: string;
+      };
+      if (response.ok && data.claim) {
+        setClaim(data.claim);
+        setExtraction({
+          sourceUrl: data.sourceUrl ?? claim.trim(),
+          modelId: data.modelId ?? "GonkaRouter",
+          requestId: data.gonkaRequestId ?? data.gatewayRequestId,
+        });
+        return;
+      }
+      setExtractError(
+        EXTRACT_ERRORS[data.error ?? ""]
+          ?? (response.status === 429
+            ? "Too many extractions right now; try again in a moment."
+            : "Could not extract a claim from that page; state it as text instead."),
+      );
+    } catch {
+      setExtractError("Could not reach the extraction service; state the claim as text instead.");
+    } finally {
+      setExtracting(false);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isUrlInput) {
+      await extract();
+      return;
+    }
     await submit({ claim });
   };
 
@@ -273,7 +345,10 @@ function FactCheckContent() {
               placeholder="e.g. The first Bitcoin halving took place in November 2012"
               className="field-sizing-content max-h-32 min-h-11 flex-1 resize-none border-0 bg-transparent p-0 py-2.5 text-base shadow-none placeholder:text-muted-foreground/45 focus-visible:ring-0 dark:bg-transparent"
               value={claim}
-              onChange={(e) => setClaim(e.target.value)}
+              onChange={(e) => {
+                setClaim(e.target.value);
+                setExtractError(null);
+              }}
               onKeyDown={(e) => {
                 // Enter submits like a search bar; Shift+Enter makes a newline.
                 if (e.key === "Enter" && !e.shiftKey) {
@@ -287,14 +362,24 @@ function FactCheckContent() {
           </div>
           <Button
             type="submit"
-            disabled={submitting || !claim.trim()}
-            aria-busy={submitting}
+            disabled={submitting || extracting || !claim.trim()}
+            aria-busy={submitting || extracting}
             className="min-h-[52px] shrink-0 px-7 font-semibold shadow-xs"
           >
             {submitting ? (
               <>
                 <Refresh size="16" variant="Linear" className="motion-safe:animate-spin" />
                 Freezing to Walrus (about 20 s)…
+              </>
+            ) : extracting ? (
+              <>
+                <Refresh size="16" variant="Linear" className="motion-safe:animate-spin" />
+                Reading the page on Gonka…
+              </>
+            ) : isUrlInput ? (
+              <>
+                Extract claim
+                <ArrowRight size="16" variant="Bold" />
               </>
             ) : (
               <>
@@ -305,12 +390,33 @@ function FactCheckContent() {
           </Button>
         </form>
 
+        {extractError && (
+          <p className="rounded-xl border border-unsure/30 bg-unsure/8 px-3 py-2 text-xs font-medium text-unsure">
+            {extractError}
+          </p>
+        )}
+        {extraction && !extractError && (
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border border-border bg-surface px-3 py-2 text-[11px] text-muted-foreground">
+            <Global size="12" variant="Bold" className="shrink-0 text-primary" />
+            <span className="min-w-0">
+              Claim extracted from{" "}
+              <span className="font-medium text-ocean">{hostOf(extraction.sourceUrl)}</span>
+              {" "}by {extraction.modelId} on Gonka
+              {extraction.requestId ? (
+                <span className="font-mono"> · {extraction.requestId}</span>
+              ) : null}
+              . Edit freely, then Verify.
+            </span>
+          </div>
+        )}
+
         {/* Helper details only surface once the user starts typing. */}
         {claim.length > 0 && (
           <div className="flex items-start justify-between gap-3 px-1">
             <p className="text-[11px] text-muted-foreground">
-              One falsifiable sentence with the who, what and when. Avoid
-              opinions, predictions and compound claims.
+              {isUrlInput
+                ? "A page URL: the engine reads it on Gonka and proposes the checkable claim."
+                : "One falsifiable sentence with the who, what and when. Avoid opinions, predictions and compound claims. Or paste a page URL."}
             </p>
             <span
               className={cn(

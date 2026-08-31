@@ -204,6 +204,36 @@ describe("createGonkaAdapter", () => {
     expect(result.attempt).toBe(attempts[0]);
   });
 
+  it("complete() honors a bounded per-call output token limit", async () => {
+    const network = queuedFetch({
+      body: completionBody('{"claim":"A checkable claim."}', {
+        id: "devshard-bounded-output",
+      }),
+    });
+    const adapter = createGonkaAdapter(
+      { apiKey: "test-key" },
+      dependencies(network.fetch),
+    );
+
+    const result = await adapter.complete({
+      manifest: makeManifest(),
+      messages: [{ role: "user", content: "extract one claim" }],
+      kind: "PRIMARY",
+      jsonMode: true,
+      input: makeInput({ promptVersion: "2" }),
+      attempts: [],
+      maxOutputTokens: 300,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(network.bodies[0]).toMatchObject({
+      temperature: 0,
+      max_tokens: 300,
+    });
+    if (!result.ok) throw new Error("expected ok");
+    expect(result.request.maxTokens).toBe(300);
+  });
+
   it("enforces the requested model and records a gateway fallback notice", async () => {
     const content = '{"action":"search","query":"sui"}';
     const network = queuedFetch({
