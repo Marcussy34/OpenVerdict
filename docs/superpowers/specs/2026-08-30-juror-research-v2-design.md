@@ -103,5 +103,8 @@ checks.
   evening: the commit window is 450 s since 22:26 with about 350 s of
   research, and calls are hedged since 2026-08-31.)
 - Router-side model substitution (seen on claim #17) still costs seats; the
-  adapter's fail-closed model check stays.
+  adapter's fail-closed model check stays. (Superseded 2026-08-31: the
+  adapter pins the model with X-Gonka-No-Fallback, so a saturated upstream
+  returns a real 429 instead of substituting; the fail-closed check remains
+  as defence in depth.)
 - Old bundles verify under their own policy; new checks apply to v4 only.

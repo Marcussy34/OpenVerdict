@@ -199,7 +199,8 @@ Postgres. Tests: 464 vitest, 70 Move.
   round one (not yet exercised live: #25 needed no round two).
 - SELECTION WEIGHTS 2026-08-30 22:15: GonkaRouter serves exactly three
   models (`GET /v1/models`: DeepSeek-V4-Flash-0731, MiniMax-M2.7,
-  Kimi-K2.6), so a fourth model family is not available and all inference
+  Kimi-K2.6), so a fourth model family is not available today (their team
+  says more large models are coming, 2026-08-31) and all inference
   stays on GonkaRouter. The committee rules (at most two seats per model,
   three families per committee, seven active agents for the draw) put at
   least one Kimi seat on every committee, and Kimi's calls on claim #22

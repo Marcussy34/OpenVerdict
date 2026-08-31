@@ -2,7 +2,9 @@
 
 Date: 2026-08-30 evening. Status: design decided by the acting lead; the
 re-execution check is being built now; the enclave is the next milestone;
-the signed receipt is a request to the network.
+the signed receipt is on GonkaRouter's roadmap (they will propose the
+format) and the public request lookup is live and integrated: see the
+2026-08-31 update at the end of this document.
 
 ## The gap, stated precisely
 

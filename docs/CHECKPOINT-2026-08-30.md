@@ -65,9 +65,11 @@
 - GonkaRouter (api.gonkarouter.io, OpenAI-compatible): all three juror
   models priced $0.0012 per 1M tokens; a claim uses about 190k tokens.
   Replies carry x-request-id, x-devshard-id, id devshard-<n>-<seq>,
-  system_fingerprint; NO signed receipt. Intermittent failures all day
-  (all models), and once served DeepSeek requests from a MiniMax node (the
-  adapter fails such runs closed).
+  system_fingerprint; no signed receipt yet (on their roadmap; the public
+  receipts lookup is live and integrated since 2026-08-31, see 3h).
+  Intermittent failures all day (all models), and once served DeepSeek
+  requests from a MiniMax node (the adapter fails such runs closed; since
+  2026-08-31 X-Gonka-No-Fallback pins the model at the gateway).
 - Firecrawl: the APP key (same in `.env` and Railway, sha256 fingerprint
   edf48c293213) belongs to the account with 957 credits, refreshing
   Sep 29, about 30 credits per claim. The CLI key for terminal lookups

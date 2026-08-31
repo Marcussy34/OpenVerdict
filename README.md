@@ -309,9 +309,11 @@ Known limitations (V1, disclosed by design):
   the pipeline upstream of the commitment is trusted infrastructure in the
   hackathon build (multi-attestor is production work, PRD §28.6).
 - There is no proof yet that the model received exactly the recorded bytes:
-  the re-execution check is a soft corroboration, a signed receipt has been
-  requested from GonkaRouter, and an attested forwarder (Nautilus) is the
-  planned closure (see `docs/superpowers/specs/2026-08-30-attested-inference-design.md`).
+  the re-execution check is a soft corroboration, GonkaRouter's public
+  receipts lookup is cross-checked on every revealed run (model, devshard,
+  timing; live since 2026-08-31), a gateway-signed receipt is on their
+  roadmap, and an attested forwarder (Nautilus) is the full closure (see
+  `docs/superpowers/specs/2026-08-30-attested-inference-design.md`).
 - Seal keys and salts are stored in plaintext in the engine's Postgres on
   testnet; encrypt at rest before any mainnet use.
 - Five LLM jurors are correlated even across model families; diversity
@@ -361,8 +363,10 @@ requirements must be reconfirmed against organizer material (PRD §7.3).
   never fetch, never hold keys, never sign. No wallet keys near models.
 - **“Did the model really see that prompt?”** The exact conversation is in
   the revealed bundle and can be resent to the same model from the run page;
-  the byte-level proof (signed receipts or an attested forwarder) is the one
-  disclosed gap, documented and requested.
+  and the gateway's own public receipt for the recorded request id is
+  compared on the run page; the byte-level proof (a gateway-signed receipt,
+  on GonkaRouter's roadmap, or an attested forwarder) is the one disclosed
+  gap, documented and in motion.
 - **“Is the dashboard running the protocol?”** No: stop it and the CLI
   continues; it has no signer and no mutation endpoint.
 - **“Does GonkaRouter prove truth?”** No, and we never claim it does: Gonka
