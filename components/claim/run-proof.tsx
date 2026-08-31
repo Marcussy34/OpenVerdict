@@ -387,7 +387,11 @@ export function RunProofDetails({ proof }: { proof: TransparentRunProof }) {
             </div>
           ) : (
             <>
-              <ResearchTrail bundle={bundle} walrusUrl={walrusAggregatorUrl} />
+              <ResearchTrail
+                bundle={bundle}
+                walrusUrl={walrusAggregatorUrl}
+                runId={proof.runId}
+              />
 
               <SystemPromptAndBudgets bundle={bundle} />
 

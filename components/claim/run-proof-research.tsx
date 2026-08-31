@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/card";
 import { HashChip } from "@/components/viz/hash-chip";
 import { FieldLabel } from "@/components/viz/panel";
+import { useCanvasHighlight } from "@/components/viz/canvas-highlight";
 import {
   ArrowDown2,
   CloseCircle,
@@ -142,6 +143,7 @@ function ResearchStepCard({
   messages,
   finalRawResponse,
   walrusUrl,
+  runId,
 }: {
   step: TransparentResearchStep;
   stepIndex: number;
@@ -151,7 +153,10 @@ function ResearchStepCard({
   messages: TransparentMessage[];
   finalRawResponse: unknown;
   walrusUrl: WalrusUrl;
+  /** Enables hover-to-highlight of this step's branch on the canvas. */
+  runId?: string;
 }) {
+  const { highlight } = useCanvasHighlight();
   const action = step.action ?? {};
   const result = step.result ?? {};
   const tool = result.tool ?? "unknown";
@@ -188,8 +193,21 @@ function ResearchStepCard({
   const tokenSummary = `${formatNumber(audit?.inputTokens)} in, ${formatNumber(audit?.outputTokens)} out`;
   const flags = attempt?.investigationFlags ?? [];
 
+  // The canvas node this step renders as, when a canvas page is listening.
+  const canvasNodeId =
+    runId === undefined ? null : `step:${runId}:${step.index ?? stepIndex}`;
+
   return (
-    <Card size="sm" className="gap-0 py-0 ring-border">
+    <Card
+      size="sm"
+      className="gap-0 py-0 ring-border"
+      onMouseEnter={() => {
+        if (canvasNodeId !== null) highlight(canvasNodeId);
+      }}
+      onMouseLeave={() => {
+        if (canvasNodeId !== null) highlight(null);
+      }}
+    >
       <CardHeader className="border-b py-3">
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           <Badge variant="outline" className="font-mono">
@@ -464,9 +482,12 @@ function ResearchStepCard({
 export function ResearchTrail({
   bundle,
   walrusUrl,
+  runId,
 }: {
   bundle: TransparentBundle;
   walrusUrl: WalrusUrl;
+  /** Enables hover-to-highlight of step branches on the canvas. */
+  runId?: string;
 }) {
   const transcript = bundle.transcript;
   const steps = transcript?.steps ?? [];
@@ -511,6 +532,7 @@ export function ResearchTrail({
                 messages={messages}
                 finalRawResponse={bundle.rawResponse}
                 walrusUrl={walrusUrl}
+                runId={runId}
               />
             </li>
           ))}

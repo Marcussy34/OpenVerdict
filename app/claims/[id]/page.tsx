@@ -32,6 +32,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { useClaimEvents } from "@/components/use-claim-events";
 import { useNow } from "@/components/use-now";
+import { CanvasHighlightProvider } from "@/components/viz/canvas-highlight";
 import { DeliberationCanvas } from "@/components/viz/deliberation-canvas";
 import { HashChip } from "@/components/viz/hash-chip";
 import { outcomeLabel } from "@/components/viz/seat-seal";
@@ -1022,6 +1023,7 @@ export default function ClaimCanvasPage({ params }: ClaimCanvasPageProps) {
   const [proofsByRunId, setProofsByRunId] = useState<ProofCache>({});
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [inspectorWidth, setInspectorWidth] = useState(380);
+  const [trailHighlightId, setTrailHighlightId] = useState<string | null>(null);
   const resizePointerRef = useRef<number | null>(null);
   const [leftOpen, setLeftOpen] = useState(false);
   const [inspectorOpen, setInspectorOpen] = useState(false);
@@ -1172,6 +1174,7 @@ export default function ClaimCanvasPage({ params }: ClaimCanvasPageProps) {
   );
   const handleSelect = useCallback((node: GraphNode | null) => {
     setSelectedId(node?.id ?? null);
+    setTrailHighlightId(null);
   }, []);
 
   if (loading) {
@@ -1256,6 +1259,7 @@ export default function ClaimCanvasPage({ params }: ClaimCanvasPageProps) {
           selectedId={selectedId}
           onSelect={handleSelect}
           avatars={JUROR_AVATARS}
+          externalHighlightId={trailHighlightId}
         />
 
         <button
@@ -1327,13 +1331,15 @@ export default function ClaimCanvasPage({ params }: ClaimCanvasPageProps) {
           {/* Only this region scrolls, so the resize handle spans the whole
               panel edge no matter how far down the content goes. */}
           <div className="ov-scroll h-full overflow-x-hidden overflow-y-auto overscroll-contain p-5">
-            <NodeInspector
-              claim={claim}
-              events={events}
-              graph={graph}
-              node={selectedNode}
-              proofsByRunId={proofsByRunId}
-            />
+            <CanvasHighlightProvider onHighlight={setTrailHighlightId}>
+              <NodeInspector
+                claim={claim}
+                events={events}
+                graph={graph}
+                node={selectedNode}
+                proofsByRunId={proofsByRunId}
+              />
+            </CanvasHighlightProvider>
           </div>
         </aside>
       )}
@@ -1359,13 +1365,15 @@ export default function ClaimCanvasPage({ params }: ClaimCanvasPageProps) {
       {inspectorOpen ? (
         <MobileSheet title="Node inspector" onClose={() => setInspectorOpen(false)}>
           <div className="ov-inspector-dark @container p-5">
-            <NodeInspector
-              claim={claim}
-              events={events}
-              graph={graph}
-              node={selectedNode}
-              proofsByRunId={proofsByRunId}
-            />
+            <CanvasHighlightProvider onHighlight={setTrailHighlightId}>
+              <NodeInspector
+                claim={claim}
+                events={events}
+                graph={graph}
+                node={selectedNode}
+                proofsByRunId={proofsByRunId}
+              />
+            </CanvasHighlightProvider>
           </div>
         </MobileSheet>
       ) : null}

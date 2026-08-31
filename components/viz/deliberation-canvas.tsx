@@ -516,12 +516,15 @@ export function DeliberationCanvas({
   selectedId,
   onSelect,
   avatars,
+  externalHighlightId,
   reducedMotion,
 }: {
   graph: DeliberationGraph;
   selectedId: string | null;
   onSelect: (node: GraphNode | null) => void;
   avatars: Partial<Record<JurorFamily, string[]>>;
+  /** A node id lit from outside the canvas (the inspector's research trail). */
+  externalHighlightId?: string | null;
   reducedMotion?: boolean;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -610,9 +613,12 @@ export function DeliberationCanvas({
     [graph.edges],
   );
   const highlightedIds = useMemo(() => {
-    if (hoveredJurorId === null || !nodesById.has(hoveredJurorId)) return null;
-    return outgoingSubtree(hoveredJurorId, graph);
-  }, [graph, hoveredJurorId, nodesById]);
+    // A local juror hover wins; otherwise an external source (the research
+    // trail in the inspector) can light a branch from outside the canvas.
+    const root = hoveredJurorId ?? externalHighlightId ?? null;
+    if (root === null || !nodesById.has(root)) return null;
+    return outgoingSubtree(root, graph);
+  }, [externalHighlightId, graph, hoveredJurorId, nodesById]);
 
   const handlePointerDown = useCallback(
     (event: ReactPointerEvent<HTMLDivElement>): void => {
