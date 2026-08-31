@@ -658,6 +658,26 @@ the recorded public record); queue after this: optimistic quick-verify
 exposure, read-only juror track record, zkLogin re-registration of the
 demo jurors. 481/481 vitest, 70 Move.
 
+Round 7 (commits `9b31c95`..`3a109c9`, deployment `7c270d32`, verified
+live): the owner's canvas refinement burst. Landing hero blurb tightened
+and widened (four lines, "research and cite each claim on Gonka's
+decentralized inference network"). Verify bar rebuilt as one flat
+items-center row (icon, input, button siblings; input padded to the
+button's 48px) so alignment is structural. BRANCH SEMANTICS: research
+steps no longer chain; every search branches from its juror ("action"
+seat->search edges only), every page hangs off the most recent earlier
+search that surfaced its URL, direct opens branch from the juror;
+assertions pin no-chaining. PENTAGON SPAWN: juror nodes carry seatIndex
+and seed at fixed 72-degree slots (verified live in replay at the
+committee frame: gaps exactly [72,72,72,72,72]); branch-out seeding now
+excludes jurors. AVATAR IDENTITY: one shared picker
+(avatarAssetNumber keyed by agentProfileId) drives both the canvas node
+and the inspector header, verified live (minimax-2.png on both).
+TRAIL HOVER: hovering a research-trail step lights its canvas branch via
+a CanvasHighlight context (no-op on report/audit pages), verified live
+(41 elements dim on hover). 486/486 vitest. One interrupted ship was
+re-run after folding in the avatar fix per the owner's flow.
+
 ## 4. Planned next (owner-approved direction)
 
 - Attestation (docs/superpowers/specs/2026-08-30-attested-inference-design.md):
