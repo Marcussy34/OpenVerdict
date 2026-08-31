@@ -927,6 +927,27 @@ Decisions locked in the pre-sleep design talk:
   probe: 0xfcc609e9b3748f532cded0f9bbab9c868c04e646f33edaed0a64d6ab0ac53570
   (Ethereum genesis block, July 30 2015), in research at write time.
 
+### 3n CLOSING, 06:20 (overnight command complete)
+
+Main = e32cf32 + docs commits, pushed, tree clean. Live deployment
+1fd625f0 on package v3. 501/501 TS, 73/73 protocol Move (+4 seal).
+All three Codex workers reviewed and landed; two required takeover
+after verify-phase hangs (standing playbook in 3n progress notes).
+Shipped and verified live: early reveal-open + treasury fee on-chain,
+7 jurors re-registered with v5 manifests, backing/track-record/
+earnings visible on /agents (Allowlist chips, 0.011-0.047 SUI each),
+proof persistence in Postgres with warm-at-finalize.
+E2E storms: claims 0x4f409921 and 0xfcc609e9 both lost 5/5 seats to a
+sustained GonkaRouter degradation (juror-sized requests shed across
+all three families, small probes fine); both stranded state 6,
+deadline fallback and fail-closed proven live. The 5/5 early-reveal
+demo is one healthy claim away.
+OWNER MORNING ACTIONS: back 1-2 jurors via Google zkLogin on /agents;
+submit one claim when Gonka clears (that run = early-reveal demo +
+video footage); everything else unblocked. Morning report artifact
+published (link in the session transcript).
+Copy nit queued: "1 seats" pluralization on agent rows.
+
 ## 4. Planned next (owner-approved direction)
 
 - Attestation (docs/superpowers/specs/2026-08-30-attested-inference-design.md):
