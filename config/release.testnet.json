@@ -3,8 +3,8 @@
   "suiRpcUrl": "https://fullnode.testnet.sui.io:443",
   "suiRpcFallbackUrl": "https://sui-testnet-rpc.publicnode.com",
   "suiFaucetUrl": "https://faucet.testnet.sui.io/v2/gas",
-  "packageId": "0xb411210a52dad799b9b4a53e3a44b30c3c8b8a3b1981795f830166533a474c1d",
-  "registryObjectId": "0x9036764a06e5a0c1df445665fd7fc5ddb3326a30603e1eb188347ab8096afe05",
+  "packageId": "0xa9f3c2dbdfad3ff900b9d2f4df605621d619a9e7575034f508eb5d39263c5bc7",
+  "registryObjectId": "0x4020f3cbe51c1cdf6d004696e7cdf0d19f67fde2572b72a5f39a51d119f8ebab",
   "demoPoolObjectId": "",
   "clockObjectId": "0x6",
   "randomObjectId": "0x8",
@@ -43,8 +43,8 @@
     ]
   },
   "explorerTxTemplate": "https://suiscan.xyz/testnet/tx/{digest}",
-  "adminCapObjectId": "0x525aed2830743f7016bfd63d508ac1ed513e83779936167472cac61d1d4720f8",
-  "pauseCapObjectId": "0xfeb0bb178f5baac6dfb057ecb1dbd7c3e0319369d0e28a256d100f676f699104",
-  "evidenceCapObjectId": "0xbe193c468e4f260a23d4a231bf45ff71676e8f5e4425c2b1793ba8d0276dc81b",
-  "runAttestorCapObjectId": "0x4aa044b452a1285bb45c01b88a7d03d2fe5ef7f9c2f910b9df5f79bace0b605b"
+  "adminCapObjectId": "0x30d1986921d399a3fe4b42559021042f4499c8e6373612286ad3d02ba3ae0637",
+  "pauseCapObjectId": "0x3d38995c3070d9ae9bb7e2827f286be0b2179de0348d3d44b94bc8a174f18810",
+  "evidenceCapObjectId": "0xa8a5a0f5a2bede5961cecefda10f77a64517195da4c3d3c387c591278a86c190",
+  "runAttestorCapObjectId": "0x82742592721c25eb76baa0c85962441ce1f0e0b908d3b1a5060e4c8539c7c720"
 }
