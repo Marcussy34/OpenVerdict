@@ -261,6 +261,18 @@ dark mode).
 
 ## 🔍 What is auditable
 
+The design goal, stated plainly: a claim's entire lifecycle can be recomputed
+from public artifacts by anyone, every step, every fetched page, every vote,
+every reasoning trace. Independence is enforced before the fact: commit-reveal
+means no juror sees another's vote before committing, and evidence roots
+freeze on Sui before any reveal. Integrity is checkable after the fact: hash
+chains run from the raw Walrus bytes to the on-chain roots. Two honest caveats
+below keep this precise: inference re-execution is corroboration rather than
+cryptographic proof until gateway-signed receipts land, and the operator is
+detectable rather than impossible, unable to forge the record without breaking
+hashes anyone can check. OpenVerdict certifies the process, not universal
+truth: manipulation cannot hide.
+
 | Item | Source of truth |
 | --- | --- |
 | Claim, deadlines, bonds, result | Shared claim object + immutable resolution certificate |
