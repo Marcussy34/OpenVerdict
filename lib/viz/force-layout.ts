@@ -59,26 +59,41 @@ export function createSimulation(
     }
     return { id: node.id, kind: node.kind };
   });
-  const links: LayoutLink[] = graph.edges.map((edge) => ({
+  type LinkWithKind = LayoutLink & { kind: string };
+  const links: LinkWithKind[] = graph.edges.map((edge) => ({
     source: edge.from,
     target: edge.to,
+    kind: edge.kind,
   }));
+  // Seat spokes hold the committee ring; the research subtrees hang further
+  // out from each juror instead of collapsing into the claim (a flat 40px
+  // distance piled every node under the juror discs).
+  const linkDistance = (link: LinkWithKind): number => {
+    switch (link.kind) {
+      case "seat": return radialRadius;
+      case "verdict": return 84;
+      case "settle": return 110;
+      case "action": return 64;
+      default: return 52;
+    }
+  };
 
   const simulation = forceSimulation<LayoutNode, LayoutLink>(nodes)
     .force(
       "link",
-      forceLink<LayoutNode, LayoutLink>(links)
+      forceLink<LayoutNode, LinkWithKind>(links)
         .id((node) => node.id)
-        .distance(40),
+        .distance(linkDistance)
+        .strength((link) => link.kind === "seat" ? 0.9 : 0.5),
     )
     // A zero strength keeps non-juror nodes free to form linked clusters.
     .force(
       "juror-ring",
       forceRadial<LayoutNode>(radialRadius, centre.x, centre.y)
-        .strength((node) => node.kind === "juror" ? 0.1 : 0),
+        .strength((node) => node.kind === "juror" ? 0.35 : 0),
     )
-    .force("charge", forceManyBody<LayoutNode>().strength(-80))
-    .force("collide", forceCollide<LayoutNode>(collisionRadius))
+    .force("charge", forceManyBody<LayoutNode>().strength(-120))
+    .force("collide", forceCollide<LayoutNode>((node) => collisionRadius(node) + 4))
     .alphaDecay(0.05);
 
   const positions = (): Map<string, { x: number; y: number }> => {

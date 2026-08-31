@@ -31,8 +31,8 @@
 - Consumes: `useClaimEvents(claimId)` from `components/use-claim-events.ts` returning `{ events, status, isDelayed, lastEventId, error, reconnect }`.
 - Produces: nothing new; behavioural change only.
 
-- [ ] **Step 1:** In the page component, call `const { events } = useClaimEvents(id);` next to the existing state hooks (before any early return).
-- [ ] **Step 2:** Add a debounced refetch effect:
+- [x] **Step 1:** In the page component, call `const { events } = useClaimEvents(id);` next to the existing state hooks (before any early return).
+- [x] **Step 2:** Add a debounced refetch effect:
 
 ```tsx
 // Live: any new engine event refetches the inspection (debounced), so the
@@ -48,9 +48,9 @@ useEffect(() => {
 ```
 
 `loadData` already exists (useCallback). Ensure `loadData` does not flip the whole page into its loading skeleton on refetch: change `setLoading(true)` inside `loadData` to only apply when `claim === null` (first load).
-- [ ] **Step 3:** `pnpm typecheck && pnpm lint` pass.
-- [ ] **Step 4:** Manual check in `pnpm dev` with a finished claim: page renders, no loop of refetches (network tab quiet after one refetch), Refresh button still works.
-- [ ] **Step 5:** Commit `feat(ui): claim page follows the live event stream`.
+- [x] **Step 3:** `pnpm typecheck && pnpm lint` pass.
+- [x] **Step 4:** Manual check in `pnpm dev` with a finished claim: page renders, no loop of refetches (network tab quiet after one refetch), Refresh button still works.
+- [x] **Step 5:** Commit `feat(ui): claim page follows the live event stream`.
 
 ### Task 2 (interim): faster submit
 
@@ -60,10 +60,10 @@ useEffect(() => {
 
 **Interfaces:** unchanged public API.
 
-- [ ] **Step 1:** In the claim creation path, find the two sequential Walrus uploads (statement, criteria) that run before the create_claim transaction and run them concurrently with `Promise.all`. The blob ids still land in the same fields; nothing else moves.
-- [ ] **Step 2:** `pnpm vitest run lib/engine` passes (lifecycle tests cover creation).
-- [ ] **Step 3:** In the form, while submitting show "Freezing your statement to Walrus (about 20 s)..." instead of plain "Submitting...".
-- [ ] **Step 4:** `pnpm typecheck && pnpm lint`; commit `perf(engine): parallel Walrus writes at claim creation, honest submit copy`.
+- [x] **Step 1:** In the claim creation path, find the two sequential Walrus uploads (statement, criteria) that run before the create_claim transaction and run them concurrently with `Promise.all`. The blob ids still land in the same fields; nothing else moves.
+- [x] **Step 2:** `pnpm vitest run lib/engine` passes (lifecycle tests cover creation).
+- [x] **Step 3:** In the form, while submitting show "Freezing your statement to Walrus (about 20 s)..." instead of plain "Submitting...".
+- [x] **Step 4:** `pnpm typecheck && pnpm lint`; commit `perf(engine): parallel Walrus writes at claim creation, honest submit copy`.
 
 ### Task 3: RESEARCH_TICK events
 
@@ -76,11 +76,11 @@ useEffect(() => {
 - Produces: `runResearchLoop` deps gain `onStep?: (info: { kind: "search" | "open"; ordinal: number }) => void` (optional, fire-and-forget, called once per recorded transcript step at the moment it is pushed; ordinal is the step index starting at 0).
 - Produces: engine emits `ResolutionEvent` with `kind: "RESEARCH_TICK"`, `source: "ENGINE"`, `visibility: "PUBLIC_NOW"`, `payload: { jurySeatId, kind, ordinal }` through the same event-append path the engine already uses for its other engine-sourced events (locate the helper that stores events with sequence numbers in `lib/events` / repository and reuse it exactly; do not invent a second path).
 
-- [ ] **Step 1:** Write the failing loop test: with a fake provider run, `onStep` receives one call per transcript step, ordinals 0..n-1, kinds matching the steps, and the info object has exactly the two keys.
-- [ ] **Step 2:** Implement `onStep` in `lib/research/loop.ts` at the single `steps.push(...)` site (wrap in try/catch so a throwing callback never affects the run).
-- [ ] **Step 3:** Write the failing engine test: a fake-jury run produces RESEARCH_TICK events, `visibility === "PUBLIC_NOW"`, and `Object.keys(payload).sort()` equals `["jurySeatId","kind","ordinal"].sort()`; no payload value contains a url or query string.
-- [ ] **Step 4:** Wire the callback in the engine's research invocation; emit per tick.
-- [ ] **Step 5:** `pnpm vitest run lib/research lib/engine lib/events` green; commit `feat(engine): content-free RESEARCH_TICK events for the sealed phase`.
+- [x] **Step 1:** Write the failing loop test: with a fake provider run, `onStep` receives one call per transcript step, ordinals 0..n-1, kinds matching the steps, and the info object has exactly the two keys.
+- [x] **Step 2:** Implement `onStep` in `lib/research/loop.ts` at the single `steps.push(...)` site (wrap in try/catch so a throwing callback never affects the run).
+- [x] **Step 3:** Write the failing engine test: a fake-jury run produces RESEARCH_TICK events, `visibility === "PUBLIC_NOW"`, and `Object.keys(payload).sort()` equals `["jurySeatId","kind","ordinal"].sort()`; no payload value contains a url or query string.
+- [x] **Step 4:** Wire the callback in the engine's research invocation; emit per tick.
+- [x] **Step 5:** `pnpm vitest run lib/research lib/engine lib/events` green; commit `feat(engine): content-free RESEARCH_TICK events for the sealed phase`.
 
 ### Task 4: graph model
 
@@ -125,9 +125,9 @@ export function familyOfModelId(modelId: string | undefined): JurorFamily; // "d
 
 Id scheme: `claim`, `seat:<jurySeatId>`, `tick:<jurySeatId>:<ordinal>` (sealedAction), `step:<runId>:<index>` (search/page), `verdict:<runId>`, `failure:<jurySeatId>`, `certificate`. A sealedAction and the revealed step with the same seat and ordinal share `atMs` so the bloom replaces in place. Edges follow the recorded sequence (spec section 1). `atMs` sources: event `occurredAt` when available, else claim deadlines interpolation for pre-tick claims (research steps spread evenly between evidence cutoff and the first commit event).
 
-- [ ] **Step 1:** Write failing tests first, minimum set: builds claim+5 jurors from a bare inspection; a revealed proof yields search/page/verdict nodes with citation edges; a `failureStatus` seat yields a failure node; RESEARCH_TICK events yield sealedAction nodes that disappear when the same seat has revealed steps; deterministic ids (two calls deep-equal); every node has finite `atMs`; pre-tick claim interpolation is monotonic. Build fixtures inline (small literal ClaimInspection and transcript objects; copy realistic field shapes from `lib/engine/contract.ts` and an actual proof JSON in `node_modules/.cache/proof-387a344b-1.json` if present).
-- [ ] **Step 2:** Implement until green. Pure module: no React, no fetch, no Date.now (take `nowMs`).
-- [ ] **Step 3:** `pnpm vitest run lib/viz` green; typecheck; commit `feat(viz): deliberation graph model`.
+- [x] **Step 1:** Write failing tests first, minimum set: builds claim+5 jurors from a bare inspection; a revealed proof yields search/page/verdict nodes with citation edges; a `failureStatus` seat yields a failure node; RESEARCH_TICK events yield sealedAction nodes that disappear when the same seat has revealed steps; deterministic ids (two calls deep-equal); every node has finite `atMs`; pre-tick claim interpolation is monotonic. Build fixtures inline (small literal ClaimInspection and transcript objects; copy realistic field shapes from `lib/engine/contract.ts` and an actual proof JSON in `node_modules/.cache/proof-387a344b-1.json` if present).
+- [x] **Step 2:** Implement until green. Pure module: no React, no fetch, no Date.now (take `nowMs`).
+- [x] **Step 3:** `pnpm vitest run lib/viz` green; typecheck; commit `feat(viz): deliberation graph model`.
 
 ### Task 5: canvas renderer
 
@@ -142,10 +142,10 @@ Id scheme: `claim`, `seat:<jurySeatId>`, `tick:<jurySeatId>:<ordinal>` (sealedAc
 
 Behaviour: claim node pinned centre; jurors on a radial ring (forceRadial), per-juror action nodes linked (forceLink distance 40, forceManyBody -80, forceCollide by radius); simulation ticks write positions into refs and a single `requestAnimationFrame` loop paints an absolutely positioned div layer (no SVG performance cliff at this size; divs keep Tailwind styling and avatar `<img>` simple). Pan and zoom with pointer events + wheel on a transform wrapper (scale 0.4 to 2.5). Hover sets a highlighted subtree (walk edges from the hovered juror); click calls `onSelect`. Dark stage: `bg-[#04122b]` with the family colours (deepseek `#0e76ff` range, kimi warm gold, minimax coral) as node accents; sealedAction nodes grey with a `Lock` icon; failure node `text-no` pulse; verdict nodes show outcome and confidence; certificate node `ShieldTick`. `prefers-reduced-motion` disables the entry/bloom animations (respect the passed `reducedMotion`).
 
-- [ ] **Step 1:** `pnpm add d3-force && pnpm add -D @types/d3-force`.
-- [ ] **Step 2:** Build `use-force-layout.ts`: input nodes/edges, output `Map<string, {x,y}>` updated per simulation tick; unit test with a 3-node graph asserting positions stabilise (run `simulation.tick()` 300 times synchronously in the test, no RAF).
-- [ ] **Step 3:** Build the component; storyless smoke test: render with a small graph in vitest jsdom asserting node labels appear.
-- [ ] **Step 4:** typecheck, lint, `pnpm vitest run components lib/viz`; commit `feat(viz): force-layout deliberation canvas`.
+- [x] **Step 1:** `pnpm add d3-force && pnpm add -D @types/d3-force`.
+- [x] **Step 2:** Build `use-force-layout.ts`: input nodes/edges, output `Map<string, {x,y}>` updated per simulation tick; unit test with a 3-node graph asserting positions stabilise (run `simulation.tick()` 300 times synchronously in the test, no RAF).
+- [x] **Step 3:** Build the component; storyless smoke test: render with a small graph in vitest jsdom asserting node labels appear.
+- [x] **Step 4:** typecheck, lint, `pnpm vitest run components lib/viz`; commit `feat(viz): force-layout deliberation canvas`.
 
 ### Task 6: page restructure
 
@@ -162,11 +162,11 @@ Behaviour: claim node pinned centre; jurors on a radial ring (forceRadial), per-
 
 Page behaviour: fetch inspection (+ events via SSE, refetch debounced as in Task 1); after reveal fetch each revealed seat's proof once (`Promise.all`, cache in state); `buildDeliberationGraph({claim, proofs, events, nowMs})` memoised; left rail shows statement, `StateBadge` (+stranded), countdown to the next deadline (from `useNow`), sealed x/5 and revealed x/5, Truth Score and certificate + "Full report" link (`/claims/[id]/report`); right inspector renders the selected node: juror or verdict node reuses the run-proof components (hash checks, Seal, re-run), search/page nodes show query, intent, url, hash, Walrus link from `detail`; failure shows the failure record. Mobile (`lg:` breakpoints): rails become sheets toggled by two floating buttons.
 
-- [ ] **Step 1:** `git mv "app/claims/[id]/page.tsx" "app/claims/[id]/report/page.tsx"`, then fix the moved file's back link and title ("Full report").
-- [ ] **Step 2:** Write the new canvas page and sidebars.
-- [ ] **Step 3:** Observe page becomes a server component calling `redirect(\`/claims/${id}\`)` from `next/navigation`.
-- [ ] **Step 4:** typecheck, lint, `pnpm vitest run`, `pnpm build`; manual dev pass on claims `0x21aa5a7bdd80…` (finalized with a failed seat), `0xbdab0011…` (Seal) and an old pre-research claim.
-- [ ] **Step 5:** Commit `feat(ui): the claim page is the deliberation canvas; report moves to /report`.
+- [x] **Step 1:** `git mv "app/claims/[id]/page.tsx" "app/claims/[id]/report/page.tsx"`, then fix the moved file's back link and title ("Full report").
+- [x] **Step 2:** Write the new canvas page and sidebars.
+- [x] **Step 3:** Observe page becomes a server component calling `redirect(\`/claims/${id}\`)` from `next/navigation`.
+- [x] **Step 4:** typecheck, lint, `pnpm vitest run`, `pnpm build`; manual dev pass on claims `0x21aa5a7bdd80…` (finalized with a failed seat), `0xbdab0011…` (Seal) and an old pre-research claim.
+- [x] **Step 5:** Commit `feat(ui): the claim page is the deliberation canvas; report moves to /report`.
 
 ### Task 7: replay
 
@@ -178,9 +178,9 @@ Page behaviour: fetch inspection (+ events via SSE, refetch debounced as in Task
 **Interfaces:**
 - Produces: `useReplay(graph: DeliberationGraph, terminal: boolean)` returning `{ active, t, playing, speed, start, stop, toggle, seek, setSpeed, visible }` where `visible` is the graph filtered to `atMs <= t`; speeds 1, 10 (default), 60; `t` runs from `min(atMs)` to `max(atMs)` on a RAF clock times speed.
 
-- [ ] **Step 1:** Failing hook test (vitest fake timers): construct a 5-node graph spanning 10 minutes, start replay at speed 60, assert `visible.nodes` grows in `atMs` order and completes.
-- [ ] **Step 2:** Implement; wire a play/scrub bar into the left rail (shadcn `Slider`, `Play`/`Pause` iconsax icons), shown only when `terminal`.
-- [ ] **Step 3:** Suites green; commit `feat(viz): replay a finished deliberation end to end`.
+- [x] **Step 1:** Failing hook test (vitest fake timers): construct a 5-node graph spanning 10 minutes, start replay at speed 60, assert `visible.nodes` grows in `atMs` order and completes.
+- [x] **Step 2:** Implement; wire a play/scrub bar into the left rail (shadcn `Slider`, `Play`/`Pause` iconsax icons), shown only when `terminal`.
+- [x] **Step 3:** Suites green; commit `feat(viz): replay a finished deliberation end to end`.
 
 ### Task 8: avatars
 
@@ -192,11 +192,11 @@ Page behaviour: fetch inspection (+ events via SSE, refetch debounced as in Task
 
 Mapping: `familyOfModelId` (Task 4) picks the family; ordinal = the agent's index within its family sorted by profile id, mod the asset count.
 
-- [ ] Steps: downscale with `sips -Z 256`, add component + usages, typecheck, lint, visual dev pass, commit `feat(ui): juror avatars`.
+- [x] Steps: downscale with `sips -Z 256`, add component + usages, typecheck, lint, visual dev pass, commit `feat(ui): juror avatars`.
 
 ### Task 9: docs and ship
 
-- [ ] README canvas paragraph + screenshot note, `docs/STATUS.md` dated bullet, `docs/demo/runbook.md` step 3 rewrite (watch the canvas, replay), spec/plan checkboxes ticked, PRD addendum item 17 (canvas, ticks, replay).
-- [ ] Full gate `pnpm typecheck && pnpm lint && pnpm test && pnpm build`.
-- [ ] Deploy between claims (worktree checkout, `railway up -s app -d`), verify: canvas on the three reference claims, sealed pulses on one fresh live claim, replay end to end, screenshots archived in the scratchpad.
-- [ ] Commit `docs: canvas shipped`, push.
+- [x] README canvas paragraph + screenshot note, `docs/STATUS.md` dated bullet, `docs/demo/runbook.md` step 3 rewrite (watch the canvas, replay), spec/plan checkboxes ticked, PRD addendum item 17 (canvas, ticks, replay).
+- [x] Full gate `pnpm typecheck && pnpm lint && pnpm test && pnpm build`.
+- [x] Deploy between claims (worktree checkout, `railway up -s app -d`), verify: canvas on the three reference claims, sealed pulses on one fresh live claim, replay end to end, screenshots archived in the scratchpad.
+- [x] Commit `docs: canvas shipped`, push.

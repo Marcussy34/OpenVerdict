@@ -27,7 +27,7 @@ evidence and agent work preserved on Walrus.
 > | Seal escrow of reveal keys | ✅ time-lock policy package on testnet; sealed bundles open after the deadline without the operator |
 > | Reliability under a flaky provider | ✅ hedged same-model calls, failed seats keep their trail, workers skip dead claims |
 > | Wallet + zkLogin onboarding · T7b one-account-one-seat registration | ✅ SDK-verified signatures, pseudonymous backing hash |
-> | Observer + fact-check UI (light + Sui blue redesign) | ✅ builds, typechecks, lints |
+> | Observer + fact-check UI · deliberation canvas claim page | ✅ live force graph (jurors with avatars, sealed pulses, bloom at reveal, replay); audit view at `/claims/[id]/report`; builds, typechecks, lints |
 > | Sui testnet package | ✅ published — ids in `config/release.testnet.json` |
 > | Hosted on Railway (web + API + workers, Railway Postgres) | ✅ https://openverdict.info (landing) · https://app.openverdict.info (console; www and apex console paths redirect there) |
 >

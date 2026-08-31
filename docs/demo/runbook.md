@@ -262,7 +262,11 @@ against the recorded model, or opened through Seal after the deadline.
 ## 5. Human end-to-end walkthrough (the user's test)
 
 1. Open the live URL → submit a fact-check (no wallet needed).
-2. Watch the observer lanes run; wait for reveal; open the report.
+2. Watch the deliberation canvas: jurors sprout locked pulses while they
+   research (content-free ticks), the graph blooms into real searches, pages
+   and citations at reveal, the certificate lands at settlement. Click any
+   node for the inspector; after settlement press Play for the replay
+   (10x default). The full audit view is behind "Full report".
 3. `/verify`: paste a revealed vote's fields → commitment matches.
 4. Connect wallet (or Google via zkLogin if Enoki keys set) → deposit into the
    demo pool → after settlement, redeem.
