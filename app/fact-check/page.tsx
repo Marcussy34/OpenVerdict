@@ -81,8 +81,12 @@ function RecentFactChecks() {
       try {
         const response = await fetch("/api/claims");
         if (!response.ok) return;
-        const data = (await response.json()) as ExplorerRow[];
-        if (!ignore && Array.isArray(data)) setRows(data.slice(0, 8));
+        // The endpoint wraps the list: { claims: [...] }.
+        const payload = (await response.json()) as
+          | ExplorerRow[]
+          | { claims?: ExplorerRow[] };
+        const list = Array.isArray(payload) ? payload : payload.claims;
+        if (!ignore && Array.isArray(list)) setRows(list.slice(0, 8));
       } catch {
         // The explorer list is a convenience; the form works without it.
       }
