@@ -11,6 +11,7 @@ import {
   DEFAULT_TOOL_POLICY_V2,
   DEFAULT_TOOL_POLICY_V3,
   DEFAULT_TOOL_POLICY_V4,
+  canonicalJsonBytes,
   createFakeGonkaAdapter,
   promptSpecHash,
   toolPolicyHash,
@@ -40,6 +41,7 @@ import {
   FakeSuiGateway,
   SignerRegistry,
   fakeId,
+  outcomeLabel,
   type BoundAgentSigner,
   type GatewayAcceptSeatInput,
   type GatewayBindEvidenceInput,
@@ -57,6 +59,7 @@ import {
   buildZkLoginBackingMessage,
   createEngine,
   EngineNoEvidenceError,
+  EngineStateError,
   EngineValidationError,
   type EngineAgentConfig,
 } from "./index";
@@ -170,6 +173,18 @@ describe("headless engine", () => {
     const firstRequest = setup.gonkaComplete.mock.calls[0]?.[0];
     if (!firstRequest) throw new Error("expected a model request");
     expect(firstRequest.input.evidenceManifest.items[0]?.excerpt).toBe(statement);
+    expect(firstRequest.input).not.toHaveProperty("priorRound");
+    const serializedInput = JSON.parse(
+      firstRequest.messages[1]?.content ?? "null",
+    ) as Record<string, unknown>;
+    expect(serializedInput).toEqual(firstRequest.input);
+    expect(serializedInput).not.toHaveProperty("priorRound");
+    const recordedRun = (await repository.listInferenceRuns(claimId, 1)).find(
+      (run) => run.runId === firstRequest.input.runId,
+    );
+    expect(recordedRun?.inputHash).toBe(
+      toHex(blake2b256(canonicalJsonBytes(firstRequest.input))),
+    );
 
     expect(await setup.engine.votesCommit(claimId, 1)).toHaveLength(5);
     await setup.engine.advance(claimId);
@@ -1153,15 +1168,77 @@ describe("headless engine", () => {
     await setup.engine.votesCommit(claimId, 1);
     await setup.engine.advance(claimId);
     await setup.engine.votesReveal(claimId, 1);
+    const repository = createRepository(setup.db);
+    const firstTally = await repository.getRoundTally(claimId, 1);
+    if (!firstTally) throw new Error("expected the first round tally");
+    const firstReveals = await repository.listReveals(claimId, 1);
+    const firstRuns = await repository.listInferenceRuns(claimId, 1);
+    const expectedPriorRound = {
+      phase: 1,
+      seats: firstTally.expectedJurySeatIds.map((jurySeatId, seatIndex) => {
+        const reveal = firstReveals.find(
+          (candidate) => candidate.jurySeatId === jurySeatId,
+        );
+        const run = firstRuns.find((candidate) => candidate.runId === reveal?.runId);
+        if (!reveal || !run?.output) {
+          throw new Error(`expected a revealed run for seat ${seatIndex}`);
+        }
+        return {
+          seatIndex,
+          modelId: run.modelId,
+          outcome: outcomeLabel(reveal.outcome),
+          confidenceBps: reveal.confidenceBps,
+          publicReasoningTrace: run.output.publicReasoningTrace,
+        };
+      }),
+    };
     await setup.engine.advance(claimId);
     await setup.engine.evidenceFreeze(claimId, 2);
+    const publicRecordEvidenceId = `round-1-public-record:${claimId}`;
+    const phaseTwoArtifacts = await repository.listEvidenceArtifacts(claimId, 2);
+    const publicRecordArtifact = phaseTwoArtifacts.find(
+      (artifact) => artifact.evidenceId === publicRecordEvidenceId,
+    );
+    if (!publicRecordArtifact) throw new Error("expected the round one public record artifact");
+    const publicRecordContent = new TextDecoder().decode(
+      await setup.walrus.get(publicRecordArtifact.canonicalWalrusBlobId),
+    );
+    expect(publicRecordContent).toBe(
+      new TextDecoder().decode(canonicalJsonBytes(expectedPriorRound)),
+    );
+    const phaseTwoManifest = await repository.getEvidenceManifest(claimId, 2);
+    if (!phaseTwoManifest) throw new Error("expected the second evidence manifest");
+    const phaseTwoManifestDocument = JSON.parse(
+      new TextDecoder().decode(await setup.walrus.get(phaseTwoManifest.manifestBlobId)),
+    ) as { items: Array<{ evidenceId: string }> };
+    expect(phaseTwoManifestDocument.items).toContainEqual(
+      expect.objectContaining({ evidenceId: publicRecordEvidenceId }),
+    );
     await setup.engine.advance(claimId);
 
     const callsBeforeSecondRound = setup.gonkaComplete.mock.calls.length;
+    for (const [request] of setup.gonkaComplete.mock.calls) {
+      expect(request.input).not.toHaveProperty("priorRound");
+      expect(
+        JSON.parse(request.messages[1]?.content ?? "null"),
+      ).not.toHaveProperty("priorRound");
+    }
     await setup.engine.juryRun(claimId, 2);
+    const phaseTwoRequests = setup.gonkaComplete.mock.calls.slice(
+      callsBeforeSecondRound,
+    );
     expect(
-      setup.gonkaComplete.mock.calls.length - callsBeforeSecondRound,
+      phaseTwoRequests.length,
     ).toBeGreaterThanOrEqual(15);
+    expect(new Set(phaseTwoRequests.map(([request]) => request.input.runId)).size).toBe(5);
+    for (const [request] of phaseTwoRequests) {
+      const serializedInput = JSON.parse(
+        request.messages[1]?.content ?? "null",
+      ) as Record<string, unknown>;
+      expect(request.input).toMatchObject({ priorRound: expectedPriorRound });
+      expect(serializedInput).toEqual(request.input);
+      expect(serializedInput).toMatchObject({ priorRound: expectedPriorRound });
+    }
     await setup.engine.votesCommit(claimId, 2);
     await setup.engine.advance(claimId);
     await setup.engine.votesReveal(claimId, 2);
@@ -1170,6 +1247,36 @@ describe("headless engine", () => {
     expect(finalized).toMatchObject({ result: "NO", truthScoreBps: 3_200 });
     expect((await setup.engine.inspect(claimId)).state).toBe(10);
     expect((await setup.engine.report(claimId)).finalRoundVotes).toHaveLength(5);
+  });
+
+  it("fails closed when round one reveals are missing before phase two", async () => {
+    const setup = await engineSetup(new FakeSuiGateway(), [
+      ["YES", "YES", "YES", "NO", "NO"],
+      ["NO", "NO", "NO", "NO", "YES"],
+    ]);
+    const { claimId } = await setup.engine.factCheckStart({
+      claim: "Discussion requires the revealed first round record.",
+      text: "Local evidence for both rounds.",
+      urls: [],
+    });
+
+    await setup.engine.selectCommittee(claimId);
+    await setup.engine.evidenceFreeze(claimId, 1);
+    await setup.engine.juryRun(claimId, 1);
+    await setup.engine.votesCommit(claimId, 1);
+    await setup.engine.advance(claimId);
+    await setup.engine.votesReveal(claimId, 1);
+    await setup.engine.advance(claimId);
+    await setup.db.query("DELETE FROM reveals WHERE claim_id = $1", [claimId]);
+    const callsBeforeFreeze = setup.gonkaComplete.mock.calls.length;
+
+    await expect(setup.engine.evidenceFreeze(claimId, 2)).rejects.toBeInstanceOf(
+      EngineStateError,
+    );
+    expect(setup.gonkaComplete).toHaveBeenCalledTimes(callsBeforeFreeze);
+    await expect(
+      createRepository(setup.db).listEvidenceArtifacts(claimId, 2),
+    ).resolves.toEqual([]);
   });
 });
 

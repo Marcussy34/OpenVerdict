@@ -21,7 +21,7 @@ import {
 const MAX_URL_LENGTH = 2_048;
 const MAX_PAGE_CHARACTERS = 12_000;
 const MAX_CLAIM_LENGTH = 1_000;
-const MAX_OUTPUT_TOKENS = 300;
+const MAX_OUTPUT_TOKENS = 1_500;
 
 const SYSTEM_PROMPT = [
   "Extract one factual claim from the supplied page text.",

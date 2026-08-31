@@ -20,6 +20,25 @@ describe("oracleInferenceInputSchema", () => {
     expect(oracleInferenceInputSchema.parse(input)).toEqual(input);
   });
 
+  it("accepts an optional revealed prior round record", () => {
+    const input = makeInput({
+      priorRound: {
+        phase: 1,
+        seats: [
+          {
+            seatIndex: 0,
+            modelId: "model-a",
+            outcome: "YES",
+            confidenceBps: 8_000,
+            publicReasoningTrace: makeOutput().publicReasoningTrace,
+          },
+        ],
+      },
+    });
+
+    expect(oracleInferenceInputSchema.parse(input)).toEqual(input);
+  });
+
   it("rejects unknown keys at the top level and in nested records", () => {
     expect(() =>
       oracleInferenceInputSchema.parse({ ...makeInput(), walletKey: "nope" }),

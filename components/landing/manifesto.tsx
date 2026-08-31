@@ -6,7 +6,7 @@ import { SplitButton, Eyebrow, CornerPin } from "./primitives";
 import { useScrollFrame, clamp01 } from "./scroll-driver";
 
 const COPY =
-  "Open verification is becoming public infrastructure. Claims deserve juries no single vendor can steer — evidence sealed before deliberation, verdicts settled in public where anyone can audit them. This is just the beginning.";
+  "Open verification is becoming public infrastructure. Claims deserve juries no single vendor can steer — inference decentralized on Gonka, evidence sealed before deliberation, verdicts settled in public where anyone can audit them. This is just the beginning.";
 
 const WORDS = COPY.split(" ");
 /** How many words are mid-fade at any moment — the width of the wipe. */

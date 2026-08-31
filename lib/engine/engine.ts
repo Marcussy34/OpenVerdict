@@ -14,6 +14,7 @@ import {
   EMPTY_TOOL_TRANSCRIPT_HASH,
   GonkaRunError,
   canonicalJsonBytes,
+  canonicalJsonString,
   hashCanonicalJson,
   promptSpecHash,
   toolPolicyHash,
@@ -148,6 +149,10 @@ const MAX_ZKLOGIN_SIGNATURE_LENGTH = 16_384;
 const MAX_FACT_CHECK_TEXT_LENGTH = 20_000;
 const ZKLOGIN_VERIFICATION_PROVIDER = "zklogin:enoki";
 const CLAIM_STATEMENT_SOURCE_URL = "urn:openverdict:claim-statement";
+const ROUND_ONE_PUBLIC_RECORD_SOURCE_URL =
+  "urn:openverdict:round-1-public-record";
+
+type PriorRoundPublicRecord = NonNullable<OracleInferenceInput["priorRound"]>;
 
 type SeatResearchConfig =
   | {
@@ -562,11 +567,23 @@ class OpenVerdictEngine implements Engine {
       };
     }
 
+    let publicRecordArtifact: EvidenceArtifactRecord | undefined;
     let artifacts = await this.#repository.listEvidenceArtifacts(claimId, phase);
-    if (phase === 2 && artifacts.length === 0) {
-      artifacts = await this.#repository.listEvidenceArtifacts(claimId, 1);
+    if (phase === 2) {
+      const priorRound = await this.roundOnePublicRecord(claimId);
+      publicRecordArtifact = await this.ensureRoundOnePublicRecordArtifact(
+        claim,
+        priorRound,
+      );
+      artifacts = artifacts.filter(
+        (artifact) => artifact.evidenceId !== publicRecordArtifact?.evidenceId,
+      );
+      if (artifacts.length === 0) {
+        artifacts = await this.#repository.listEvidenceArtifacts(claimId, 1);
+      }
     }
     artifacts = uniqueEvidenceArtifacts(statementArtifactFirst(artifacts));
+    if (publicRecordArtifact) artifacts.push(publicRecordArtifact);
     if (artifacts.length === 0) {
       throw new EngineNoEvidenceError();
     }
@@ -642,6 +659,8 @@ class OpenVerdictEngine implements Engine {
     const committee = await this.requiredCommittee(claimId);
     const seats = await this.#repository.listJurySeats(claimId, phase);
     if (seats.length !== 5) throw new EngineStateError("jury run requires five selected seats");
+    const priorRound =
+      phase === 2 ? await this.roundOnePublicRecord(claimId) : undefined;
     const researchConfigs = new Map<string, SeatResearchConfig>();
     for (const seat of seats) {
       const agent = await this.requiredAgent(seat.agentProfileId);
@@ -788,6 +807,7 @@ class OpenVerdictEngine implements Engine {
             seat,
             evidence,
             artifacts,
+            priorRound,
             research,
             searchCache,
             storedPageCache,
@@ -1783,11 +1803,15 @@ class OpenVerdictEngine implements Engine {
     claim: ClaimRecord,
     text: string,
     phase: 1 | 2,
-    options: { evidenceLabel?: string; sourceUrl?: string } = {},
+    options: {
+      evidenceId?: string;
+      evidenceLabel?: string;
+      sourceUrl?: string;
+    } = {},
   ): Promise<void> {
-    const evidenceId = deterministicId(
-      options.evidenceLabel ?? `text:${claim.claimId}:${phase}`,
-    );
+    const evidenceId =
+      options.evidenceId ??
+      deterministicId(options.evidenceLabel ?? `text:${claim.claimId}:${phase}`);
     const sourceUrl = options.sourceUrl ?? "urn:openverdict:submitted-text";
     const timestamp = this.isoNow();
     const submission: EvidenceSubmissionRecord = {
@@ -1951,6 +1975,7 @@ class OpenVerdictEngine implements Engine {
     seat: JurySeatRecord,
     evidence: EvidenceManifestRecord,
     artifacts: EvidenceArtifactRecord[],
+    priorRound: PriorRoundPublicRecord | undefined,
     research: ResearchProvider,
     searchCache: SearchCache,
     storedPageCache: Map<string, Promise<PageStorePage>>,
@@ -1966,6 +1991,7 @@ class OpenVerdictEngine implements Engine {
       seat,
       evidence,
       artifacts,
+      priorRound,
       agent.role,
       baseRunId,
       researchConfig.spec.version,
@@ -3154,17 +3180,107 @@ class OpenVerdictEngine implements Engine {
     return updated;
   }
 
+  /** Assemble only vote data already made public by the round one reveal. */
+  private async roundOnePublicRecord(
+    claimId: string,
+  ): Promise<PriorRoundPublicRecord> {
+    const [tally, reveals, runs] = await Promise.all([
+      this.requiredTally(claimId, 1),
+      this.#repository.listReveals(claimId, 1),
+      this.#repository.listInferenceRuns(claimId, 1),
+    ]);
+    if (
+      tally.revealedJurySeatIds.length === 0 ||
+      reveals.length !== tally.revealedJurySeatIds.length
+    ) {
+      throw new EngineStateError("round one revealed public record is incomplete");
+    }
+    const seatIndexById = new Map(
+      tally.expectedJurySeatIds.map((jurySeatId, seatIndex) => [
+        jurySeatId,
+        seatIndex,
+      ]),
+    );
+    const revealBySeat = new Map(
+      reveals.map((reveal) => [reveal.jurySeatId, reveal]),
+    );
+    const runById = new Map(runs.map((run) => [run.runId, run]));
+    const seats = tally.revealedJurySeatIds.map((jurySeatId) => {
+      const seatIndex = seatIndexById.get(jurySeatId);
+      const reveal = revealBySeat.get(jurySeatId);
+      const run = reveal === undefined ? undefined : runById.get(reveal.runId);
+      if (seatIndex === undefined || reveal === undefined || run?.output === undefined) {
+        throw new EngineStateError(
+          `round one revealed public record is missing seat ${jurySeatId}`,
+        );
+      }
+      return {
+        seatIndex,
+        modelId: run.modelId,
+        outcome: outcomeLabel(reveal.outcome),
+        confidenceBps: reveal.confidenceBps,
+        publicReasoningTrace: run.output.publicReasoningTrace,
+      };
+    });
+    return {
+      phase: 1,
+      seats: seats.sort((left, right) => left.seatIndex - right.seatIndex),
+    };
+  }
+
+  private async ensureRoundOnePublicRecordArtifact(
+    claim: ClaimRecord,
+    priorRound: PriorRoundPublicRecord,
+  ): Promise<EvidenceArtifactRecord> {
+    const evidenceId = roundOnePublicRecordEvidenceId(claim.claimId);
+    const content = canonicalJsonString(priorRound);
+    const contentHash = toHex(blake2b256(new TextEncoder().encode(content)));
+    const existing = await this.#repository.getEvidenceArtifact(evidenceId);
+    if (existing !== undefined) {
+      if (
+        existing.claimId !== claim.claimId ||
+        existing.phase !== 2 ||
+        existing.sourceUrl !== ROUND_ONE_PUBLIC_RECORD_SOURCE_URL ||
+        existing.contentHash !== contentHash
+      ) {
+        throw new EngineStateError("round one public record evidence is inconsistent");
+      }
+      return existing;
+    }
+    await this.ingestText(claim, content, 2, {
+      evidenceId,
+      sourceUrl: ROUND_ONE_PUBLIC_RECORD_SOURCE_URL,
+    });
+    const artifact = await this.#repository.getEvidenceArtifact(evidenceId);
+    if (artifact === undefined) {
+      throw new EngineStateError("round one public record evidence is missing");
+    }
+    return artifact;
+  }
+
   private async artifactsForPhase(
     claimId: string,
     phase: 1 | 2,
   ): Promise<EvidenceArtifactRecord[]> {
     const artifacts = await this.#repository.listEvidenceArtifacts(claimId, phase);
-    if (phase === 2 && artifacts.length === 0) {
-      return statementArtifactFirst(
-        await this.#repository.listEvidenceArtifacts(claimId, 1),
-      );
+    if (phase === 1) return statementArtifactFirst(artifacts);
+    const publicRecordEvidenceId = roundOnePublicRecordEvidenceId(claimId);
+    const publicRecordArtifact = artifacts.find(
+      (artifact) => artifact.evidenceId === publicRecordEvidenceId,
+    );
+    if (publicRecordArtifact === undefined) {
+      throw new EngineStateError("round one public record evidence is missing");
     }
-    return statementArtifactFirst(artifacts);
+    let secondRoundArtifacts = artifacts.filter(
+      (artifact) => artifact.evidenceId !== publicRecordEvidenceId,
+    );
+    if (secondRoundArtifacts.length === 0) {
+      secondRoundArtifacts = await this.#repository.listEvidenceArtifacts(claimId, 1);
+    }
+    return [
+      ...statementArtifactFirst(secondRoundArtifacts),
+      publicRecordArtifact,
+    ];
   }
 
   private async evidenceManifests(claimId: string): Promise<EvidenceManifestRecord[]> {
@@ -3534,6 +3650,10 @@ function statementArtifactFirst(
   ];
 }
 
+function roundOnePublicRecordEvidenceId(claimId: string): string {
+  return `round-1-public-record:${claimId}`;
+}
+
 function canonicalArtifact(artifact: RetrievedArtifact): {
   text: string;
   parserVersion: string;
@@ -3563,6 +3683,7 @@ function oracleInput(
   seat: JurySeatRecord,
   manifest: EvidenceManifestRecord,
   artifacts: EvidenceArtifactRecord[],
+  priorRound: PriorRoundPublicRecord | undefined,
   role: string,
   runId: string,
   promptVersion: "2" | "3" | "4",
@@ -3609,6 +3730,7 @@ function oracleInput(
         excerpt: artifact.excerpt,
       })),
     },
+    ...(priorRound === undefined ? {} : { priorRound }),
     outputContract: {
       requiredOutcome: true,
       requiredEvidenceIds: true,

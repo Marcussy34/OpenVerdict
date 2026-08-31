@@ -182,7 +182,7 @@ describe("extract claim handler", () => {
       gatewayRequestId: "gateway-request-42",
     });
     expect(completionRequest?.manifest.modelId).toBe("vendor/model-a");
-    expect(completionRequest?.maxOutputTokens).toBe(300);
+    expect(completionRequest?.maxOutputTokens).toBe(1_500);
     expect(completionRequest?.messages[1]?.content).toContain(
       "Acme reported revenue.",
     );

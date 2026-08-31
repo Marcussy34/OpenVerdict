@@ -14,6 +14,21 @@ const byteLengthAtMost = (limit: number) => (value: string): boolean =>
 const boundedEvidenceId = z.string().min(1).max(256);
 const boundedEvidenceIds = z.array(boundedEvidenceId).max(MAX_OUTPUT_ARRAY_ITEMS);
 
+const reasoningTraceSchema = z
+  .object({
+    check: z
+      .string()
+      .min(1)
+      .refine(byteLengthAtMost(512), "check exceeds 512 UTF-8 bytes"),
+    evidenceIds: boundedEvidenceIds,
+    assessment: z.enum(["SUPPORTS", "CONTRADICTS", "MIXED", "INSUFFICIENT"]),
+    finding: z
+      .string()
+      .min(1)
+      .refine(byteLengthAtMost(2_000), "finding exceeds 2000 UTF-8 bytes"),
+  })
+  .strict();
+
 const evidenceItemSchema = z
   .object({
     evidenceId: boundedEvidenceId,
@@ -52,6 +67,29 @@ export const oracleInferenceInputSchema: z.ZodType<OracleInferenceInput> = z
         items: z.array(evidenceItemSchema).max(256),
       })
       .strict(),
+    priorRound: z
+      .object({
+        phase: z.literal(1),
+        seats: z
+          .array(
+            z
+              .object({
+                seatIndex: z.number().int().min(0).max(4),
+                modelId: z.string().min(1).max(256).optional(),
+                outcome: z.enum(["YES", "NO", "UNSURE"]),
+                confidenceBps: z.number().int().min(0).max(10_000),
+                publicReasoningTrace: z
+                  .array(reasoningTraceSchema)
+                  .min(1)
+                  .max(MAX_TRACE_ENTRIES),
+              })
+              .strict(),
+          )
+          .min(1)
+          .max(5),
+      })
+      .strict()
+      .optional(),
     outputContract: z
       .object({
         requiredOutcome: z.literal(true),
@@ -59,21 +97,6 @@ export const oracleInferenceInputSchema: z.ZodType<OracleInferenceInput> = z
         maximumReasonLength: z.number().int().min(1).max(MAX_REASONING_BYTES),
       })
       .strict(),
-  })
-  .strict();
-
-const reasoningTraceSchema = z
-  .object({
-    check: z
-      .string()
-      .min(1)
-      .refine(byteLengthAtMost(512), "check exceeds 512 UTF-8 bytes"),
-    evidenceIds: boundedEvidenceIds,
-    assessment: z.enum(["SUPPORTS", "CONTRADICTS", "MIXED", "INSUFFICIENT"]),
-    finding: z
-      .string()
-      .min(1)
-      .refine(byteLengthAtMost(2_000), "finding exceeds 2000 UTF-8 bytes"),
   })
   .strict();
 

@@ -148,6 +148,16 @@ export type OracleInferenceInput = {
       excerpt: string;
     }>;
   };
+  priorRound?: {
+    phase: 1;
+    seats: Array<{
+      seatIndex: number;
+      modelId?: string;
+      outcome: OracleInferenceOutput["outcome"];
+      confidenceBps: number;
+      publicReasoningTrace: OracleInferenceOutput["publicReasoningTrace"];
+    }>;
+  };
   outputContract: {
     requiredOutcome: true;
     requiredEvidenceIds: true;

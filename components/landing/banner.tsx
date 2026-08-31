@@ -42,11 +42,16 @@ export function Banner() {
                 <span className="text-[#F3F3F3]/50">engineered to verify.</span>
               </h2>
 
-              <div className="flex flex-wrap items-center gap-[2px] gap-y-2">
-                <SplitButton href="/fact-check">Submit a claim</SplitButton>
-                <SplitButton href="/learn" tone="dark" chip={false}>
-                  How it works
-                </SplitButton>
+              <div>
+                <div className="flex flex-wrap items-center gap-[2px] gap-y-2">
+                  <SplitButton href="/fact-check">Submit a claim</SplitButton>
+                  <SplitButton href="/learn" tone="dark" chip={false}>
+                    How it works
+                  </SplitButton>
+                </div>
+                <p className="mt-5 text-[11px] tracking-[0.16em] text-[#F3F3F3]/45 uppercase">
+                  Juries on GonkaRouter · settled on Sui
+                </p>
               </div>
             </div>
 
