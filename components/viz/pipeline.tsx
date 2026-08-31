@@ -37,7 +37,7 @@ export const PIPELINE_STAGES: Stage[] = [
   {
     index: "03",
     kicker: "Sealing",
-    title: "Blake2b-256 commit",
+    title: "Sealed votes",
     body: "Every vote commits on-chain sealed, so nothing can be copied or front-run.",
     icon: Lock,
     tone: "sealed",
