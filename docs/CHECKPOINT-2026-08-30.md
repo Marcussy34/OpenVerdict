@@ -561,6 +561,24 @@ opens inspector with zero node movement; claim dossier + certificate
 panel assertions all true. Proof caches warmed after each deploy (3 demo
 claims, 14 proofs, ~45 s cold each set).
 
+Round 3 (commit `62b0571`, deployment `a0341543`, verified live):
+HashChip gained an href mode (chip opens Suiscan object/tx or the Walrus
+aggregator; copy moved onto the copy icon; external icon always visible),
+wired across the report page (claim/committee/certificate/vote objects,
+agent profiles, finalize tx, artifact blobs) and the canvas inspector
+panels; `lib/web/explorer.ts` is the one home for explorer URLs. The
+evidence sides panel renders short evidence chips under linked titles
+instead of raw 64-char badges. The inspector aside no longer scrolls
+itself: an inner `ov-scroll` region does (handle spans the full edge at
+any scroll depth, verified while scrolled to 800px), horizontal overflow
+is clipped, and `scrollbar-width: thin` + `scrollbar-color` on the scope
+theme every nested scrollbar. Report drops "(PRD §26.3)". Probe result
+worth keeping: the dark scope was never broken; secondary badges compute
+rgba(243,243,243,0.09) in-panel, and the "light pills" were the oversized
+evidence-id badges themselves. Verified: 15 Suiscan links + 1 Walrus link
+on the report, 4 explorer chips in the claim dossier, no horizontal
+overflow, thin scrollbars, resize handle reachable while scrolled.
+
 ## 4. Planned next (owner-approved direction)
 
 - Attestation (docs/superpowers/specs/2026-08-30-attested-inference-design.md):
