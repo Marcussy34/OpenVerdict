@@ -190,7 +190,10 @@ export function HeroShrink({
     <>
       <div
         ref={wrapRef}
-        className="relative z-10"
+        // pointer-events-none is load-bearing: this transparent z-10 runway
+        // overlaps the reveal section pulled up beneath it, and it must never
+        // eat that section's clicks. The panel inside re-enables its own.
+        className="pointer-events-none relative z-10"
         style={active ? { height: `${100 + RUNWAY_VH}vh` } : undefined}
       >
         {/* Header-theme markers: stacked, never overlapping. */}
