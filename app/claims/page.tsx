@@ -137,7 +137,7 @@ export default function ClaimsPage() {
           <Button asChild className="min-h-[42px] px-5 font-semibold shadow-xs">
             <Link href="/fact-check">
               <ShieldSearch size="16" variant="Bold" />
-              New fact-check
+              New verification
             </Link>
           </Button>
         }

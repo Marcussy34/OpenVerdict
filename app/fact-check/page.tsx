@@ -6,7 +6,6 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { ExperimentalTag } from "@/components/viz/page-header";
 import { FieldLabel } from "@/components/viz/panel";
 import { PIPELINE_STAGES } from "@/components/viz/pipeline";
 import { StateBadge } from "@/components/claim/state-badge";
@@ -102,7 +101,7 @@ function RecentFactChecks() {
   return (
     <section className="mx-auto w-full max-w-3xl space-y-2">
       <p className="ov-micro ov-micro-sm text-muted-foreground">
-        Recent fact-checks
+        Recent verifications
       </p>
 
       {rows === null ? (
@@ -113,7 +112,7 @@ function RecentFactChecks() {
         </div>
       ) : rows.length === 0 ? (
         <p className="rounded-xl border border-dashed border-border bg-surface p-4 text-xs text-muted-foreground">
-          No fact-checks yet. Yours can be the first.
+          No verifications yet. Yours can be the first.
         </p>
       ) : (
         <ul className="ov-edge divide-y divide-border overflow-hidden rounded-2xl border border-border bg-card">
@@ -169,7 +168,7 @@ function HowItRuns() {
           className="text-muted-foreground motion-safe:transition-transform group-open:rotate-180"
         />
         <ShieldSearch size="15" variant="Bold" className="text-primary" />
-        How a fact-check runs
+        How verification runs
       </summary>
       <div className="space-y-4 border-t border-border p-4">
         <ol className="space-y-3">
@@ -222,21 +221,18 @@ function FactCheckContent() {
   const claimTooLong = claim.length > MAX_CLAIM * 0.9;
 
   return (
-    <div className="mx-auto max-w-5xl space-y-10 px-5 py-14 md:px-7 md:py-20">
+    <div className="mx-auto max-w-5xl space-y-12 px-5 py-16 md:px-7 md:py-24">
       {/* Hero: explorer style, almost no words on screen. */}
-      <div className="mx-auto max-w-2xl space-y-3 text-center">
-        <div className="flex justify-center">
-          <ExperimentalTag />
-        </div>
-        <h1 className="ov-display text-4xl text-ocean md:text-5xl">
-          Fact-check a claim
+      <div className="mx-auto max-w-3xl space-y-4 text-center">
+        <h1 className="ov-display text-5xl text-ocean md:text-6xl">
+          Verify any claim
         </h1>
-        <p className="text-sm text-muted-foreground">
+        <p className="text-base text-muted-foreground">
           No wallet, no account, no gas.
         </p>
       </div>
 
-      <div className="mx-auto w-full max-w-2xl space-y-3">
+      <div className="mx-auto w-full max-w-3xl space-y-3">
         {isEngineOffline && (
           <Alert className="border-unsure/35 bg-unsure/8">
             <Warning2 size="18" variant="Bold" className="text-unsure" />
@@ -280,8 +276,8 @@ function FactCheckContent() {
               id="claim-text"
               required
               rows={1}
-              placeholder="State one factual claim, e.g. The first Bitcoin halving took place in November 2012"
-              className="field-sizing-content max-h-28 min-h-9 flex-1 resize-none border-0 bg-transparent p-0 py-2 text-sm shadow-none focus-visible:ring-0 dark:bg-transparent"
+              placeholder="e.g. The first Bitcoin halving took place in November 2012"
+              className="field-sizing-content max-h-32 min-h-11 flex-1 resize-none border-0 bg-transparent p-0 py-2.5 text-base shadow-none placeholder:text-muted-foreground/45 focus-visible:ring-0 dark:bg-transparent"
               value={claim}
               onChange={(e) => setClaim(e.target.value)}
               onKeyDown={(e) => {
@@ -299,7 +295,7 @@ function FactCheckContent() {
             type="submit"
             disabled={submitting || !claim.trim()}
             aria-busy={submitting}
-            className="min-h-[44px] shrink-0 px-6 font-semibold shadow-xs"
+            className="min-h-[52px] shrink-0 px-7 font-semibold shadow-xs"
           >
             {submitting ? (
               <>
@@ -308,7 +304,7 @@ function FactCheckContent() {
               </>
             ) : (
               <>
-                Start fact-check
+                Verify claim
                 <ArrowRight size="16" variant="Bold" />
               </>
             )}
@@ -333,14 +329,6 @@ function FactCheckContent() {
           </div>
         )}
 
-        <div className="space-y-1.5 pt-2 text-center">
-          <p className="ov-micro ov-micro-sm text-muted-foreground">
-            5 jurors · 3 model families · sealed votes
-          </p>
-          <p className="text-xs text-muted-foreground">
-            Everything becomes public and auditable after reveal.
-          </p>
-        </div>
       </div>
 
       <RecentFactChecks />

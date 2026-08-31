@@ -580,7 +580,7 @@ export default function ClaimDetailPage({ params }: ClaimDetailPageProps) {
       {isTerminal && report && (
         <Reveal>
           <Panel
-            label="Public fact-check report & audit bundle"
+            label="Public verification report & audit bundle"
             icon={Award}
             tone="yes"
             action={

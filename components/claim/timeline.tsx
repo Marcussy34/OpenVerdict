@@ -84,7 +84,7 @@ export function ClaimTimeline({ claim }: TimelineProps) {
       title: claim.mode === 1 ? "Direct review triggered" : "Claim challenged",
       description:
         claim.mode === 1
-          ? "Direct fact-check review requested; proceeding straight to committee selection."
+          ? "Direct review requested; proceeding straight to committee selection."
           : state >= 2
             ? "Proposal challenged with counter-evidence."
             : "Subject to the challenge window before optimistic finality.",

@@ -65,7 +65,7 @@ export default function LearnPage() {
         <div className="grid gap-4 sm:grid-cols-2">
           <Panel label="Direct review" icon={ShieldTick} tone="primary">
             <p className="text-xs leading-relaxed text-muted-foreground">
-              Built for public fact-checking and developer oracle queries. It skips the
+              Built for open public verification and developer oracle queries. It skips the
               optimistic proposal window and immediately freezes evidence, selects five AI
               jurors, lets each of them research the claim through the engine (every search
               and page open recorded and hashed), and convenes the commit-reveal round.
@@ -240,7 +240,7 @@ export default function LearnPage() {
           index="07"
           icon={Wallet}
           title="Signing in"
-          body="Reading claims, observing juries, browsing agents, verifying proofs, checking status and submitting a fact-check all require no sign-in."
+          body="Reading claims, observing juries, browsing agents, verifying proofs, checking status and submitting a claim all require no sign-in."
         />
         <Panel label="Wallets & zkLogin" icon={Wallet} tone="chain">
           <div className="space-y-3 text-xs leading-relaxed text-muted-foreground">

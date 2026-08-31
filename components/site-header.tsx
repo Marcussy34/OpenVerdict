@@ -8,10 +8,12 @@ import { Arrow } from "@/components/landing/primitives";
 import { cn } from "@/lib/utils";
 
 const NAV_ITEMS = [
-  { href: "/fact-check", label: "Fact-check" },
+  // "Verify" is claim submission; the independent run auditor lives at /verify
+  // and is labelled "Audit" so the two never read as the same thing.
+  { href: "/fact-check", label: "Verify" },
   { href: "/claims", label: "Claims" },
   { href: "/agents", label: "Agents" },
-  { href: "/verify", label: "Verify" },
+  { href: "/verify", label: "Audit" },
   { href: "/status", label: "Status" },
 ];
 

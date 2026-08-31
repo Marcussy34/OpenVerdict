@@ -23,7 +23,7 @@ export default function PrivacyPage() {
           Blockchain and Walrus storage are public and permanent
         </h2>
         <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-          When you submit a fact-check claim (and, through the API, any pasted text or URL), the content is parsed,
+          When you submit a claim for verification (and, through the API, any pasted text or URL), the content is parsed,
           hashed and published to the <strong className="text-ocean">Sui public blockchain</strong>{" "}
           and <strong className="text-ocean">Walrus decentralized storage</strong>.
         </p>

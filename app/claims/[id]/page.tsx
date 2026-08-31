@@ -1243,10 +1243,10 @@ export default function ClaimCanvasPage({ params }: ClaimCanvasPageProps) {
             Claims
           </Link>
           <Link href="/fact-check" className="rounded-full px-2.5 py-1 text-xs font-semibold text-white/80 hover:bg-white/10 hover:text-white">
-            Fact-check
+            Verify
           </Link>
           <Link href="/verify" className="rounded-full px-2.5 py-1 text-xs font-semibold text-white/80 hover:bg-white/10 hover:text-white">
-            Verify
+            Audit
           </Link>
         </nav>
         <StageBanner claim={claim} graph={graph} replay={replay} now={now} />

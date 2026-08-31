@@ -73,7 +73,7 @@ export function useClaimSubmission() {
 
       const data = await res.json();
       if (!res.ok) {
-        setErrorMessage(data.message || data.error || "Failed to submit fact-check");
+        setErrorMessage(data.message || data.error || "Failed to submit the claim");
         return false;
       }
       if (data.claimId) {
