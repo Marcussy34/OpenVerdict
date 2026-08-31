@@ -89,7 +89,7 @@ function ConversationExpander({
   content: string | null | undefined;
 }) {
   return (
-    <details className="group rounded-lg border border-border bg-surface">
+    <details className="group min-w-0 rounded-lg border border-border bg-surface">
       <summary className="flex min-h-10 cursor-pointer list-none items-center gap-2 px-3 py-2 text-xs font-semibold text-ocean focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset focus-visible:outline-none">
         <ArrowDown2
           size="13"
@@ -99,7 +99,7 @@ function ConversationExpander({
         <Code1 size="14" variant="Bold" className="text-primary" />
         {label}
       </summary>
-      <pre className="max-h-72 overflow-auto border-t border-border p-3 font-mono text-[11px] leading-relaxed whitespace-pre-wrap break-words text-foreground/85">
+      <pre className="ov-scroll max-h-72 overflow-auto border-t border-border p-3 font-mono text-[11px] leading-relaxed whitespace-pre-wrap break-words text-foreground/85">
         {content?.trim() || "Not recorded"}
       </pre>
     </details>
@@ -260,7 +260,7 @@ function ResearchStepCard({
           {attempt?.error !== undefined && (
             <div className="rounded-lg border border-no/25 bg-no/6 p-2.5 text-xs text-no">
               <p className="font-semibold">Attempt error</p>
-              <pre className="mt-1 overflow-auto font-mono text-[11px] whitespace-pre-wrap">
+              <pre className="ov-scroll mt-1 overflow-auto font-mono text-[11px] whitespace-pre-wrap">
                 {displayValue(attempt.error)}
               </pre>
             </div>

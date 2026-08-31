@@ -14,6 +14,7 @@ import { PositionPanel } from "@/components/pool/position-panel";
 import { PageHeader, ExperimentalTag, MetaTag } from "@/components/viz/page-header";
 import { Panel, FieldLabel, Well } from "@/components/viz/panel";
 import { HashChip } from "@/components/viz/hash-chip";
+import { suiObjectUrl, suiTransactionUrl, walrusBlobUrl } from "@/lib/web/explorer";
 import { SeatSeal, outcomeLabel, seatStateOf } from "@/components/viz/seat-seal";
 import { ModelBadge } from "@/components/viz/model-badge";
 import { Reveal } from "@/components/viz/reveal";
@@ -324,11 +325,11 @@ export default function ClaimDetailPage({ params }: ClaimDetailPageProps) {
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="space-y-1">
                 <FieldLabel>Claim object</FieldLabel>
-                <HashChip value={claim.claimId} tone="chain" head={10} tail={8} />
+                <HashChip value={claim.claimId} tone="chain" head={10} tail={8} href={suiObjectUrl(claim.claimId)} />
               </div>
               <div className="space-y-1">
                 <FieldLabel>Committee object</FieldLabel>
-                <HashChip value={claim.committeeId} tone="sealed" head={10} tail={8} />
+                <HashChip value={claim.committeeId} tone="sealed" head={10} tail={8} href={claim.committeeId ? suiObjectUrl(claim.committeeId) : undefined} />
               </div>
               <div className="space-y-1">
                 <FieldLabel>Proposed outcome</FieldLabel>
@@ -492,7 +493,7 @@ export default function ClaimDetailPage({ params }: ClaimDetailPageProps) {
                     {item.sourceUrl || "Pasted text submission"}
                   </span>
                   <HashChip value={item.evidenceId} label="id" tone="muted" />
-                  <HashChip value={item.blobId} label="blob" tone="muted" />
+                  <HashChip value={item.blobId} label="blob" tone="muted" href={item.blobId ? walrusBlobUrl(item.blobId) : null} />
                   <HashChip value={item.contentHash} label="hash" tone="muted" />
                 </li>
               ))}
@@ -571,7 +572,7 @@ export default function ClaimDetailPage({ params }: ClaimDetailPageProps) {
       </Panel>
 
       {/* --------------------------------------------------------- Timeline */}
-      <Panel label="Resolution lifecycle (PRD §26.3)" icon={Clock}>
+      <Panel label="Resolution lifecycle" icon={Clock}>
         <ClaimTimeline claim={claim} />
       </Panel>
 
@@ -702,7 +703,7 @@ export default function ClaimDetailPage({ params }: ClaimDetailPageProps) {
                         ))}
                       </ol>
                       <div className="flex flex-wrap gap-1 border-t border-border pt-2">
-                        <HashChip value={agent.agentProfileId} label="agent" tone="muted" />
+                        <HashChip value={agent.agentProfileId} label="agent" tone="muted" href={suiObjectUrl(agent.agentProfileId)} />
                         <HashChip value={agent.owner} label="owner" tone="muted" />
                         <HashChip value={agent.gonkaRequestId} label="gonka" tone="muted" />
                       </div>
@@ -719,14 +720,14 @@ export default function ClaimDetailPage({ params }: ClaimDetailPageProps) {
                     <span className="ov-micro ov-micro-sm text-muted-foreground">
                       Claim object
                     </span>
-                    <HashChip value={report.sui.claimObjectId} tone="chain" full />
+                    <HashChip value={report.sui.claimObjectId} tone="chain" full href={suiObjectUrl(report.sui.claimObjectId)} />
                   </div>
                   {report.sui.committeeId && (
                     <div className="space-y-1">
                       <span className="ov-micro ov-micro-sm text-muted-foreground">
                         Committee object
                       </span>
-                      <HashChip value={report.sui.committeeId} tone="sealed" full />
+                      <HashChip value={report.sui.committeeId} tone="sealed" full href={suiObjectUrl(report.sui.committeeId)} />
                     </div>
                   )}
                   {report.sui.certificateId && (
@@ -734,7 +735,7 @@ export default function ClaimDetailPage({ params }: ClaimDetailPageProps) {
                       <span className="ov-micro ov-micro-sm text-muted-foreground">
                         Certificate object
                       </span>
-                      <HashChip value={report.sui.certificateId} tone="yes" full />
+                      <HashChip value={report.sui.certificateId} tone="yes" full href={suiObjectUrl(report.sui.certificateId)} />
                     </div>
                   )}
                   {report.evidenceRoot && (
@@ -752,7 +753,7 @@ export default function ClaimDetailPage({ params }: ClaimDetailPageProps) {
                   </span>
                   <div className="flex flex-wrap gap-1">
                     {report.sui.revealedVoteIds?.map((vid) => (
-                      <HashChip key={vid} value={vid} tone="muted" />
+                      <HashChip key={vid} value={vid} tone="muted" href={suiObjectUrl(vid)} />
                     ))}
                   </div>
                 </div>
@@ -761,7 +762,7 @@ export default function ClaimDetailPage({ params }: ClaimDetailPageProps) {
                     <span className="ov-micro ov-micro-sm text-muted-foreground">
                       Finalization transaction
                     </span>
-                    <HashChip value={claim.result.digest} tone="chain" full />
+                    <HashChip value={claim.result.digest} tone="chain" full href={suiTransactionUrl(claim.result.digest)} />
                   </div>
                 )}
               </div>

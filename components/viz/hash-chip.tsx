@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Copy, TickCircle } from "@/components/icons";
+import { Copy, ExportSquare, TickCircle } from "@/components/icons";
 import { cn } from "@/lib/utils";
 
 const TONE = {
@@ -16,7 +16,9 @@ const TONE = {
 /**
  * Every hash, object id, blob id and tx digest in the app renders through this
  * chip: truncated mono head/tail, full value on hover (title) and click-to-copy.
- * Nothing is dropped — long values are rehoused, not removed.
+ * With `href` the chip opens the value on its public explorer instead, and the
+ * copy affordance moves onto the small copy icon. Nothing is dropped — long
+ * values are rehoused, not removed.
  */
 export function HashChip({
   value,
@@ -26,6 +28,7 @@ export function HashChip({
   tone = "default",
   className,
   full = false,
+  href,
 }: {
   value: string | null | undefined;
   label?: string;
@@ -35,6 +38,8 @@ export function HashChip({
   className?: string;
   /** Render the entire value (wrapping) instead of the truncated form. */
   full?: boolean;
+  /** Public explorer URL; the chip becomes a link that opens it. */
+  href?: string | null;
 }) {
   const [copied, setCopied] = React.useState(false);
 
@@ -59,18 +64,15 @@ export function HashChip({
     }
   };
 
-  return (
-    <button
-      type="button"
-      onClick={copy}
-      title={`${label ? `${label}: ` : ""}${value} (click to copy)`}
-      className={cn(
-        "group/hash inline-flex max-w-full items-center gap-1.5 rounded-md border px-1.5 py-0.5 font-mono text-[11px] leading-5 transition-colors",
-        full && "break-all whitespace-normal text-left",
-        TONE[tone],
-        className,
-      )}
-    >
+  const chipClass = cn(
+    "group/hash inline-flex max-w-full items-center gap-1.5 rounded-md border px-1.5 py-0.5 font-mono text-[11px] leading-5 transition-colors",
+    full && "break-all whitespace-normal text-left",
+    TONE[tone],
+    className,
+  );
+
+  const body = (
+    <>
       {label && (
         <span className="shrink-0 text-[9px] tracking-[0.12em] text-muted-foreground uppercase">
           {label}
@@ -79,12 +81,53 @@ export function HashChip({
       <span className={cn(!full && "truncate")}>{shown}</span>
       {copied ? (
         <TickCircle size="11" variant="Bold" className="shrink-0 text-yes" />
+      ) : href ? (
+        <span
+          role="button"
+          tabIndex={-1}
+          aria-label="Copy value"
+          onClick={(event) => {
+            // The chip itself navigates to the explorer; this icon copies.
+            event.preventDefault();
+            event.stopPropagation();
+            void copy();
+          }}
+          className="shrink-0 opacity-0 transition-opacity group-hover/hash:opacity-60 hover:opacity-100"
+        >
+          <Copy size="11" />
+        </span>
       ) : (
         <Copy
           size="11"
           className="shrink-0 opacity-0 transition-opacity group-hover/hash:opacity-60"
         />
       )}
+      {href ? <ExportSquare size="11" className="shrink-0 opacity-70" /> : null}
+    </>
+  );
+
+  if (href) {
+    return (
+      <a
+        href={href}
+        target="_blank"
+        rel="noreferrer"
+        title={`${label ? `${label}: ` : ""}${value} (opens explorer; copy icon copies)`}
+        className={chipClass}
+      >
+        {body}
+      </a>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={copy}
+      title={`${label ? `${label}: ` : ""}${value} (click to copy)`}
+      className={chipClass}
+    >
+      {body}
     </button>
   );
 }

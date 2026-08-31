@@ -272,6 +272,10 @@
     --signal-unsure: #ffc65c;
     --signal-sealed: #b3a7ff;
     --signal-chain: #7ab5ff;
+    /* Slim dark scrollbars for every scroll area inside the panel
+       (scrollbar-color inherits, so nested pres match the panel itself). */
+    scrollbar-width: thin;
+    scrollbar-color: rgb(243 243 243 / 28%) transparent;
 }
 
 /* ---------------------------------------------------------------------------

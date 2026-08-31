@@ -394,7 +394,7 @@ function KeyValueGrid({
         <div key={key} className="min-w-0 rounded-lg border border-border bg-surface p-2.5">
           <dt className="font-mono text-[10px] break-all text-muted-foreground">{key}</dt>
           <dd>
-            <pre className="mt-1 max-h-36 overflow-auto font-mono text-[11px] leading-relaxed whitespace-pre-wrap break-words text-ocean">
+            <pre className="ov-scroll mt-1 max-h-36 overflow-auto font-mono text-[11px] leading-relaxed whitespace-pre-wrap break-words text-ocean">
               {displayValue(value)}
             </pre>
           </dd>
@@ -476,24 +476,26 @@ function EvidenceReference({
   const page = openedById.get(evidenceId);
   const url = page?.finalUrl ?? page?.url;
   if (!page || !url) {
+    // A bare content hash with no opened page behind it: short chip, full
+    // value on hover and click-to-copy, instead of a 64-char wall.
     return (
-      <code className="font-mono text-[11px] break-all text-ocean">
-        {evidenceId}
-      </code>
+      <HashChip value={evidenceId} label="evidence" tone="muted" head={12} tail={8} />
     );
   }
 
   return (
-    <a
-      href={url}
-      target="_blank"
-      rel="noreferrer"
-      className="inline-flex min-h-10 min-w-0 items-center gap-1.5 text-xs font-semibold break-words text-ocean underline decoration-border underline-offset-4 hover:text-primary focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-    >
-      <span>{page.title ?? evidenceId}</span>
-      <Badge variant="secondary" className="font-mono">{evidenceId}</Badge>
-      <ExportSquare size="13" className="shrink-0" />
-    </a>
+    <div className="min-w-0 space-y-1.5">
+      <a
+        href={url}
+        target="_blank"
+        rel="noreferrer"
+        className="flex min-w-0 items-start gap-1.5 text-xs leading-snug font-semibold break-words text-ocean underline decoration-border underline-offset-4 hover:text-primary focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+      >
+        <span className="min-w-0">{page.title ?? evidenceId}</span>
+        <ExportSquare size="13" className="mt-0.5 shrink-0" />
+      </a>
+      <HashChip value={evidenceId} label="evidence" tone="muted" head={12} tail={8} />
+    </div>
   );
 }
 

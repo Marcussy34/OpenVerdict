@@ -38,6 +38,7 @@ import { outcomeLabel } from "@/components/viz/seat-seal";
 import type { ClaimInspection, ResolutionEvent } from "@/lib/engine/contract";
 import { isStrandedDiscussion } from "@/lib/engine/claim-lifecycle";
 import { CLAIM_MODE, CLAIM_STATE } from "@/lib/protocol/constants";
+import { suiObjectUrl, suiTransactionUrl } from "@/lib/web/explorer";
 import { cn } from "@/lib/utils";
 import {
   buildDeliberationGraph,
@@ -793,17 +794,20 @@ function NodeInspector({
             value={certificateId}
             label="certificate"
             tone={outcome === "YES" ? "yes" : "default"}
+            href={certificateId ? suiObjectUrl(certificateId) : undefined}
             className="max-w-full bg-white/5"
           />
           <HashChip
             value={claim.claimId}
             label="claim"
+            href={suiObjectUrl(claim.claimId)}
             className="max-w-full bg-white/5 text-white/75"
           />
           {digest !== undefined ? (
             <HashChip
               value={digest}
               label="finalize tx"
+              href={suiTransactionUrl(digest)}
               className="max-w-full bg-white/5 text-white/75"
             />
           ) : null}
@@ -811,6 +815,7 @@ function NodeInspector({
             <HashChip
               value={claim.committeeId}
               label="committee"
+              href={suiObjectUrl(claim.committeeId)}
               className="max-w-full bg-white/5 text-white/75"
             />
           ) : null}
@@ -877,6 +882,7 @@ function NodeInspector({
               value={result.certificateId}
               label="certificate"
               tone="yes"
+              href={suiObjectUrl(result.certificateId)}
               className="max-w-full bg-white/5"
             />
           </div>
@@ -932,12 +938,14 @@ function NodeInspector({
           <HashChip
             value={claim.claimId}
             label="claim"
+            href={suiObjectUrl(claim.claimId)}
             className="max-w-full bg-white/5 text-white/75"
           />
           {claim.committeeId !== undefined ? (
             <HashChip
               value={claim.committeeId}
               label="committee"
+              href={suiObjectUrl(claim.committeeId)}
               className="max-w-full bg-white/5 text-white/75"
             />
           ) : null}
@@ -1280,7 +1288,7 @@ export default function ClaimCanvasPage({ params }: ClaimCanvasPageProps) {
       {selectedNode !== null && (
         <aside
           style={{ width: inspectorWidth }}
-          className="ov-inspector-dark @container absolute inset-y-0 right-0 z-30 hidden max-w-[calc(100vw-28rem)] overflow-y-auto border-l border-white/12 bg-[#061532]/95 shadow-[-28px_0_60px_rgba(1,8,22,0.55)] backdrop-blur-md lg:block"
+          className="ov-inspector-dark @container absolute inset-y-0 right-0 z-30 hidden overflow-hidden max-w-[calc(100vw-28rem)] border-l border-white/12 bg-[#061532]/95 shadow-[-28px_0_60px_rgba(1,8,22,0.55)] backdrop-blur-md lg:block"
         >
           {/* Drag this edge to widen or narrow the panel. */}
           <div
@@ -1315,7 +1323,9 @@ export default function ClaimCanvasPage({ params }: ClaimCanvasPageProps) {
               }
             }}
           />
-          <div className="p-5">
+          {/* Only this region scrolls, so the resize handle spans the whole
+              panel edge no matter how far down the content goes. */}
+          <div className="ov-scroll h-full overflow-x-hidden overflow-y-auto overscroll-contain p-5">
             <NodeInspector
               claim={claim}
               events={events}
