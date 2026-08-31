@@ -339,6 +339,42 @@ Known limitations (V1, disclosed by design):
   deployments need an edge limiter.
 - Unaudited. Capped, team-funded demo value only.
 
+## 💰 Economics: who pays, who earns
+
+OpenVerdict runs a validator-slot model, not a bring-your-own-agent model.
+Jurors are standardized and manifest-pinned (fixed GonkaRouter model catalog,
+prompt and tool policy hashed on-chain), so nobody competes on secret sauce:
+operators compete on liveness and integrity, the way PoS validators do.
+
+The money flows that exist on-chain today:
+
+- **Requesters fund claims.** `create_claim` escrows creation, committee and
+  evidence budgets as coins. Direct review is requester-paid by construction;
+  the public demo tier is a rate-limited subsidy, not the business model.
+- **Jurors earn.** At settlement the committee budget splits per valid
+  revealed seat and mints a recipient-bound payout ticket to the seat
+  owner's address (`settlement.move`, `REASON_JURY_REWARD`). Commit late,
+  fail schema, or refuse to reveal, and you earn nothing.
+- **Disputes fund themselves.** The optimistic pathway finalizes
+  unchallenged bonded outcomes with zero inference cost; a challenge
+  escalates to a jury and the losing side's bond pays for it.
+- **The protocol takes a fee.** A treasury cut of each committee budget is
+  the sustainability switch (landing in the current release).
+
+Human backing is the gate on that faucet: one Google-derived zkLogin
+address backs at most one seat per committee, so capturing a five-seat jury
+costs five distinct identities, and slashing bites a track record that
+cannot respawn for free. Where DIVE gates agent rewards with World ID
+personhood proofs on the agent the human owns, OpenVerdict gates
+standardized validator seats with account-uniqueness, honestly labelled as
+Sybil-cost rather than proof of personhood.
+
+Decentralization ladder: today the team operates all seven jurors (demo);
+next, backers adopt seats (their identity, their bond, their earnings, our
+compute); finally, self-hosted juror workers bring their own GonkaRouter
+keys and pay their own inference, verified by the engine exactly as our own
+runs are (run hashes, receipts, re-execution).
+
 ## 🏆 Hackathon track fit
 
 **MUBA Gonka Track — AI for Society** (fact checker):
