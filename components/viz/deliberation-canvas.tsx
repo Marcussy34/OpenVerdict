@@ -45,26 +45,32 @@ const FAMILY_STYLE: Record<JurorFamily, {
   disc: string;
   initial: string;
   ring: string;
+  /** Soft halo in the family colour, the canvas's main splash of life. */
+  glow: string;
 }> = {
   deepseek: {
     disc: "bg-[#0e76ff] text-white",
     initial: "D",
     ring: "ring-[#0e76ff]",
+    glow: "shadow-[0_0_26px_rgba(14,118,255,0.5)]",
   },
   kimi: {
     disc: "bg-[#e2b93b] text-[#04122b]",
     initial: "K",
     ring: "ring-[#e2b93b]",
+    glow: "shadow-[0_0_26px_rgba(226,185,59,0.45)]",
   },
   minimax: {
     disc: "bg-[#ff6f61] text-white",
     initial: "M",
     ring: "ring-[#ff6f61]",
+    glow: "shadow-[0_0_26px_rgba(255,111,97,0.48)]",
   },
   unknown: {
     disc: "bg-white/15 text-white/80",
     initial: "?",
     ring: "ring-white/30",
+    glow: "shadow-[0_0_20px_rgba(255,255,255,0.2)]",
   },
 };
 
@@ -118,13 +124,23 @@ function outgoingSubtree(
   return visited;
 }
 
+// Edge palette: the wires carry meaning too. Citations glow verdict green,
+// juror actions carry brand blue, search results stay a quiet paper blue.
+type EdgeStyle = { stroke: string; lo: number; hi: number; width: number };
+const DEFAULT_EDGE_STYLE: EdgeStyle = { stroke: "#ffffff", lo: 0.12, hi: 0.3, width: 1 };
+const EDGE_STYLE: Record<string, EdgeStyle> = {
+  citation: { stroke: "#43e5a0", lo: 0.38, hi: 0.75, width: 1.4 },
+  action: { stroke: "#7db4ff", lo: 0.2, hi: 0.5, width: 1 },
+  result: { stroke: "#9ecbff", lo: 0.16, hi: 0.45, width: 1 },
+};
+
 function nodeClassName(node: GraphNode, selected: boolean): string {
   const selectedRing = selected ? "ring-2 ring-white/70" : undefined;
 
   switch (node.kind) {
     case "claim":
       return cn(
-        "size-[92px] rounded-full border-2 border-[#0e76ff]/70 bg-[#0a1f3d] text-white shadow-2xl",
+        "size-[92px] rounded-full border-2 border-[#0e76ff]/70 bg-[#0a1f3d] text-white shadow-[0_0_46px_rgba(14,118,255,0.4)]",
         selectedRing,
       );
     case "juror": {
@@ -132,6 +148,7 @@ function nodeClassName(node: GraphNode, selected: boolean): string {
       return cn(
         "size-14 rounded-full ring-2",
         selected ? "ring-white/70" : FAMILY_STYLE[family].ring,
+        FAMILY_STYLE[family].glow,
         node.state === "sealed" && "opacity-80",
       );
     }
@@ -143,14 +160,14 @@ function nodeClassName(node: GraphNode, selected: boolean): string {
       );
     case "search":
       return cn(
-        "size-[26px] rounded-full text-white/85",
+        "size-[26px] rounded-full text-[#bcd9ff]",
         "after:absolute after:-inset-2.5 after:content-['']",
-        node.intent === "challenge" ? "bg-[#ff8f3f]/25" : "bg-[#0e76ff]/25",
+        node.intent === "challenge" ? "bg-[#ff8f3f]/30 text-[#ffc79b]" : "bg-[#0e76ff]/30",
         selectedRing,
       );
     case "page":
       return cn(
-        "size-6 rounded-md bg-white/15 text-white/85",
+        "size-6 rounded-md bg-[#173a68] text-[#a6cdff]",
         "after:absolute after:-inset-2.5 after:content-['']",
         selectedRing,
       );
@@ -170,7 +187,7 @@ function nodeClassName(node: GraphNode, selected: boolean): string {
       );
     case "certificate":
       return cn(
-        "size-16 rounded-2xl border border-[#43e5a0]/45 bg-[#0e7a4b]/25 text-[#43e5a0]",
+        "size-16 rounded-2xl border border-[#43e5a0]/45 bg-[#0e7a4b]/25 text-[#43e5a0] shadow-[0_0_28px_rgba(67,229,160,0.35)]",
         selectedRing,
       );
   }
@@ -713,6 +730,17 @@ export function DeliberationCanvas({
       onPointerCancel={cancelPointer}
       onWheel={handleWheel}
     >
+      {/* Vibrancy ground: brand-blue aurora, a whisper of verdict green and
+          a faint dot lattice, all far behind the graph. */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0"
+        style={{
+          backgroundImage:
+            "radial-gradient(900px 560px at 20% 12%, rgba(14,118,255,0.17), transparent 62%), radial-gradient(760px 480px at 82% 80%, rgba(67,229,160,0.09), transparent 62%), radial-gradient(rgba(158,203,255,0.11) 1px, transparent 1px)",
+          backgroundSize: "auto, auto, 26px 26px",
+        }}
+      />
       <div
         aria-hidden
         className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_35%,rgba(0,0,0,0.42)_100%)]"
@@ -743,6 +771,7 @@ export function DeliberationCanvas({
             if (from === undefined || to === undefined) return null;
             const highlighted = highlightedIds !== null
               && (highlightedIds.has(edge.from) || highlightedIds.has(edge.to));
+            const style = EDGE_STYLE[edge.kind] ?? DEFAULT_EDGE_STYLE;
             return (
               <line
                 key={edge.id}
@@ -750,9 +779,9 @@ export function DeliberationCanvas({
                 y1={from.y}
                 x2={to.x}
                 y2={to.y}
-                stroke="#ffffff"
-                strokeOpacity={highlighted ? 0.3 : 0.12}
-                strokeWidth="1"
+                stroke={style.stroke}
+                strokeOpacity={highlighted ? style.hi : style.lo}
+                strokeWidth={style.width}
               />
             );
           })}
