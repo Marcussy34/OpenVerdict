@@ -188,15 +188,12 @@ function HowItRuns() {
           ))}
         </ol>
         <p className="border-t border-border pt-3 text-[11px] leading-relaxed text-muted-foreground">
-          Direct review bypasses the optimistic disputation window: the engine
-          locks the evidence manifest immediately, draws five jurors across ≥3
-          model families with Sui native randomness, and executes the sealed
-          commit-reveal round.
+          Direct review skips the dispute window: evidence locks at once, five
+          jurors are drawn with Sui randomness, and the sealed round runs.
         </p>
         <p className="text-[11px] leading-relaxed text-muted-foreground">
-          Write one falsifiable sentence with the who, what and when, for
-          example: The first Bitcoin halving took place in November 2012. Avoid
-          opinions, predictions and compound claims.
+          One falsifiable sentence with the who, what and when. No opinions,
+          predictions or compound claims.
         </p>
       </div>
     </details>
@@ -265,7 +262,7 @@ function FactCheckContent() {
         {/* The bar: one input, the button inside it, nothing else. */}
         <form
           onSubmit={handleSubmit}
-          className="ov-edge flex flex-col gap-2 rounded-2xl border border-border bg-card p-2 shadow-xs focus-within:ring-2 focus-within:ring-ring sm:flex-row sm:items-center"
+          className="ov-edge flex flex-col gap-2 rounded-2xl border border-border bg-card p-2 shadow-xs focus-within:ring-2 focus-within:ring-ring sm:flex-row sm:items-stretch"
         >
           <div className="flex min-w-0 flex-1 items-center gap-2.5 pl-2.5">
             <SearchNormal1 size="16" className="shrink-0 text-muted-foreground" />

@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { PageHeader, MetaTag } from "@/components/viz/page-header";
 import { Panel } from "@/components/viz/panel";
 import { StatTile } from "@/components/viz/stat-tile";
 import { StateBadge } from "@/components/claim/state-badge";
@@ -11,7 +10,6 @@ import { useNow } from "@/components/use-now";
 import { Arrow } from "@/components/landing/primitives";
 import { SuiMark, GonkaMark } from "@/components/brand/logos";
 import {
-  Element3,
   DocumentText,
   People,
   ShieldSearch,
@@ -44,7 +42,7 @@ const DESKS = [
   {
     href: "/verify",
     icon: ShieldSearch,
-    title: "Independent verifier",
+    title: "Independent audit",
     body: "Recompute commitments and Truth Scores in your own browser. Nothing here calls the engine.",
   },
   {
@@ -103,22 +101,25 @@ export default function AppHomePage() {
   const recent = claims.slice(0, 5);
 
   return (
-    <div className="space-y-8 px-5 py-10 md:px-7 lg:py-12">
-      <PageHeader
-        eyebrow="Console"
-        title="OpenVerdict"
-        icon={Element3}
-        description="The working end of the protocol: submit a claim, watch a jury sit, and check any verdict yourself. Everything on these pages is a read-only projection of on-chain objects, Walrus blobs and public events."
-        badges={<MetaTag tone="chain">Read-only</MetaTag>}
-        actions={
+    <div className="mx-auto max-w-6xl space-y-10 px-5 py-10 md:px-7 lg:py-12">
+      {/* Centered hero: the console reads as a dashboard, not a document. */}
+      <div className="mx-auto max-w-2xl space-y-4 pt-4 text-center">
+        <p className="ov-micro ov-micro-sm text-muted-foreground">
+          Console · read-only
+        </p>
+        <h1 className="ov-display text-4xl text-ocean md:text-5xl">OpenVerdict</h1>
+        <p className="text-base text-muted-foreground">
+          AI juries on Sui. Every verdict public, auditable, replayable.
+        </p>
+        <div className="flex justify-center pt-1">
           <Link href="/fact-check" className="ov-btn">
-            <span className="ov-btn__label ov-micro">Submit a claim</span>
+            <span className="ov-btn__label ov-micro">Verify a claim</span>
             <span className="ov-btn__chip" aria-hidden>
               <Arrow />
             </span>
           </Link>
-        }
-      />
+        </div>
+      </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatTile label="Claims settled" value={stats.settled} icon={ShieldTick} tone="yes" />
@@ -133,24 +134,19 @@ export default function AppHomePage() {
           <Link
             key={desk.href}
             href={desk.href}
-            className="ov-lift group relative flex flex-col border border-border bg-card p-5 transition-colors hover:bg-surface"
+            className="ov-lift group relative flex flex-col items-center border border-border bg-card p-6 text-center transition-colors hover:bg-surface"
           >
             <span
               aria-hidden
               className="absolute top-0 left-0 size-1.5 bg-[var(--ov-accent)]"
             />
-            <div className="flex items-start justify-between gap-4">
-              <span className="grid size-9 shrink-0 place-items-center bg-sea/12 text-primary">
-                <desk.icon size="19" variant="Bold" />
-              </span>
-              <span className="grid size-[34px] shrink-0 place-items-center bg-surface text-muted-foreground transition-colors group-hover:bg-[var(--ov-accent)] group-hover:text-white">
-                <Arrow />
-              </span>
-            </div>
-            <h2 className="mt-5 text-[19px] leading-snug font-medium tracking-[-0.01em]">
+            <span className="grid size-10 place-items-center bg-sea/12 text-primary">
+              <desk.icon size="20" variant="Bold" />
+            </span>
+            <h2 className="mt-4 text-[19px] leading-snug font-medium tracking-[-0.01em]">
               {desk.title}
             </h2>
-            <p className="mt-2 text-[15px] leading-[1.5] text-black/65">{desk.body}</p>
+            <p className="mt-2 text-sm leading-[1.5] text-black/65">{desk.body}</p>
           </Link>
         ))}
       </div>
