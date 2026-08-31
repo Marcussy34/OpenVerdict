@@ -22,7 +22,7 @@ evidence and agent work preserved on Walrus.
 > | Layer | State |
 > | --- | --- |
 > | Sui Move packages (8 protocol modules incl. Object Display, plus the Seal policy) | ✅ `sui move test`: **66/66** protocol, **4/4** Seal policy |
-> | TS libs · engine · CLI · workers | ✅ vitest: **481/481** (full suite) |
+> | TS libs · engine · CLI · workers | ✅ vitest: **485/485** (full suite) |
 > | TS↔Move commitment parity gate | ✅ 6 cross-pinned blake2b256/BCS vectors |
 > | Localnet E2E + cockpit demo state | ✅ 3 lifecycle paths, sponsored deposit, CLI parity — exit 0 |
 > | Juror research (v2, batched opens) | ✅ support + challenge searches, pages on both sides, citations from two sites, counter-evidence summary; every step in the sealed transcript |
@@ -30,7 +30,7 @@ evidence and agent work preserved on Walrus.
 > | Seal escrow of reveal keys | ✅ time-lock policy package on testnet; sealed bundles open after the deadline without the operator |
 > | Reliability under a flaky provider | ✅ hedged same-model calls, failed seats keep their trail, workers skip dead claims |
 > | Wallet + zkLogin onboarding · T7b one-account-one-seat registration | ✅ SDK-verified signatures, pseudonymous backing hash |
-> | Observer + fact-check UI · deliberation canvas claim page | ✅ live force graph (jurors with avatars, sealed pulses, bloom at reveal, replay); audit view at `/claims/[id]/report`; builds, typechecks, lints |
+> | Observer + verification UI · deliberation canvas claim page | ✅ live force graph (jurors with avatars, sealed pulses, bloom at reveal, replay); audit view at `/claims/[id]/report`; builds, typechecks, lints |
 > | Sui testnet package | ✅ published — ids in `config/release.testnet.json` |
 > | Hosted on Railway (web + API + workers, Railway Postgres) | ✅ https://openverdict.info (landing) · https://app.openverdict.info (console; www and apex console paths redirect there) |
 >
@@ -70,7 +70,7 @@ pnpm test:move
 # Typecheck + lint + production build
 pnpm typecheck && pnpm lint && pnpm build
 
-# Observer + fact-check UI (full engine wired)
+# Observer + verification UI (full engine wired)
 pnpm dev            # http://localhost:3000
 
 # Full lifecycle proof on a throwaway local Sui network
@@ -111,7 +111,7 @@ lib/storage/          drizzle schema over pglite (dev/tests) or Postgres (prod)
 lib/sui/              SuiGrpcClient wiring + per-entry-point transaction builders
 cli/                  `openverdict` CLI — complete headless control surface
 workers/              evidence / inference / resolution loops (live-claim triage, wake file)
-app/                  Next.js 16 observer, fact-check UI, thin API routes
+app/                  Next.js 16 observer, verification UI, thin API routes
 config/               Release manifests (localnet/testnet): ids, models, policies, Seal
 scripts/              Parity vectors, localnet E2E, cockpit demo, testnet deploy,
                       live canary, manifest and Seal policy publishing, registry prune
@@ -161,7 +161,7 @@ a Sui address. Three tiers:
   <img alt="OpenVerdict interaction tiers" src="docs/diagrams/onboarding-tiers.png">
 </picture>
 
-1. **Anyone (no login, no wallet):** submit a fact-check (sponsor-funded,
+1. **Anyone (no login, no wallet):** submit a claim for verification (sponsor-funded,
    rate-limited), watch live jury resolutions, browse every claim/agent/
    evidence artifact, and recompute commitments + Truth Scores at `/verify`.
 2. **Economic participants (wallet OR Google):** demo-pool deposits, bonds,
@@ -251,13 +251,13 @@ dark mode).
 | Sui client | `@mysten/sui` 2.26 (`SuiGrpcClient`) | BCS, PTBs, signing, object/event reads |
 | Storage of record | Walrus (`@mysten/walrus` 1.2) | Evidence, opened pages, manifests, sealed and revealed run bundles, failure records |
 | App/db | drizzle-orm + pglite (dev/tests) / Railway Postgres (prod) | Rebuildable indexes and the resolution event log |
-| Frontend | Next.js 16, React 19, Tailwind 4, shadcn/ui, iconsax | Read-only observer + fact-check UI |
+| Frontend | Next.js 16, React 19, Tailwind 4, shadcn/ui, iconsax | Read-only observer + verification UI |
 | CLI | TypeScript + commander 15 (`pnpm cli`) | Complete control, inspection, automation |
 | Validation | zod 4 (strict schemas) | Oracle I/O contracts, manifests, config |
 | Hashing | `@noble/hashes` blake2b-256 == `sui::hash::blake2b256` | One commitment format across TS and Move |
 | Onboarding | `@mysten/enoki` (zkLogin) + dapp-kit v2 | Social-login self-custodial addresses; env-gated, wallet-standard |
 | Object metadata | Sui Object Display (`display_meta` module) | Certificates/profiles/positions render in wallets + explorers |
-| Tests | vitest 4 + `sui move test` | 481 TS + 70 Move (66 protocol, 4 Seal policy), incl. the cross-language parity gate |
+| Tests | vitest 4 + `sui move test` | 485 TS + 70 Move (66 protocol, 4 Seal policy), incl. the cross-language parity gate |
 
 ## 🔍 What is auditable
 

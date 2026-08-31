@@ -11,7 +11,7 @@ Node ≥22, pnpm, Sui CLI ≥1.52. `pnpm install` at the repo root.
 ## 1. Offline proof (no network, no keys)
 
 ```bash
-pnpm test && pnpm test:move   # 481 TS + 70 Move (66 protocol, 4 Seal policy)
+pnpm test && pnpm test:move   # 485 TS + 70 Move (66 protocol, 4 Seal policy)
 pnpm e2e:localnet             # spawns a local Sui network, deploys, runs 3 full
                               # lifecycles + sponsored deposit, exits 0 on success
 ```
@@ -144,7 +144,7 @@ against the recorded model, or opened through Seal after the deadline.
    testnet; `railway logs -s app -d --lines 200` is quiet between claims
    (the workers skip finished and stuck claims, so a tick never spends a
    live claim's reveal window on dead ones).
-4. Timeline of a hosted fact-check with the fast ladder (measured on
+4. Timeline of a hosted verification with the fast ladder (measured on
    claim #16, 2026-08-30 08:22, the first hosted YES verdict, certificate
    `0x62036142…`): POST returns after ~45 s (statement and criteria on
    Walrus, create_claim at ~t+20 s, statement artifact), committee at
@@ -261,7 +261,7 @@ against the recorded model, or opened through Seal after the deadline.
 
 ## 5. Human end-to-end walkthrough (the user's test)
 
-1. Open the live URL → submit a fact-check (no wallet needed).
+1. Open the live URL → submit a claim (no wallet needed).
 2. Watch the deliberation canvas: jurors sprout locked pulses while they
    research (content-free ticks), the graph blooms into real searches, pages
    and citations at reveal, the certificate lands at settlement. Click any
