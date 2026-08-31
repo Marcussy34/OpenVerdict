@@ -952,9 +952,9 @@
     animation-play-state: paused;
 }
 
-/* --- Wave word: the hero's "claim" itself undulates like water ----------- */
-/* One keyframe drives both the bob and the gradient shift; the negative
-   per-letter delay stagger (--i) makes the wave travel through the word. */
+/* --- Wave word: a blue color wave cycles through the still word ----------- */
+/* The gradient shift plus the negative per-letter delay stagger (--i) make
+   the bright band travel through the word; the letters never move. */
 .ov-wave-word {
     display: inline-block;
     white-space: nowrap;
@@ -976,15 +976,12 @@
         infinite;
 }
 
-/* The crest catches the light: the rise and the bright band peak together. */
 @keyframes ov-wave-letter {
     0%,
     100% {
-        transform: translateY(0);
         background-position-x: 0%;
     }
     50% {
-        transform: translateY(-0.12em);
         background-position-x: 100%;
     }
 }
@@ -1022,6 +1019,5 @@
     /* The wave letters park as static blue gradient text. */
     .ov-wave-letter {
         animation: none !important;
-        transform: none !important;
     }
 }
