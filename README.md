@@ -257,7 +257,7 @@ dark mode).
 | Hashing | `@noble/hashes` blake2b-256 == `sui::hash::blake2b256` | One commitment format across TS and Move |
 | Onboarding | `@mysten/enoki` (zkLogin) + dapp-kit v2 | Social-login self-custodial addresses; env-gated, wallet-standard |
 | Object metadata | Sui Object Display (`display_meta` module) | Certificates/profiles/positions render in wallets + explorers |
-| Tests | vitest 4 + `sui move test` | 431 TS + 70 Move (66 protocol, 4 Seal policy), incl. the cross-language parity gate |
+| Tests | vitest 4 + `sui move test` | 464 TS + 70 Move (66 protocol, 4 Seal policy), incl. the cross-language parity gate |
 
 ## 🔍 What is auditable
 
