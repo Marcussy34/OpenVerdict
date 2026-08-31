@@ -31,6 +31,15 @@ function suiArtifact(record: JsonRecord | undefined, objectKey: string) {
   };
 }
 
+// A revealed run's proof is immutable (the bundle is content-addressed and the
+// commitment is on chain), but building it costs two Walrus testnet reads of
+// about ten seconds. Serve repeats from memory and let browsers cache it.
+const IMMUTABLE_CACHE = new Map<string, JsonRecord>();
+const IMMUTABLE_CACHE_LIMIT = 200;
+const IMMUTABLE_HEADERS = {
+  "Cache-Control": "public, max-age=31536000, immutable",
+} as const;
+
 /** Return the public proof material for one inference run. */
 export async function GET(_request: Request, context: RouteContext) {
   try {
@@ -40,6 +49,12 @@ export async function GET(_request: Request, context: RouteContext) {
         { error: "validation_error", message: "claim id and run id are required" },
         { status: 400 },
       );
+    }
+
+    const cacheKey = `${id}:${runId}`;
+    const cached = IMMUTABLE_CACHE.get(cacheKey);
+    if (cached) {
+      return NextResponse.json(cached, { status: 200, headers: IMMUTABLE_HEADERS });
     }
 
     const engine = await getServerEngine();
@@ -68,26 +83,34 @@ export async function GET(_request: Request, context: RouteContext) {
     const commitmentArtifact = suiArtifact(commitment, "votePackageId");
     const revealArtifact = suiArtifact(reveal, "revealedVoteId");
 
-    return NextResponse.json(
-      {
-        ...proof,
-        sui: {
-          claimObjectId: proof.bundle?.audit.claimObjectId ?? proof.claimId,
-          agentProfileId: proof.agentProfileId,
-          jurySeatId: proof.jurySeatId,
-          ...(runApprovalArtifact
-            ? { runApproval: runApprovalArtifact }
-            : {}),
-          ...(commitmentArtifact
-            ? { commitment: commitmentArtifact }
-            : {}),
-          ...(revealArtifact
-            ? { reveal: revealArtifact }
-            : {}),
-        },
+    const body: JsonRecord = {
+      ...proof,
+      sui: {
+        claimObjectId: proof.bundle?.audit.claimObjectId ?? proof.claimId,
+        agentProfileId: proof.agentProfileId,
+        jurySeatId: proof.jurySeatId,
+        ...(runApprovalArtifact
+          ? { runApproval: runApprovalArtifact }
+          : {}),
+        ...(commitmentArtifact
+          ? { commitment: commitmentArtifact }
+          : {}),
+        ...(revealArtifact
+          ? { reveal: revealArtifact }
+          : {}),
       },
-      { status: 200 },
-    );
+    };
+
+    // Only a revealed proof is final; pre-reveal responses change at reveal.
+    if (proof.revealed === true) {
+      if (IMMUTABLE_CACHE.size >= IMMUTABLE_CACHE_LIMIT) {
+        const oldest = IMMUTABLE_CACHE.keys().next().value;
+        if (oldest !== undefined) IMMUTABLE_CACHE.delete(oldest);
+      }
+      IMMUTABLE_CACHE.set(cacheKey, body);
+      return NextResponse.json(body, { status: 200, headers: IMMUTABLE_HEADERS });
+    }
+    return NextResponse.json(body, { status: 200 });
   } catch (error) {
     if (
       error instanceof EngineNotWiredError ||

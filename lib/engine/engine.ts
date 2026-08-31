@@ -1542,18 +1542,20 @@ class OpenVerdictEngine implements Engine {
     }
     const sealedBlobId = run.sealedBlobId ?? null;
     const revealedBlobId = run.revealedBlobId ?? null;
+    // Both blobs live on Walrus and testnet reads are slow; fetch them
+    // together instead of back to back.
+    const [sealedBytes, revealedBytes] = await Promise.all([
+      sealedBlobId === null ? null : this.#walrus.get(sealedBlobId),
+      revealedBlobId === null ? null : this.#walrus.get(revealedBlobId),
+    ]);
     const sealed =
-      sealedBlobId === null
+      sealedBytes === null
         ? null
-        : JSON.parse(
-            new TextDecoder().decode(await this.#walrus.get(sealedBlobId)),
-          ) as SealedRunBundleV2;
+        : JSON.parse(new TextDecoder().decode(sealedBytes)) as SealedRunBundleV2;
     const bundle =
-      revealedBlobId === null
-          ? null
-          : JSON.parse(
-              new TextDecoder().decode(await this.#walrus.get(revealedBlobId)),
-            ) as PublicRunBundle;
+      revealedBytes === null
+        ? null
+        : JSON.parse(new TextDecoder().decode(revealedBytes)) as PublicRunBundle;
     return {
       ...common,
       runHash: run.runHash,

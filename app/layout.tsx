@@ -5,6 +5,7 @@ import { Archivo, Archivo_Narrow, Geist_Mono } from "next/font/google";
 import { cn } from "@/lib/utils";
 import { SiteHeader } from "@/components/site-header";
 import { LandingFooter } from "@/components/landing/footer";
+import { ChromeVisibility } from "@/components/chrome-visibility";
 import { WalletProviders } from "@/components/wallet/providers";
 
 import { SITE_URL, SITE_NAME, SITE_DESCRIPTION } from "@/lib/web/site-urls";
@@ -80,13 +81,17 @@ export default async function RootLayout({
 
         <WalletProviders>
           <div className="relative z-10 flex min-h-screen flex-col">
-            <SiteHeader consoleHost={consoleHost} />
+            <ChromeVisibility>
+              <SiteHeader consoleHost={consoleHost} />
+            </ChromeVisibility>
             <main id="main" className="flex-1">
               {children}
             </main>
             {/* One footer for the whole product — the landing's deep-blue
                 close, on every route. */}
-            <LandingFooter />
+            <ChromeVisibility>
+              <LandingFooter />
+            </ChromeVisibility>
           </div>
         </WalletProviders>
       </body>

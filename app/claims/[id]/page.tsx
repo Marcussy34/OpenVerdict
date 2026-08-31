@@ -830,12 +830,32 @@ export default function ClaimCanvasPage({ params }: ClaimCanvasPageProps) {
   }
 
   return (
-    <div className="relative flex min-h-[calc(100vh-74px)] bg-[#04122b] text-white">
-      <aside className="hidden h-[calc(100vh-74px)] w-[320px] shrink-0 overflow-y-auto border-r border-white/10 bg-white/[0.04] lg:block">
+    <div className="relative flex h-dvh overflow-hidden bg-[#04122b] text-white">
+      <aside className="hidden h-dvh w-[320px] shrink-0 overflow-y-auto border-r border-white/10 bg-white/[0.04] lg:block">
         <LeftRail claim={claim} now={now} replay={replay} />
       </aside>
 
-      <main className="relative h-[calc(100vh-74px)] min-h-[calc(100vh-74px)] flex-1 overflow-hidden">
+      <main className="relative h-dvh flex-1 overflow-hidden">
+        {/* The global chrome stays off the stage (owner request); this pill
+            is the quick way around. */}
+        <nav className="absolute top-4 left-4 z-30 flex items-center gap-1 rounded-full border border-white/15 bg-[#07162f]/90 px-2 py-1.5 shadow-xl backdrop-blur">
+          <Link
+            href="/"
+            aria-label="OpenVerdict home"
+            className="grid size-7 shrink-0 place-items-center rounded-full bg-[#0e76ff] text-[10px] font-bold text-white"
+          >
+            OV
+          </Link>
+          <Link href="/claims" className="rounded-full px-2.5 py-1 text-xs font-semibold text-white/80 hover:bg-white/10 hover:text-white">
+            Claims
+          </Link>
+          <Link href="/fact-check" className="rounded-full px-2.5 py-1 text-xs font-semibold text-white/80 hover:bg-white/10 hover:text-white">
+            Fact-check
+          </Link>
+          <Link href="/verify" className="rounded-full px-2.5 py-1 text-xs font-semibold text-white/80 hover:bg-white/10 hover:text-white">
+            Verify
+          </Link>
+        </nav>
         <DeliberationCanvas
           graph={replay.visible}
           selectedId={selectedId}
@@ -867,7 +887,7 @@ export default function ClaimCanvasPage({ params }: ClaimCanvasPageProps) {
         </button>
       </main>
 
-      <aside className="hidden h-[calc(100vh-74px)] w-[380px] shrink-0 overflow-y-auto border-l border-white/10 bg-white/[0.04] p-5 lg:block">
+      <aside className="hidden h-dvh w-[380px] shrink-0 overflow-y-auto border-l border-white/10 bg-white/[0.04] p-5 lg:block">
         <NodeInspector
           claim={claim}
           events={events}
