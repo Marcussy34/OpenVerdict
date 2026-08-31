@@ -36,7 +36,7 @@ describe("console paths", () => {
 
   it("does not match paths that only share a prefix", () => {
     expect(isConsolePath("/claimsx")).toBe(false);
-    expect(isConsolePath("/learn")).toBe(false);
+    expect(isConsolePath("/privacy")).toBe(false);
     expect(isConsolePath("/")).toBe(false);
   });
 });
@@ -81,7 +81,6 @@ describe("host redirects", () => {
   it("leaves apex non-console paths on the landing host", () => {
     for (const path of [
       "/",
-      "/learn",
       "/privacy",
       "/api/claims",
       "/claimsx",

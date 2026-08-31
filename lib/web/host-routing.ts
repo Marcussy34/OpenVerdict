@@ -14,6 +14,7 @@ export const CONSOLE_PATHS: readonly string[] = [
   "/status",
   "/fact-check",
   "/evidence",
+  "/learn",
 ];
 
 /** Returns the path to rewrite to, or null when the request passes through. */

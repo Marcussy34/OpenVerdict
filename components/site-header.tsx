@@ -15,6 +15,7 @@ const NAV_ITEMS = [
   { href: "/agents", label: "Agents" },
   { href: "/verify", label: "Audit" },
   { href: "/status", label: "Status" },
+  { href: "/learn", label: "Learn" },
 ];
 
 /**
