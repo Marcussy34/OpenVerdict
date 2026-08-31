@@ -887,15 +887,19 @@ export default function ClaimCanvasPage({ params }: ClaimCanvasPageProps) {
         </button>
       </main>
 
-      <aside className="hidden h-dvh w-[380px] shrink-0 overflow-y-auto border-l border-white/10 bg-white/[0.04] p-5 lg:block">
-        <NodeInspector
-          claim={claim}
-          events={events}
-          graph={graph}
-          node={selectedNode}
-          proofsByRunId={proofsByRunId}
-        />
-      </aside>
+      {/* The inspector exists only while a node is selected; clicking empty
+          canvas deselects and gives the stage the full width. */}
+      {selectedNode !== null && (
+        <aside className="hidden h-dvh w-[380px] shrink-0 overflow-y-auto border-l border-white/10 bg-white/[0.04] p-5 lg:block">
+          <NodeInspector
+            claim={claim}
+            events={events}
+            graph={graph}
+            node={selectedNode}
+            proofsByRunId={proofsByRunId}
+          />
+        </aside>
+      )}
 
       {leftOpen || inspectorOpen ? (
         <button
