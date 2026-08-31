@@ -122,7 +122,7 @@ function nodeClassName(node: GraphNode, selected: boolean): string {
   switch (node.kind) {
     case "claim":
       return cn(
-        "size-[84px] rounded-full border border-white/25 bg-white/8 text-white/85",
+        "w-[280px] rounded-2xl border-2 border-[#0e76ff]/60 bg-[#0a1f3d] p-4 text-left shadow-2xl",
         selectedRing,
       );
     case "juror": {
@@ -267,12 +267,19 @@ function nodeContent(
   switch (node.kind) {
     case "claim":
       return (
-        <>
-          <ShieldSearch size="30" variant="Bulk" />
-          <span className="pointer-events-none absolute top-[calc(100%+7px)] left-1/2 w-40 -translate-x-1/2 truncate text-center text-[11px] text-white/85">
-            {labelAtMost(node.label, 60)}
+        <span className="flex w-full flex-col gap-2.5">
+          <span className="flex items-center gap-2">
+            <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-[#0e76ff] text-white">
+              <ShieldSearch size="18" variant="Bold" />
+            </span>
+            <span className="text-[10px] font-bold tracking-[0.14em] text-[#7fb4ff]">
+              CLAIM ON TRIAL
+            </span>
           </span>
-        </>
+          <span className="text-[13px] leading-snug font-medium break-words text-white">
+            {labelAtMost(node.label, 300)}
+          </span>
+        </span>
       );
     case "juror":
       return (
@@ -340,8 +347,12 @@ function CanvasNode({
   cited,
   jurorVerdict,
   reduceMotion,
+  viewScale,
   onSelect,
   onJurorHover,
+  onDragStart,
+  onDrag,
+  onDragEnd,
 }: {
   node: GraphNode;
   position: Position;
@@ -352,13 +363,27 @@ function CanvasNode({
   cited: boolean;
   jurorVerdict?: GraphNode;
   reduceMotion: boolean;
+  viewScale: number;
   onSelect: (node: GraphNode) => void;
   onJurorHover: (id: string | null) => void;
+  onDragStart: (id: string) => void;
+  onDrag: (id: string, x: number, y: number) => void;
+  onDragEnd: (id: string) => void;
 }) {
+  // A short press selects; moving past 4px hands the node to the simulation.
+  const dragRef = useRef<{
+    pointerId: number;
+    startClientX: number;
+    startClientY: number;
+    originX: number;
+    originY: number;
+    moved: boolean;
+  } | null>(null);
+  const suppressClickRef = useRef(false);
   return (
     <div
-      className="absolute top-0 left-0 will-change-transform"
-      style={{ transform: `translate3d(${position.x}px, ${position.y}px, 0)` }}
+      className="absolute top-0 left-0"
+      style={{ transform: `translate(${position.x}px, ${position.y}px)` }}
     >
       <div className="-translate-x-1/2 -translate-y-1/2">
         <div
@@ -373,7 +398,7 @@ function CanvasNode({
             type="button"
             aria-label={`Select ${node.kind}: ${node.label}`}
             className={cn(
-              "relative grid place-items-center focus-visible:outline-none",
+              "relative grid cursor-grab place-items-center focus-visible:outline-none active:cursor-grabbing",
               "focus-visible:ring-2 focus-visible:ring-white/90 focus-visible:ring-offset-2",
               "focus-visible:ring-offset-[#04122b]",
               nodeClassName(node, selected),
@@ -386,9 +411,63 @@ function CanvasNode({
             }}
             onClick={(event) => {
               event.stopPropagation();
+              if (suppressClickRef.current) {
+                suppressClickRef.current = false;
+                return;
+              }
               onSelect(node);
             }}
-            onPointerDown={(event) => event.stopPropagation()}
+            onPointerDown={(event) => {
+              event.stopPropagation();
+              if (event.button !== 0) return;
+              event.currentTarget.setPointerCapture(event.pointerId);
+              dragRef.current = {
+                pointerId: event.pointerId,
+                startClientX: event.clientX,
+                startClientY: event.clientY,
+                originX: position.x,
+                originY: position.y,
+                moved: false,
+              };
+            }}
+            onPointerMove={(event) => {
+              const drag = dragRef.current;
+              if (drag === null || drag.pointerId !== event.pointerId) return;
+              const clientDeltaX = event.clientX - drag.startClientX;
+              const clientDeltaY = event.clientY - drag.startClientY;
+              if (!drag.moved && Math.hypot(clientDeltaX, clientDeltaY) > 4) {
+                drag.moved = true;
+                onDragStart(node.id);
+              }
+              if (drag.moved) {
+                onDrag(
+                  node.id,
+                  drag.originX + clientDeltaX / viewScale,
+                  drag.originY + clientDeltaY / viewScale,
+                );
+              }
+            }}
+            onPointerUp={(event) => {
+              const drag = dragRef.current;
+              if (drag === null || drag.pointerId !== event.pointerId) return;
+              dragRef.current = null;
+              if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+                event.currentTarget.releasePointerCapture(event.pointerId);
+              }
+              if (drag.moved) {
+                suppressClickRef.current = true;
+                onDragEnd(node.id);
+              }
+            }}
+            onPointerCancel={(event) => {
+              const drag = dragRef.current;
+              if (drag === null || drag.pointerId !== event.pointerId) return;
+              dragRef.current = null;
+              if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+                event.currentTarget.releasePointerCapture(event.pointerId);
+              }
+              if (drag.moved) onDragEnd(node.id);
+            }}
             onMouseEnter={() => {
               if (node.kind === "juror") onJurorHover(node.id);
             }}
@@ -429,7 +508,7 @@ export function DeliberationCanvas({
   const [size, setSize] = useState({ width: 0, height: 0 });
   const [manualView, setManualView] = useState<Viewport | null>(null);
   const [hoveredJurorId, setHoveredJurorId] = useState<string | null>(null);
-  const positions = useForceLayout(graph, size);
+  const { positions, startDrag, dragTo, endDrag } = useForceLayout(graph, size);
 
   // Frame the whole graph with padding until the user takes the view over
   // (pan or zoom); until then the bloom keeps itself in frame automatically.
@@ -569,6 +648,13 @@ export function DeliberationCanvas({
     [],
   );
 
+  // Dragging a node freezes the auto-fit at its current framing, otherwise
+  // the view would keep re-centring against the user's hand.
+  const handleNodeDragStart = useCallback((id: string): void => {
+    setManualView((current) => current ?? view);
+    startDrag(id);
+  }, [startDrag, view]);
+
   const handleWheel = useCallback((event: ReactWheelEvent<HTMLDivElement>): void => {
     event.preventDefault();
     const rect = event.currentTarget.getBoundingClientRect();
@@ -605,7 +691,9 @@ export function DeliberationCanvas({
       <div
         className="absolute inset-0 origin-top-left"
         style={{
-          transform: `translate3d(${view.x}px, ${view.y}px, 0) scale(${view.scale})`,
+          // A plain 2D transform: promoted 3d layers rasterize once and then
+          // rescale as textures, which is what made the canvas look blurry.
+          transform: `translate(${view.x}px, ${view.y}px) scale(${view.scale})`,
         }}
       >
         {/* Edges and nodes share one viewport transform. */}
@@ -656,8 +744,12 @@ export function DeliberationCanvas({
                 node.seatId === undefined ? undefined : verdictBySeat.get(node.seatId)
               }
               reduceMotion={shouldReduceMotion}
+              viewScale={view.scale}
               onSelect={onSelect}
               onJurorHover={setHoveredJurorId}
+              onDragStart={handleNodeDragStart}
+              onDrag={dragTo}
+              onDragEnd={endDrag}
             />
           );
         })}

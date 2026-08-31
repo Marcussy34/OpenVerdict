@@ -312,7 +312,8 @@ export function buildDeliberationGraph(input: {
   addNode({
     id: "claim",
     kind: "claim",
-    label: shortLabel(input.claim.statement, "Claim"),
+    // The genesis card renders the whole statement, so no truncation here.
+    label: input.claim.statement.trim() || "Claim",
     atMs: claimAtMs,
     detail: {
       claimId: input.claim.claimId,
