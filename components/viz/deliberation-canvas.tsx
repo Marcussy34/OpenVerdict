@@ -45,32 +45,26 @@ const FAMILY_STYLE: Record<JurorFamily, {
   disc: string;
   initial: string;
   ring: string;
-  /** Soft halo in the family colour, the canvas's main splash of life. */
-  glow: string;
 }> = {
   deepseek: {
     disc: "bg-[#0e76ff] text-white",
     initial: "D",
     ring: "ring-[#0e76ff]",
-    glow: "shadow-[0_0_26px_rgba(14,118,255,0.5)]",
   },
   kimi: {
     disc: "bg-[#e2b93b] text-[#04122b]",
     initial: "K",
     ring: "ring-[#e2b93b]",
-    glow: "shadow-[0_0_26px_rgba(226,185,59,0.45)]",
   },
   minimax: {
     disc: "bg-[#ff6f61] text-white",
     initial: "M",
     ring: "ring-[#ff6f61]",
-    glow: "shadow-[0_0_26px_rgba(255,111,97,0.48)]",
   },
   unknown: {
     disc: "bg-white/15 text-white/80",
     initial: "?",
     ring: "ring-white/30",
-    glow: "shadow-[0_0_20px_rgba(255,255,255,0.2)]",
   },
 };
 
@@ -140,7 +134,7 @@ function nodeClassName(node: GraphNode, selected: boolean): string {
   switch (node.kind) {
     case "claim":
       return cn(
-        "size-[92px] rounded-full border-2 border-[#0e76ff]/70 bg-[#0a1f3d] text-white shadow-[0_0_46px_rgba(14,118,255,0.4)]",
+        "size-[92px] rounded-full border-2 border-[#0e76ff]/70 bg-[#0a1f3d] text-white shadow-2xl",
         selectedRing,
       );
     case "juror": {
@@ -148,7 +142,6 @@ function nodeClassName(node: GraphNode, selected: boolean): string {
       return cn(
         "size-14 rounded-full ring-2",
         selected ? "ring-white/70" : FAMILY_STYLE[family].ring,
-        FAMILY_STYLE[family].glow,
         node.state === "sealed" && "opacity-80",
       );
     }
@@ -187,7 +180,7 @@ function nodeClassName(node: GraphNode, selected: boolean): string {
       );
     case "certificate":
       return cn(
-        "size-16 rounded-2xl border border-[#43e5a0]/45 bg-[#0e7a4b]/25 text-[#43e5a0] shadow-[0_0_28px_rgba(67,229,160,0.35)]",
+        "size-16 rounded-2xl border border-[#43e5a0]/45 bg-[#0e7a4b]/25 text-[#43e5a0]",
         selectedRing,
       );
   }

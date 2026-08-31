@@ -10,7 +10,6 @@ import { cn } from "@/lib/utils";
 import type { ClaimInspection } from "@/lib/engine/contract";
 import {
   SearchNormal1,
-  ShieldSearch,
   Warning2,
   Refresh,
   ArrowRight2,
@@ -172,12 +171,6 @@ export default function ClaimsPage() {
             onChange={(e) => setSearchQuery(e.target.value)}
             aria-label="Search claims"
           />
-          <Button asChild className="min-h-11 shrink-0 px-5 font-semibold shadow-xs">
-            <Link href="/fact-check">
-              <ShieldSearch size="15" variant="Bold" />
-              Verify a claim
-            </Link>
-          </Button>
         </div>
 
         {/* State chips: light, centered, counted. */}
