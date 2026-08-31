@@ -97,6 +97,7 @@ export function HeroShrink({
       el.style.clipPath = "";
       el.style.opacity = "";
       el.style.visibility = "";
+      el.style.pointerEvents = "";
     }
     if (revealRef.current) revealRef.current.style.transform = "";
     exitEls.current?.forEach((el) => {
@@ -134,6 +135,11 @@ export function HeroShrink({
         : `translate3d(0, ${(16 * exit).toFixed(1)}px, 0)`;
       el.style.visibility = exit >= 0.995 ? "hidden" : "";
     });
+
+    // The hero's interactive life ends with its type: once the exit finishes,
+    // release the pinned panel's pointer events so the revealed card beneath
+    // (its "More in live claims" button included) takes the clicks.
+    panel.style.pointerEvents = exit >= 0.995 ? "none" : "";
 
     // Pin the reveal section at its exact final position for the whole
     // runway — the shrink plays out on one static screen and the fade
