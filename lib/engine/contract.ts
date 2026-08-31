@@ -277,6 +277,25 @@ export type EngineStatus = {
   paused: boolean;
 };
 
+/**
+ * Off-chain signal from AgentManifest.humanVerificationProvider, written by
+ * the engine at registration time. It is currently reliable because the engine
+ * controls every registration path. Move stores only a caller-supplied opaque
+ * human_backing_hash and does not verify this kind, so a future unmapped path
+ * fails closed to UNKNOWN.
+ */
+export type AgentBackingStatus = {
+  kind: "ZKLOGIN" | "ALLOWLIST" | "UNKNOWN";
+  label?: string;
+};
+
+export type AgentTrackRecord = {
+  seatsServed: number;
+  committed: number;
+  revealed: number;
+  agreedWithCertificate: number;
+};
+
 export type AgentDirectoryEntry = {
   agentProfileId: string;
   owner: string;
@@ -285,6 +304,16 @@ export type AgentDirectoryEntry = {
   manifestHash: `0x${string}`;
   active: boolean;
   reputation: Record<string, number>;
+  /** Engine-recorded off-chain backing signal. See AgentBackingStatus. */
+  backing: AgentBackingStatus;
+  trackRecord: AgentTrackRecord;
+  /**
+   * Decimal-string BigInt sum of u64 mist in payout_tickets for reason 2
+   * (settlement.move REASON_JURY_REWARD) whose recipient matches this owner
+   * case-insensitively. Tickets count when awarded on chain, whether withdrawn
+   * or not, so this is lifetime jury rewards and not a live wallet balance.
+   */
+  earnedMist: string;
 };
 
 // ---------------------------------------------------------------------------

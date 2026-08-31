@@ -56,6 +56,7 @@ import {
 } from "./agentManifestDocument";
 import { openSealedRunBundle } from "./runBundle";
 import {
+  agentBackingStatus,
   buildZkLoginBackingMessage,
   createEngine,
   EngineNoEvidenceError,
@@ -130,6 +131,21 @@ describe("headless engine", () => {
   it("runs a statement-only fact check through the full lifecycle", async () => {
     const statement = "The claim statement is sufficient to begin juror research.";
     const gateway = new FakeSuiGateway();
+    const finalize = gateway.finalize.bind(gateway);
+    vi.spyOn(gateway, "finalize").mockImplementation(async (input) => {
+      const result = await finalize(input);
+      const payoutTickets = gateway.agents.map((agent) => ({
+        payoutTicketId: fakeId(`payout:${input.claimId}:${agent.agentProfileId}`),
+        recipient: agent.owner,
+        amount: "1",
+        reason: 2,
+      }));
+      return {
+        ...result,
+        payoutTicketIds: payoutTickets.map((ticket) => ticket.payoutTicketId),
+        payoutTickets,
+      };
+    });
     const setup = await engineSetup(gateway, 5);
     const { claimId } = await setup.engine.factCheckStart({
       claim: statement,
@@ -198,6 +214,24 @@ describe("headless engine", () => {
       claimId,
       result: "YES",
     });
+
+    const participatingAgentIds = new Set(
+      jury.runs.map((run) => run.agentProfileId),
+    );
+    const participatingAgents = (await setup.engine.listAgents()).filter((agent) =>
+      participatingAgentIds.has(agent.agentProfileId),
+    );
+    expect(participatingAgents).toHaveLength(5);
+    for (const agent of participatingAgents) {
+      expect(agent.backing).toEqual({ kind: "UNKNOWN", label: "test-only" });
+      expect(agent.trackRecord).toEqual({
+        seatsServed: 1,
+        committed: 1,
+        revealed: 1,
+        agreedWithCertificate: 1,
+      });
+      expect(BigInt(agent.earnedMist)).toBeGreaterThan(0n);
+    }
   });
 
   it("warms revealed run proofs sequentially without failing finalization", async () => {
@@ -1339,6 +1373,23 @@ describe("headless engine", () => {
     await expect(
       createRepository(setup.db).listEvidenceArtifacts(claimId, 2),
     ).resolves.toEqual([]);
+  });
+});
+
+describe("agent backing status", () => {
+  it("maps only explicitly known verification providers", () => {
+    expect(agentBackingStatus("zklogin:enoki")).toEqual({
+      kind: "ZKLOGIN",
+      label: "zklogin:enoki",
+    });
+    expect(agentBackingStatus("demo-allowlist")).toEqual({
+      kind: "ALLOWLIST",
+      label: "demo-allowlist",
+    });
+    expect(agentBackingStatus("something-else")).toEqual({
+      kind: "UNKNOWN",
+      label: "something-else",
+    });
   });
 });
 

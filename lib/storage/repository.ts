@@ -148,6 +148,14 @@ export class Repository {
     );
   }
 
+  async listAllJurySeats(): Promise<JurySeatRecord[]> {
+    return listRecords<JurySeatRecord>(
+      this.db,
+      "SELECT record_json FROM jury_seats ORDER BY claim_id, jury_seat_id",
+      [],
+    );
+  }
+
   async getJurySeat(jurySeatId: string): Promise<JurySeatRecord | undefined> {
     return getRecord<JurySeatRecord>(
       this.db,
@@ -491,6 +499,14 @@ export class Repository {
     );
   }
 
+  async listAllVotePackages(): Promise<VotePackageRecord[]> {
+    return listRecords<VotePackageRecord>(
+      this.db,
+      "SELECT record_json FROM vote_packages ORDER BY claim_id, jury_seat_id",
+      [],
+    );
+  }
+
   async saveReveal(record: RevealRecord): Promise<void> {
     await saveRecord(this.db, "reveals", ["vote_package_id"], {
       revealed_vote_id: record.revealedVoteId,
@@ -517,6 +533,14 @@ export class Repository {
       this.db,
       `SELECT record_json FROM reveals WHERE claim_id = $1${phase === undefined ? "" : " AND phase = $2"} ORDER BY jury_seat_id`,
       phase === undefined ? [claimId] : [claimId, phase],
+    );
+  }
+
+  async listAllReveals(): Promise<RevealRecord[]> {
+    return listRecords<RevealRecord>(
+      this.db,
+      "SELECT record_json FROM reveals ORDER BY claim_id, jury_seat_id",
+      [],
     );
   }
 
@@ -553,6 +577,14 @@ export class Repository {
       "resolution_certificates",
       "claim_id = $1",
       [claimId],
+    );
+  }
+
+  async listAllResolutionCertificates(): Promise<ResolutionCertificateRecord[]> {
+    return listRecords<ResolutionCertificateRecord>(
+      this.db,
+      "SELECT record_json FROM resolution_certificates ORDER BY claim_id",
+      [],
     );
   }
 
@@ -607,6 +639,14 @@ export class Repository {
       updated_at: record.updatedAt,
       record_json: json(record),
     });
+  }
+
+  async listAllPayoutTickets(): Promise<PayoutTicketRecord[]> {
+    return listRecords<PayoutTicketRecord>(
+      this.db,
+      "SELECT record_json FROM payout_tickets ORDER BY claim_id, payout_ticket_id",
+      [],
+    );
   }
 
   async appendResolutionEvent(input: ResolutionEventInsert): Promise<ResolutionEvent> {

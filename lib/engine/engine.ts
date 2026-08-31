@@ -97,9 +97,11 @@ import type { SealEscrowService } from "../seal/escrow";
 import { serializePublicEvent } from "../events";
 import type { WalrusStore, WalrusPutResult } from "../walrus";
 import type {
+  AgentBackingStatus,
   AgentCard,
   AgentDirectoryEntry,
   AgentRunSummary,
+  AgentTrackRecord,
   ChallengeReason,
   ClaimCreateRequest,
   ClaimInspection,
@@ -150,9 +152,41 @@ const SUI_ADDRESS_PATTERN = /^0x[0-9a-f]{64}$/;
 const MAX_ZKLOGIN_SIGNATURE_LENGTH = 16_384;
 const MAX_FACT_CHECK_TEXT_LENGTH = 20_000;
 const ZKLOGIN_VERIFICATION_PROVIDER = "zklogin:enoki";
+const DEMO_ALLOWLIST_VERIFICATION_PROVIDER = "demo-allowlist";
+// move/openverdict/sources/settlement.move defines REASON_JURY_REWARD as 2.
+const JURY_REWARD_REASON = 2;
 const CLAIM_STATEMENT_SOURCE_URL = "urn:openverdict:claim-statement";
 const ROUND_ONE_PUBLIC_RECORD_SOURCE_URL =
   "urn:openverdict:round-1-public-record";
+
+export function agentBackingStatus(
+  humanVerificationProvider: string,
+): AgentBackingStatus {
+  switch (humanVerificationProvider) {
+    case ZKLOGIN_VERIFICATION_PROVIDER:
+      return { kind: "ZKLOGIN", label: humanVerificationProvider };
+    case DEMO_ALLOWLIST_VERIFICATION_PROVIDER:
+      return { kind: "ALLOWLIST", label: humanVerificationProvider };
+    default:
+      return { kind: "UNKNOWN", label: humanVerificationProvider };
+  }
+}
+
+function trackRecordFor(
+  trackRecords: Map<string, AgentTrackRecord>,
+  agentProfileId: string,
+): AgentTrackRecord {
+  const existing = trackRecords.get(agentProfileId);
+  if (existing !== undefined) return existing;
+  const trackRecord: AgentTrackRecord = {
+    seatsServed: 0,
+    committed: 0,
+    revealed: 0,
+    agreedWithCertificate: 0,
+  };
+  trackRecords.set(agentProfileId, trackRecord);
+  return trackRecord;
+}
 
 type PriorRoundPublicRecord = NonNullable<OracleInferenceInput["priorRound"]>;
 
@@ -1516,7 +1550,48 @@ class OpenVerdictEngine implements Engine {
   }
 
   async listAgents(): Promise<AgentDirectoryEntry[]> {
-    return (await this.#repository.listAgentManifests()).map((record) => ({
+    const [agents, jurySeats, votePackages, reveals, certificates, payoutTickets] =
+      await Promise.all([
+        this.#repository.listAgentManifests(),
+        this.#repository.listAllJurySeats(),
+        this.#repository.listAllVotePackages(),
+        this.#repository.listAllReveals(),
+        this.#repository.listAllResolutionCertificates(),
+        this.#repository.listAllPayoutTickets(),
+      ]);
+    const trackRecords = new Map<string, AgentTrackRecord>();
+    for (const seat of jurySeats) {
+      trackRecordFor(trackRecords, seat.agentProfileId).seatsServed += 1;
+    }
+    for (const votePackage of votePackages) {
+      const trackRecord = trackRecordFor(trackRecords, votePackage.agentProfileId);
+      if (votePackage.committed) trackRecord.committed += 1;
+      if (votePackage.revealed) trackRecord.revealed += 1;
+    }
+    const certificateByClaim = new Map(
+      certificates.map((certificate) => [certificate.claimId, certificate]),
+    );
+    for (const reveal of reveals) {
+      if (!reveal.valid) continue;
+      const certificate = certificateByClaim.get(reveal.claimId);
+      if (
+        certificate !== undefined &&
+        outcomeLabel(reveal.outcome) === certificate.result
+      ) {
+        trackRecordFor(trackRecords, reveal.agentProfileId).agreedWithCertificate += 1;
+      }
+    }
+    const earnedMistByOwner = new Map<string, bigint>();
+    for (const payoutTicket of payoutTickets) {
+      if (payoutTicket.reason !== JURY_REWARD_REASON) continue;
+      const owner = payoutTicket.recipient.toLowerCase();
+      earnedMistByOwner.set(
+        owner,
+        (earnedMistByOwner.get(owner) ?? 0n) + BigInt(payoutTicket.amount),
+      );
+    }
+
+    return agents.map((record) => ({
       agentProfileId: record.manifest.agentProfileId,
       owner: record.manifest.owner,
       modelId: record.manifest.modelId,
@@ -1524,6 +1599,11 @@ class OpenVerdictEngine implements Engine {
       manifestHash: record.manifest.manifestHash,
       active: record.active,
       reputation: record.reputation,
+      backing: agentBackingStatus(record.manifest.humanVerificationProvider),
+      trackRecord: trackRecordFor(trackRecords, record.manifest.agentProfileId),
+      earnedMist: String(
+        earnedMistByOwner.get(record.manifest.owner.toLowerCase()) ?? 0n,
+      ),
     }));
   }
 
@@ -3024,7 +3104,7 @@ class OpenVerdictEngine implements Engine {
       network: this.#manifest.network,
       backingKind: "TESTNET_DEMO_ALLOWLIST",
       humanBackingHash,
-      humanVerificationProvider: "demo-allowlist",
+      humanVerificationProvider: DEMO_ALLOWLIST_VERIFICATION_PROVIDER,
       operationalOwner: owner as `0x${string}`,
       role,
       modelId,
@@ -3040,7 +3120,7 @@ class OpenVerdictEngine implements Engine {
       agentProfileId: agentProfileId as `0x${string}`,
       owner: owner as `0x${string}`,
       humanAttestationHash: humanBackingHash,
-      humanVerificationProvider: "demo-allowlist",
+      humanVerificationProvider: DEMO_ALLOWLIST_VERIFICATION_PROVIDER,
       version: built.document.version,
       manifestBlobId: manifestUpload.blobId,
       manifestHash: built.manifestHash,
