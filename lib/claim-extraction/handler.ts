@@ -20,8 +20,14 @@ import {
 
 const MAX_URL_LENGTH = 2_048;
 const MAX_PAGE_CHARACTERS = 12_000;
+const MIN_PROSE_LINE_CHARACTERS = 160;
 const MAX_CLAIM_LENGTH = 1_000;
 const MAX_OUTPUT_TOKENS = 1_500;
+
+const REPAIR_PROMPT = [
+  "Repair the prior response into JSON only.",
+  'Return ONLY the strict JSON object {"claim":string|null,"reason":string} with no other text.',
+].join(" ");
 
 const SYSTEM_PROMPT = [
   "Extract one factual claim from the supplied page text.",
@@ -122,7 +128,10 @@ export function buildHandler(
 
     let pageText: string;
     try {
-      pageText = textFromArtifact(fetched).slice(0, MAX_PAGE_CHARACTERS);
+      pageText = selectProseWindow(
+        textFromArtifact(fetched),
+        MAX_PAGE_CHARACTERS,
+      );
     } catch {
       return fetchFailed();
     }
@@ -149,7 +158,26 @@ export function buildHandler(
     }
     if (!completion.ok) return noClaimFound();
 
-    const reply = parseModelReply(completion.content);
+    let reply = parseModelReply(completion.content);
+    if (reply === undefined) {
+      // Give an otherwise successful completion one format repair.
+      try {
+        completion = await runtime.adapter.complete({
+          ...completionRequest,
+          messages: [
+            ...completionRequest.messages,
+            { role: "assistant", content: completion.content },
+            { role: "user", content: REPAIR_PROMPT },
+          ],
+          kind: "REPAIR",
+          jsonMode: true,
+        });
+      } catch {
+        return noClaimFound();
+      }
+      if (!completion.ok) return noClaimFound();
+      reply = parseModelReply(completion.content);
+    }
     if (reply === undefined || reply.claim === null) return noClaimFound();
 
     return NextResponse.json(
@@ -205,6 +233,18 @@ function textFromArtifact(artifact: RetrievedArtifact): string {
       .trim();
   }
   return "";
+}
+
+/** Select the first bounded window that begins with substantial prose. */
+export function selectProseWindow(text: string, limit: number): string {
+  let start = 0;
+  for (const line of text.split("\n")) {
+    if (line.trim().length >= MIN_PROSE_LINE_CHARACTERS) {
+      return text.slice(start, start + limit);
+    }
+    start += line.length + 1;
+  }
+  return text.slice(0, limit);
 }
 
 function buildCompletionRequest(

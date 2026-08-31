@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { GonkaCompletionRequest } from "../gonka";
 import {
   buildHandler,
+  selectProseWindow,
   type ClaimExtractionRuntime,
 } from "./handler";
 
@@ -134,8 +135,79 @@ describe("extract claim handler", () => {
     });
   });
 
-  it("returns 422 when the model returns invalid JSON", async () => {
-    const response = await handlerFor(runtime("not JSON"))(
+  it("repairs malformed model JSON once", async () => {
+    const value = runtime("not JSON");
+    const malformedContent = '{"claim{":" \t: "El Salvador became..."}';
+    const completionRequests: GonkaCompletionRequest[] = [];
+    value.adapter = {
+      complete: async (candidate) => {
+        completionRequests.push(candidate);
+        if (completionRequests.length === 1) {
+          return {
+            ok: true,
+            content: malformedContent,
+            gonkaRequestId: "devshard-primary-malformed",
+            gateway: { gatewayRequestId: "gateway-primary-malformed" },
+          };
+        }
+        return {
+          ok: true,
+          content: JSON.stringify({
+            claim: "El Salvador adopted Bitcoin as legal tender in 2021.",
+            reason: "The assertion names an actor, action, and year.",
+          }),
+          gonkaRequestId: "devshard-repaired",
+          gateway: { gatewayRequestId: "gateway-repaired" },
+        };
+      },
+    };
+
+    const response = await handlerFor(value)(
+      request({ url: "https://example.com/story" }),
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      claim: "El Salvador adopted Bitcoin as legal tender in 2021.",
+      sourceUrl: "https://example.com/final",
+      modelId: "vendor/model-a",
+      gonkaRequestId: "devshard-repaired",
+      gatewayRequestId: "gateway-repaired",
+    });
+    expect(completionRequests).toHaveLength(2);
+    expect(completionRequests[1]).toMatchObject({
+      kind: "REPAIR",
+      jsonMode: true,
+    });
+    expect(completionRequests[1]?.messages).toEqual(
+      expect.arrayContaining([
+        { role: "assistant", content: malformedContent },
+        {
+          role: "user",
+          content: expect.stringContaining(
+            "Repair the prior response into JSON only",
+          ),
+        },
+      ]),
+    );
+  });
+
+  it("returns 422 when the single repair is also malformed", async () => {
+    const value = runtime("not JSON");
+    const completionRequests: GonkaCompletionRequest[] = [];
+    value.adapter = {
+      complete: async (candidate) => {
+        completionRequests.push(candidate);
+        return {
+          ok: true,
+          content: completionRequests.length === 1 ? "{bad" : "{still bad",
+          gonkaRequestId: `devshard-malformed-${completionRequests.length}`,
+          gateway: {},
+        };
+      },
+    };
+
+    const response = await handlerFor(value)(
       request({ url: "https://example.com/story" }),
     );
 
@@ -144,6 +216,7 @@ describe("extract claim handler", () => {
       error: "NO_CLAIM_FOUND",
       message: expect.any(String),
     });
+    expect(completionRequests).toHaveLength(2);
   });
 
   it("returns the claim and captured request IDs", async () => {
@@ -274,5 +347,31 @@ describe("extract claim handler", () => {
     await expect(response.json()).resolves.toEqual({
       error: "ENGINE_NOT_WIRED",
     });
+  });
+});
+
+describe("selectProseWindow", () => {
+  it("starts at the first substantial prose line", () => {
+    const navigation = Array.from(
+      { length: 200 },
+      (_, index) => `Navigation item ${index}`,
+    ).join("\n");
+    const prose =
+      "Bitcoin is a decentralized digital currency whose transaction history is recorded on a public ledger, and its network validates transfers without relying on a central bank or single administrator.";
+    const text = `${navigation}\n${prose}\nReferences`;
+
+    expect(selectProseWindow(text, 500)).toBe(`${prose}\nReferences`);
+  });
+
+  it("falls back to the head when no line contains substantial prose", () => {
+    const text = "Home\nContents\nReferences";
+
+    expect(selectProseWindow(text, 12)).toBe(text.slice(0, 12));
+  });
+
+  it("never exceeds the supplied character limit", () => {
+    const text = `${"Navigation\n".repeat(100)}${"p".repeat(200)}`;
+
+    expect(selectProseWindow(text, 37)).toHaveLength(37);
   });
 });
