@@ -1,56 +1,636 @@
 "use client";
 
-import { useState, useEffect, use, useCallback, useMemo, useRef } from "react";
 import Link from "next/link";
-import { Button } from "@/components/ui/button";
-import { StateBadge } from "@/components/claim/state-badge";
-import { isStrandedDiscussion } from "@/lib/engine/claim-lifecycle";
-import { useNow } from "@/components/use-now";
-import { useClaimEvents } from "@/components/use-claim-events";
-import { VerdictGauge } from "@/components/viz/verdict-gauge";
-import { ClaimTimeline } from "@/components/claim/timeline";
-import { TimeDisplay } from "@/components/time-display";
-import { PositionPanel } from "@/components/pool/position-panel";
-import { PageHeader, ExperimentalTag, MetaTag } from "@/components/viz/page-header";
-import { Panel, FieldLabel, Well } from "@/components/viz/panel";
-import { HashChip } from "@/components/viz/hash-chip";
-import { SeatSeal, outcomeLabel, seatStateOf } from "@/components/viz/seat-seal";
-import { ModelBadge } from "@/components/viz/model-badge";
-import { Reveal } from "@/components/viz/reveal";
-import { RunProof } from "@/components/claim/run-proof";
-import { cn } from "@/lib/utils";
-import { deriveRunId } from "@/lib/verify/run-proof";
-import type { ClaimInspection, FactCheckReport } from "@/lib/engine/contract";
 import {
+  use,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
+
+import { JurorAvatar } from "@/components/agents/avatar";
+import { RunProof } from "@/components/claim/run-proof";
+import { StateBadge } from "@/components/claim/state-badge";
+import {
+  Clock,
+  CloseCircle,
   DocumentText,
-  Eye,
+  ExportSquare,
+  InfoCircle,
+  Judge,
+  Pause,
+  Play,
+  Refresh,
   ShieldTick,
   Warning2,
-  Clock,
-  Judge,
-  Award,
-  DocumentDownload,
-  ArrowDown2,
-  Refresh,
-  Link21,
-  Global,
-  Cpu,
-  InfoCircle,
 } from "@/components/icons";
+import { Button } from "@/components/ui/button";
+import { useClaimEvents } from "@/components/use-claim-events";
+import { useNow } from "@/components/use-now";
+import { DeliberationCanvas } from "@/components/viz/deliberation-canvas";
+import { HashChip } from "@/components/viz/hash-chip";
+import { outcomeLabel } from "@/components/viz/seat-seal";
+import type { ClaimInspection, ResolutionEvent } from "@/lib/engine/contract";
+import { isStrandedDiscussion } from "@/lib/engine/claim-lifecycle";
+import { cn } from "@/lib/utils";
+import {
+  buildDeliberationGraph,
+  familyOfModelId,
+  type DeliberationGraph,
+  type GraphNode,
+  type JurorFamily,
+} from "@/lib/viz/deliberation-graph";
+import { deriveRunId, type BrowserRunProof } from "@/lib/verify/run-proof";
+import { useReplay } from "@/components/viz/use-replay";
 
-interface ClaimDetailPageProps {
+interface ClaimCanvasPageProps {
   params: Promise<{ id: string }>;
 }
 
-export default function ClaimDetailPage({ params }: ClaimDetailPageProps) {
-  // Hooks run before the loading and error returns below (rules of hooks).
-  const now = useNow();
+type ProofCache = Record<string, BrowserRunProof>;
+type ReplayControls = ReturnType<typeof useReplay>;
+type UnknownRecord = Record<string, unknown>;
+
+const EMPTY_GRAPH: DeliberationGraph = { nodes: [], edges: [] };
+const JUROR_AVATARS: Partial<Record<JurorFamily, string[]>> = {
+  deepseek: [
+    "/media/agents/deepseek-1.png",
+    "/media/agents/deepseek-2.png",
+    "/media/agents/deepseek-3.png",
+  ],
+  kimi: [
+    "/media/agents/kimi-1.png",
+    "/media/agents/kimi-2.png",
+  ],
+  minimax: [
+    "/media/agents/minimax-1.png",
+    "/media/agents/minimax-2.png",
+  ],
+};
+
+const DEADLINE_LABELS: Array<{
+  key: keyof ClaimInspection["deadlines"];
+  label: string;
+}> = [
+  { key: "evidenceCutoffMs", label: "evidence" },
+  { key: "proposalDeadlineMs", label: "proposal" },
+  { key: "challengeDeadlineMs", label: "challenge" },
+  { key: "firstCommitDeadlineMs", label: "phase 1 commit" },
+  { key: "firstRevealDeadlineMs", label: "phase 1 reveal" },
+  { key: "discussionDeadlineMs", label: "discussion" },
+  { key: "secondCommitDeadlineMs", label: "phase 2 commit" },
+  { key: "secondRevealDeadlineMs", label: "phase 2 reveal" },
+];
+
+function asRecord(value: unknown): UnknownRecord | undefined {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? value as UnknownRecord
+    : undefined;
+}
+
+function stringField(value: unknown, key: string): string | undefined {
+  const candidate = asRecord(value)?.[key];
+  return typeof candidate === "string" && candidate.length > 0
+    ? candidate
+    : undefined;
+}
+
+function proofTranscript(proof: BrowserRunProof): unknown {
+  const bundle = proof.bundle;
+  return bundle !== null && "transcript" in bundle
+    ? bundle.transcript
+    : undefined;
+}
+
+function formatRemaining(milliseconds: number): string {
+  const totalSeconds = Math.max(0, Math.ceil(milliseconds / 1_000));
+  const hours = Math.floor(totalSeconds / 3_600);
+  const minutes = Math.floor((totalSeconds % 3_600) / 60);
+  const seconds = totalSeconds % 60;
+
+  if (hours > 0) {
+    return `${hours}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+  }
+  return `${minutes}:${String(seconds).padStart(2, "0")}`;
+}
+
+function nextDeadlineLine(claim: ClaimInspection, now: number | null): string {
+  if (now === null) return "Next milestone loading";
+  const next = DEADLINE_LABELS.find(({ key }) => claim.deadlines[key] > now);
+  if (next === undefined) return "All protocol deadlines passed";
+  return `Next: ${next.label} closes in ${formatRemaining(claim.deadlines[next.key] - now)}`;
+}
+
+function truthScoreLabel(scoreBps: number | null | undefined): string {
+  if (scoreBps === null || scoreBps === undefined) return "N/A";
+  const score = scoreBps / 100;
+  return `${Number.isInteger(score) ? score.toFixed(0) : score.toFixed(2)}/100`;
+}
+
+function modelIdFromEvents(
+  events: ResolutionEvent[],
+  seatId: string,
+  agentProfileId: string,
+): string | undefined {
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const event = events[index];
+    if (event === undefined || event.kind !== "inference_completed") continue;
+    const eventSeatId = stringField(event.payload, "jurySeatId")
+      ?? stringField(event.payload, "jury_seat_id");
+    if (event.actorId !== agentProfileId && eventSeatId !== seatId) continue;
+    return stringField(event.payload, "model_id")
+      ?? stringField(event.payload, "modelId");
+  }
+  return undefined;
+}
+
+function searchResultUrls(node: GraphNode): string[] {
+  const result = asRecord(node.detail?.result);
+  const results = result?.results;
+  if (!Array.isArray(results)) return [];
+  return [...new Set(
+    results.flatMap((value) => {
+      const url = stringField(value, "url");
+      return url === undefined ? [] : [url];
+    }),
+  )];
+}
+
+function LeftRail({
+  claim,
+  now,
+  replay,
+}: {
+  claim: ClaimInspection;
+  now: number | null;
+  replay: ReplayControls;
+}) {
+  const stranded = now !== null && isStrandedDiscussion(claim, now);
+  const terminal = claim.state >= 9;
+  const sealedCount = claim.commitments.filter((commitment) => commitment.committed).length;
+  const revealedCount = claim.commitments.filter((commitment) => commitment.revealed).length;
+
+  return (
+    <div className="flex min-h-full flex-col gap-6 p-5 text-white">
+      <div className="space-y-3">
+        <p className="text-[10px] font-semibold tracking-[0.16em] text-white/45 uppercase">
+          Claim assertion
+        </p>
+        <p className="text-[15px] leading-relaxed font-medium text-white/90">
+          {claim.statement}
+        </p>
+      </div>
+
+      <div className="space-y-3 border-t border-white/10 pt-5">
+        <StateBadge
+          state={claim.state}
+          stranded={stranded}
+          className="border-white/15 bg-white/5 text-white/80"
+        />
+        <p className="flex items-center gap-2 text-xs text-white/60 tabular-nums">
+          <Clock size="14" variant="Bold" className="text-[#72b6ff]" />
+          {nextDeadlineLine(claim, now)}
+        </p>
+      </div>
+
+      <dl className="grid grid-cols-2 gap-2">
+        <div className="rounded-xl border border-white/10 bg-white/[0.04] p-3">
+          <dt className="text-[10px] font-semibold tracking-[0.12em] text-white/45 uppercase">
+            Sealed
+          </dt>
+          <dd className="mt-1 font-mono text-xl font-semibold text-white">
+            {sealedCount}/5
+          </dd>
+        </div>
+        <div className="rounded-xl border border-white/10 bg-white/[0.04] p-3">
+          <dt className="text-[10px] font-semibold tracking-[0.12em] text-white/45 uppercase">
+            Revealed
+          </dt>
+          <dd className="mt-1 font-mono text-xl font-semibold text-white">
+            {revealedCount}/5
+          </dd>
+        </div>
+      </dl>
+
+      {terminal ? (
+        <div className="space-y-3 rounded-xl border border-yes/25 bg-yes/8 p-4">
+          <div>
+            <p className="text-[10px] font-semibold tracking-[0.12em] text-white/45 uppercase">
+              Truth Score
+            </p>
+            <p className="mt-1 font-mono text-2xl font-semibold text-yes">
+              {truthScoreLabel(claim.result?.truthScoreBps)}
+            </p>
+          </div>
+          <HashChip
+            value={claim.result?.certificateId}
+            label="certificate"
+            tone="yes"
+            className="max-w-full bg-white/5"
+          />
+        </div>
+      ) : null}
+
+      {terminal ? (
+        <div className="space-y-3 border-t border-white/10 pt-5">
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-[10px] font-semibold tracking-[0.16em] text-white/45 uppercase">
+              Replay
+            </p>
+            <button
+              type="button"
+              onClick={replay.toggle}
+              className="inline-flex min-h-9 items-center gap-2 rounded-lg bg-[#0e76ff] px-3 text-xs font-semibold text-white transition-colors hover:bg-[#2a87ff] focus-visible:ring-2 focus-visible:ring-white/80 focus-visible:outline-none"
+            >
+              {replay.playing ? (
+                <Pause size="14" variant="Bold" />
+              ) : (
+                <Play size="14" variant="Bold" />
+              )}
+              {replay.playing ? "Pause" : "Play"}
+            </button>
+          </div>
+          <input
+            type="range"
+            aria-label="Replay position"
+            min={replay.startMs}
+            max={replay.endMs}
+            step={500}
+            value={replay.t}
+            onChange={(event) => replay.seek(Number(event.currentTarget.value))}
+            className="w-full accent-[#0e76ff]"
+          />
+          <div className="grid grid-cols-3 gap-2">
+            {([1, 10, 60] as const).map((speed) => (
+              <button
+                key={speed}
+                type="button"
+                aria-pressed={replay.speed === speed}
+                onClick={() => replay.setSpeed(speed)}
+                className={cn(
+                  "min-h-8 rounded-lg border text-xs font-semibold transition-colors",
+                  replay.speed === speed
+                    ? "border-[#0e76ff] bg-[#0e76ff]/20 text-white"
+                    : "border-white/10 bg-white/[0.04] text-white/55 hover:text-white",
+                )}
+              >
+                {speed}x
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      <Link
+        href={`/claims/${claim.claimId}/report`}
+        className="mt-auto inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-white/15 bg-white/[0.04] px-3 text-xs font-semibold text-white/80 transition-colors hover:bg-white/10 hover:text-white"
+      >
+        <DocumentText size="15" variant="Bold" />
+        Full report
+      </Link>
+    </div>
+  );
+}
+
+function SeatInspector({
+  claim,
+  events,
+  graph,
+  node,
+  proofsByRunId,
+}: {
+  claim: ClaimInspection;
+  events: ResolutionEvent[];
+  graph: DeliberationGraph;
+  node: GraphNode;
+  proofsByRunId: ProofCache;
+}) {
+  const seatId = node.seatId;
+  if (seatId === undefined) return null;
+  const seatIndex = claim.commitments.findIndex(
+    (commitment) => commitment.jurySeatId === seatId,
+  );
+  const commitment = claim.commitments[seatIndex];
+  if (seatIndex < 0 || commitment === undefined) return null;
+
+  const phase: 1 | 2 = seatIndex < 5 ? 1 : 2;
+  const runId = node.runId ?? deriveRunId(claim.claimId, seatId, phase);
+  const proof = proofsByRunId[runId];
+  const seatNode = graph.nodes.find(
+    (candidate) => candidate.kind === "juror" && candidate.seatId === seatId,
+  );
+  const verdictNode = graph.nodes.find(
+    (candidate) => candidate.kind === "verdict" && candidate.seatId === seatId,
+  );
+  const modelId = proof?.bundle?.request.model
+    ?? modelIdFromEvents(events, seatId, commitment.agentProfileId);
+  const family = node.family
+    ?? seatNode?.family
+    ?? familyOfModelId(modelId);
+  const familyOrdinal = graph.nodes
+    .filter((candidate) => candidate.kind === "juror" && candidate.family === family)
+    .findIndex((candidate) => candidate.seatId === seatId);
+  const output = proof?.bundle?.validatedOutput;
+  const outcome = node.outcome
+    ?? verdictNode?.outcome
+    ?? outcomeLabel(commitment.outcome)
+    ?? output?.outcome;
+  const confidenceBps = node.confidenceBps
+    ?? verdictNode?.confidenceBps
+    ?? commitment.confidenceBps
+    ?? output?.confidenceBps;
+
+  return (
+    <div className="space-y-5">
+      <div className="flex items-center gap-3">
+        <JurorAvatar
+          family={family}
+          ordinal={familyOrdinal < 0 ? seatIndex : familyOrdinal}
+          size={56}
+          className="ring-2 ring-white/15"
+        />
+        <div className="min-w-0">
+          <p className="text-sm font-semibold text-white">
+            Juror {seatIndex + 1}
+          </p>
+          <p className="mt-1 break-all text-[11px] leading-relaxed text-white/50">
+            {modelId ?? "Model id unavailable"}
+          </p>
+        </div>
+      </div>
+
+      <dl className="grid grid-cols-2 gap-2">
+        <div className="rounded-xl border border-white/10 bg-white/[0.04] p-3">
+          <dt className="text-[10px] tracking-[0.12em] text-white/40 uppercase">
+            Outcome
+          </dt>
+          <dd className="mt-1 text-sm font-semibold text-white">
+            {outcome ?? "Pending"}
+          </dd>
+        </div>
+        <div className="rounded-xl border border-white/10 bg-white/[0.04] p-3">
+          <dt className="text-[10px] tracking-[0.12em] text-white/40 uppercase">
+            Confidence
+          </dt>
+          <dd className="mt-1 text-sm font-semibold text-white tabular-nums">
+            {confidenceBps === undefined
+              ? "Pending"
+              : `${confidenceBps} bps`}
+          </dd>
+        </div>
+      </dl>
+
+      {proof !== undefined ? (
+        <RunProof
+          key={`proof-${commitment.jurySeatId}`}
+          claimId={claim.claimId}
+          runId={runId}
+          seatLabel={`Seat ${seatIndex + 1}, phase ${phase}`}
+        />
+      ) : (
+        <p className="rounded-xl border border-white/10 bg-white/[0.04] p-3 text-xs leading-relaxed text-white/45">
+          The public run proof will appear here after this seat is revealed.
+        </p>
+      )}
+    </div>
+  );
+}
+
+function NodeInspector({
+  claim,
+  events,
+  graph,
+  node,
+  proofsByRunId,
+}: {
+  claim: ClaimInspection;
+  events: ResolutionEvent[];
+  graph: DeliberationGraph;
+  node: GraphNode | null;
+  proofsByRunId: ProofCache;
+}) {
+  if (node === null) {
+    return (
+      <div className="grid min-h-52 place-items-center p-6 text-center">
+        <div className="space-y-2">
+          <InfoCircle size="22" variant="Bold" className="mx-auto text-white/35" />
+          <p className="text-sm text-white/55">Click any node</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (node.kind === "juror" || node.kind === "verdict") {
+    return (
+      <SeatInspector
+        claim={claim}
+        events={events}
+        graph={graph}
+        node={node}
+        proofsByRunId={proofsByRunId}
+      />
+    );
+  }
+
+  if (node.kind === "search") {
+    const urls = searchResultUrls(node);
+    const query = stringField(node.detail?.action, "query") ?? node.label;
+    return (
+      <div className="space-y-5">
+        <div className="space-y-2">
+          <p className="text-[10px] font-semibold tracking-[0.14em] text-white/40 uppercase">
+            Search query
+          </p>
+          <p className="text-sm leading-relaxed text-white/90">{query}</p>
+          <span
+            className={cn(
+              "inline-flex rounded-full border px-2 py-1 text-[10px] font-semibold uppercase",
+              node.intent === "challenge"
+                ? "border-[#ff8f3f]/40 bg-[#ff8f3f]/15 text-[#ffb077]"
+                : "border-[#0e76ff]/40 bg-[#0e76ff]/15 text-[#72b6ff]",
+            )}
+          >
+            {node.intent ?? "support"}
+          </span>
+        </div>
+        <div className="space-y-2">
+          <p className="text-[10px] font-semibold tracking-[0.14em] text-white/40 uppercase">
+            Results
+          </p>
+          {urls.length === 0 ? (
+            <p className="text-xs text-white/45">No result URLs recorded.</p>
+          ) : (
+            <ul className="space-y-2">
+              {urls.map((url) => (
+                <li key={url}>
+                  <a
+                    href={url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="flex items-start gap-2 break-all text-xs leading-relaxed text-[#72b6ff] hover:underline"
+                  >
+                    <ExportSquare size="13" className="mt-0.5 shrink-0" />
+                    {url}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  if (node.kind === "page") {
+    const opened = asRecord(node.detail?.opened);
+    const result = asRecord(node.detail?.result);
+    const contentHash = stringField(opened, "contentHash")
+      ?? stringField(result, "contentHash");
+    const cited = graph.edges.some(
+      (edge) => edge.kind === "citation" && edge.from === node.id,
+    ) || Array.isArray(node.detail?.citations);
+    return (
+      <div className="space-y-5">
+        <div className="space-y-2">
+          <p className="text-[10px] font-semibold tracking-[0.14em] text-white/40 uppercase">
+            Opened page
+          </p>
+          {node.url === undefined ? (
+            <p className="text-xs text-white/45">No URL recorded.</p>
+          ) : (
+            <a
+              href={node.url}
+              target="_blank"
+              rel="noreferrer"
+              className="flex items-start gap-2 break-all text-xs leading-relaxed text-[#72b6ff] hover:underline"
+            >
+              <ExportSquare size="13" className="mt-0.5 shrink-0" />
+              {node.url}
+            </a>
+          )}
+        </div>
+        <div className="space-y-2">
+          <p className="text-[10px] font-semibold tracking-[0.14em] text-white/40 uppercase">
+            Content hash
+          </p>
+          <HashChip
+            value={contentHash}
+            label="hash"
+            full
+            className="max-w-full bg-white/5 text-white/75"
+          />
+        </div>
+        <span
+          className={cn(
+            "inline-flex items-center gap-1.5 rounded-full border px-2 py-1 text-[10px] font-semibold uppercase",
+            cited
+              ? "border-yes/35 bg-yes/10 text-yes"
+              : "border-white/10 bg-white/[0.04] text-white/45",
+          )}
+        >
+          <ShieldTick size="12" variant="Bold" />
+          {cited ? "Cited by verdict" : "Not cited"}
+        </span>
+      </div>
+    );
+  }
+
+  if (node.kind === "failure") {
+    const status = stringField(node.detail, "failureStatus") ?? node.label;
+    const message = stringField(node.detail, "message")
+      ?? stringField(node.detail?.failure, "message");
+    return (
+      <div className="space-y-4">
+        <span className="inline-flex rounded-full border border-no/35 bg-no/10 px-2 py-1 text-[10px] font-semibold text-no uppercase">
+          {status}
+        </span>
+        <p className="text-sm leading-relaxed text-white/75">
+          {message ?? "No failure message was recorded."}
+        </p>
+      </div>
+    );
+  }
+
+  if (node.kind === "certificate") {
+    const certificateId = stringField(node.detail, "certificateId");
+    return (
+      <div className="space-y-4">
+        <HashChip
+          value={certificateId}
+          label="certificate"
+          tone="yes"
+          full
+          className="max-w-full bg-white/5"
+        />
+        {certificateId !== undefined ? (
+          <a
+            href={`https://suiscan.xyz/testnet/object/${certificateId}`}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-2 text-xs font-semibold text-[#72b6ff] hover:underline"
+          >
+            <ExportSquare size="14" variant="Bold" />
+            Open in Suiscan
+          </a>
+        ) : null}
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-2">
+      <p className="text-[10px] font-semibold tracking-[0.14em] text-white/40 uppercase">
+        {node.kind}
+      </p>
+      <p className="text-sm leading-relaxed text-white/80">{node.label}</p>
+    </div>
+  );
+}
+
+function MobileSheet({
+  title,
+  onClose,
+  children,
+}: {
+  title: string;
+  onClose: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <div className="fixed inset-x-0 bottom-0 z-50 max-h-[70vh] overflow-auto rounded-t-2xl border-t border-white/15 bg-[#07162f] shadow-2xl lg:hidden">
+      <div className="sticky top-0 z-10 flex items-center justify-between border-b border-white/10 bg-[#07162f]/95 px-5 py-3 backdrop-blur">
+        <p className="text-xs font-semibold tracking-[0.12em] text-white/65 uppercase">
+          {title}
+        </p>
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label={`Close ${title}`}
+          className="grid size-9 place-items-center rounded-full text-white/55 transition-colors hover:bg-white/10 hover:text-white"
+        >
+          <CloseCircle size="18" variant="Bold" />
+        </button>
+      </div>
+      {children}
+    </div>
+  );
+}
+
+export default function ClaimCanvasPage({ params }: ClaimCanvasPageProps) {
   const { id } = use(params);
+  const now = useNow();
   const { events } = useClaimEvents(id);
   const hasClaimRef = useRef(false);
+  const requestedProofsRef = useRef(new Set<string>());
 
   const [claim, setClaim] = useState<ClaimInspection | null>(null);
-  const [report, setReport] = useState<FactCheckReport | null>(null);
+  const [proofsByRunId, setProofsByRunId] = useState<ProofCache>({});
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [leftOpen, setLeftOpen] = useState(false);
+  const [inspectorOpen, setInspectorOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [engineOffline, setEngineOffline] = useState(false);
   const [notFound, setNotFound] = useState(false);
@@ -78,15 +658,6 @@ export default function ClaimDetailPage({ params }: ClaimDetailPageProps) {
       const inspectData: ClaimInspection = await inspectRes.json();
       setClaim(inspectData);
       hasClaimRef.current = true;
-
-      if (inspectData.state >= 9) {
-        try {
-          const reportRes = await fetch(`/api/claims/${encodeURIComponent(id)}/report`);
-          if (reportRes.ok) setReport(await reportRes.json());
-        } catch {
-          /* report is optional; the inspection view stands on its own */
-        }
-      }
     } catch {
       setEngineOffline(true);
     } finally {
@@ -118,32 +689,18 @@ export default function ClaimDetailPage({ params }: ClaimDetailPageProps) {
           setClaim(inspectData);
           hasClaimRef.current = true;
         }
-
-        if (inspectData.state >= 9) {
-          try {
-            const reportRes = await fetch(`/api/claims/${encodeURIComponent(id)}/report`);
-            if (reportRes.ok) {
-              const reportData = await reportRes.json();
-              if (!ignore) setReport(reportData);
-            }
-          } catch {
-            /* ignore */
-          }
-        }
       } catch {
         if (!ignore) setEngineOffline(true);
       } finally {
         if (!ignore) setLoading(false);
       }
     }
-    init();
+    void init();
     return () => {
       ignore = true;
     };
   }, [id]);
 
-  // Live: any new engine event refetches the inspection (debounced), so the
-  // page follows the claim without the Refresh button.
   const eventCount = events.length;
   useEffect(() => {
     if (eventCount === 0) return;
@@ -153,44 +710,75 @@ export default function ClaimDetailPage({ params }: ClaimDetailPageProps) {
     return () => clearTimeout(timer);
   }, [eventCount, loadData]);
 
-  /** Merge on-chain seat state with the post-reveal agent card for each seat. */
-  const seats = useMemo(() => {
-    if (!claim) return [];
-    return (claim.commitments ?? []).map((c, i) => {
-      const card = report?.agents.find((a) => a.agentProfileId === c.agentProfileId);
-      // The engine stores five ordered seats per phase.
-      const phase = i < 5 ? 1 : 2;
-      return {
-        index: i + 1,
-        phase,
-        runId: deriveRunId(claim.claimId, c.jurySeatId, phase),
-        state: seatStateOf(c),
-        // Present only for a seat that failed before committing.
-        failureStatus: c.failureStatus,
-        outcome: outcomeLabel(c.outcome ?? card?.outcome),
-        confidenceBps: c.confidenceBps ?? card?.confidenceBps,
-        agentProfileId: c.agentProfileId,
-        jurySeatId: c.jurySeatId,
-        modelId: card?.modelId,
-        role: card?.role,
-        reasoning: card?.reasoning,
-        gonkaRequestId: card?.gonkaRequestId,
-      };
+  useEffect(() => {
+    if (claim === null) return;
+    const pending = claim.commitments.flatMap((commitment, index) => {
+      if (!commitment.revealed) return [];
+      const phase: 1 | 2 = index < 5 ? 1 : 2;
+      const runId = deriveRunId(claim.claimId, commitment.jurySeatId, phase);
+      if (requestedProofsRef.current.has(runId)) return [];
+      requestedProofsRef.current.add(runId);
+      return [{ runId }];
     });
-  }, [claim, report]);
+    if (pending.length === 0) return;
 
-  const downloadAuditBundle = () => {
-    if (!report?.auditBundle) return;
-    const blob = new Blob([JSON.stringify(report.auditBundle, null, 2)], {
-      type: "application/json",
+    void Promise.all(
+      pending.map(async ({ runId }) => {
+        try {
+          const response = await fetch(
+            `/api/claims/${encodeURIComponent(id)}/runs/${encodeURIComponent(runId)}/proof`,
+            { cache: "no-store" },
+          );
+          if (!response.ok) return null;
+          return [runId, await response.json() as BrowserRunProof] as const;
+        } catch {
+          return null;
+        }
+      }),
+    ).then((loaded) => {
+      if (loaded.every((entry) => entry === null)) return;
+      setProofsByRunId((current) => {
+        const next = { ...current };
+        for (const entry of loaded) {
+          if (entry === null) continue;
+          const [runId, proof] = entry;
+          next[runId] = proof;
+        }
+        return next;
+      });
     });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `openverdict-audit-${id.slice(0, 10)}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
+  }, [claim, id]);
+
+  const proofs = useMemo(
+    () => Object.values(proofsByRunId).map((proof) => ({
+      runId: proof.runId,
+      jurySeatId: proof.jurySeatId,
+      transcript: proofTranscript(proof),
+      output: proof.bundle?.validatedOutput,
+      revealed: proof.revealed,
+    })),
+    [proofsByRunId],
+  );
+
+  const graph = useMemo(() => {
+    if (claim === null) return EMPTY_GRAPH;
+    return buildDeliberationGraph({
+      claim,
+      proofs,
+      events,
+      // useNow is null during SSR, so this keeps graph timestamps finite.
+      // eslint-disable-next-line react-hooks/purity
+      nowMs: now ?? Date.now(),
+    });
+  }, [claim, events, now, proofs]);
+  const replay = useReplay(graph, claim !== null && claim.state >= 9);
+  const selectedNode = useMemo(
+    () => replay.visible.nodes.find((node) => node.id === selectedId) ?? null,
+    [replay.visible.nodes, selectedId],
+  );
+  const handleSelect = useCallback((node: GraphNode | null) => {
+    setSelectedId(node?.id ?? null);
+  }, []);
 
   if (loading) {
     return (
@@ -226,7 +814,7 @@ export default function ClaimDetailPage({ params }: ClaimDetailPageProps) {
     );
   }
 
-  if (notFound || !claim) {
+  if (notFound || claim === null) {
     return (
       <div className="mx-auto flex max-w-2xl flex-col items-center gap-3 px-4 py-24 text-center">
         <h1 className="text-xl font-semibold text-ocean">Claim not found</h1>
@@ -241,538 +829,85 @@ export default function ClaimDetailPage({ params }: ClaimDetailPageProps) {
     );
   }
 
-  const isTerminal = claim.state >= 9;
-  const isDirectReview = claim.mode === 1;
-  const revealedCount = claim.commitments?.filter((c) => c.revealed).length ?? 0;
-  const sealedCount = claim.commitments?.filter((c) => c.committed).length ?? 0;
-  const verification = claim.verification;
-  const stranded = now !== null && isStrandedDiscussion(claim, now);
-
   return (
-    <div className="space-y-8 px-5 py-10 md:px-7 lg:py-12">
-      <PageHeader
-        backHref="/claims"
-        backLabel="All claims"
-        eyebrow={isDirectReview ? "Direct review" : "Optimistic settlement"}
-        title="Claim report"
-        icon={Judge}
-        badges={
-          <div>
-            <div className="flex flex-wrap items-center gap-2">
-              <StateBadge state={claim.state} stranded={stranded} />
-              <ExperimentalTag />
-            </div>
-            {stranded && (
-              <p className="mt-1 text-xs text-muted-foreground">
-                The discussion window closed without a second round, so this claim can no longer resolve.
-              </p>
-            )}
-          </div>
-        }
-        actions={
-          <>
-            <Button asChild size="sm" className="min-h-[40px] px-4 font-semibold shadow-xs">
-              <Link href={`/claims/${encodeURIComponent(claim.claimId)}/observe`}>
-                <Eye size="15" variant="Bold" />
-                Live observer
-              </Link>
-            </Button>
-            <Button asChild variant="outline" size="sm" className="min-h-[40px] font-semibold">
-              <Link href="/verify">
-                <ShieldTick size="15" variant="Bold" />
-                Verify proofs
-              </Link>
-            </Button>
-          </>
-        }
-      />
+    <div className="relative flex min-h-[calc(100vh-74px)] bg-[#04122b] text-white">
+      <aside className="hidden h-[calc(100vh-74px)] w-[320px] shrink-0 overflow-y-auto border-r border-white/10 bg-white/[0.04] lg:block">
+        <LeftRail claim={claim} now={now} replay={replay} />
+      </aside>
 
-      {/* ------------------------------------------------ Assertion + verdict */}
-      <div className="grid gap-5 lg:grid-cols-3">
-        <Panel
-          label="Claim assertion"
-          icon={DocumentText}
-          tone="primary"
-          className="lg:col-span-2"
-          action={
-            <MetaTag tone="chain">
-              Mode {isDirectReview ? "1 · direct" : "2 · optimistic"}
-            </MetaTag>
-          }
+      <main className="relative h-[calc(100vh-74px)] min-h-[calc(100vh-74px)] flex-1 overflow-hidden">
+        <DeliberationCanvas
+          graph={replay.visible}
+          selectedId={selectedId}
+          onSelect={handleSelect}
+          avatars={JUROR_AVATARS}
+        />
+
+        <button
+          type="button"
+          onClick={() => {
+            setLeftOpen(true);
+            setInspectorOpen(false);
+          }}
+          className="absolute bottom-5 left-4 z-20 inline-flex min-h-11 items-center gap-2 rounded-full border border-white/15 bg-[#07162f]/90 px-4 text-xs font-semibold text-white shadow-xl backdrop-blur lg:hidden"
         >
-          <div className="space-y-4">
-            <p className="text-lg leading-snug font-semibold text-ocean sm:text-xl">
-              {claim.statement}
-            </p>
+          <DocumentText size="16" variant="Bold" />
+          Claim
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            setInspectorOpen(true);
+            setLeftOpen(false);
+          }}
+          className="absolute right-4 bottom-5 z-20 inline-flex min-h-11 items-center gap-2 rounded-full border border-white/15 bg-[#07162f]/90 px-4 text-xs font-semibold text-white shadow-xl backdrop-blur lg:hidden"
+        >
+          <Judge size="16" variant="Bold" />
+          Inspect
+        </button>
+      </main>
 
-            {claim.resolutionCriteria && (
-              <Well>
-                <FieldLabel className="mb-1">Resolution criteria</FieldLabel>
-                <p className="text-xs leading-relaxed text-foreground/85">
-                  {claim.resolutionCriteria}
-                </p>
-              </Well>
-            )}
+      <aside className="hidden h-[calc(100vh-74px)] w-[380px] shrink-0 overflow-y-auto border-l border-white/10 bg-white/[0.04] p-5 lg:block">
+        <NodeInspector
+          claim={claim}
+          events={events}
+          graph={graph}
+          node={selectedNode}
+          proofsByRunId={proofsByRunId}
+        />
+      </aside>
 
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div className="space-y-1">
-                <FieldLabel>Claim object</FieldLabel>
-                <HashChip value={claim.claimId} tone="chain" head={10} tail={8} />
-              </div>
-              <div className="space-y-1">
-                <FieldLabel>Committee object</FieldLabel>
-                <HashChip value={claim.committeeId} tone="sealed" head={10} tail={8} />
-              </div>
-              <div className="space-y-1">
-                <FieldLabel>Proposed outcome</FieldLabel>
-                <p className="text-sm font-semibold text-ocean">
-                  {claim.proposedOutcome ?? "None recorded"}
-                </p>
-              </div>
-              <div className="space-y-1">
-                <FieldLabel>Seat progress</FieldLabel>
-                <p className="text-sm font-semibold text-ocean tabular-nums">
-                  {revealedCount} revealed · {sealedCount} sealed / {claim.commitments?.length ?? 0}
-                </p>
-              </div>
-            </div>
+      {leftOpen || inspectorOpen ? (
+        <button
+          type="button"
+          aria-label="Close open sheet"
+          onClick={() => {
+            setLeftOpen(false);
+            setInspectorOpen(false);
+          }}
+          className="fixed inset-0 z-40 bg-black/55 lg:hidden"
+        />
+      ) : null}
 
-            {/* Independent recomputation report (verify=1) */}
-            {verification && (
-              <div className="grid gap-2 rounded-xl border border-border bg-surface p-3 sm:grid-cols-3">
-                {(
-                  [
-                    ["Commitments", verification.commitmentsRecomputed],
-                    ["Truth Score", verification.truthScoreRecomputed],
-                    ["Evidence roots", verification.evidenceRootsRecomputed],
-                  ] as const
-                ).map(([label, ok]) => (
-                  <div key={label} className="flex items-center gap-1.5">
-                    <span
-                      className={cn(
-                        "grid size-5 place-items-center rounded-full",
-                        ok ? "bg-yes/12 text-yes" : "bg-unsure/12 text-unsure",
-                      )}
-                    >
-                      <ShieldTick size="12" variant="Bold" />
-                    </span>
-                    <span className="ov-micro ov-micro-sm text-muted-foreground">
-                      {label} {ok ? "recomputed" : "unverified"}
-                    </span>
-                  </div>
-                ))}
-                {verification.issues.length > 0 && (
-                  <p className="text-[11px] text-no sm:col-span-3">
-                    Issues: {verification.issues.join("; ")}
-                  </p>
-                )}
-              </div>
-            )}
-          </div>
-        </Panel>
+      {leftOpen ? (
+        <MobileSheet title="Claim details" onClose={() => setLeftOpen(false)}>
+          <LeftRail claim={claim} now={now} replay={replay} />
+        </MobileSheet>
+      ) : null}
 
-        <Panel label="Consensus truth score" icon={Award} tone="yes">
-          <div className="flex flex-col items-center gap-4">
-            <VerdictGauge
-              scoreBps={claim.result?.truthScoreBps ?? null}
-              size={208}
-              emptyTitle={sealedCount > 0 ? "•••" : "N/A"}
-              emptyLabel={
-                sealedCount > 0
-                  ? "Sealed until\nthe reveal phase"
-                  : "Not independently\nreviewed"
-              }
-              emptyChip={sealedCount > 0 ? "Commitments sealed" : "No jury round"}
+      {inspectorOpen ? (
+        <MobileSheet title="Node inspector" onClose={() => setInspectorOpen(false)}>
+          <div className="p-5">
+            <NodeInspector
+              claim={claim}
+              events={events}
+              graph={graph}
+              node={selectedNode}
+              proofsByRunId={proofsByRunId}
             />
-            <div className="w-full space-y-2 border-t border-border pt-3">
-              <p className="text-center text-[11px] leading-relaxed text-muted-foreground">
-                Computed by deterministic integer arithmetic over the terminal valid jury
-                round. A model never rates the result.
-              </p>
-              <Link
-                href="/learn"
-                className="block text-center text-[11px] font-semibold text-primary hover:underline"
-              >
-                Read the scoring formula
-              </Link>
-            </div>
           </div>
-        </Panel>
-      </div>
-
-      {/* Wallet-gated economic actions; claim reading remains anonymous. */}
-      <PositionPanel />
-
-      {/* --------------------------------------------------------- Deadlines */}
-      {claim.deadlines && (
-        <Panel label="Epoch deadlines (UTC & local)" icon={Clock} tone="chain">
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            {(
-              [
-                ["Challenge deadline", claim.deadlines.challengeDeadlineMs],
-                ["Phase 1 commit cutoff", claim.deadlines.firstCommitDeadlineMs],
-                ["Phase 1 reveal cutoff", claim.deadlines.firstRevealDeadlineMs],
-                ["Discussion cutoff", claim.deadlines.discussionDeadlineMs],
-              ] as const
-            ).map(([label, ms]) => (
-              <div key={label} className="rounded-xl border border-border bg-surface p-3">
-                <FieldLabel className="mb-1.5">{label}</FieldLabel>
-                <TimeDisplay timestampMs={ms} />
-              </div>
-            ))}
-          </div>
-        </Panel>
-      )}
-
-      {/* ---------------------------------------------------------- Evidence */}
-      <Panel
-        label="Admitted evidence manifests"
-        icon={DocumentText}
-        action={
-          <MetaTag>
-            {claim.evidenceRoots?.length ?? 0} bundle
-            {(claim.evidenceRoots?.length ?? 0) === 1 ? "" : "s"} frozen
-          </MetaTag>
-        }
-      >
-        {!claim.evidenceRoots || claim.evidenceRoots.length === 0 ? (
-          <p className="text-xs text-muted-foreground italic">
-            No evidence bundles frozen yet. Evidence retrieval is pending.
-          </p>
-        ) : (
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-            {claim.evidenceRoots.map((bundle, idx) => (
-              <div
-                key={idx}
-                className="ov-lift space-y-2.5 rounded-xl border border-border bg-surface p-3.5"
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-sm font-semibold text-ocean">
-                    Phase {bundle.phase} evidence bundle
-                  </span>
-                  <MetaTag tone="chain">Merkle frozen</MetaTag>
-                </div>
-                <div className="space-y-1.5">
-                  <FieldLabel>Merkle root</FieldLabel>
-                  <HashChip value={bundle.root} tone="chain" full />
-                  <FieldLabel className="pt-1">Bundle id</FieldLabel>
-                  <HashChip value={bundle.bundleId} tone="muted" full />
-                </div>
-                <Link
-                  href={`/evidence/${encodeURIComponent(bundle.bundleId)}`}
-                  className="inline-flex items-center gap-1 text-[11px] font-semibold text-primary hover:underline"
-                >
-                  View artifact metadata &amp; blob hashes
-                  <Link21 size="12" variant="Bold" />
-                </Link>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Retrieved artifacts, only present once the public report exists. */}
-        {report && report.evidence.length > 0 && (
-          <div className="mt-4 space-y-2 border-t border-border pt-4">
-            <FieldLabel>Retrieved artifacts</FieldLabel>
-            <ul className="space-y-2">
-              {report.evidence.map((item) => (
-                <li
-                  key={item.evidenceId}
-                  className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-surface px-3 py-2"
-                >
-                  <Global size="13" variant="Bold" className="shrink-0 text-primary" />
-                  <span className="min-w-0 flex-1 truncate text-[11px] text-foreground/85">
-                    {item.sourceUrl || "Pasted text submission"}
-                  </span>
-                  <HashChip value={item.evidenceId} label="id" tone="muted" />
-                  <HashChip value={item.blobId} label="blob" tone="muted" />
-                  <HashChip value={item.contentHash} label="hash" tone="muted" />
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-
-        {report && report.submittedUrls.length > 0 && (
-          <div className="mt-4 space-y-1.5 border-t border-border pt-4">
-            <FieldLabel>Submitted source URLs</FieldLabel>
-            <ul className="space-y-1">
-              {report.submittedUrls.map((url) => (
-                <li key={url} className="truncate font-mono text-[11px] text-muted-foreground">
-                  {url}
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-      </Panel>
-
-      {/* ------------------------------------------------------- Jury seats */}
-      <Panel
-        label="Jury commit-reveal seats"
-        icon={Judge}
-        tone={revealedCount > 0 ? "yes" : "sealed"}
-        action={
-          <MetaTag tone={revealedCount > 0 ? "yes" : "sealed"}>
-            {revealedCount} / {claim.commitments?.length ?? 5} revealed
-          </MetaTag>
-        }
-      >
-        <p className="mb-4 text-xs leading-relaxed text-muted-foreground">
-          Strict pre-reveal redaction: each seat&apos;s vote preimage stays sealed on-chain
-          until the reveal phase opens it. Nothing here is inferred by the observer.
-        </p>
-
-        {seats.length === 0 ? (
-          <div className="rounded-xl border border-dashed border-border bg-surface p-5 text-center text-xs text-muted-foreground">
-            Awaiting committee selection through Sui native randomness.
-          </div>
-        ) : (
-          <>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
-              {seats.map((seat) => (
-                <SeatSeal
-                  key={seat.jurySeatId}
-                  seatIndex={seat.index}
-                  state={seat.state}
-                  outcome={seat.outcome}
-                  confidenceBps={seat.confidenceBps}
-                  agentProfileId={seat.agentProfileId}
-                  jurySeatId={seat.jurySeatId}
-                  modelId={seat.modelId}
-                  role={seat.role}
-                  reasoning={seat.reasoning}
-                  gonkaRequestId={seat.gonkaRequestId}
-                  failureStatus={seat.failureStatus}
-                />
-              ))}
-            </div>
-
-            <div className="mt-5 space-y-2 border-t border-border pt-4">
-              <FieldLabel>Juror run proofs</FieldLabel>
-              {seats.map((seat) => (
-                <RunProof
-                  key={`proof-${seat.jurySeatId}`}
-                  claimId={claim.claimId}
-                  runId={seat.runId}
-                  seatLabel={`Seat ${seat.index}, phase ${seat.phase}`}
-                />
-              ))}
-            </div>
-          </>
-        )}
-      </Panel>
-
-      {/* --------------------------------------------------------- Timeline */}
-      <Panel label="Resolution lifecycle (PRD §26.3)" icon={Clock}>
-        <ClaimTimeline claim={claim} />
-      </Panel>
-
-      {/* -------------------------------------- Certificate & audit bundle */}
-      {isTerminal && report && (
-        <Reveal>
-          <Panel
-            label="Public fact-check report & audit bundle"
-            icon={Award}
-            tone="yes"
-            action={
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={downloadAuditBundle}
-                className="min-h-[36px] font-semibold"
-              >
-                <DocumentDownload size="14" variant="Bold" />
-                Download JSON
-              </Button>
-            }
-          >
-            <div className="space-y-5">
-              <div className="grid gap-3 sm:grid-cols-3">
-                <div className="rounded-xl border border-yes/25 bg-yes/6 p-3">
-                  <FieldLabel className="mb-1">Settled label</FieldLabel>
-                  <p className="text-xl font-semibold text-yes">{report.label}</p>
-                </div>
-                <div className="rounded-xl border border-border bg-surface p-3">
-                  <FieldLabel className="mb-1">Truth score</FieldLabel>
-                  <p className="text-xl font-semibold text-ocean tabular-nums">
-                    {report.truthScore === null ? "N/A" : report.truthScore}
-                    <span className="ml-1 text-xs text-muted-foreground">/100</span>
-                  </p>
-                </div>
-                <div className="rounded-xl border border-border bg-surface p-3">
-                  <FieldLabel className="mb-1">Final round votes</FieldLabel>
-                  <div className="flex flex-wrap gap-1">
-                    {report.finalRoundVotes.map((v, i) => (
-                      <span
-                        key={i}
-                        className={cn(
-                          "rounded px-1.5 py-0.5 font-mono text-[10px] font-semibold",
-                          v.outcome === "YES"
-                            ? "bg-yes/10 text-yes"
-                            : v.outcome === "NO"
-                              ? "bg-no/10 text-no"
-                              : "bg-unsure/10 text-unsure",
-                        )}
-                      >
-                        {v.outcome} {Math.round(v.confidenceBps / 100)}%
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              <Well>
-                <FieldLabel className="mb-1">Truth score formula</FieldLabel>
-                <p className="text-[13px] leading-relaxed text-foreground/85">
-                  {report.truthScoreFormula}
-                </p>
-              </Well>
-
-              {/* Public reasoning traces: every check the jurors published. */}
-              <div className="space-y-2">
-                <FieldLabel>Public reasoning traces</FieldLabel>
-                {report.agents.map((agent) => (
-                  <details
-                    key={agent.agentProfileId}
-                    className="group rounded-xl border border-border bg-card open:bg-surface"
-                  >
-                    <summary className="flex cursor-pointer list-none flex-wrap items-center gap-2 px-3 py-2.5 text-xs transition-colors hover:bg-surface">
-                      <ArrowDown2
-                        size="13"
-                        variant="Bold"
-                        className="shrink-0 text-muted-foreground transition-transform group-open:rotate-180"
-                      />
-                      <Cpu size="13" variant="Bold" className="shrink-0 text-primary" />
-                      <ModelBadge modelId={agent.modelId} />
-                      <span className="font-semibold text-ocean">
-                        {agent.role.replace(/_/g, " ")}
-                      </span>
-                      <span
-                        className={cn(
-                          "ml-auto rounded px-1.5 py-0.5 font-mono text-[10px] font-bold",
-                          agent.outcome === "YES"
-                            ? "bg-yes/10 text-yes"
-                            : agent.outcome === "NO"
-                              ? "bg-no/10 text-no"
-                              : "bg-unsure/10 text-unsure",
-                        )}
-                      >
-                        {agent.outcome} · {agent.confidenceBps} bps
-                      </span>
-                    </summary>
-
-                    <div className="space-y-2.5 border-t border-border px-3 py-3">
-                      <p className="text-[11px] leading-relaxed text-foreground/80 italic">
-                        “{agent.reasoning}”
-                      </p>
-                      <ol className="space-y-1.5">
-                        {agent.publicReasoningTrace.map((trace, i) => (
-                          <li
-                            key={i}
-                            className="rounded-lg border border-border bg-card px-2.5 py-2 text-[11px]"
-                          >
-                            <p className="font-semibold text-ocean">{trace.check}</p>
-                            <p className="text-muted-foreground">{trace.finding}</p>
-                            <div className="mt-1 flex flex-wrap items-center gap-1">
-                              <span
-                                className={cn(
-                                  "ov-micro ov-micro-sm rounded px-1 py-px",
-                                  trace.assessment === "SUPPORTS"
-                                    ? "bg-yes/10 text-yes"
-                                    : trace.assessment === "CONTRADICTS"
-                                      ? "bg-no/10 text-no"
-                                      : "bg-unsure/10 text-unsure",
-                                )}
-                              >
-                                {trace.assessment}
-                              </span>
-                              {trace.evidenceIds?.map((eid) => (
-                                <HashChip key={eid} value={eid} label="ev" tone="muted" />
-                              ))}
-                            </div>
-                          </li>
-                        ))}
-                      </ol>
-                      <div className="flex flex-wrap gap-1 border-t border-border pt-2">
-                        <HashChip value={agent.agentProfileId} label="agent" tone="muted" />
-                        <HashChip value={agent.owner} label="owner" tone="muted" />
-                        <HashChip value={agent.gonkaRequestId} label="gonka" tone="muted" />
-                      </div>
-                    </div>
-                  </details>
-                ))}
-              </div>
-
-              {/* Sui Move objects */}
-              <div className="space-y-2 rounded-xl border border-border bg-surface p-3.5">
-                <FieldLabel>Sui Move protocol objects</FieldLabel>
-                <div className="grid gap-2 sm:grid-cols-2">
-                  <div className="space-y-1">
-                    <span className="ov-micro ov-micro-sm text-muted-foreground">
-                      Claim object
-                    </span>
-                    <HashChip value={report.sui.claimObjectId} tone="chain" full />
-                  </div>
-                  {report.sui.committeeId && (
-                    <div className="space-y-1">
-                      <span className="ov-micro ov-micro-sm text-muted-foreground">
-                        Committee object
-                      </span>
-                      <HashChip value={report.sui.committeeId} tone="sealed" full />
-                    </div>
-                  )}
-                  {report.sui.certificateId && (
-                    <div className="space-y-1">
-                      <span className="ov-micro ov-micro-sm text-muted-foreground">
-                        Certificate object
-                      </span>
-                      <HashChip value={report.sui.certificateId} tone="yes" full />
-                    </div>
-                  )}
-                  {report.evidenceRoot && (
-                    <div className="space-y-1">
-                      <span className="ov-micro ov-micro-sm text-muted-foreground">
-                        Evidence root
-                      </span>
-                      <HashChip value={report.evidenceRoot} tone="chain" full />
-                    </div>
-                  )}
-                </div>
-                <div className="space-y-1 border-t border-border pt-2">
-                  <span className="ov-micro ov-micro-sm text-muted-foreground">
-                    Revealed vote objects ({report.sui.revealedVoteIds?.length ?? 0})
-                  </span>
-                  <div className="flex flex-wrap gap-1">
-                    {report.sui.revealedVoteIds?.map((vid) => (
-                      <HashChip key={vid} value={vid} tone="muted" />
-                    ))}
-                  </div>
-                </div>
-                {claim.result?.digest && (
-                  <div className="space-y-1 border-t border-border pt-2">
-                    <span className="ov-micro ov-micro-sm text-muted-foreground">
-                      Finalization transaction
-                    </span>
-                    <HashChip value={claim.result.digest} tone="chain" full />
-                  </div>
-                )}
-              </div>
-            </div>
-          </Panel>
-        </Reveal>
-      )}
-
-      {/* -------------------------------------------- Security boundary note */}
-      <div className="flex items-start gap-2.5 rounded-2xl border border-border bg-surface p-4">
-        <InfoCircle size="16" variant="Bold" className="mt-0.5 shrink-0 text-primary" />
-        <p className="text-xs leading-relaxed text-muted-foreground">
-          <strong className="font-semibold text-ocean">Read-only projection.</strong> This page
-          holds no signer and cannot advance protocol state, trigger inference, or derive
-          unrevealed votes. Every value above is read from on-chain Move objects, Walrus blobs
-          and public resolution events.
-        </p>
-      </div>
+        </MobileSheet>
+      ) : null}
     </div>
   );
 }
