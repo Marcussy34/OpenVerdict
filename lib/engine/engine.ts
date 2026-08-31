@@ -839,11 +839,12 @@ class OpenVerdictEngine implements Engine {
     const claim = await this.claim(claimId);
     assertCommitState(claim.state, phase);
     const committee = await this.requiredCommittee(claimId);
+    const tally = await this.requiredTally(claimId, phase);
     if (!committee.locked) {
       await this.#gateway.lockCommittee({
         claimId,
         committeeId: committee.committeeId,
-        roundTallyId: (await this.requiredTally(claimId, phase)).roundTallyId,
+        roundTallyId: tally.roundTallyId,
       });
       await this.#repository.saveCommittee({
         ...committee,
@@ -888,6 +889,7 @@ class OpenVerdictEngine implements Engine {
       );
       const result = await this.#gateway.commitVote({
         jurySeatId: run.jurySeatId,
+        roundTallyId: tally.roundTallyId,
         agentProfileId: run.agentProfileId,
         runApprovalId: approval.runApprovalId,
         commitment: fromHex(commitment),
@@ -1167,7 +1169,8 @@ class OpenVerdictEngine implements Engine {
     }
     if (claim.state === CLAIM_STATE.COMMIT_1 || claim.state === CLAIM_STATE.COMMIT_2) {
       const phase = claim.state === CLAIM_STATE.COMMIT_1 ? 1 : 2;
-      const result = await this.#gateway.advancePhase(claimId);
+      const tally = await this.requiredTally(claimId, phase);
+      const result = await this.#gateway.advancePhase(claimId, tally.roundTallyId);
       const next = phase === 1 ? CLAIM_STATE.REVEAL_1 : CLAIM_STATE.REVEAL_2;
       await this.changePhase(claim, next, result);
       return result;
@@ -1298,6 +1301,12 @@ class OpenVerdictEngine implements Engine {
       ...(await this.#repository.listVotePackages(claimId, 1)),
       ...(await this.#repository.listVotePackages(claimId, 2)),
     ];
+    const tallies = (
+      await Promise.all([
+        this.#repository.getRoundTally(claimId, 1),
+        this.#repository.getRoundTally(claimId, 2),
+      ])
+    ).filter((tally): tally is RoundTallyRecord => tally !== undefined);
     const seats = [
       ...(await this.#repository.listJurySeats(claimId, 1)),
       ...(await this.#repository.listJurySeats(claimId, 2)),
@@ -1340,6 +1349,14 @@ class OpenVerdictEngine implements Engine {
           : {}),
       };
     });
+    const rounds = tallies.map((tally) => ({
+      phase: tally.phase,
+      expectedJurySeatIds: tally.expectedJurySeatIds,
+      committedJurySeatIds: tally.expectedJurySeatIds.filter(
+        (jurySeatId) => packageBySeat.get(jurySeatId)?.committed,
+      ),
+      revealedJurySeatIds: tally.revealedJurySeatIds,
+    }));
     const result = await this.#repository.getResolutionCertificate(claimId);
     const inspection: ClaimInspection = {
       claimId,
@@ -1358,6 +1375,7 @@ class OpenVerdictEngine implements Engine {
         bundleId: manifest.evidenceBundleId ?? "",
       })),
       commitments,
+      rounds,
       ...(result === undefined ? {} : { result: certificateToFinalizeReport(result) }),
     };
     if (opts.verify) inspection.verification = await this.verifyClaim(claim, manifests, packages, result);

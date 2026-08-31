@@ -93,6 +93,7 @@ module openverdict::jury {
         phase: u8,
         evidence_root: vector<u8>,
         expected_jury_seat_ids: vector<ID>,
+        committed_count: u8,
         revealed_jury_seat_ids: vector<ID>,
         revealed_vote_ids: vector<ID>,
         yes_count: u8,
@@ -457,6 +458,7 @@ module openverdict::jury {
     /// Consume a matching approval and store only the hidden commitment and fixed run hash.
     public entry fun commit_vote(
         seat: &mut JurySeat,
+        tally: &mut RoundTally,
         cap: &AgentCap,
         approval: RunApproval,
         commitment: vector<u8>,
@@ -466,6 +468,11 @@ module openverdict::jury {
         assert!(seat.status == SEAT_ACCEPTED, E_INVALID_SEAT_STATUS);
         assert!(commitment.length() == HASH_LENGTH, E_INVALID_HASH);
         assert!(!seat.evidence_root.is_empty(), E_EVIDENCE_NOT_BOUND);
+        assert_tally_seat(tally, seat);
+        assert!(
+            (tally.committed_count as u64) < tally.expected_jury_seat_ids.length(),
+            E_TALLY_MISMATCH,
+        );
         let timing = df::borrow<SeatTimingKey, SeatTiming>(&seat.id, SeatTimingKey {});
         assert!(clock::timestamp_ms(clock) <= timing.commit_deadline_ms, E_DEADLINE_PASSED);
         assert_approval_matches(seat, &approval);
@@ -489,6 +496,7 @@ module openverdict::jury {
         seat.run_hash = run_hash;
         seat.commitment = commitment;
         seat.status = SEAT_COMMITTED;
+        tally.committed_count = tally.committed_count + 1;
         event::emit(VoteCommitted {
             claim_id: seat.claim_id,
             jury_seat_id: object::id(seat),
@@ -524,7 +532,7 @@ module openverdict::jury {
 
         let timing = df::borrow<SeatTimingKey, SeatTiming>(&seat.id, SeatTimingKey {});
         let now = clock::timestamp_ms(clock);
-        assert!(now > timing.commit_deadline_ms, E_REVEAL_NOT_OPEN);
+        assert!(now > timing.commit_deadline_ms || all_seats_committed(tally), E_REVEAL_NOT_OPEN);
         assert!(now <= timing.reveal_deadline_ms, E_DEADLINE_PASSED);
         assert!(run_hash == seat.run_hash, E_INVALID_HASH);
         assert_tally_seat(tally, &seat);
@@ -619,6 +627,7 @@ module openverdict::jury {
             phase: PHASE_TWO,
             evidence_root: vector[],
             expected_jury_seat_ids: vector[],
+            committed_count: 0,
             revealed_jury_seat_ids: vector[],
             revealed_vote_ids: vector[],
             yes_count: 0,
@@ -726,6 +735,7 @@ module openverdict::jury {
     public fun jury_seat_status(seat: &JurySeat): u8 { seat.status }
     public fun tally_id(tally: &RoundTally): ID { object::id(tally) }
     public fun tally_phase(tally: &RoundTally): u8 { tally.phase }
+    public fun tally_commit_count(tally: &RoundTally): u8 { tally.committed_count }
     public fun tally_reveal_count(tally: &RoundTally): u8 { tally.truth_probability_count }
     public fun tally_yes_count(tally: &RoundTally): u8 { tally.yes_count }
     public fun tally_no_count(tally: &RoundTally): u8 { tally.no_count }
@@ -766,6 +776,33 @@ module openverdict::jury {
 
     public(package) fun revealed_seat_ids(tally: &RoundTally): &vector<ID> {
         &tally.revealed_jury_seat_ids
+    }
+
+    public(package) fun all_seats_committed(tally: &RoundTally): bool {
+        let committed = tally.committed_count as u64;
+        let expected = tally.expected_jury_seat_ids.length();
+        assert!(committed <= expected, E_TALLY_MISMATCH);
+        committed == expected
+    }
+
+    public(package) fun all_seats_revealed(tally: &RoundTally): bool {
+        let revealed = tally.revealed_jury_seat_ids.length();
+        let expected = tally.expected_jury_seat_ids.length();
+        assert!(revealed <= expected, E_TALLY_MISMATCH);
+        revealed == expected
+    }
+
+    /// Produce a tally-bound receipt for claim phase advancement.
+    public fun phase_readiness(tally: &RoundTally, ctx: &mut TxContext): claim::PhaseReadiness {
+        assert!(!tally.closed, E_TALLY_CLOSED);
+        assert!(tally.phase == PHASE_ONE || tally.phase == PHASE_TWO, E_INVALID_PHASE);
+        claim::new_phase_readiness(
+            tally.claim_id,
+            object::id(tally),
+            tally.phase,
+            all_seats_committed(tally),
+            ctx,
+        )
     }
 
     public(package) fun owner_for_expected_index(committee: &Committee, index: u64): address {
@@ -829,6 +866,7 @@ module openverdict::jury {
             phase: PHASE_ONE,
             evidence_root: vector[],
             expected_jury_seat_ids: vector[],
+            committed_count: 0,
             revealed_jury_seat_ids: vector[],
             revealed_vote_ids: vector[],
             yes_count: 0,
@@ -1266,6 +1304,7 @@ module openverdict::jury {
             phase,
             evidence_root,
             expected_jury_seat_ids,
+            committed_count: 0,
             revealed_jury_seat_ids: vector[],
             revealed_vote_ids: vector[],
             yes_count: 0,
@@ -1323,6 +1362,7 @@ module openverdict::jury {
             phase: _,
             evidence_root: _,
             expected_jury_seat_ids: _,
+            committed_count: _,
             revealed_jury_seat_ids: _,
             revealed_vote_ids: _,
             yes_count: _,

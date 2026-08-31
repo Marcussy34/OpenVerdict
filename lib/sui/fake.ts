@@ -44,6 +44,10 @@ export class FakeSuiGateway implements SuiGateway {
   #counter = 0;
   #claimCounter = 0;
   #phaseByClaim = new Map<string, 1 | 2>();
+  #claimByTally = new Map<string, string>();
+  #expectedSeatsByTally = new Map<string, Set<string>>();
+  #committedSeatsByTally = new Map<string, Set<string>>();
+  #revealedSeatsByTally = new Map<string, Set<string>>();
 
   constructor(agents: FakeSuiAgent[] = defaultFakeAgents()) {
     this.agents = agents;
@@ -132,18 +136,50 @@ export class FakeSuiGateway implements SuiGateway {
   }
 
   async commitVote(input: GatewayCommitVoteInput): Promise<TxResult> {
-    void input;
+    const expected = this.expectedSeats(input.roundTallyId);
+    if (!expected.has(input.jurySeatId)) throw new Error("fake tally rejected an unexpected seat");
+    const committed = this.#committedSeatsByTally.get(input.roundTallyId)!;
+    if (committed.has(input.jurySeatId)) throw new Error("fake tally rejected a duplicate commit");
+    committed.add(input.jurySeatId);
     return this.tx("commit_vote");
   }
 
   async revealVote(input: GatewayRevealVoteInput): Promise<RevealVoteResult> {
+    const expected = this.expectedSeats(input.roundTallyId);
+    if (!expected.has(input.jurySeatId)) throw new Error("fake tally rejected an unexpected seat");
+    const committed = this.#committedSeatsByTally.get(input.roundTallyId)!;
+    if (!committed.has(input.jurySeatId)) throw new Error("fake tally rejected an uncommitted seat");
+    const revealed = this.#revealedSeatsByTally.get(input.roundTallyId)!;
+    if (revealed.has(input.jurySeatId)) throw new Error("fake tally rejected a duplicate reveal");
+    revealed.add(input.jurySeatId);
     const result = this.tx("reveal_vote");
     const revealedVoteId = fakeId(`reveal:${input.jurySeatId}`);
     return { ...result, revealedVoteId, objectIds: { revealedVote: revealedVoteId } };
   }
 
-  async advancePhase(): Promise<TxResult> {
+  async advancePhase(claimId: string, roundTallyId: string): Promise<TxResult> {
+    if (this.#claimByTally.get(roundTallyId) !== claimId) {
+      throw new Error("fake phase advance received the wrong tally");
+    }
     return this.tx("advance_phase");
+  }
+
+  committedJurySeatIds(roundTallyId: string): string[] {
+    return [...(this.#committedSeatsByTally.get(roundTallyId) ?? [])].sort();
+  }
+
+  revealedJurySeatIds(roundTallyId: string): string[] {
+    return [...(this.#revealedSeatsByTally.get(roundTallyId) ?? [])].sort();
+  }
+
+  allSeatsCommitted(roundTallyId: string): boolean {
+    const expected = this.expectedSeats(roundTallyId);
+    return expected.size > 0 && this.committedJurySeatIds(roundTallyId).length === expected.size;
+  }
+
+  allSeatsRevealed(roundTallyId: string): boolean {
+    const expected = this.expectedSeats(roundTallyId);
+    return expected.size > 0 && this.revealedJurySeatIds(roundTallyId).length === expected.size;
   }
 
   async openDiscussion(): Promise<TxResult> {
@@ -218,6 +254,13 @@ export class FakeSuiGateway implements SuiGateway {
       owner: agent.owner,
       agentCapId: agent.agentCapId,
     }));
+    this.#claimByTally.set(roundTallyId, claimId);
+    this.#expectedSeatsByTally.set(
+      roundTallyId,
+      new Set(seats.map((seat) => seat.jurySeatId)),
+    );
+    this.#committedSeatsByTally.set(roundTallyId, new Set());
+    this.#revealedSeatsByTally.set(roundTallyId, new Set());
     const result = this.tx(label);
     return {
       ...result,
@@ -232,6 +275,12 @@ export class FakeSuiGateway implements SuiGateway {
   private tx(label: string): TxResult {
     this.#counter += 1;
     return { digest: `fake-${String(this.#counter).padStart(4, "0")}-${label}`, checkpoint: this.#counter };
+  }
+
+  private expectedSeats(roundTallyId: string): Set<string> {
+    const expected = this.#expectedSeatsByTally.get(roundTallyId);
+    if (!expected) throw new Error("fake tally does not exist");
+    return expected;
   }
 }
 

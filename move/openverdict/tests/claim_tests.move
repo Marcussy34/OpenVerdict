@@ -2,6 +2,7 @@
 module openverdict::claim_tests {
     use openverdict::agent_registry;
     use openverdict::claim;
+    use openverdict::jury;
     use sui::clock;
     use sui::coin;
     use sui::test_scenario;
@@ -14,6 +15,23 @@ module openverdict::claim_tests {
 
     fun params(mode: u8): claim::ClaimParams {
         claim::new_claim_params(mode, 10, 20, 30, 40, 50, 60, 70, 10, 80, 10)
+    }
+
+    fun link_phase_one_tally<T>(
+        claim: &mut claim::Claim<T>,
+        ctx: &mut TxContext,
+    ): jury::RoundTally {
+        let committee_id = object::id_from_address(@0xC011);
+        let tally = jury::new_tally_for_testing(
+            claim::claim_id(claim),
+            committee_id,
+            1,
+            vector[],
+            vector[object::id_from_address(@0x5EA7)],
+            ctx,
+        );
+        claim::link_committee(claim, committee_id, jury::tally_id(&tally));
+        tally
     }
 
     #[test]
@@ -312,9 +330,11 @@ module openverdict::claim_tests {
             &clock,
             scenario.ctx(),
         );
-        claim::set_state_for_testing(&mut claim, claim::state_commit_1());
+        claim::start_direct_review(&registry, &mut claim, &clock);
+        let tally = link_phase_one_tally(&mut claim, scenario.ctx());
         clock::set_for_testing(&mut clock, 30);
-        claim::advance_phase(&mut claim, &clock);
+        let readiness = jury::phase_readiness(&tally, scenario.ctx());
+        claim::advance_phase(&mut claim, readiness, &clock);
         abort E_UNEXPECTED_SUCCESS
     }
 
@@ -331,14 +351,46 @@ module openverdict::claim_tests {
             &clock,
             scenario.ctx(),
         );
-        claim::set_state_for_testing(&mut claim, claim::state_commit_1());
+        claim::start_direct_review(&registry, &mut claim, &clock);
+        let tally = link_phase_one_tally(&mut claim, scenario.ctx());
         clock::set_for_testing(&mut clock, 31);
-        claim::advance_phase(&mut claim, &clock);
+        let readiness = jury::phase_readiness(&tally, scenario.ctx());
+        claim::advance_phase(&mut claim, readiness, &clock);
         assert!(claim::state(&claim) == claim::state_reveal_1());
         claim::destroy_claim_for_testing(claim);
+        jury::destroy_tally_for_testing(tally);
         agent_registry::destroy_registry_for_testing(registry);
         clock::destroy_for_testing(clock);
         scenario.end();
+    }
+
+    #[test, expected_failure(abort_code = openverdict::claim::E_INVALID_STATE)]
+    fun phase_advance_rejects_readiness_for_another_tally() {
+        let mut scenario = test_scenario::begin(CREATOR);
+        let registry = agent_registry::new_registry_for_testing(scenario.ctx());
+        let clock = clock::create_for_testing(scenario.ctx());
+        let budget = coin::mint_for_testing<TestCoin>(100, scenario.ctx());
+        let mut claim = claim::new_claim_for_testing(
+            &registry,
+            budget,
+            params(claim::claim_mode_direct_review()),
+            &clock,
+            scenario.ctx(),
+        );
+        claim::start_direct_review(&registry, &mut claim, &clock);
+        let active_tally = link_phase_one_tally(&mut claim, scenario.ctx());
+        let other_tally = jury::new_tally_for_testing(
+            claim::claim_id(&claim),
+            object::id_from_address(@0xC011),
+            1,
+            vector[],
+            vector[object::id_from_address(@0x5EA8)],
+            scenario.ctx(),
+        );
+        let readiness = jury::phase_readiness(&other_tally, scenario.ctx());
+        claim::advance_phase(&mut claim, readiness, &clock);
+        jury::destroy_tally_for_testing(active_tally);
+        abort E_UNEXPECTED_SUCCESS
     }
 
     #[test, expected_failure(abort_code = openverdict::claim::E_INVALID_BUDGET)]

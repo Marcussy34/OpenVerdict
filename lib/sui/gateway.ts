@@ -287,8 +287,10 @@ export class RealSuiGateway implements SuiGateway {
     return { ...txResult(result), revealedVoteId };
   }
 
-  async advancePhase(claimId: string): Promise<TxResult> {
-    return this.executeOperator(() => buildAdvancePhaseTransaction(this.#manifest, { claimId }));
+  async advancePhase(claimId: string, roundTallyId: string): Promise<TxResult> {
+    return this.executeOperator(() =>
+      buildAdvancePhaseTransaction(this.#manifest, { claimId, roundTallyId }),
+    );
   }
 
   async openDiscussion(input: {

@@ -402,7 +402,8 @@ module openverdict::settlement_tests {
             i = i + 1;
         };
         clock::set_for_testing(&mut clock, 61);
-        claim::advance_phase(&mut claim, &clock);
+        let readiness = jury::phase_readiness(&second_tally, scenario.ctx());
+        claim::advance_phase(&mut claim, readiness, &clock);
         clock::set_for_testing(&mut clock, 71);
         settlement::finalize_claim(
             &mut claim,
@@ -628,7 +629,7 @@ module openverdict::settlement_tests {
     }
 
     #[test]
-    fun full_five_agent_commit_reveal_finalize_creates_all_entitlements() {
+    fun full_five_agent_commit_reveal_finalizes_early_and_creates_all_entitlements() {
         let mut scenario = test_scenario::begin(CREATOR);
         let registry = agent_registry::new_registry_for_testing(scenario.ctx());
         let evidence_cap = agent_registry::new_evidence_cap_for_testing(scenario.ctx());
@@ -703,6 +704,7 @@ module openverdict::settlement_tests {
             let approval = jury::new_run_approval_for_testing(&seat, hash(3), scenario.ctx());
             jury::commit_vote(
                 &mut seat,
+                &mut tally,
                 &cap,
                 approval,
                 jury::compute_commitment(&preimage),
@@ -714,8 +716,9 @@ module openverdict::settlement_tests {
             i = i + 1;
         };
 
-        clock::set_for_testing(&mut clock, 31);
-        claim::advance_phase(&mut claim, &clock);
+        clock::set_for_testing(&mut clock, 29);
+        let readiness = jury::phase_readiness(&tally, scenario.ctx());
+        claim::advance_phase(&mut claim, readiness, &clock);
         i = 0;
         while (i < 5) {
             test_scenario::next_tx(&mut scenario, owners[i]);
@@ -742,7 +745,7 @@ module openverdict::settlement_tests {
         assert!(jury::threshold_outcome(&tally) == claim::outcome_yes());
         assert!(jury::tally_reveal_count(&tally) == 5);
 
-        clock::set_for_testing(&mut clock, 41);
+        clock::set_for_testing(&mut clock, 30);
         test_scenario::next_tx(&mut scenario, CREATOR);
         let bundle = test_scenario::take_immutable<evidence::EvidenceBundle>(&scenario);
         settlement::finalize_claim(

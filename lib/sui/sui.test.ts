@@ -164,6 +164,26 @@ describe("transaction builders", () => {
     });
   });
 
+  it("builds tally readiness before claim phase advancement", () => {
+    const tx = buildAdvancePhaseTransaction(manifest, {
+      claimId: `0x${"33".repeat(32)}`,
+      roundTallyId: `0x${"44".repeat(32)}`,
+    });
+    const data = tx.getData() as {
+      commands: Array<{ $kind: string; MoveCall?: { module: string; function: string } }>;
+    };
+
+    expect(data.commands).toHaveLength(2);
+    expect(data.commands[0]).toMatchObject({
+      $kind: "MoveCall",
+      MoveCall: { module: "jury", function: "phase_readiness" },
+    });
+    expect(data.commands[1]).toMatchObject({
+      $kind: "MoveCall",
+      MoveCall: { module: "claim", function: "advance_phase" },
+    });
+  });
+
   it.each(transactionCases())(
     "builds $functionName with the Move-source argument count",
     ({ transaction, functionName, argumentCount }) => {
@@ -198,6 +218,27 @@ describe("FakeSuiGateway", () => {
     expect(gateway.agents[0]?.manifestBlobId).toBe("updated-manifest");
     expect(gateway.agents[0]?.modelHash).toEqual(modelHash);
     expect(gateway.agents[0]?.roleHash).toEqual(roleHash);
+  });
+
+  it("tracks each committed seat against its round tally", async () => {
+    const gateway = new FakeSuiGateway();
+    const claimId = `0x${"cc".repeat(32)}`;
+    const selection = await gateway.selectCommittee(claimId);
+
+    for (const seat of selection.seats) {
+      await gateway.commitVote({
+        jurySeatId: seat.jurySeatId,
+        roundTallyId: selection.roundTallyId,
+        agentProfileId: seat.agentProfileId,
+        runApprovalId: `0x${"aa".repeat(32)}`,
+        commitment: new Uint8Array(32),
+      });
+    }
+
+    expect(gateway.allSeatsCommitted(selection.roundTallyId)).toBe(true);
+    expect(gateway.committedJurySeatIds(selection.roundTallyId)).toEqual(
+      selection.seats.map((seat) => seat.jurySeatId).sort(),
+    );
   });
 });
 
@@ -351,9 +392,10 @@ function transactionCases(): Array<{
     },
     {
       functionName: "commit_vote",
-      argumentCount: 5,
+      argumentCount: 6,
       transaction: buildCommitVoteTransaction(manifest, {
         jurySeatId: id("4"),
+        roundTallyId: id("f"),
         agentCapId: id("5"),
         runApprovalId: id("e"),
         commitment: hash,
@@ -378,8 +420,11 @@ function transactionCases(): Array<{
     },
     {
       functionName: "advance_phase",
-      argumentCount: 2,
-      transaction: buildAdvancePhaseTransaction(manifest, { claimId: id("3") }),
+      argumentCount: 3,
+      transaction: buildAdvancePhaseTransaction(manifest, {
+        claimId: id("3"),
+        roundTallyId: id("f"),
+      }),
     },
     {
       functionName: "finalize_claim",

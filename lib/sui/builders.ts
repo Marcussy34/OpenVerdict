@@ -85,6 +85,7 @@ export interface ApproveRunTransactionInput {
 
 export interface CommitVoteTransactionInput {
   jurySeatId: string;
+  roundTallyId: string;
   agentCapId: string;
   runApprovalId: string;
   commitment: Uint8Array;
@@ -108,6 +109,10 @@ export interface FinalizeClaimTransactionInput extends ClaimObjectInput {
   committeeId: string;
   roundTallyId: string;
   evidenceBundleId: string;
+}
+
+export interface AdvancePhaseTransactionInput extends ClaimObjectInput {
+  roundTallyId: string;
 }
 
 export interface WithdrawPayoutTransactionInput extends ClaimObjectInput {
@@ -425,6 +430,7 @@ export function buildCommitVoteTransaction(
     target: target(manifest, "jury", "commit_vote"),
     arguments: [
       tx.object(input.jurySeatId),
+      tx.object(input.roundTallyId),
       tx.object(input.agentCapId),
       tx.object(input.runApprovalId),
       bytes(tx, input.commitment),
@@ -461,13 +467,22 @@ export function buildRevealVoteTransaction(
 
 export function buildAdvancePhaseTransaction(
   manifest: ReleaseManifest,
-  input: ClaimObjectInput,
+  input: AdvancePhaseTransactionInput,
 ): Transaction {
   const tx = transactionFor(manifest);
+  // Claim cannot import jury without a Move module cycle, so jury issues the proof first.
+  const readiness = tx.moveCall({
+    target: target(manifest, "jury", "phase_readiness"),
+    arguments: [tx.object(input.roundTallyId)],
+  });
   tx.moveCall({
     target: target(manifest, "claim", "advance_phase"),
     typeArguments: [manifest.coinType],
-    arguments: [tx.object(input.claimId), tx.object(manifest.clockObjectId)],
+    arguments: [
+      tx.object(input.claimId),
+      readiness,
+      tx.object(manifest.clockObjectId),
+    ],
   });
   return tx;
 }

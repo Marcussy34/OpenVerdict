@@ -67,6 +67,15 @@ module openverdict::claim {
         evidence_budget_amount: u64,
     }
 
+    /// Tally-bound proof used to advance a commit phase safely.
+    public struct PhaseReadiness has key {
+        id: UID,
+        claim_id: ID,
+        tally_id: ID,
+        phase: u8,
+        all_seats_committed: bool,
+    }
+
     /// Keeps challenge audit pointers together within the validator's 32-field struct limit.
     public struct ChallengeReason has store, drop {
         hash: vector<u8>,
@@ -316,14 +325,61 @@ module openverdict::claim {
         claim.state = STATE_REVIEW_REQUESTED;
     }
 
-    /// Advance only when the active action window has closed.
-    public entry fun advance_phase<T>(claim: &mut Claim<T>, clock: &Clock) {
+    public(package) fun new_phase_readiness(
+        claim_id: ID,
+        tally_id: ID,
+        phase: u8,
+        all_seats_committed: bool,
+        ctx: &mut TxContext,
+    ): PhaseReadiness {
+        PhaseReadiness {
+            id: object::new(ctx),
+            claim_id,
+            tally_id,
+            phase,
+            all_seats_committed,
+        }
+    }
+
+    /// Advance when every seat committed, or when the action window has closed.
+    public entry fun advance_phase<T>(
+        claim: &mut Claim<T>,
+        readiness: PhaseReadiness,
+        clock: &Clock,
+    ) {
+        let PhaseReadiness {
+            id,
+            claim_id,
+            tally_id,
+            phase,
+            all_seats_committed,
+        } = readiness;
+        id.delete();
+        assert!(claim_id == object::id(claim), E_INVALID_STATE);
         let now = clock::timestamp_ms(clock);
         if (claim.state == STATE_COMMIT_1) {
-            assert!(now > claim.first_commit_deadline_ms, E_DEADLINE_NOT_REACHED);
+            assert!(
+                phase == 1 &&
+                    claim.first_round_tally_id.is_some() &&
+                    *claim.first_round_tally_id.borrow() == tally_id,
+                E_INVALID_STATE,
+            );
+            assert!(
+                now > claim.first_commit_deadline_ms || all_seats_committed,
+                E_DEADLINE_NOT_REACHED,
+            );
             claim.state = STATE_REVEAL_1;
         } else if (claim.state == STATE_COMMIT_2) {
-            assert!(now > claim.second_commit_deadline_ms, E_DEADLINE_NOT_REACHED);
+            assert!(
+                phase == 2 &&
+                    claim.second_round_tally_id.is_some() &&
+                    *claim.second_round_tally_id.borrow() == tally_id,
+                E_INVALID_STATE,
+            );
+            assert!(
+                now > claim.second_commit_deadline_ms || all_seats_committed,
+                E_DEADLINE_NOT_REACHED,
+            );
             claim.state = STATE_REVEAL_2;
         } else {
             abort E_INVALID_STATE

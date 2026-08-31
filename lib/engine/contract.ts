@@ -194,6 +194,13 @@ export type CommitmentStatus = {
   failureStatus?: string;
 };
 
+export type RoundReadinessStatus = {
+  phase: 1 | 2;
+  expectedJurySeatIds: string[];
+  committedJurySeatIds: string[];
+  revealedJurySeatIds: string[];
+};
+
 export type ClaimInspection = {
   claimId: string;
   mode: ClaimMode;
@@ -205,6 +212,8 @@ export type ClaimInspection = {
   committeeId?: string;
   evidenceRoots: { phase: 1 | 2; root: `0x${string}`; bundleId: string }[];
   commitments: CommitmentStatus[];
+  /** Local records used only to avoid submitting a known-early chain call. */
+  rounds?: RoundReadinessStatus[];
   result?: FinalizeReport;
   /** Populated when inspect() is called with { verify: true }. */
   verification?: {

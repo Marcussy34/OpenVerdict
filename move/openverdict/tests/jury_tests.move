@@ -87,8 +87,9 @@ module openverdict::jury_tests {
         let (mut seat, mut tally, cap) = make_seat_and_tally(scenario.ctx());
         let commitment = commitment_for(&seat, claim::outcome_yes(), 9_000);
         let approval = jury::new_run_approval_for_testing(&seat, hash(3), scenario.ctx());
-        jury::commit_vote(&mut seat, &cap, approval, commitment, &clock);
-        clock::set_for_testing(&mut clock, 11);
+        jury::commit_vote(&mut seat, &mut tally, &cap, approval, commitment, &clock);
+        assert!(jury::tally_commit_count(&tally) == 1);
+        clock::set_for_testing(&mut clock, 1);
         jury::reveal_vote(
             seat,
             &mut tally,
@@ -120,7 +121,7 @@ module openverdict::jury_tests {
         let (mut seat, mut tally, cap) = make_seat_and_tally(scenario.ctx());
         let commitment = commitment_for(&seat, claim::outcome_yes(), 9_000);
         let approval = jury::new_run_approval_for_testing(&seat, hash(3), scenario.ctx());
-        jury::commit_vote(&mut seat, &cap, approval, commitment, &clock);
+        jury::commit_vote(&mut seat, &mut tally, &cap, approval, commitment, &clock);
         clock::set_for_testing(&mut clock, 11);
         jury::reveal_vote(
             seat,
@@ -186,7 +187,7 @@ module openverdict::jury_tests {
     fun run_approval_is_bound_to_one_seat() {
         let mut scenario = test_scenario::begin(OWNER);
         let clock = clock::create_for_testing(scenario.ctx());
-        let (mut seat, tally, cap) = make_seat_and_tally(scenario.ctx());
+        let (mut seat, mut tally, cap) = make_seat_and_tally(scenario.ctx());
         let other = jury::new_seat_for_testing(
             object::id_from_address(@0xC1A1),
             object::id_from_address(@0xC011),
@@ -200,7 +201,7 @@ module openverdict::jury_tests {
             scenario.ctx(),
         );
         let approval = jury::new_run_approval_for_testing(&other, hash(3), scenario.ctx());
-        jury::commit_vote(&mut seat, &cap, approval, hash(9), &clock);
+        jury::commit_vote(&mut seat, &mut tally, &cap, approval, hash(9), &clock);
         jury::destroy_seat_for_testing(seat);
         jury::destroy_seat_for_testing(other);
         jury::destroy_tally_for_testing(tally);
@@ -208,14 +209,57 @@ module openverdict::jury_tests {
         abort E_UNEXPECTED_SUCCESS
     }
 
-    #[test, expected_failure(abort_code = openverdict::jury::E_REVEAL_NOT_OPEN)]
-    fun reveal_at_commit_deadline_is_early() {
+    #[test]
+    fun all_committed_reveal_at_commit_deadline_succeeds() {
         let mut scenario = test_scenario::begin(OWNER);
         let mut clock = clock::create_for_testing(scenario.ctx());
         let (mut seat, mut tally, cap) = make_seat_and_tally(scenario.ctx());
         let commitment = commitment_for(&seat, claim::outcome_yes(), 9_000);
         let approval = jury::new_run_approval_for_testing(&seat, hash(3), scenario.ctx());
-        jury::commit_vote(&mut seat, &cap, approval, commitment, &clock);
+        jury::commit_vote(&mut seat, &mut tally, &cap, approval, commitment, &clock);
+        assert!(jury::all_seats_committed(&tally));
+        clock::set_for_testing(&mut clock, 10);
+        jury::reveal_vote(
+            seat,
+            &mut tally,
+            &cap,
+            claim::outcome_yes(),
+            9_000,
+            hash(2),
+            hash(3),
+            b"salt",
+            b"argument",
+            object::id_from_address(@0xA46),
+            10,
+            &clock,
+            scenario.ctx(),
+        );
+        assert!(jury::tally_reveal_count(&tally) == 1);
+        jury::destroy_tally_for_testing(tally);
+        agent_registry::destroy_agent_cap_for_testing(cap);
+        clock::destroy_for_testing(clock);
+        scenario.end();
+    }
+
+    #[test, expected_failure(abort_code = openverdict::jury::E_REVEAL_NOT_OPEN)]
+    fun partial_commit_reveal_at_commit_deadline_aborts() {
+        let mut scenario = test_scenario::begin(OWNER);
+        let mut clock = clock::create_for_testing(scenario.ctx());
+        let (mut seat, tally, cap) = make_seat_and_tally(scenario.ctx());
+        jury::destroy_tally_for_testing(tally);
+        let mut tally = jury::new_tally_for_testing(
+            object::id_from_address(@0xC1A1),
+            object::id_from_address(@0xC011),
+            1,
+            hash(1),
+            vector[jury::jury_seat_id(&seat), object::id_from_address(@0x5EA7)],
+            scenario.ctx(),
+        );
+        let commitment = commitment_for(&seat, claim::outcome_yes(), 9_000);
+        let approval = jury::new_run_approval_for_testing(&seat, hash(3), scenario.ctx());
+        jury::commit_vote(&mut seat, &mut tally, &cap, approval, commitment, &clock);
+        assert!(jury::tally_commit_count(&tally) == 1);
+        assert!(!jury::all_seats_committed(&tally));
         clock::set_for_testing(&mut clock, 10);
         jury::reveal_vote(
             seat,
@@ -235,6 +279,46 @@ module openverdict::jury_tests {
         abort E_UNEXPECTED_SUCCESS
     }
 
+    #[test]
+    fun commit_deadline_fallback_opens_reveal_with_uncommitted_seat() {
+        let mut scenario = test_scenario::begin(OWNER);
+        let mut clock = clock::create_for_testing(scenario.ctx());
+        let (mut seat, tally, cap) = make_seat_and_tally(scenario.ctx());
+        jury::destroy_tally_for_testing(tally);
+        let mut tally = jury::new_tally_for_testing(
+            object::id_from_address(@0xC1A1),
+            object::id_from_address(@0xC011),
+            1,
+            hash(1),
+            vector[jury::jury_seat_id(&seat), object::id_from_address(@0x5EA7)],
+            scenario.ctx(),
+        );
+        let commitment = commitment_for(&seat, claim::outcome_yes(), 9_000);
+        let approval = jury::new_run_approval_for_testing(&seat, hash(3), scenario.ctx());
+        jury::commit_vote(&mut seat, &mut tally, &cap, approval, commitment, &clock);
+        clock::set_for_testing(&mut clock, 11);
+        jury::reveal_vote(
+            seat,
+            &mut tally,
+            &cap,
+            claim::outcome_yes(),
+            9_000,
+            hash(2),
+            hash(3),
+            b"salt",
+            b"argument",
+            object::id_from_address(@0xA46),
+            10,
+            &clock,
+            scenario.ctx(),
+        );
+        assert!(jury::tally_reveal_count(&tally) == 1);
+        jury::destroy_tally_for_testing(tally);
+        agent_registry::destroy_agent_cap_for_testing(cap);
+        clock::destroy_for_testing(clock);
+        scenario.end();
+    }
+
     #[test, expected_failure(abort_code = openverdict::jury::E_DEADLINE_PASSED)]
     fun reveal_one_ms_late_aborts() {
         let mut scenario = test_scenario::begin(OWNER);
@@ -242,7 +326,7 @@ module openverdict::jury_tests {
         let (mut seat, mut tally, cap) = make_seat_and_tally(scenario.ctx());
         let commitment = commitment_for(&seat, claim::outcome_yes(), 9_000);
         let approval = jury::new_run_approval_for_testing(&seat, hash(3), scenario.ctx());
-        jury::commit_vote(&mut seat, &cap, approval, commitment, &clock);
+        jury::commit_vote(&mut seat, &mut tally, &cap, approval, commitment, &clock);
         clock::set_for_testing(&mut clock, 21);
         jury::reveal_vote(
             seat,
@@ -391,7 +475,7 @@ module openverdict::jury_tests {
         let commitment = commitment_for(&seat, claim::outcome_yes(), 9_000);
         let approval = jury::new_run_approval_for_testing(&seat, hash(3), scenario.ctx());
         clock::set_for_testing(&mut clock, 10);
-        jury::commit_vote(&mut seat, &cap, approval, commitment, &clock);
+        jury::commit_vote(&mut seat, &mut tally, &cap, approval, commitment, &clock);
         clock::set_for_testing(&mut clock, 20);
         jury::reveal_vote(
             seat,
@@ -419,10 +503,10 @@ module openverdict::jury_tests {
     fun commit_one_ms_late_aborts() {
         let mut scenario = test_scenario::begin(OWNER);
         let mut clock = clock::create_for_testing(scenario.ctx());
-        let (mut seat, tally, cap) = make_seat_and_tally(scenario.ctx());
+        let (mut seat, mut tally, cap) = make_seat_and_tally(scenario.ctx());
         let approval = jury::new_run_approval_for_testing(&seat, hash(3), scenario.ctx());
         clock::set_for_testing(&mut clock, 11);
-        jury::commit_vote(&mut seat, &cap, approval, hash(9), &clock);
+        jury::commit_vote(&mut seat, &mut tally, &cap, approval, hash(9), &clock);
         jury::destroy_seat_for_testing(seat);
         jury::destroy_tally_for_testing(tally);
         agent_registry::destroy_agent_cap_for_testing(cap);
@@ -450,11 +534,11 @@ module openverdict::jury_tests {
     fun second_run_approval_cannot_recommit_same_seat() {
         let mut scenario = test_scenario::begin(OWNER);
         let clock = clock::create_for_testing(scenario.ctx());
-        let (mut seat, tally, cap) = make_seat_and_tally(scenario.ctx());
+        let (mut seat, mut tally, cap) = make_seat_and_tally(scenario.ctx());
         let first = jury::new_run_approval_for_testing(&seat, hash(3), scenario.ctx());
         let second = jury::new_run_approval_for_testing(&seat, hash(3), scenario.ctx());
-        jury::commit_vote(&mut seat, &cap, first, hash(9), &clock);
-        jury::commit_vote(&mut seat, &cap, second, hash(8), &clock);
+        jury::commit_vote(&mut seat, &mut tally, &cap, first, hash(9), &clock);
+        jury::commit_vote(&mut seat, &mut tally, &cap, second, hash(8), &clock);
         jury::destroy_seat_for_testing(seat);
         jury::destroy_tally_for_testing(tally);
         agent_registry::destroy_agent_cap_for_testing(cap);
@@ -526,6 +610,7 @@ module openverdict::jury_tests {
             let approval = jury::new_run_approval_for_testing(&seat, hash(3), scenario.ctx());
             jury::commit_vote(
                 &mut seat,
+                &mut tally,
                 &cap,
                 approval,
                 jury::compute_commitment(&preimage),
@@ -901,6 +986,14 @@ module openverdict::jury_tests {
             20,
             scenario.ctx(),
         );
+        let mut tally = jury::new_tally_for_testing(
+            object::id_from_address(@0xAA02),
+            object::id_from_address(@0xAA03),
+            1,
+            hash(1),
+            vector[jury::jury_seat_id(&seat)],
+            scenario.ctx(),
+        );
         jury::approve_run(
             &attestor,
             object::id_from_address(@0xAA02),
@@ -921,9 +1014,10 @@ module openverdict::jury_tests {
         test_scenario::next_tx(&mut scenario, OWNER);
         let approval = test_scenario::take_from_sender<jury::RunApproval>(&scenario);
         let cap = agent_registry::new_agent_cap_for_testing(profile_id, scenario.ctx());
-        jury::commit_vote(&mut seat, &cap, approval, hash(9), &clock);
+        jury::commit_vote(&mut seat, &mut tally, &cap, approval, hash(9), &clock);
         assert!(jury::jury_seat_status(&seat) == 2);
         jury::destroy_seat_for_testing(seat);
+        jury::destroy_tally_for_testing(tally);
         agent_registry::destroy_agent_cap_for_testing(cap);
         agent_registry::destroy_run_attestor_cap_for_testing(attestor);
         clock::destroy_for_testing(clock);

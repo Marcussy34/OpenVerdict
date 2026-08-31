@@ -129,7 +129,8 @@ describe("evidence artifact storage", () => {
 describe("headless engine", () => {
   it("runs a statement-only fact check through the full lifecycle", async () => {
     const statement = "The claim statement is sufficient to begin juror research.";
-    const setup = await engineSetup(new FakeSuiGateway(), 5);
+    const gateway = new FakeSuiGateway();
+    const setup = await engineSetup(gateway, 5);
     const { claimId } = await setup.engine.factCheckStart({
       claim: statement,
       urls: [],
@@ -187,8 +188,12 @@ describe("headless engine", () => {
     );
 
     expect(await setup.engine.votesCommit(claimId, 1)).toHaveLength(5);
+    const tally = await repository.getRoundTally(claimId, 1);
+    if (!tally) throw new Error("expected the first round tally");
+    expect(gateway.allSeatsCommitted(tally.roundTallyId)).toBe(true);
     await setup.engine.advance(claimId);
     expect(await setup.engine.votesReveal(claimId, 1)).toHaveLength(5);
+    expect(gateway.allSeatsRevealed(tally.roundTallyId)).toBe(true);
     await expect(setup.engine.finalize(claimId)).resolves.toMatchObject({
       claimId,
       result: "YES",

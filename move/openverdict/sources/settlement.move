@@ -113,10 +113,16 @@ module openverdict::settlement {
         let now = clock::timestamp_ms(clock);
         if (phase == PHASE_ONE) {
             assert!(claim::state(claim) == claim::state_reveal_1(), E_INVALID_STATE);
-            assert!(now > claim::first_reveal_deadline_ms(claim), E_DEADLINE_NOT_REACHED);
+            assert!(
+                now > claim::first_reveal_deadline_ms(claim) || jury::all_seats_revealed(tally),
+                E_DEADLINE_NOT_REACHED,
+            );
         } else if (phase == PHASE_TWO) {
             assert!(claim::state(claim) == claim::state_reveal_2(), E_INVALID_STATE);
-            assert!(now > claim::second_reveal_deadline_ms(claim), E_DEADLINE_NOT_REACHED);
+            assert!(
+                now > claim::second_reveal_deadline_ms(claim) || jury::all_seats_revealed(tally),
+                E_DEADLINE_NOT_REACHED,
+            );
         } else {
             abort E_INVALID_STATE
         };

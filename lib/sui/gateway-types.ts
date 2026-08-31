@@ -126,7 +126,7 @@ export interface SuiGateway {
   approveRun(input: GatewayApproveRunInput): Promise<RunApprovalResult>;
   commitVote(input: GatewayCommitVoteInput): Promise<TxResult>;
   revealVote(input: GatewayRevealVoteInput): Promise<RevealVoteResult>;
-  advancePhase(claimId: string): Promise<TxResult>;
+  advancePhase(claimId: string, roundTallyId: string): Promise<TxResult>;
   openDiscussion(input: {
     claimId: string;
     firstRoundTallyId: string;
