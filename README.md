@@ -11,15 +11,18 @@ evidence and agent work preserved on Walrus.
 > Full lifecycles run end-to-end on a real local Sui network (`pnpm
 > e2e:localnet` exits 0), and live claims finalize on Sui testnet in about
 > ten minutes with five GonkaRouter jurors across three model families,
-> each researching the web through the engine: latest verdicts YES @ 9860
-> bps (certificate `0xff3191bc…`, claim #25, all five seats, Seal escrows)
-> and NO @ 200 bps (certificate `0x975b3ae1…`, claim #26, hedged calls).
+> each researching the web through the engine, and every deliberation
+> rendered live on a force-graph canvas with end-to-end replay: latest
+> verdicts YES @ 9525 (certificate `0xc842…e0a8`, the Section 232 tariffs
+> claim, four seats plus one honestly recorded failed seat), YES @ 9860
+> (certificate `0xff3191bc…`, claim #25, Seal escrows) and NO @ 200
+> (certificate `0x975b3ae1…`, claim #26, hedged calls).
 > Unaudited; no real user funds may touch this code.
 >
 > | Layer | State |
 > | --- | --- |
 > | Sui Move packages (8 protocol modules incl. Object Display, plus the Seal policy) | ✅ `sui move test`: **66/66** protocol, **4/4** Seal policy |
-> | TS libs · engine · CLI · workers | ✅ vitest: **431/431** (full suite) |
+> | TS libs · engine · CLI · workers | ✅ vitest: **464/464** (full suite) |
 > | TS↔Move commitment parity gate | ✅ 6 cross-pinned blake2b256/BCS vectors |
 > | Localnet E2E + cockpit demo state | ✅ 3 lifecycle paths, sponsored deposit, CLI parity — exit 0 |
 > | Juror research (v2, batched opens) | ✅ support + challenge searches, pages on both sides, citations from two sites, counter-evidence summary; every step in the sealed transcript |
@@ -141,7 +144,7 @@ OpenVerdict turns dispute resolution into a:
 > Human-backed, AI-powered, evidence-driven jury process with enforceable
 > on-chain rules.
 
-The hackathon entry point is a public fact checker: paste a claim, URL, or both
+The hackathon entry point is a public fact checker: state one bounded claim (the API and CLI still accept optional URLs and text)
 and receive a multi-model verdict, a transparent Truth Score, evidence-linked
 public reasoning traces, and the Gonka Request ID for every agent run. A
 prediction market is the first economic consumer of that verdict. The engine is
