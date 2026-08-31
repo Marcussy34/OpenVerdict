@@ -509,6 +509,58 @@ proof caches warmed after every container restart.
   stall was finished by hand (React Compiler forbids ref writes and
   setState-in-effect: derive instead).
 
+## 3j. UI TOUCHUP PASS 2026-08-31 afternoon (owner-directed, post-compaction #10)
+
+Two deploys, both verified live in the owner's Chrome. Main = `449a0f4`,
+deployment `deafc65c` healthy. 465 vitest, 70 Move.
+
+Commit `7f20a9f` (deployment `66a0d1e5`): the inspector became an absolute
+OVERLAY so opening/closing it never resizes the canvas (node positions
+verified byte-identical across a select); drag its left edge to resize
+(320-680px, `resizePointerRef` + pointer capture); `.ov-inspector-dark` in
+globals.css remaps the theme tokens so the shared proof components render
+dark inside the panel without forking; all run-proof* grids converted to
+container queries (`@container` on RunProof + RunProofDetails roots,
+`@xs/@sm/@lg/@2xl` variants) so cells fit any panel width, including the
+report and /verify pages unchanged at full width. Stage banner top-centre
+(StageBanner in the canvas page: live on-chain state via CLAIM_STATE map,
+or replay-time stage from graph milestones; motion remount per change).
+Juror family now comes from `CommitmentStatus.modelId`, populated by
+`engine.inspect()` from each seat's registered agent manifest, so failed
+seats show their real mascot (the owner's "?" bug: seat `0xd1a772…5349`,
+INVALID_SCHEMA, never emitted an inference_completed event). Short seat id
+under every juror node + in the seat inspector header. Brighter canvas
+type with drop shadows; bright dark-stage OUTCOME_STYLE; failure nodes
+labelled. Replay presets 1x/10x/30x (was 60x). New nodes seed at a
+positioned neighbour (use-force-layout) so they grow out of their anchor.
+
+Commit `449a0f4` (deployment `deafc65c`): edge svg got `overflow-visible`
+(svgs clip to their box; every edge with an endpoint outside the viewport
+rectangle silently vanished once the fitted view spread the graph; probe
+after fix: 82 lines, 23 with endpoints outside the box, all drawn).
+Claim-node dossier panel (statement, verdict + Truth Score + certificate
+chip, resolution criteria, jury tally, mode, evidence cutoff, on-chain
+ids, Suiscan + report links). Certificate node renders a framed
+resolution certificate (outcome-toned frame, big verdict, Truth Score,
+quoted statement, jury line, finalized time, on-chain record, object + tx
+explorer links). Failure nodes explain themselves per status
+(FAILURE_EXPLANATIONS: INVALID_SCHEMA / CITATION_INVALID / PROVIDER_ERROR
++ fail-closed note).
+
+Owner Q&A settled: rounds end "late" because commit-reveal runs on the
+per-claim deadline schedule (~10 min), not on juror completion; windows
+can be tightened at claim creation if the owner wants snappier demos
+(offered, not yet requested). No juror-to-juror edges by design in round
+1 (independence); discussion-round cross edges are a future rendering
+when a claim actually reaches DISCUSSION.
+
+Verified live (real Chrome, page-12 probes + screenshots): banner
+FINALIZED · YES; 5/5 mascots, 5 seat tags, no "?"; 30x present, 60x gone;
+INVALID_SCHEMA label; svg overflow visible with all 82 edges; select
+opens inspector with zero node movement; claim dossier + certificate
+panel assertions all true. Proof caches warmed after each deploy (3 demo
+claims, 14 proofs, ~45 s cold each set).
+
 ## 4. Planned next (owner-approved direction)
 
 - Attestation (docs/superpowers/specs/2026-08-30-attested-inference-design.md):
