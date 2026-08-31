@@ -46,6 +46,15 @@ Operator address (generated 2026-08-27, key held in local .env only):
    `https://sui-testnet-rpc.publicnode.com` (JSON-RPC) which works from here.
 2. `pnpm tsx scripts/deploy-testnet.ts` (adapts the localnet deploy; writes
    packageId/registryObjectId into config/release.testnet.json).
+   Since 2026-09-01 (sui CLI 1.78, network protocol 135) the CLI publish
+   speaks gRPC that this machine's path cannot serve; use instead:
+   `sui move build --dump-bytecode-as-base64 --no-tree-shaking --path
+   move/openverdict > bytecode.json` then
+   `pnpm tsx scripts/publish-openverdict-bytecode.ts bytecode.json`
+   (SDK publish over the JSON-RPC fallback; dry-run it first). Also:
+   the validator caps structs at 32 fields and local move tests never
+   check that; Claim sits exactly at the cap, so new scalar state goes
+   inside ChallengeReason.
 3. Canary: one full direct-review lifecycle against testnet, fake adapter
    unless `GONKA_ROUTER_API_KEY` is set. First run registers the 7 agents;
    later runs reuse them.

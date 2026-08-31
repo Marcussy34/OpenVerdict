@@ -246,7 +246,7 @@ dark mode).
 | --- | --- | --- |
 | AI inference | GonkaRouter (`/v1/chat/completions`, 4096-token output cap; three model families) | Every oracle-agent reasoning pass; no hidden fallback; hedged same-model calls after 25 s |
 | Juror research | Firecrawl v2 REST through the engine | Engine-executed web search and page reads; every step recorded and hashed |
-| Protocol | Sui Move (edition 2024, sui CLI 1.52) | Objects, capabilities, native randomness, commit-reveal, settlement |
+| Protocol | Sui Move (edition 2024, sui CLI 1.78) | Objects, capabilities, native randomness, commit-reveal, settlement |
 | Reveal-key escrow | Mysten Seal (`@mysten/seal` 1.4, time-lock policy package on testnet) | Sealed bundles openable by anyone after the reveal deadline, without the operator |
 | Sui client | `@mysten/sui` 2.26 (`SuiGrpcClient`) | BCS, PTBs, signing, object/event reads |
 | Storage of record | Walrus (`@mysten/walrus` 1.2) | Evidence, opened pages, manifests, sealed and revealed run bundles, failure records |
@@ -257,7 +257,7 @@ dark mode).
 | Hashing | `@noble/hashes` blake2b-256 == `sui::hash::blake2b256` | One commitment format across TS and Move |
 | Onboarding | `@mysten/enoki` (zkLogin) + dapp-kit v2 | Social-login self-custodial addresses; env-gated, wallet-standard |
 | Object metadata | Sui Object Display (`display_meta` module) | Certificates/profiles/positions render in wallets + explorers |
-| Tests | vitest 4 + `sui move test` | 485 TS + 70 Move (66 protocol, 4 Seal policy), incl. the cross-language parity gate |
+| Tests | vitest 4 + `sui move test` | 500 TS + 77 Move (73 protocol, 4 Seal policy), incl. the cross-language parity gate |
 
 ## 🔍 What is auditable
 

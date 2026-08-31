@@ -872,6 +872,35 @@ Decisions locked in the pre-sleep design talk:
 - Worker A (reveal-early) still in flight at write time; fallback
   status watcher brsee8z2a polls its Codex job every 3 min.
 
+### 3n progress, 04:25
+
+- Reveal-early worker froze in Codex verify phase (hung vitest); work
+  was complete on disk: reviewed, committed 98f5bfc (69/69 Move, 495 TS).
+- Treasury fee worker delivered clean: reviewed, committed 39c1b84
+  (73/73 Move). Publish then FAILED: Claim hit 34 fields against the
+  validator's 32-field struct limit (local move tests never check
+  validator config). Fix af2498e packs the fee policy inside
+  ChallengeReason; Claim is exactly 32 again. LESSON: any new scalar
+  Claim state must go inside a packed sub-struct.
+- Publish toolchain: brew sui 1.52 -> 1.78 (protocol 88 vs 135); CLI
+  publish now speaks gRPC that publicnode rejects, and this Mac cannot
+  reach *.sui.io, so scripts/publish-openverdict-bytecode.ts (5e06bbc)
+  publishes prebuilt bytecode through the SDK JSON-RPC fallback. Build
+  bytecode offline with: sui move build --dump-bytecode-as-base64
+  --no-tree-shaking. Dry-run first via sui_dryRunTransactionBlock.
+- Proof-persist worker also froze in verify; store/route/tests were
+  done, the engine surface was not: lead wrote the storage adapters and
+  the never-rejecting sequential warm hook (42e0aef). 500/500 TS.
+- PUBLISHED package v3: 0xa9f3c2dbdfad3ff900b9d2f4df605621d619a9e7575034f508eb5d39263c5bc7,
+  registry 0x4020f3cbe51c1cdf6d004696e7cdf0d19f67fde2572b72a5f39a51d119f8ebab,
+  tx 8MCKzNsM7tF3MVdzFLo9Z85CE8Gw83Tk5qC5CHS1KEPb. Canary registered
+  all 7 jurors on the new registry; its live claim drew 2/5 valid seats
+  (4am Gonka weather + citation fail-close) and correctly used the
+  deadline fallback. Config committed be54d48; deploy 6f9331e5 in
+  flight. Remaining: in-container publish-agent-manifests + 
+  seed-testnet-agents, production E2E claim (5/5 early-reveal demo),
+  backing-surface worker (running), lead UI pass, docs, morning report.
+
 ## 4. Planned next (owner-approved direction)
 
 - Attestation (docs/superpowers/specs/2026-08-30-attested-inference-design.md):
