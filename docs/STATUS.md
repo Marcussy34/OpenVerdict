@@ -1,6 +1,6 @@
 # OpenVerdict — Product Status Snapshot
 
-> Last updated: 2026-08-31 01:30. Source of truth for claims below: the code
+> Last updated: 2026-08-31 16:20. Source of truth for claims below: the code
 > and its test suites (`pnpm test`, `pnpm test:move`), not this file. The
 > dated bullets under "What is NOT true yet" are the change log, newest first.
 
@@ -20,7 +20,7 @@ so a sealed bundle opens after its deadline without the operator; a browser
 verifier recomputes 15 checks per run, re-runs a juror against the recorded
 model, and opens bundles through Seal; failed seats keep their research trail.
 Hosted on one Railway container (web, API, three workers) with Railway
-Postgres. Tests: 431 vitest, 70 Move.
+Postgres. Tests: 464 vitest, 70 Move.
 
 ## Layer inventory
 

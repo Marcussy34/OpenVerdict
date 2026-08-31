@@ -266,7 +266,9 @@ against the recorded model, or opened through Seal after the deadline.
    research (content-free ticks), the graph blooms into real searches, pages
    and citations at reveal, the certificate lands at settlement. Click any
    node for the inspector; after settlement press Play for the replay
-   (10x default). The full audit view is behind "Full report".
+   (10x default). In a juror's proof, "Check with GonkaRouter" fetches the
+   gateway's own public receipt for the recorded request id and compares
+   model, devshard and timing. The full audit view is behind "Full report".
 3. `/verify`: paste a revealed vote's fields → commitment matches.
 4. Connect wallet (or Google via zkLogin if Enoki keys set) → deposit into the
    demo pool → after settlement, redeem.

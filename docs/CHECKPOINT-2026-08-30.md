@@ -440,6 +440,29 @@ remaining GonkaRouter asks (signed receipts, request lookup by id, Kimi
 capacity for demo day), and a fresh claim submission to see sealed pulses
 live (every claim so far predates RESEARCH_TICK).
 
+## 3h. DONE 2026-08-31 afternoon: canvas interactivity and the gateway receipt check
+
+Owner-driven iteration with the owner awake and clicking: draggable nodes
+(pin where dropped, simulation reheats; `use-force-layout` exposes
+startDrag/dragTo/endDrag), crisp rendering (all translate3d layers became
+plain 2D transforms; promoted layers rasterized once and rescaled as
+textures, which was the blur), the genesis is an opaque circular node with
+an accent icon and the full statement wrapped beneath it (collision 62,
+fit padding 140), and the right inspector exists only while a node is
+selected (background click clears it; verified with a real input event).
+The GonkaRouter team shipped their public request lookup the same day we
+asked: every revealed run's proof now carries a "Gateway receipt" block
+(relay route `app/api/gateway-receipts/[requestId]` with an immutable
+cache, component `components/claim/run-proof-receipt.tsx`) comparing the
+gateway's own record (model, devshard, completed-at, outcome, tokens,
+ttft, duration) against the sealed bundle, and printing the direct
+`api.gonkarouter.io/v1/receipts/<id>` URL so third parties bypass us (no
+CORS upstream yet). Commits `a7b017f`, `e27c102`, `72eeb08`, `6eb49e5`;
+deployments through `b15b9b8d`. Signed receipts: their roadmap, they
+propose the format. No reply to the Gonka team is needed; nothing pending
+on their thread. Verified live via chrome-devtools each deploy; demo-claim
+proof caches warmed after every container restart.
+
 ## 4. Planned next (owner-approved direction)
 
 - Attestation (docs/superpowers/specs/2026-08-30-attested-inference-design.md):
