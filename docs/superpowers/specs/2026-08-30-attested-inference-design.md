@@ -96,3 +96,17 @@ of the response body, the model, the request id and a timestamp, signed by
 a key that can be matched to the node's identity on Gonka's chain (or by a
 router key with a published rotation). A response header or a field in the
 completion body both work. Is this available or planned?"
+
+
+## Update 2026-08-31: request lookup is live
+
+The GonkaRouter team shipped the public lookup the same day it was asked
+for: `GET https://api.gonkarouter.io/v1/receipts/{x-request-id}` (no auth,
+metadata only: model, devshard, created_at, outcome, status, combined
+total_tokens, ttft, duration; rate limited per IP). The run view now
+cross-checks every revealed run's recorded request id against it
+(`components/claim/run-proof-receipt.tsx`, relay route
+`app/api/gateway-receipts/[requestId]`), and prints the direct URL so a
+third party can bypass us. Signed receipts remain on their roadmap (they
+will propose a format; streaming needs a trailer design); Kimi capacity
+improvements are planned with judging days in mind.

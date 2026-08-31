@@ -33,6 +33,7 @@ import {
   RunProofFailure,
 } from "@/components/claim/run-proof-failure";
 import { RunProofSeal } from "@/components/claim/run-proof-seal";
+import { GatewayReceiptCheck } from "@/components/claim/run-proof-receipt";
 import {
   EverythingElse,
   EvidenceSidesPanel,
@@ -370,6 +371,14 @@ export function RunProofDetails({ proof }: { proof: TransparentRunProof }) {
             <ProofValue label="Sealed blob id" value={proof.sealedBlobId} tone="sealed" />
             <ProofValue label="Revealed blob id" value={proof.revealedBlobId} tone="yes" />
           </div>
+
+          {bundle !== null && proof.gateway?.gatewayRequestId ? (
+            <GatewayReceiptCheck
+              requestId={proof.gateway.gatewayRequestId}
+              devshardId={proof.gateway.devshardId}
+              expectedModel={bundle.audit?.responseModelId ?? bundle.audit?.modelId}
+            />
+          ) : null}
 
           {!bundle ? (
             <div className="flex items-center gap-2 rounded-lg border border-sealed/25 bg-sealed/8 p-3 text-xs font-semibold text-sealed">
