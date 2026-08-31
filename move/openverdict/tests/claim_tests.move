@@ -9,6 +9,8 @@ module openverdict::claim_tests {
 
     const CREATOR: address = @0xA11CE;
     const PROPOSER: address = @0xB0B;
+    const TREASURY: address = @0x7EA5;
+    const UPDATED_TREASURY: address = @0x7EA6;
     const E_UNEXPECTED_SUCCESS: u64 = 99;
 
     public struct TestCoin has drop {}
@@ -53,6 +55,42 @@ module openverdict::claim_tests {
         assert!(claim::destroy_claim_for_testing(claim) == 100);
         agent_registry::destroy_registry_for_testing(registry);
         clock::destroy_for_testing(clock);
+        scenario.end();
+    }
+
+    #[test]
+    fun claim_snapshots_treasury_policy_at_creation() {
+        let mut scenario = test_scenario::begin(CREATOR);
+        agent_registry::init_for_testing(scenario.ctx());
+        test_scenario::next_tx(&mut scenario, CREATOR);
+        let mut registry = test_scenario::take_shared<agent_registry::Registry>(&scenario);
+        let admin_cap = test_scenario::take_from_sender<agent_registry::AdminCap>(&scenario);
+        agent_registry::set_treasury_policy(&mut registry, &admin_cap, TREASURY, 1_000);
+        let clock = clock::create_for_testing(scenario.ctx());
+        let budget = coin::mint_for_testing<TestCoin>(100, scenario.ctx());
+        let claim = claim::new_claim_for_testing(
+            &registry,
+            budget,
+            params(claim::claim_mode_direct_review()),
+            &clock,
+            scenario.ctx(),
+        );
+
+        agent_registry::set_treasury_policy(
+            &mut registry,
+            &admin_cap,
+            UPDATED_TREASURY,
+            0,
+        );
+        assert!(claim::treasury(&claim) == TREASURY);
+        assert!(claim::protocol_fee_bps(&claim) == 1_000);
+        assert!(agent_registry::treasury(&registry) == UPDATED_TREASURY);
+        assert!(agent_registry::protocol_fee_bps(&registry) == 0);
+
+        assert!(claim::destroy_claim_for_testing(claim) == 100);
+        clock::destroy_for_testing(clock);
+        test_scenario::return_to_sender(&scenario, admin_cap);
+        test_scenario::return_shared(registry);
         scenario.end();
     }
 

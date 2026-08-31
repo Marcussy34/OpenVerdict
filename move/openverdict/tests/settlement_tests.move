@@ -17,6 +17,7 @@ module openverdict::settlement_tests {
     const AGENT_3: address = @0xA3;
     const AGENT_4: address = @0xA4;
     const AGENT_5: address = @0xA5;
+    const TREASURY: address = @0x7EA5;
     const E_UNEXPECTED_SUCCESS: u64 = 99;
 
     public struct TestCoin has drop {}
@@ -68,6 +69,154 @@ module openverdict::settlement_tests {
             clock,
             ctx,
         );
+    }
+
+    fun finalize_four_of_five(
+        registry: &agent_registry::Registry,
+        scenario: &mut test_scenario::Scenario,
+    ): (
+        claim::Claim<TestCoin>,
+        jury::Committee,
+        jury::RoundTally,
+        agent_registry::EvidenceCap,
+        Clock,
+    ) {
+        let evidence_cap = agent_registry::new_evidence_cap_for_testing(scenario.ctx());
+        let mut clock = clock::create_for_testing(scenario.ctx());
+        let budget = coin::mint_for_testing<TestCoin>(100, scenario.ctx());
+        let mut claim = claim::new_claim_for_testing(
+            registry,
+            budget,
+            params(claim::claim_mode_direct_review()),
+            &clock,
+            scenario.ctx(),
+        );
+        claim::start_direct_review(registry, &mut claim, &clock);
+        let committee = jury::new_committee_for_testing(
+            claim::claim_id(&claim),
+            profiles(),
+            owners(),
+            true,
+            scenario.ctx(),
+        );
+        let mut tally = jury::new_tally_for_testing(
+            claim::claim_id(&claim),
+            jury::committee_id(&committee),
+            1,
+            hash(7),
+            seat_ids(),
+            scenario.ctx(),
+        );
+        claim::link_committee(&mut claim, jury::committee_id(&committee), jury::tally_id(&tally));
+        freeze_phase_one(&mut claim, &evidence_cap, &clock, scenario.ctx());
+        let expected = *jury::expected_seat_ids(&tally);
+        let mut i = 0;
+        while (i < 4) {
+            jury::record_reveal_for_testing(
+                &mut tally,
+                expected[i],
+                object::id_from_address(if (i == 0) @0x311 else if (i == 1) @0x312 else if (i == 2) @0x313 else @0x314),
+                claim::outcome_yes(),
+                9_000,
+            );
+            i = i + 1;
+        };
+        claim::set_state_for_testing(&mut claim, claim::state_reveal_1());
+        clock::set_for_testing(&mut clock, 41);
+        test_scenario::next_tx(scenario, CREATOR);
+        let bundle = test_scenario::take_immutable<evidence::EvidenceBundle>(scenario);
+        settlement::finalize_claim(
+            &mut claim,
+            &committee,
+            &mut tally,
+            &bundle,
+            &clock,
+            scenario.ctx(),
+        );
+        test_scenario::return_immutable(bundle);
+        (claim, committee, tally, evidence_cap, clock)
+    }
+
+    #[test]
+    fun reviewed_settlement_mints_default_protocol_fee_and_splits_remainder() {
+        let mut scenario = test_scenario::begin(TREASURY);
+        let registry = agent_registry::new_registry_for_testing(scenario.ctx());
+        test_scenario::next_tx(&mut scenario, CREATOR);
+        let (claim, committee, tally, evidence_cap, clock) =
+            finalize_four_of_five(&registry, &mut scenario);
+
+        test_scenario::next_tx(&mut scenario, TREASURY);
+        let fee_ticket = test_scenario::take_from_sender<settlement::PayoutTicket<TestCoin>>(&scenario);
+        assert!(settlement::ticket_recipient(&fee_ticket) == TREASURY);
+        assert!(settlement::ticket_amount(&fee_ticket) == 4);
+        assert!(settlement::ticket_reason(&fee_ticket) == settlement::reason_protocol_fee());
+        test_scenario::return_to_sender(&scenario, fee_ticket);
+
+        let payout_owners = owners();
+        let mut i = 0;
+        while (i < 4) {
+            test_scenario::next_tx(&mut scenario, payout_owners[i]);
+            let ticket = test_scenario::take_from_sender<settlement::PayoutTicket<TestCoin>>(&scenario);
+            assert!(settlement::ticket_amount(&ticket) == 19);
+            assert!(settlement::ticket_reason(&ticket) == settlement::reason_jury_reward());
+            test_scenario::return_to_sender(&scenario, ticket);
+            i = i + 1;
+        };
+        test_scenario::next_tx(&mut scenario, AGENT_5);
+        assert!(!test_scenario::has_most_recent_for_sender<settlement::PayoutTicket<TestCoin>>(&scenario));
+        test_scenario::next_tx(&mut scenario, CREATOR);
+        let refund = test_scenario::take_from_sender<settlement::PayoutTicket<TestCoin>>(&scenario);
+        assert!(settlement::ticket_amount(&refund) == 20);
+        assert!(settlement::ticket_reason(&refund) == settlement::reason_creator_refund());
+        test_scenario::return_to_sender(&scenario, refund);
+
+        assert!(claim::destroy_claim_for_testing(claim) == 100);
+        jury::destroy_tally_for_testing(tally);
+        jury::destroy_committee_for_testing(committee);
+        agent_registry::destroy_evidence_cap_for_testing(evidence_cap);
+        agent_registry::destroy_registry_for_testing(registry);
+        clock::destroy_for_testing(clock);
+        scenario.end();
+    }
+
+    #[test]
+    fun zero_protocol_fee_mints_no_treasury_ticket_and_splits_full_budget() {
+        let mut scenario = test_scenario::begin(TREASURY);
+        agent_registry::init_for_testing(scenario.ctx());
+        test_scenario::next_tx(&mut scenario, TREASURY);
+        let mut registry = test_scenario::take_shared<agent_registry::Registry>(&scenario);
+        let admin_cap = test_scenario::take_from_sender<agent_registry::AdminCap>(&scenario);
+        agent_registry::set_treasury_policy(&mut registry, &admin_cap, TREASURY, 0);
+        test_scenario::next_tx(&mut scenario, CREATOR);
+        let (claim, committee, tally, evidence_cap, clock) =
+            finalize_four_of_five(&registry, &mut scenario);
+
+        test_scenario::next_tx(&mut scenario, TREASURY);
+        assert!(!test_scenario::has_most_recent_for_sender<settlement::PayoutTicket<TestCoin>>(&scenario));
+        let payout_owners = owners();
+        let mut i = 0;
+        while (i < 4) {
+            test_scenario::next_tx(&mut scenario, payout_owners[i]);
+            let ticket = test_scenario::take_from_sender<settlement::PayoutTicket<TestCoin>>(&scenario);
+            assert!(settlement::ticket_amount(&ticket) == 20);
+            assert!(settlement::ticket_reason(&ticket) == settlement::reason_jury_reward());
+            test_scenario::return_to_sender(&scenario, ticket);
+            i = i + 1;
+        };
+        test_scenario::next_tx(&mut scenario, CREATOR);
+        let refund = test_scenario::take_from_sender<settlement::PayoutTicket<TestCoin>>(&scenario);
+        assert!(settlement::ticket_amount(&refund) == 20);
+        assert!(settlement::ticket_reason(&refund) == settlement::reason_creator_refund());
+        test_scenario::return_to_sender(&scenario, refund);
+
+        assert!(claim::destroy_claim_for_testing(claim) == 100);
+        jury::destroy_tally_for_testing(tally);
+        jury::destroy_committee_for_testing(committee);
+        agent_registry::destroy_evidence_cap_for_testing(evidence_cap);
+        clock::destroy_for_testing(clock);
+        test_scenario::return_to_address(TREASURY, admin_cap);
+        test_scenario::return_shared(registry);
+        scenario.end();
     }
 
     #[test]
@@ -140,7 +289,7 @@ module openverdict::settlement_tests {
             let owner = payout_owners[i];
             test_scenario::next_tx(&mut scenario, owner);
             let ticket = test_scenario::take_from_sender<settlement::PayoutTicket<TestCoin>>(&scenario);
-            assert!(settlement::ticket_amount(&ticket) == 20);
+            assert!(settlement::ticket_amount(&ticket) == 19);
             settlement::withdraw_payout(&mut claim, ticket, &clock, scenario.ctx());
             assert!(!test_scenario::has_most_recent_for_sender<settlement::PayoutTicket<TestCoin>>(&scenario));
             test_scenario::next_tx(&mut scenario, owner);
@@ -155,6 +304,13 @@ module openverdict::settlement_tests {
         test_scenario::next_tx(&mut scenario, CREATOR);
         let creator_payout = test_scenario::take_from_sender<Coin<TestCoin>>(&scenario);
         withdrawn = withdrawn + coin::burn_for_testing(creator_payout);
+        let fee_ticket = test_scenario::take_from_sender<settlement::PayoutTicket<TestCoin>>(&scenario);
+        assert!(settlement::ticket_amount(&fee_ticket) == 4);
+        assert!(settlement::ticket_reason(&fee_ticket) == settlement::reason_protocol_fee());
+        settlement::withdraw_payout(&mut claim, fee_ticket, &clock, scenario.ctx());
+        test_scenario::next_tx(&mut scenario, CREATOR);
+        let fee_payout = test_scenario::take_from_sender<Coin<TestCoin>>(&scenario);
+        withdrawn = withdrawn + coin::burn_for_testing(fee_payout);
         assert!(withdrawn == 100);
         assert!(claim::total_balance(&claim) == 0);
 
@@ -766,12 +922,12 @@ module openverdict::settlement_tests {
         assert!(*jury::certificate_truth_score_bps(&certificate).borrow() == 9_000);
         test_scenario::return_immutable(certificate);
         let reward = test_scenario::take_from_sender<settlement::PayoutTicket<TestCoin>>(&scenario);
-        assert!(settlement::ticket_amount(&reward) == 16);
+        assert!(settlement::ticket_amount(&reward) == 15);
         assert!(settlement::ticket_reason(&reward) == settlement::reason_jury_reward());
         test_scenario::return_to_sender(&scenario, reward);
         test_scenario::next_tx(&mut scenario, CREATOR);
         let refund = test_scenario::take_from_sender<settlement::PayoutTicket<TestCoin>>(&scenario);
-        assert!(settlement::ticket_amount(&refund) == 20);
+        assert!(settlement::ticket_amount(&refund) == 21);
         assert!(settlement::ticket_reason(&refund) == settlement::reason_creator_refund());
         test_scenario::return_to_sender(&scenario, refund);
 

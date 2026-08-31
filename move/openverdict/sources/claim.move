@@ -86,6 +86,8 @@ module openverdict::claim {
     public struct Claim<phantom T> has key {
         id: UID,
         protocol_version: u64,
+        treasury: address,
+        protocol_fee_bps: u64,
         claim_mode: u8,
         creator: address,
         content_hash: vector<u8>,
@@ -466,6 +468,8 @@ module openverdict::claim {
         Claim {
             id: object::new(ctx),
             protocol_version: PROTOCOL_VERSION,
+            treasury: agent_registry::treasury(registry),
+            protocol_fee_bps: agent_registry::protocol_fee_bps(registry),
             claim_mode: params.claim_mode,
             creator: ctx.sender(),
             content_hash,
@@ -617,6 +621,8 @@ module openverdict::claim {
     public(package) fun proposer_bond_value<T>(claim: &Claim<T>): u64 { balance::value(&claim.proposer_bond) }
     public(package) fun challenger_bond_value<T>(claim: &Claim<T>): u64 { balance::value(&claim.challenger_bond) }
     public(package) fun evidence_policy_id<T>(claim: &Claim<T>): &vector<u8> { &claim.evidence_policy_id }
+    public(package) fun treasury<T>(claim: &Claim<T>): address { claim.treasury }
+    public(package) fun protocol_fee_bps<T>(claim: &Claim<T>): u64 { claim.protocol_fee_bps }
 
     public(package) fun set_terminal<T>(claim: &mut Claim<T>, result: u8, reviewed: bool, certificate_id: ID) {
         assert!(!is_terminal_state(claim.state), E_INVALID_STATE);
@@ -740,6 +746,8 @@ module openverdict::claim {
         let Claim {
             id,
             protocol_version: _,
+            treasury: _,
+            protocol_fee_bps: _,
             claim_mode: _,
             creator: _,
             content_hash: _,

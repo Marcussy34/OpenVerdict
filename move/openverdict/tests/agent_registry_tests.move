@@ -19,6 +19,8 @@ module openverdict::agent_registry_tests {
         let registry = test_scenario::take_shared<agent_registry::Registry>(&scenario);
         assert!(agent_registry::registry_version(&registry) == 1);
         assert!(!agent_registry::registry_paused(&registry));
+        assert!(agent_registry::treasury(&registry) == OWNER);
+        assert!(agent_registry::protocol_fee_bps(&registry) == 500);
         assert!(test_scenario::has_most_recent_for_sender<agent_registry::AdminCap>(&scenario));
         assert!(test_scenario::has_most_recent_for_sender<agent_registry::PauseCap>(&scenario));
         assert!(test_scenario::has_most_recent_for_sender<agent_registry::EvidenceCap>(&scenario));
@@ -132,5 +134,16 @@ module openverdict::agent_registry_tests {
         agent_registry::destroy_registry_for_testing(registry);
         clock::destroy_for_testing(clock);
         scenario.end();
+    }
+
+    #[test, expected_failure(abort_code = openverdict::agent_registry::E_INVALID_PROTOCOL_FEE)]
+    fun treasury_policy_rejects_fee_above_cap() {
+        let mut scenario = test_scenario::begin(OWNER);
+        agent_registry::init_for_testing(scenario.ctx());
+        test_scenario::next_tx(&mut scenario, OWNER);
+        let mut registry = test_scenario::take_shared<agent_registry::Registry>(&scenario);
+        let admin_cap = test_scenario::take_from_sender<agent_registry::AdminCap>(&scenario);
+        agent_registry::set_treasury_policy(&mut registry, &admin_cap, OWNER, 2_001);
+        abort E_UNEXPECTED_SUCCESS
     }
 }

@@ -23,8 +23,11 @@ module openverdict::agent_registry {
     const E_NOT_AGENT_OWNER: u64 = 10;
     const E_AGENT_NOT_FOUND: u64 = 11;
     const E_INVALID_WEIGHT: u64 = 12;
+    const E_INVALID_PROTOCOL_FEE: u64 = 13;
 
     const PROTOCOL_VERSION: u64 = 1;
+    const DEFAULT_PROTOCOL_FEE_BPS: u64 = 500;
+    const MAX_PROTOCOL_FEE_BPS: u64 = 2_000;
     const MIN_AGENT_BOND: u64 = 1;
     const MAX_ELIGIBLE_AGENTS: u64 = 32;
     const MAX_SELECTION_WEIGHT: u64 = 1_000_000;
@@ -35,6 +38,8 @@ module openverdict::agent_registry {
     public struct Registry has key {
         id: UID,
         version: u64,
+        treasury: address,
+        protocol_fee_bps: u64,
         eligible_agents: vector<EligibilityRecord>,
         paused: bool,
     }
@@ -111,6 +116,8 @@ module openverdict::agent_registry {
         transfer::share_object(Registry {
             id: object::new(ctx),
             version: PROTOCOL_VERSION,
+            treasury: publisher,
+            protocol_fee_bps: DEFAULT_PROTOCOL_FEE_BPS,
             eligible_agents: vector[],
             paused: false,
         });
@@ -252,6 +259,18 @@ module openverdict::agent_registry {
         record.active = active && profile.active;
     }
 
+    /// Update the treasury recipient and bounded jury reward fee.
+    public entry fun set_treasury_policy(
+        registry: &mut Registry,
+        _admin_cap: &AdminCap,
+        treasury: address,
+        protocol_fee_bps: u64,
+    ) {
+        assert!(protocol_fee_bps <= MAX_PROTOCOL_FEE_BPS, E_INVALID_PROTOCOL_FEE);
+        registry.treasury = treasury;
+        registry.protocol_fee_bps = protocol_fee_bps;
+    }
+
     /// Add bond while active economic writes are enabled.
     public entry fun deposit_agent_bond(
         registry: &Registry,
@@ -329,6 +348,8 @@ module openverdict::agent_registry {
 
     public fun registry_version(registry: &Registry): u64 { registry.version }
     public fun registry_paused(registry: &Registry): bool { registry.paused }
+    public fun treasury(registry: &Registry): address { registry.treasury }
+    public fun protocol_fee_bps(registry: &Registry): u64 { registry.protocol_fee_bps }
     public fun eligible_agent_count(registry: &Registry): u64 { registry.eligible_agents.length() }
     public fun agent_profile_id(profile: &AgentProfile): ID { object::id(profile) }
     public fun agent_owner(profile: &AgentProfile): address { profile.owner }
@@ -415,6 +436,8 @@ module openverdict::agent_registry {
         Registry {
             id: object::new(ctx),
             version: PROTOCOL_VERSION,
+            treasury: ctx.sender(),
+            protocol_fee_bps: DEFAULT_PROTOCOL_FEE_BPS,
             eligible_agents: vector[],
             paused: false,
         }
@@ -442,7 +465,14 @@ module openverdict::agent_registry {
 
     #[test_only]
     public(package) fun destroy_registry_for_testing(registry: Registry) {
-        let Registry { id, version: _, eligible_agents: _, paused: _ } = registry;
+        let Registry {
+            id,
+            version: _,
+            treasury: _,
+            protocol_fee_bps: _,
+            eligible_agents: _,
+            paused: _,
+        } = registry;
         id.delete();
     }
 

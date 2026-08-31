@@ -30,6 +30,7 @@ module openverdict::settlement {
     const REASON_PROPOSER_REFUND: u8 = 5;
     const REASON_CHALLENGER_REFUND: u8 = 6;
     const REASON_CANCELLED: u8 = 7;
+    const REASON_PROTOCOL_FEE: u8 = 8;
 
     /// One-time claim on value that remains inside its terminal Claim<T> vault.
     public struct PayoutTicket<phantom T> has key, store {
@@ -202,6 +203,7 @@ module openverdict::settlement {
     public fun ticket_reason<T>(ticket: &PayoutTicket<T>): u8 { ticket.reason }
     public fun reason_creator_refund(): u8 { REASON_CREATOR_REFUND }
     public fun reason_jury_reward(): u8 { REASON_JURY_REWARD }
+    public fun reason_protocol_fee(): u8 { REASON_PROTOCOL_FEE }
 
     fun create_unchallenged_payouts<T>(claim: &mut Claim<T>, ctx: &mut TxContext) {
         let proposer_amount = claim::proposer_bond_value(claim);
@@ -240,10 +242,22 @@ module openverdict::settlement {
         let challenger_bond = claim::challenger_bond_value(claim);
         let total = claim::consolidate_for_payout(claim);
         let valid_count = jury::tally_reveal_count(tally) as u64;
-        let reward = if (valid_count == 0) 0 else committee_budget / valid_count;
+        let fee = committee_budget * claim::protocol_fee_bps(claim) / 10_000;
+        let juror_budget = committee_budget - fee;
+        let reward = if (valid_count == 0) 0 else juror_budget / valid_count;
         let expected = *jury::expected_seat_ids(tally);
         let revealed = jury::revealed_seat_ids(tally);
         let mut allocated = 0;
+        if (fee > 0) {
+            create_ticket<T>(
+                claim::claim_id(claim),
+                claim::treasury(claim),
+                fee,
+                REASON_PROTOCOL_FEE,
+                ctx,
+            );
+            allocated = fee;
+        };
         let mut i = 0;
         while (i < expected.length()) {
             if (reward > 0 && vector::contains(revealed, &expected[i])) {
