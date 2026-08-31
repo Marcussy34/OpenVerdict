@@ -745,7 +745,9 @@ pushed after each. Live deployment: `c3f7916e` (main `2b79dd1`).
   undulate: per-letter spans, one keyframe driving bob + gradient crest,
   negative delay stagger (-0.22s * --i), aria-label on the wrapper,
   static gradient under prefers-reduced-motion. Verified live: 5 letters,
-  staggered delays, clip text, no ::after.
+  staggered delays, clip text, no ::after. v3 followed on owner direction
+  ("keep the word still"): the bob was removed, only the staggered gradient
+  color wave cycles through the still letters.
 - Explorer link sweep (`05fbf21`), owner: "everything that can be found
   on chain is a clickable explorer link". Added hrefs: timeline finalize
   tx (Suiscan tx), Seal policy package + identity claim/seat + key
