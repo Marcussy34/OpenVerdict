@@ -678,6 +678,61 @@ a CanvasHighlight context (no-op on report/audit pages), verified live
 (41 elements dim on hover). 486/486 vitest. One interrupted ship was
 re-run after folding in the avatar fix per the owner's flow.
 
+## 3k. CLOSING STATE 2026-08-31 23:25 (pre-compaction #11): read 3d through 3k and continue as if nothing happened
+
+Main = `997d22d`, pushed, tree CLEAN. Live deployment `7c270d32` healthy
+on Railway (single container: web + API + 3 workers, Railway Postgres).
+486/486 vitest, 70 Move. Zero live claims (10 old stranded DISCUSSION
+claims are skipped by workers and safe to deploy over). Proof caches
+warmed post-deploy (scratchpad/warm-proofs.mts, run it after EVERY
+deploy). Deploy ritual unchanged: gate (typecheck/lint/test/build) ->
+TARGETED git add -> commit/push -> railway-tree checkout --detach <sha>
+-> railway up -s app -d -> background status watcher -> warm ->
+real-Chrome verify (chrome-devtools MCP, close tabs after). Never
+deploy while a non-stranded claim is live; check /api/claims first.
+
+Today's shipped record: rounds 1-7 in section 3j (canvas touchups,
+explorer landing, open-verification rename with nav Verify/Audit, URL
+claim extraction on Gonka with repair round + prose windowing, round-2
+revealed-record discussion injection, landing Gonka weave, architecture
+diagram, branch semantics, pentagon spawn (verified 72-degree gaps),
+shared avatar identity by agentProfileId, research-trail hover lighting
+canvas branches). docs/GONKA-INTEGRATION.md carries two live examples
+with checkable request ids. PRD addendum item 18 records extraction +
+discussion + naming. Track fit: everything closed except the owner's
+2-minute video.
+
+OPEN DECISIONS AWAITING THE OWNER:
+1. Approved queue, not started: optimistic quick-verify exposure
+   (UI + one API field; protocol/engine already support
+   OPTIMISTIC_SETTLEMENT), read-only juror track record on /agents
+   (computed from public records, keep equal-weight selection), zkLogin
+   re-registration of the 7 demo jurors (mechanism live; current demo
+   jurors use TESTNET_DEMO_ALLOWLIST backing).
+2. Offered, undecided: bare-search clarity line in the search panel
+   ("N results found, none opened"); tighter per-claim deadline windows
+   for snappier demos; bps -> percent relabeling for user-facing chips.
+3. Future rendering: discussion-round cross-juror edges on the canvas
+   when a claim actually reaches DISCUSSION (round-2 inputs already
+   carry the revealed record).
+4. Recorded decisions: "juror" stays, "swarm" rejected (twice, with
+   reasoning); routes /fact-check and /api/fact-checks keep URLs.
+5. Owner's own items: the live end-to-end test (never run today), the
+   2-minute video, faucet top-up before a demo day, hackathon
+   submission form/deadline.
+
+WORKER ROUTING (owner rule, enforced): UI/frontend = the lead directly;
+Codex = backend/architectural only; brief workers with fresh
+self-contained tasks (never blind --resume-last: it grabs the newest
+thread in the shared runtime); on stand-down, cancel via
+codex-companion.mjs cancel and re-check git status before touching the
+same files. Scratchpad tools: warm-proofs.mts, extract-repro.mts (live
+extraction debug harness with logging adapter), railway-tree (deploy
+worktree), factcheck-codex-overwrite.tsx (preserved race artifact),
+cannes2026/ (DIVE comparison clone). Key fingerprints unchanged (Gonka
+key in .env + Railway, never print). MCP memory entity "OpenVerdict
+production topology" mirrors all of this.
+
 ## 4. Planned next (owner-approved direction)
 
 - Attestation (docs/superpowers/specs/2026-08-30-attested-inference-design.md):
