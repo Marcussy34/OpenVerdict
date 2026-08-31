@@ -780,6 +780,45 @@ pushed after each. Live deployment: `c3f7916e` (main `2b79dd1`).
   first-viewer cost. The sequential warmer stays in scratchpad for
   quiet-hours use only.
 
+## 3m. POST-MIDNIGHT ROUND 2026-09-01 01:05 (owner-directed burst)
+
+Two deploys, live: `5f8841f9` (main `95f4441`). Earlier `f614929e`.
+
+- "More in live claims" dead button had TWO layers: (1) the hero
+  choreography panel kept pointer-events-auto for the whole runway
+  (d69c4ed releases it once the hero type exits, style handed back when
+  choreography turns off); (2) the transparent z-10 runway wrapper
+  itself still swallowed hits over the reveal section pulled up under
+  it (95f4441: wrapper pointer-events-none, panel re-enables its own).
+  Verified live: clickable at runway fractions 0.35/0.6/0.9/1.15.
+- /learn wired into the console (7c2a9b3): CONSOLE_PATHS + Learn nav
+  entry + routing tests updated. Verified: apex 308 -> app host, 200 in
+  0.46s, nav present. Page content verified accurate (temperature 0 is
+  z.literal(0) in the agent manifest schema; families match
+  release.testnet.json).
+- Canvas vibrancy (eb2656f): family halos (FAMILY_STYLE.glow), blue
+  aurora + dot lattice ground, EDGE_STYLE palette (citation green
+  #43e5a0, action #7db4ff, result #9ecbff, default white; typed
+  DEFAULT_EDGE_STYLE avoids TS18048), glowing claim disc, green-haloed
+  certificate, blue page chips. Verified on the tariffs claim: 55 edges
+  = 11 action + 19 result + 11 citation + 14 default.
+- Scaling verdict (owner asked to scale): Railway limit is ALREADY
+  24 vCPU / 24 GB, peak use 1.5 vCPU. Nothing to scale; the stall is
+  the web process's single-threaded event loop doing proof recomputes.
+  railway scale = replicas only (unsafe: duplicate singleton workers).
+  Real fix = persist proof bundles at finalization; owner has NOT yet
+  said go on that.
+- Protocol change IN FLIGHT: owner approved early reveal-open
+  (readiness-first, deadline fallback; same for settlement). Codex
+  worker "reveal-early-worker" dispatched with a full brief (RoundTally
+  committed counter, commit_vote gains &mut RoundTally, reveal gate
+  now-or-all-committed, settlement all-revealed-or-deadline, Move +
+  builders + engine + both suites). Review the diff when it reports;
+  then package republish + re-register 7 jurors + config update, all
+  lead-owned. NEVER blind --resume-last on the bridge.
+- Icons question answered: all iconsax via @/components/icons, zero
+  emoji in UI trees, avatars are generated PNGs.
+
 ## 4. Planned next (owner-approved direction)
 
 - Attestation (docs/superpowers/specs/2026-08-30-attested-inference-design.md):
