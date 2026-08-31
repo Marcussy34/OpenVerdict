@@ -117,6 +117,7 @@ export type InferenceRunAudit = {
   gatewayRequestId?: string;
   devshardId?: string;
   systemFingerprint?: string;
+  gatewayFallback?: string;
   status: InferenceRunStatus;
 };
 
@@ -207,6 +208,9 @@ export type GatewayResponseMeta = {
   gatewayRequestId?: string;
   devshardId?: string;
   systemFingerprint?: string;
+  /** X-Gonka-Fallback response header, recorded if the gateway ever
+   *  substitutes a model despite X-Gonka-No-Fallback (should not happen). */
+  gatewayFallback?: string;
 };
 
 export type ProviderRequestRecord = {

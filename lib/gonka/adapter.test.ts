@@ -47,10 +47,12 @@ function queuedFetch(...steps: FetchStep[]): {
   fetch: typeof fetch;
   bodies: Array<Record<string, unknown>>;
   calls: () => number;
+  noFallbackHeaders: () => Array<string | null>;
   timeoutHeaders: () => Array<string | null>;
 } {
   const bodies: Array<Record<string, unknown>> = [];
   const timeoutHeaders: Array<string | null> = [];
+  const noFallbackHeaders: Array<string | null> = [];
   let callCount = 0;
   const fetchImpl: typeof fetch = async (input, init) => {
     callCount += 1;
@@ -60,6 +62,7 @@ function queuedFetch(...steps: FetchStep[]): {
     timeoutHeaders.push(
       headers.get("x-stainless-timeout"),
     );
+    noFallbackHeaders.push(headers.get("x-gonka-no-fallback"));
     if (typeof init?.body === "string") {
       bodies.push(JSON.parse(init.body) as Record<string, unknown>);
     }
@@ -77,6 +80,7 @@ function queuedFetch(...steps: FetchStep[]): {
     fetch: fetchImpl,
     bodies,
     calls: () => callCount,
+    noFallbackHeaders: () => noFallbackHeaders,
     timeoutHeaders: () => timeoutHeaders,
   };
 }
@@ -198,6 +202,35 @@ describe("createGonkaAdapter", () => {
     expect(attempts).toHaveLength(1);
     expect(attempts[0]?.audit.status).toBe("RECEIVED");
     expect(result.attempt).toBe(attempts[0]);
+  });
+
+  it("enforces the requested model and records a gateway fallback notice", async () => {
+    const content = '{"action":"search","query":"sui"}';
+    const network = queuedFetch({
+      body: completionBody(content, { id: "devshard-nf-1" }),
+      // The gateway should never substitute once no-fallback is sent; if it
+      // ever does, the notice must land in the audit rather than pass silently.
+      headers: { "x-gonka-fallback": "deepseek -> minimax" },
+    });
+    const adapter = createGonkaAdapter(
+      { apiKey: "test-key" },
+      dependencies(network.fetch),
+    );
+    const attempts: GonkaAttemptRecord[] = [];
+
+    const result = await adapter.complete({
+      manifest: makeManifest(),
+      messages: [{ role: "user", content: "u" }],
+      kind: "PRIMARY",
+      jsonMode: true,
+      input: makeInput({ promptVersion: "2" }),
+      attempts,
+    });
+
+    expect(result.ok).toBe(true);
+    // Every outbound request pins the exact model at the gateway.
+    expect(network.noFallbackHeaders()).toEqual(["true"]);
+    expect(attempts[0]?.audit.gatewayFallback).toBe("deepseek -> minimax");
   });
 
   it("uses the dedicated research timeout for complete()", async () => {

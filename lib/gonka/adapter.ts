@@ -190,10 +190,12 @@ function gatewayResponseMeta(
 ): GatewayResponseMeta {
   const gatewayRequestId = headers.get("x-request-id");
   const devshardId = headers.get("x-devshard-id");
+  const gatewayFallback = headers.get("x-gonka-fallback");
   const systemFingerprint = responseMetadata(response).systemFingerprint;
   return {
     ...(gatewayRequestId === null ? {} : { gatewayRequestId }),
     ...(devshardId === null ? {} : { devshardId }),
+    ...(gatewayFallback === null ? {} : { gatewayFallback }),
     ...(systemFingerprint === undefined ? {} : { systemFingerprint }),
   };
 }
@@ -435,6 +437,12 @@ export function createGonkaAdapterWithDependencies(
   const client = new OpenAI({
     apiKey: cfg.apiKey,
     baseURL: cfg.baseUrl ?? DEFAULT_BASE_URL,
+    // GonkaRouter substitutes a fallback model when the requested upstream is
+    // saturated (confirmed by their team, 2026-08-31). We enforce the exact
+    // requested model: a saturated upstream then returns a real 429, which the
+    // retry and hedge paths already absorb; a silent substitution would only
+    // fail closed later at the served-model check and burn the whole call.
+    defaultHeaders: { "X-Gonka-No-Fallback": "true" },
     timeout: timeoutMs,
     // SDK retries stay disabled so every application retry is visible.
     maxRetries: 0,

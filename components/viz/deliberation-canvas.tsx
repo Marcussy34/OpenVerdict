@@ -427,9 +427,37 @@ export function DeliberationCanvas({
   const systemReducedMotion = useReducedMotion();
   const shouldReduceMotion = reducedMotion === true || systemReducedMotion === true;
   const [size, setSize] = useState({ width: 0, height: 0 });
-  const [viewport, setViewport] = useState<Viewport>({ x: 0, y: 0, scale: 1 });
+  const [manualView, setManualView] = useState<Viewport | null>(null);
   const [hoveredJurorId, setHoveredJurorId] = useState<string | null>(null);
   const positions = useForceLayout(graph, size);
+
+  // Frame the whole graph with padding until the user takes the view over
+  // (pan or zoom); until then the bloom keeps itself in frame automatically.
+  const fittedView = useMemo<Viewport>(() => {
+    if (size.width === 0 || size.height === 0 || positions.size === 0) {
+      return { x: 0, y: 0, scale: 1 };
+    }
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+    for (const point of positions.values()) {
+      if (point.x < minX) minX = point.x;
+      if (point.y < minY) minY = point.y;
+      if (point.x > maxX) maxX = point.x;
+      if (point.y > maxY) maxY = point.y;
+    }
+    const pad = 90;
+    const spanX = Math.max(1, maxX - minX + pad * 2);
+    const spanY = Math.max(1, maxY - minY + pad * 2);
+    const scale = clampScale(Math.min(size.width / spanX, size.height / spanY, 1));
+    return {
+      scale,
+      x: size.width / 2 - ((minX + maxX) / 2) * scale,
+      y: size.height / 2 - ((minY + maxY) / 2) * scale,
+    };
+  }, [positions, size.height, size.width]);
+  const view = manualView ?? fittedView;
 
   useEffect(() => {
     const container = containerRef.current;
@@ -492,12 +520,12 @@ export function DeliberationCanvas({
         pointerId: event.pointerId,
         startX: event.clientX,
         startY: event.clientY,
-        originX: viewport.x,
-        originY: viewport.y,
+        originX: view.x,
+        originY: view.y,
         moved: false,
       };
     },
-    [viewport.x, viewport.y],
+    [view.x, view.y],
   );
 
   const handlePointerMove = useCallback(
@@ -507,13 +535,13 @@ export function DeliberationCanvas({
       const deltaX = event.clientX - drag.startX;
       const deltaY = event.clientY - drag.startY;
       if (Math.hypot(deltaX, deltaY) > 3) drag.moved = true;
-      setViewport((current) => ({
-        ...current,
+      setManualView({
         x: drag.originX + deltaX,
         y: drag.originY + deltaY,
-      }));
+        scale: view.scale,
+      });
     },
-    [],
+    [view.scale],
   );
 
   const finishPointer = useCallback(
@@ -547,19 +575,16 @@ export function DeliberationCanvas({
     const pointerX = event.clientX - rect.left;
     const pointerY = event.clientY - rect.top;
 
-    setViewport((current) => {
-      const nextScale = clampScale(current.scale * Math.exp(-event.deltaY * 0.001));
-      if (nextScale === current.scale) return current;
-      // Keep the graph coordinate under the pointer fixed while zooming.
-      const graphX = (pointerX - current.x) / current.scale;
-      const graphY = (pointerY - current.y) / current.scale;
-      return {
-        scale: nextScale,
-        x: pointerX - graphX * nextScale,
-        y: pointerY - graphY * nextScale,
-      };
+    const nextScale = clampScale(view.scale * Math.exp(-event.deltaY * 0.001));
+    // Keep the graph coordinate under the pointer fixed while zooming.
+    const graphX = (pointerX - view.x) / view.scale;
+    const graphY = (pointerY - view.y) / view.scale;
+    setManualView({
+      scale: nextScale,
+      x: pointerX - graphX * nextScale,
+      y: pointerY - graphY * nextScale,
     });
-  }, []);
+  }, [view]);
 
   return (
     <div
@@ -580,7 +605,7 @@ export function DeliberationCanvas({
       <div
         className="absolute inset-0 origin-top-left"
         style={{
-          transform: `translate3d(${viewport.x}px, ${viewport.y}px, 0) scale(${viewport.scale})`,
+          transform: `translate3d(${view.x}px, ${view.y}px, 0) scale(${view.scale})`,
         }}
       >
         {/* Edges and nodes share one viewport transform. */}
