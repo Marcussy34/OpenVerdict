@@ -618,6 +618,35 @@ internal type names (FactCheckReport) untouched. Verified in Chrome:
 hero, faded placeholder, VERIFY CLAIM button, nav labels, no user-facing
 "fact-check" text anywhere on the page, 8 explorer rows rendering.
 
+Round 6 (commits `fd68b6d`..`9ad0e50` + diagram `776293d`, deployment
+`6b8796fc`, all verified live): the hackathon-track amendments and the
+discussion round. POST /api/extract-claim (Codex-built, line-reviewed):
+pasted URL -> SSRF-guarded engine fetch -> first Gonka model at
+temperature 0 -> one falsifiable claim + Gonka/gateway request ids; the
+verify bar detects URLs, extracts, and shows source/model/request-id
+provenance. Two live-found defects: a 300-token output cap starved
+reasoning models into empty replies (raised to 1500, verified live:
+simple.wikipedia/Bitcoin -> "In June 2021, El Salvador became the first
+country in the world to make Bitcoin a legal tender.",
+devshard-67806-387); slightly malformed model JSON still 422s, repair
+round + prose windowing running as a Codex follow-up. ROUND-2 DISCUSSION
+(Codex-built, line-reviewed): split first rounds now inject the revealed
+round-1 public record (seat index, model, outcome, confidenceBps, public
+reasoning trace) into every round-2 juror input and freeze it canonically
+as phase-2 evidence artifact round-1-public-record:<claimId>; fail-closed
+on missing reveals; phase-1 inputs byte-identical (hash-asserted); specs,
+Move, BCS untouched. Landing names GonkaRouter in the hero statement,
+productivity paragraph, manifesto and a new banner strip (verified in
+served HTML; the manifesto string is letter-split by its animation so
+grep the source, not the DOM). docs/GONKA-INTEGRATION.md written for
+judges with a live example; high-level architecture diagram at
+docs/diagrams/openverdict-architecture.{excalidraw,png} (3 render-fix
+passes). Owner decisions recorded: keep "juror", never "swarm" (the
+discussion round strengthens jury language; influence flows only through
+the recorded public record); queue after this: optimistic quick-verify
+exposure, read-only juror track record, zkLogin re-registration of the
+demo jurors. 481/481 vitest, 70 Move.
+
 ## 4. Planned next (owner-approved direction)
 
 - Attestation (docs/superpowers/specs/2026-08-30-attested-inference-design.md):

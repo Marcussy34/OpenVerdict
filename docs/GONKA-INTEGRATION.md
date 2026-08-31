@@ -86,3 +86,11 @@ the Gonka request id of the extraction call itself. The user confirms or
 edits the claim and submits it through the normal statement-only path; the
 jurors then research it from scratch, so the submitter's page never
 becomes privileged evidence.
+
+Live example (2026-08-31, production): posting
+`{"url":"https://simple.wikipedia.org/wiki/Bitcoin"}` returned
+"In June 2021, El Salvador became the first country in the world to make
+Bitcoin a legal tender." with modelId `deepseek-ai/DeepSeek-V4-Flash-0731`,
+gonkaRequestId `devshard-67806-387` and gatewayRequestId
+`req-1788185908680461519-129576`, both checkable against GonkaRouter's
+public receipts endpoint.

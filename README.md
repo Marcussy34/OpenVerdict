@@ -22,7 +22,7 @@ evidence and agent work preserved on Walrus.
 > | Layer | State |
 > | --- | --- |
 > | Sui Move packages (8 protocol modules incl. Object Display, plus the Seal policy) | ✅ `sui move test`: **66/66** protocol, **4/4** Seal policy |
-> | TS libs · engine · CLI · workers | ✅ vitest: **465/465** (full suite) |
+> | TS libs · engine · CLI · workers | ✅ vitest: **481/481** (full suite) |
 > | TS↔Move commitment parity gate | ✅ 6 cross-pinned blake2b256/BCS vectors |
 > | Localnet E2E + cockpit demo state | ✅ 3 lifecycle paths, sponsored deposit, CLI parity — exit 0 |
 > | Juror research (v2, batched opens) | ✅ support + challenge searches, pages on both sides, citations from two sites, counter-evidence summary; every step in the sealed transcript |
@@ -257,7 +257,7 @@ dark mode).
 | Hashing | `@noble/hashes` blake2b-256 == `sui::hash::blake2b256` | One commitment format across TS and Move |
 | Onboarding | `@mysten/enoki` (zkLogin) + dapp-kit v2 | Social-login self-custodial addresses; env-gated, wallet-standard |
 | Object metadata | Sui Object Display (`display_meta` module) | Certificates/profiles/positions render in wallets + explorers |
-| Tests | vitest 4 + `sui move test` | 465 TS + 70 Move (66 protocol, 4 Seal policy), incl. the cross-language parity gate |
+| Tests | vitest 4 + `sui move test` | 481 TS + 70 Move (66 protocol, 4 Seal policy), incl. the cross-language parity gate |
 
 ## 🔍 What is auditable
 

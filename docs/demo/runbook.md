@@ -11,7 +11,7 @@ Node ≥22, pnpm, Sui CLI ≥1.52. `pnpm install` at the repo root.
 ## 1. Offline proof (no network, no keys)
 
 ```bash
-pnpm test && pnpm test:move   # 465 TS + 70 Move (66 protocol, 4 Seal policy)
+pnpm test && pnpm test:move   # 481 TS + 70 Move (66 protocol, 4 Seal policy)
 pnpm e2e:localnet             # spawns a local Sui network, deploys, runs 3 full
                               # lifecycles + sponsored deposit, exits 0 on success
 ```
