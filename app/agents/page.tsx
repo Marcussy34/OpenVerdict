@@ -22,6 +22,13 @@ function shortId(id: string): string {
   return id.length <= 14 ? id : `${id.slice(0, 8)}…${id.slice(-4)}`;
 }
 
+/** " · earned 0.42 SUI" when any jury rewards exist, empty otherwise. */
+function earnedSui(earnedMist: string | undefined): string {
+  if (!earnedMist || earnedMist === "0") return "";
+  const sui = Number(BigInt(earnedMist)) / 1_000_000_000;
+  return ` · earned ${sui.toFixed(sui >= 1 ? 2 : 3)} SUI`;
+}
+
 export default function AgentsPage() {
   const [agents, setAgents] = useState<AgentDirectoryEntry[]>([]);
   const [loading, setLoading] = useState(true);
@@ -77,7 +84,7 @@ export default function AgentsPage() {
   /** Families present in the registry: the diversity rule, made visible. */
   const familyGroups = useMemo(() => {
     const map = new Map<string, { name: string; count: number; dot: string }>();
-    for (const agent of agents) {
+    for (const agent of agents.filter((a) => a.active)) {
       const fam = modelFamily(agent.modelId);
       const entry = map.get(fam.key);
       map.set(fam.key, { name: fam.name, dot: fam.dot, count: (entry?.count ?? 0) + 1 });
@@ -85,15 +92,19 @@ export default function AgentsPage() {
     return map;
   }, [agents]);
 
+  // The preview lists active jurors only; retired package generations stay
+  // in the API for history but out of the directory.
+  const activeAgents = useMemo(() => agents.filter((a) => a.active), [agents]);
+
   const filteredAgents = useMemo(
     () =>
-      agents.filter(
+      activeAgents.filter(
         (agent) => familyFilter === "ALL" || modelFamily(agent.modelId).key === familyFilter,
       ),
-    [agents, familyFilter],
+    [activeAgents, familyFilter],
   );
 
-  const activeCount = agents.filter((a) => a.active).length;
+  const activeCount = activeAgents.length;
 
   return (
     <div className="mx-auto max-w-5xl space-y-10 px-5 py-16 md:px-7 md:py-24">
@@ -112,7 +123,7 @@ export default function AgentsPage() {
         <div className="flex flex-wrap justify-center gap-1.5">
           <FamilyChip
             label="All"
-            count={agents.length}
+            count={activeAgents.length}
             active={familyFilter === "ALL"}
             onClick={() => setFamilyFilter("ALL")}
           />
@@ -177,14 +188,30 @@ export default function AgentsPage() {
                       <p className="mt-0.5 truncate font-mono text-[11px] text-muted-foreground">
                         {shortId(agent.agentProfileId)} · {agent.role}
                       </p>
+                      {agent.trackRecord && (
+                        <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
+                          {agent.trackRecord.seatsServed} seats ·{" "}
+                          {agent.trackRecord.revealed} revealed ·{" "}
+                          {agent.trackRecord.agreedWithCertificate} agreed
+                          {earnedSui(agent.earnedMist)}
+                        </p>
+                      )}
                     </div>
                     <span
                       className={cn(
                         "shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold",
-                        agent.active ? "bg-yes/10 text-yes" : "bg-muted text-muted-foreground",
+                        agent.backing?.kind === "ZKLOGIN"
+                          ? "bg-yes/10 text-yes"
+                          : agent.backing?.kind === "ALLOWLIST"
+                            ? "bg-sea/10 text-primary"
+                            : "bg-muted text-muted-foreground",
                       )}
                     >
-                      {agent.active ? "Active" : "Inactive"}
+                      {agent.backing?.kind === "ZKLOGIN"
+                        ? "Human-backed"
+                        : agent.backing?.kind === "ALLOWLIST"
+                          ? "Allowlist"
+                          : "Unverified"}
                     </span>
                     <ArrowRight2 size="14" className="shrink-0 text-muted-foreground" />
                   </Link>
