@@ -13,6 +13,7 @@ import {
   ShieldTick,
   Wallet,
   ArrowRight,
+  DocumentText,
   type IconComponent,
 } from "@/components/icons";
 
@@ -21,22 +22,33 @@ export const metadata: Metadata = {
 };
 
 const CONTENTS = [
-  { id: "pathways", label: "Resolution pathways" },
-  { id: "pipeline", label: "The pipeline" },
-  { id: "commit-reveal", label: "Commit-reveal" },
-  { id: "diversity", label: "Model diversity" },
-  { id: "uncertainty", label: "Uncertainty as a result" },
-  { id: "score", label: "Truth Score" },
+  { id: "overview", label: "Overview" },
+  { id: "how-it-works", label: "How it works" },
+  { id: "secret-votes", label: "Secret votes" },
+  { id: "five-jurors", label: "Five jurors" },
+  { id: "unsure", label: "When it's unsure" },
+  { id: "truth-score", label: "Truth Score" },
   { id: "signin", label: "Signing in" },
+  { id: "facts", label: "Key facts" },
+];
+
+// The Limitless-style closing table: one glance, the whole system.
+const KEY_FACTS: Array<[string, string]> = [
+  ["Chain", "Sui testnet: verdicts and certificates live on-chain"],
+  ["Evidence storage", "Walrus: every source and juror work file, public"],
+  ["AI inference", "GonkaRouter: three model families (DeepSeek, Kimi, MiniMax)"],
+  ["Jury", "5 jurors; 4 of 5 must agree to decide"],
+  ["Outcomes", "YES, NO or UNRESOLVED, each with a 0-100 Truth Score"],
+  ["Cost to read or verify", "Free: no account, no wallet, no gas"],
 ];
 
 export default function LearnPage() {
   return (
     <div className="mx-auto max-w-5xl space-y-8 px-5 py-10 md:px-7 lg:py-12">
       <PageHeader
-        eyebrow="Protocol concepts"
+        eyebrow="Get started"
         title="How OpenVerdict works"
-        description="A decentralized intelligence verification engine combining Sui Move smart contracts, diverse GonkaRouter AI juries and permanent Walrus storage."
+        description="Submit a claim. Five independent AI jurors research it, vote in secret, and publish every step so anyone can check the answer."
         icon={Judge}
         badges={<ExperimentalTag />}
       />
@@ -54,69 +66,69 @@ export default function LearnPage() {
         ))}
       </nav>
 
-      {/* 1. Pathways */}
-      <section id="pathways" className="scroll-mt-24 space-y-4">
+      {/* 1. Overview */}
+      <section id="overview" className="scroll-mt-24 space-y-4">
         <SectionHeading
           index="01"
           icon={ShieldTick}
-          title="Optimistic resolution & escalation pathways"
-          body="OpenVerdict supports two resolution pathways, designed for economic efficiency and trust minimization."
+          title="One question: is this claim true?"
+          body="OpenVerdict is a public fact-checking machine whose work you can re-check."
         />
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Panel label="Direct review" icon={ShieldTick} tone="primary">
-            <p className="text-xs leading-relaxed text-muted-foreground">
-              Built for open public verification and developer oracle queries. It skips the
-              optimistic proposal window and immediately freezes evidence, selects five AI
-              jurors, lets each of them research the claim through the engine (every search
-              and page open recorded and hashed), and convenes the commit-reveal round.
-            </p>
-          </Panel>
-          <Panel label="Optimistic settlement" icon={Judge} tone="chain">
-            <p className="text-xs leading-relaxed text-muted-foreground">
-              A proposer posts a bonded outcome. If nobody challenges before the deadline the
-              claim finalizes with no inference cost. If challenged with counter-evidence it
-              escalates to an autonomous AI jury.
-            </p>
-          </Panel>
+        <div className="max-w-3xl space-y-3 text-sm leading-relaxed text-muted-foreground">
+          <p>
+            You submit one clear claim, for example{" "}
+            <em>&ldquo;The first Bitcoin halving happened in November 2012.&rdquo;</em>{" "}
+            Five AI jurors research it on the live web, weigh the evidence on both
+            sides, and vote{" "}
+            <strong className="font-semibold text-ocean">YES</strong>,{" "}
+            <strong className="font-semibold text-ocean">NO</strong> or{" "}
+            <strong className="font-semibold text-ocean">UNSURE</strong>.
+          </p>
+          <p>
+            Votes are locked in secret first and only opened together, so no juror
+            can copy another. The verdict and its{" "}
+            <strong className="font-semibold text-ocean">Truth Score</strong> are
+            then stamped on the Sui blockchain, where nobody can quietly edit them.
+          </p>
         </div>
       </section>
 
-      {/* 2. Pipeline */}
-      <section id="pipeline" className="scroll-mt-24 space-y-4">
+      {/* 2. How it works */}
+      <section id="how-it-works" className="scroll-mt-24 space-y-4">
         <SectionHeading
           index="02"
           icon={Cpu}
-          title="The five-phase pipeline"
-          body="Every claim that reaches a jury walks the same deterministic path, and each phase leaves an artefact anyone can re-derive."
+          title="How it works"
+          body="Five steps, the same every time. Each one leaves a public record."
         />
         <Pipeline />
       </section>
 
-      {/* 3. Commit-reveal */}
-      <section id="commit-reveal" className="scroll-mt-24 space-y-4">
+      {/* 3. Secret votes */}
+      <section id="secret-votes" className="scroll-mt-24 space-y-4">
         <SectionHeading
           index="03"
           icon={Lock}
-          title="Cryptographic commit-reveal eliminates model collusion"
-          body="In naive multi-agent systems, language models can be biased by seeing intermediate votes or reasoning from other models — producing systemic groupthink and front-running."
+          title="Votes are locked, then opened"
+          body="If jurors could peek at each other, they would herd. So peeking is impossible."
         />
-        <Panel label="Two-stage protocol enforced on Sui" icon={Lock} tone="sealed">
+        <Panel label="Three moves" icon={Lock} tone="sealed">
           <ol className="space-y-3">
             {[
               {
                 step: "1",
-                title: "Commitment preimage",
-                code: "VotePreimageV1 { claim_id, agent_id, jury_seat_id, phase, outcome, confidence_bps, evidence_root, output_hash, run_hash, salt }",
+                title: "Lock",
+                text: "Each juror's vote is sealed into a fingerprint on the blockchain. The vote itself stays hidden.",
               },
               {
                 step: "2",
-                title: "On-chain sealed hash",
-                code: "commitment = Blake2b256(BCS(VotePreimageV1))",
+                title: "Wait",
+                text: "Nothing opens until every juror has locked in, or the clock runs out.",
               },
               {
                 step: "3",
-                title: "Reveal verification",
-                code: "Move asserts Blake2b256(preimage) == stored_commitment",
+                title: "Open",
+                text: "Each vote must match its fingerprint exactly. A changed vote simply will not open.",
               },
             ].map((row) => (
               <li key={row.step} className="flex gap-3">
@@ -125,49 +137,43 @@ export default function LearnPage() {
                 </span>
                 <div className="min-w-0 flex-1 space-y-1">
                   <FieldLabel>{row.title}</FieldLabel>
-                  <Well className="ov-scroll overflow-x-auto">
-                    <code className="font-mono text-[11px] whitespace-pre text-ocean">
-                      {row.code}
-                    </code>
-                  </Well>
+                  <p className="text-xs leading-relaxed text-muted-foreground">{row.text}</p>
                 </div>
               </li>
             ))}
           </ol>
           <p className="mt-4 border-t border-border pt-3 text-[11px] leading-relaxed text-muted-foreground">
-            Jurors cannot see or change their vote after committing. Unopened commitments are
-            penalised through reputation and bond slashing once the deadline expires. Salts
-            never leave the engine, and a malformed model output can never become a vote — the
-            adapter fails closed.
+            No juror ever sees another vote before locking their own. Not the other
+            jurors, not us, not anyone.
           </p>
         </Panel>
       </section>
 
-      {/* 4. Diversity */}
-      <section id="diversity" className="scroll-mt-24 space-y-4">
+      {/* 4. Five jurors */}
+      <section id="five-jurors" className="scroll-mt-24 space-y-4">
         <SectionHeading
           index="04"
-          icon={Cpu}
-          title="Model diversity & architecture invariants"
-          body="Large language models exhibit non-deterministic reasoning, hallucinations and shared training biases. Four invariants keep the jury resilient."
+          icon={Judge}
+          title="Five jurors, three AI makers"
+          body="One AI can be wrong, biased, or having a bad day. Five from different makers keep each other honest."
         />
         <div className="grid gap-3 sm:grid-cols-2">
           {[
             {
-              title: "Strict 3-family rule",
-              body: "Every 5-agent committee drawn by Sui native randomness must contain at least 3 distinct model families (DeepSeek-V4, Kimi-K2.6, MiniMax-M2.7).",
+              title: "Different makers",
+              body: "Every jury mixes models from DeepSeek, Kimi and MiniMax, drawn randomly on-chain. No single company decides.",
             },
             {
-              title: "Human-backing separation",
-              body: "No single human owner or entity may operate more than one seat in any committee.",
+              title: "One person, one seat",
+              body: "Nobody may run two jurors in the same jury.",
             },
             {
-              title: "Zero-temperature determinism",
-              body: "Inference calls run at temperature 0 with strict schema enforcement, eliminating prompt variance between reruns.",
+              title: "Same run, same answer",
+              body: "Jurors run in deterministic mode, so rerunning a vote gives the same result.",
             },
             {
-              title: "SSRF-safe evidence ingestion",
-              body: "Crawlers block private subnets, loopbacks and metadata IPs, and canonicalise HTML into plain text before hashing.",
+              title: "Sources you can reopen",
+              body: "Every page a juror read is stored publicly, exactly as it was fetched.",
             },
           ].map((item) => (
             <div
@@ -181,49 +187,45 @@ export default function LearnPage() {
         </div>
       </section>
 
-      {/* 5. Uncertainty */}
-      <section id="uncertainty" className="scroll-mt-24 space-y-4">
+      {/* 5. Unsure */}
+      <section id="unsure" className="scroll-mt-24 space-y-4">
         <SectionHeading
           index="05"
           icon={Warning2}
-          title="Uncertainty as a first-class result"
-          body="Unlike binary oracles that force an artificial YES or NO onto ambiguous claims, OpenVerdict treats UNSURE as a valid, honest outcome."
+          title={'"We don\u2019t know" is an honest answer'}
+          body="Some claims cannot be settled with the evidence available. OpenVerdict never fakes certainty."
         />
         <Panel label="What UNSURE does" icon={Warning2} tone="warn">
           <p className="text-xs leading-relaxed text-muted-foreground">
-            When evidence conflicts, cannot be verified, or is simply insufficient, a juror votes
-            UNSURE and is assigned a neutral 5,000 bps probability. If four of five jurors agree
-            on UNSURE — or if no 4-of-5 supermajority is reached after two rounds — the claim
-            finalizes as{" "}
-            <strong className="font-semibold text-ocean">UNRESOLVED</strong>, releasing policy
-            refunds and protecting prediction-market participants from arbitrary settlement.
+            A juror who cannot verify a claim votes{" "}
+            <strong className="font-semibold text-ocean">UNSURE</strong>. If the
+            jury cannot reach 4-of-5 agreement, the claim ends as{" "}
+            <strong className="font-semibold text-ocean">UNRESOLVED</strong> and
+            fees are refunded, instead of forcing a fake YES or NO onto anyone
+            relying on the answer.
           </p>
         </Panel>
       </section>
 
       {/* 6. Truth score */}
-      <section id="score" className="scroll-mt-24 space-y-4">
+      <section id="truth-score" className="scroll-mt-24 space-y-4">
         <SectionHeading
           index="06"
           icon={Award}
-          title="Deterministic Truth Score formulation"
-          body="Rather than producing a subjective rating, the Truth Score is pure on-chain half-up integer arithmetic over revealed confidence basis points in the final valid round."
+          title="The Truth Score"
+          body="Every verdict carries a confidence score from 0 to 100."
         />
-        <Panel label="Formula" icon={Award} tone="yes">
+        <Panel label="How to read it" icon={Award} tone="yes">
           <Well className="space-y-1 font-mono text-xs">
-            <div className="font-bold text-ocean">
-              truthScoreBps = (Σ agentProbabilityBps + ⌊N / 2⌋) / N
-            </div>
-            <div className="text-muted-foreground">• YES → probability = confidenceBps</div>
-            <div className="text-muted-foreground">
-              • NO → probability = 10,000 − confidenceBps
-            </div>
-            <div className="text-muted-foreground">• UNSURE → probability = 5,000 bps</div>
+            <div className="font-bold text-ocean">95 = very confident the claim is TRUE</div>
+            <div className="text-muted-foreground">5 = very confident it is FALSE</div>
+            <div className="text-muted-foreground">around 50 = genuinely uncertain</div>
           </Well>
           <p className="mt-3 text-[11px] leading-relaxed text-muted-foreground">
-            Claims settled optimistically without a jury round return{" "}
-            <em>&ldquo;Not independently reviewed&rdquo;</em> instead of an invented confidence
-            score. You can rerun the whole calculation yourself in the browser.
+            It is a plain average of the jurors&apos; revealed confidence: a YES
+            counts as its confidence, a NO as 100 minus it, an UNSURE as 50. No
+            judgment calls, no hidden weights, and you can recompute it yourself
+            in your browser.
           </p>
           <Button asChild variant="outline" size="sm" className="mt-3 min-h-[38px] font-semibold">
             <Link href="/verify">
@@ -239,28 +241,46 @@ export default function LearnPage() {
         <SectionHeading
           index="07"
           icon={Wallet}
-          title="Signing in"
-          body="Reading claims, observing juries, browsing agents, verifying proofs, checking status and submitting a claim all require no sign-in."
+          title="No account needed"
+          body="Reading claims, watching juries, checking proofs and submitting a claim: all free, no sign-in."
         />
-        <Panel label="Wallets & zkLogin" icon={Wallet} tone="chain">
+        <Panel label="Who signs in, then?" icon={Wallet} tone="chain">
           <div className="space-y-3 text-xs leading-relaxed text-muted-foreground">
             <p>
-              Deposits and position or payout views require a connected Sui wallet. Everything
-              else on this site stays anonymous.
+              A Sui wallet is only needed for deposits and payouts. Everything else
+              stays anonymous.
             </p>
             <p>
-              Google sign-in uses Sui zkLogin through Enoki to create a self-custodial address.
-              It is an authentication option — never proof of unique humanity.
-            </p>
-            <p>
-              A juror agent receives the{" "}
-              <strong className="font-semibold text-ocean">ZKLOGIN_BACKED</strong> label only
-              after its Google zkLogin address signs the canonical backing message. With a fixed
-              Enoki salt policy, one Google account maps to one backing hash and therefore one
-              committee seat. This raises Sybil cost; it is not proof of personhood.
+              People who operate a juror can back it with Google sign-in (Sui
+              zkLogin): one Google account backs exactly one juror seat. It proves
+              you own the account, never that you are a unique human.
             </p>
           </div>
         </Panel>
+      </section>
+
+      {/* 8. Key facts */}
+      <section id="facts" className="scroll-mt-24 space-y-4">
+        <SectionHeading
+          index="08"
+          icon={DocumentText}
+          title="Key facts"
+          body="The whole system at a glance."
+        />
+        <div className="ov-edge overflow-hidden rounded-2xl border border-border bg-card">
+          <table className="w-full">
+            <tbody>
+              {KEY_FACTS.map(([stat, detail]) => (
+                <tr key={stat} className="border-b border-border last:border-0">
+                  <td className="w-48 px-4 py-3 align-top text-xs font-semibold text-muted-foreground">
+                    {stat}
+                  </td>
+                  <td className="px-4 py-3 text-xs font-medium text-ocean">{detail}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </section>
     </div>
   );
