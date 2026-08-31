@@ -194,6 +194,15 @@ export const inferenceRuns = pgTable("inference_runs", {
   ...auditColumns(),
 });
 
+export const runProofs = pgTable("run_proofs", {
+  runId: text("run_id").primaryKey(),
+  claimId: text("claim_id").notNull(),
+  phase: integer("phase").notNull(),
+  proofJson: text("proof_json").notNull(),
+  builtAt: text("built_at").notNull(),
+  ...auditColumns(),
+});
+
 export const toolCalls = pgTable(
   "tool_calls",
   {
@@ -345,6 +354,7 @@ export const storageSchema = {
   evidenceArtifacts,
   evidenceManifests,
   inferenceRuns,
+  runProofs,
   toolCalls,
   runApprovals,
   votePackages,

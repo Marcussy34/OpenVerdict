@@ -6,6 +6,7 @@ import {
   migrate,
   type ClaimRecord,
   type InferenceRunRecord,
+  type RunProofRecord,
 } from "./index";
 
 const openDatabases: PGlite[] = [];
@@ -57,6 +58,38 @@ describe("storage", () => {
 
     await repository.saveClaim(claim);
     expect(await repository.getClaim(claim.claimId)).toEqual(claim);
+  });
+
+  it("round trips immutable run proofs and supports explicit replacement", async () => {
+    const repository = await testRepository();
+    const record: RunProofRecord = {
+      runId: "run-proof-1",
+      claimId: "claim-proof-1",
+      phase: 1,
+      proofJson: JSON.stringify({ runId: "run-proof-1", revealed: true }),
+      builtAt: "2026-08-27T00:00:00.000Z",
+      createdAt: "2026-08-27T00:00:00.000Z",
+      updatedAt: "2026-08-27T00:00:00.000Z",
+    };
+
+    await repository.saveRunProof(record);
+    await repository.saveRunProof({
+      ...record,
+      proofJson: JSON.stringify({ runId: "run-proof-1", replaced: true }),
+    });
+
+    await expect(repository.getRunProof(record.runId)).resolves.toEqual(record);
+    await expect(
+      repository.listRunProofIdsForClaim(record.claimId),
+    ).resolves.toEqual([record.runId]);
+
+    const replacement = {
+      ...record,
+      proofJson: JSON.stringify({ runId: "run-proof-1", repaired: true }),
+      updatedAt: "2026-08-27T00:01:00.000Z",
+    };
+    await repository.replaceRunProof(replacement);
+    await expect(repository.getRunProof(record.runId)).resolves.toEqual(replacement);
   });
 
   it("lists claims newest first, with and without a state filter", async () => {

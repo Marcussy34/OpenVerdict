@@ -18,6 +18,7 @@ import type {
   RevealRecord,
   RoundTallyRecord,
   RunApprovalRecord,
+  RunProofRecord,
   VotePackageRecord,
 } from "./types";
 
@@ -27,6 +28,16 @@ interface JsonRow {
 
 interface SequenceRow {
   sequence: number;
+}
+
+interface RunProofRow {
+  run_id: string;
+  claim_id: string;
+  phase: 1 | 2;
+  proof_json: string;
+  built_at: string;
+  created_at: string;
+  updated_at: string;
 }
 
 type SqlValue = string | number | boolean | null | undefined;
@@ -353,6 +364,69 @@ export class Repository {
       `SELECT record_json FROM inference_runs WHERE claim_id = $1${phase === undefined ? "" : " AND phase = $2"} ORDER BY phase, jury_seat_id, attempt`,
       phase === undefined ? [claimId] : [claimId, phase],
     );
+  }
+
+  /** Store the first completed proof and preserve it on later writes. */
+  async saveRunProof(record: RunProofRecord): Promise<void> {
+    await execute(
+      this.db,
+      `INSERT INTO run_proofs (
+        run_id, claim_id, phase, proof_json, built_at, created_at, updated_at, record_json
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+      ON CONFLICT (run_id) DO NOTHING`,
+      [
+        record.runId,
+        record.claimId,
+        record.phase,
+        record.proofJson,
+        record.builtAt,
+        record.createdAt,
+        record.updatedAt,
+        json(record),
+      ],
+    );
+  }
+
+  /** Replace only a stored proof that failed JSON validation. */
+  async replaceRunProof(record: RunProofRecord): Promise<void> {
+    await saveRecord(this.db, "run_proofs", ["run_id"], {
+      run_id: record.runId,
+      claim_id: record.claimId,
+      phase: record.phase,
+      proof_json: record.proofJson,
+      built_at: record.builtAt,
+      created_at: record.createdAt,
+      updated_at: record.updatedAt,
+      record_json: json(record),
+    });
+  }
+
+  async getRunProof(runId: string): Promise<RunProofRecord | undefined> {
+    const [row] = await listRows<RunProofRow>(
+      this.db,
+      `SELECT run_id, claim_id, phase, proof_json, built_at, created_at, updated_at
+       FROM run_proofs WHERE run_id = $1 LIMIT 1`,
+      [runId],
+    );
+    if (!row) return undefined;
+    return {
+      runId: row.run_id,
+      claimId: row.claim_id,
+      phase: row.phase,
+      proofJson: row.proof_json,
+      builtAt: row.built_at,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    };
+  }
+
+  async listRunProofIdsForClaim(claimId: string): Promise<string[]> {
+    const rows = await listRows<{ run_id: string }>(
+      this.db,
+      "SELECT run_id FROM run_proofs WHERE claim_id = $1 ORDER BY run_id",
+      [claimId],
+    );
+    return rows.map((row) => row.run_id);
   }
 
   async saveRunApproval(record: RunApprovalRecord): Promise<void> {

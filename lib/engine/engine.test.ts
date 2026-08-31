@@ -200,6 +200,63 @@ describe("headless engine", () => {
     });
   });
 
+  it("warms revealed run proofs sequentially without failing finalization", async () => {
+    const setup = await engineSetup(new FakeSuiGateway(), 5);
+    const { claimId } = await setup.engine.factCheckStart({
+      claim: "Finalization should warm every revealed public proof.",
+      urls: [],
+    });
+    await setup.engine.selectCommittee(claimId);
+    await setup.engine.evidenceFreeze(claimId, 1);
+    await setup.engine.juryRun(claimId, 1);
+    await setup.engine.votesCommit(claimId, 1);
+    await setup.engine.advance(claimId);
+    await setup.engine.votesReveal(claimId, 1);
+
+    const repository = createRepository(setup.db);
+    const reveals = await repository.listReveals(claimId, 1);
+    const failedRunId = reveals[0]?.runId;
+    if (!failedRunId) throw new Error("expected revealed runs");
+    const expectedProofIds = reveals
+      .slice(1)
+      .map((reveal) => reveal.runId)
+      .sort();
+    const originalRunProof = setup.engine.runProof.bind(setup.engine);
+    let activeBuilds = 0;
+    let maxActiveBuilds = 0;
+    vi.spyOn(setup.engine, "runProof").mockImplementation(
+      async (proofClaimId, proofRunId) => {
+        activeBuilds += 1;
+        maxActiveBuilds = Math.max(maxActiveBuilds, activeBuilds);
+        try {
+          if (proofRunId === failedRunId) throw new Error("proof build failed");
+          return await originalRunProof(proofClaimId, proofRunId);
+        } finally {
+          activeBuilds -= 1;
+        }
+      },
+    );
+    const stderr = vi.spyOn(process.stderr, "write").mockReturnValue(true);
+
+    try {
+      await expect(setup.engine.finalize(claimId)).resolves.toMatchObject({
+        claimId,
+        result: "YES",
+      });
+      await vi.waitFor(async () => {
+        await expect(
+          repository.listRunProofIdsForClaim(claimId),
+        ).resolves.toEqual(expectedProofIds);
+      });
+      expect(maxActiveBuilds).toBe(1);
+      expect(stderr).toHaveBeenCalledWith(
+        expect.stringContaining(`run proof warm: claim ${claimId} run ${failedRunId}`),
+      );
+    } finally {
+      stderr.mockRestore();
+    }
+  });
+
   it("publishes content-free research ticks through the engine event stream", async () => {
     const statement = "Research ticks must never reveal this query.";
     const setup = await engineSetup(new FakeSuiGateway(), 5);

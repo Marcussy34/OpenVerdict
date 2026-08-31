@@ -204,6 +204,16 @@ export interface InferenceRunRecord {
   updatedAt: string;
 }
 
+export interface RunProofRecord {
+  runId: string;
+  claimId: string;
+  phase: 1 | 2;
+  proofJson: string;
+  builtAt: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface RunApprovalRecord {
   runApprovalId: string;
   runId: string;

@@ -82,7 +82,9 @@ import {
   type RoundTallyRecord,
   type RunApprovalRecord,
   type VotePackageRecord,
+  type RunProofRecord,
 } from "../storage";
+import { getOrBuildPublicRunProof } from "../verify/public-run-proof";
 import {
   createSuiGateway,
   loadReleaseManifest,
@@ -1525,6 +1527,44 @@ class OpenVerdictEngine implements Engine {
     }));
   }
 
+  /** Proof persistence surface consumed by lib/verify/public-run-proof. */
+  async getStoredRunProof(runId: string): Promise<RunProofRecord | undefined> {
+    return this.#repository.getRunProof(runId);
+  }
+
+  async saveStoredRunProof(
+    record: RunProofRecord,
+    options: { replace: boolean },
+  ): Promise<void> {
+    if (options.replace) await this.#repository.replaceRunProof(record);
+    else await this.#repository.saveRunProof(record);
+  }
+
+  /** Builds and stores every revealed run's proof, strictly one at a time. */
+  private async warmRunProofs(claimId: string): Promise<void> {
+    // The warmer runs detached from finalize, so nothing here may ever
+    // reject: a torn-down store (tests, shutdown) only logs and stops.
+    try {
+      const reveals = [
+        ...(await this.#repository.listReveals(claimId, 1)),
+        ...(await this.#repository.listReveals(claimId, 2)),
+      ];
+      for (const reveal of reveals) {
+        try {
+          await getOrBuildPublicRunProof(this, claimId, reveal.runId);
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          process.stderr.write(
+            `run proof warm: claim ${claimId} run ${reveal.runId} failed: ${message}\n`,
+          );
+        }
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      process.stderr.write(`run proof warm: claim ${claimId} failed: ${message}\n`);
+    }
+  }
+
   async runProof(claimId: string, runId: string): Promise<RunProofResult> {
     const claim = await this.claim(claimId);
     const run = (await this.#repository.listInferenceRuns(claimId)).find(
@@ -2706,6 +2746,10 @@ class OpenVerdictEngine implements Engine {
         transaction_digest: chain.digest,
       },
     });
+    // Fire-and-forget: warm and persist this claim's public run proofs so no
+    // viewer (or fresh deploy) ever pays the first heavy build. A failed build
+    // only logs; finalization never waits on it.
+    void this.warmRunProofs(claim.claimId);
     return certificateToFinalizeReport(certificate);
   }
 
