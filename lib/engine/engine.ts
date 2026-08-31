@@ -165,7 +165,10 @@ export function agentBackingStatus(
   switch (humanVerificationProvider) {
     case ZKLOGIN_VERIFICATION_PROVIDER:
       return { kind: "ZKLOGIN", label: humanVerificationProvider };
+    // Two historical spellings: the engine's registration path writes
+    // "demo-allowlist", the testnet seed documents carry the longer form.
     case DEMO_ALLOWLIST_VERIFICATION_PROVIDER:
+    case "testnet-demo-allowlist":
       return { kind: "ALLOWLIST", label: humanVerificationProvider };
     default:
       return { kind: "UNKNOWN", label: humanVerificationProvider };
