@@ -901,6 +901,32 @@ Decisions locked in the pre-sleep design talk:
   seed-testnet-agents, production E2E claim (5/5 early-reveal demo),
   backing-surface worker (running), lead UI pass, docs, morning report.
 
+### 3n progress, 05:45 (backing loop shipped)
+
+- Backing-surface worker delivered the read path (reviewed, 5b8d086):
+  AgentDirectoryEntry gains backing {ZKLOGIN|ALLOWLIST|UNKNOWN,
+  fail-closed}, trackRecord {seatsServed, committed, revealed,
+  agreedWithCertificate} computed from public records via batched
+  listAll* reads, earnedMist = lifetime REASON_JURY_REWARD ticket sum
+  per owner. 501/501 TS.
+- Lead UI pass (298eb1a): /agents rows carry backing chip + one
+  public-record line + earnings; directory previews active jurors only.
+- Two post-deploy defects found and fixed: (1) seed documents carry
+  provider label "testnet-demo-allowlist" while the engine writes
+  "demo-allowlist"; both now map to ALLOWLIST (e32cf32). (2) LESSON:
+  repository tables deserialize record_json (jsonb), so a column-only
+  SQL UPDATE is invisible; canonical deactivation must patch BOTH
+  (record_json || '{"active": false}'). 35 old-package manifest rows
+  retired that way.
+- Deploys ca3649f2 (backing UI) + 1fd625f0 (label fix) verified in
+  browser: exactly 7 jurors, Allowlist chips, track lines, earnings
+  0.011-0.047 SUI. Copy nit for later: "1 seats" plural.
+- E2E attempt #1 (0x4f409921, Sui mainnet) died 0/5 in a Gonka storm
+  (3 PROVIDER_ERROR, 2 TIMEOUT), proving the deadline fallback live;
+  now stranded state 6. E2E attempt #2 launched after a clean DeepSeek
+  probe: 0xfcc609e9b3748f532cded0f9bbab9c868c04e646f33edaed0a64d6ab0ac53570
+  (Ethereum genesis block, July 30 2015), in research at write time.
+
 ## 4. Planned next (owner-approved direction)
 
 - Attestation (docs/superpowers/specs/2026-08-30-attested-inference-design.md):
