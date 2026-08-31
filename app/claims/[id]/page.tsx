@@ -383,6 +383,7 @@ function LeftRail({
             label="certificate"
             tone="yes"
             className="max-w-full bg-white/5"
+            href={claim.result?.certificateId ? suiObjectUrl(claim.result.certificateId) : undefined}
           />
         </div>
       ) : null}

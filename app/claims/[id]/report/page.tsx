@@ -464,7 +464,7 @@ export default function ClaimDetailPage({ params }: ClaimDetailPageProps) {
                   <FieldLabel>Merkle root</FieldLabel>
                   <HashChip value={bundle.root} tone="chain" full />
                   <FieldLabel className="pt-1">Bundle id</FieldLabel>
-                  <HashChip value={bundle.bundleId} tone="muted" full />
+                  <HashChip value={bundle.bundleId} tone="muted" full href={suiObjectUrl(bundle.bundleId)} />
                 </div>
                 <Link
                   href={`/evidence/${encodeURIComponent(bundle.bundleId)}`}

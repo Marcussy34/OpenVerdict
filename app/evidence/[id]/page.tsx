@@ -4,6 +4,7 @@ import { use } from "react";
 import { PageHeader, ExperimentalTag, MetaTag } from "@/components/viz/page-header";
 import { Panel, FieldLabel, Well } from "@/components/viz/panel";
 import { HashChip } from "@/components/viz/hash-chip";
+import { suiObjectUrl, walrusBlobUrl } from "@/lib/web/explorer";
 import { TimeDisplay } from "@/components/time-display";
 import { DocumentText, ShieldTick, Global, Clock, Box, Lock } from "@/components/icons";
 
@@ -111,11 +112,11 @@ export default function EvidenceDetailPage({ params }: EvidenceDetailPageProps) 
         <dl className="grid gap-3 sm:grid-cols-2">
           <div className="space-y-1.5">
             <FieldLabel>Blob id</FieldLabel>
-            <HashChip value={evidence.walrusBlobId} tone="chain" full />
+            <HashChip value={evidence.walrusBlobId} tone="chain" full href={walrusBlobUrl(evidence.walrusBlobId)} />
           </div>
           <div className="space-y-1.5">
             <FieldLabel>Blob object id</FieldLabel>
-            <HashChip value={evidence.walrusBlobObjectId} tone="chain" full />
+            <HashChip value={evidence.walrusBlobObjectId} tone="chain" full href={evidence.walrusBlobObjectId ? suiObjectUrl(evidence.walrusBlobObjectId) : undefined} />
           </div>
           <div className="space-y-1.5">
             <FieldLabel>Retention end epoch</FieldLabel>

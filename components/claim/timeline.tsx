@@ -3,6 +3,7 @@
 import { motion, useReducedMotion } from "motion/react";
 import { TimeDisplay } from "@/components/time-display";
 import { HashChip } from "@/components/viz/hash-chip";
+import { suiTransactionUrl } from "@/lib/web/explorer";
 import { cn } from "@/lib/utils";
 import type { ClaimInspection } from "@/lib/engine/contract";
 import {
@@ -241,7 +242,7 @@ export function ClaimTimeline({ claim }: TimelineProps) {
                       <HashChip value={step.artifactHash} label="artifact" tone="muted" />
                     )}
                     {step.txDigest && (
-                      <HashChip value={step.txDigest} label="tx" tone="chain" head={8} />
+                      <HashChip value={step.txDigest} label="tx" tone="chain" head={8} href={suiTransactionUrl(step.txDigest)} />
                     )}
                   </div>
                 )}
