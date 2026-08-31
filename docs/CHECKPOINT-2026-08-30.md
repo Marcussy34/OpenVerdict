@@ -579,6 +579,27 @@ evidence-id badges themselves. Verified: 15 Suiscan links + 1 Walrus link
 on the report, 4 explorer chips in the claim dossier, no horizontal
 overflow, thin scrollbars, resize handle reachable while scrolled.
 
+Round 4 (commits `cf8b82e` + `67fa207`, deployment `b7b8efe0`, verified
+live): /fact-check rebuilt as an explorer-style landing per the owner's
+reference: above the fold only the title ("Fact-check a claim"), one
+line ("No wallet, no account, no gas."), a single search-bar form with
+the submit button inside it (Enter submits, Shift+Enter newline, helper
+copy and counter appear only once typing starts), and a micro strip;
+below it a Recent fact-checks list (top 8 claims, statement + short id +
+relative time via useNow, outcome + Truth Score chip, StateBadge, 15 s
+refresh) and ONE closed "How a fact-check runs" details holding all the
+educational copy. Submission hook, validation, offline alert and ?claim=
+prefill unchanged. Two lessons: (1) NEW ROUTING RULE from the owner: UI
+work stays with the lead, Codex is backend/architectural only; the
+already-dispatched UI worker was stood down, but its Codex turn kept
+writing (5 patch rounds) after the stand-down message: always
+`codex-companion.mjs cancel` the turn directly and re-check `git status`
+before editing the same file. Its overwrite was preserved to the
+scratchpad and the committed file restored. (2) GET /api/claims returns
+a `{ claims: [...] }` envelope, not a bare array; the list fix is
+`67fa207`. Verified in Chrome: 8 rows rendering, skeletons gone, helper
+hidden until typing, old side panel gone.
+
 ## 4. Planned next (owner-approved direction)
 
 - Attestation (docs/superpowers/specs/2026-08-30-attested-inference-design.md):
