@@ -2,8 +2,9 @@ import {
   forceCollide,
   forceLink,
   forceManyBody,
-  forceRadial,
   forceSimulation,
+  forceX,
+  forceY,
   type Simulation,
   type SimulationLinkDatum,
   type SimulationNodeDatum,
@@ -18,6 +19,9 @@ type LayoutNode = SimulationNodeDatum & {
   id: string;
   kind: GraphNode["kind"];
   seatIndex?: number;
+  /** Pentagon slot a juror is softly anchored to (angle AND radius). */
+  homeX?: number;
+  homeY?: number;
 };
 
 type LayoutLink = SimulationLinkDatum<LayoutNode>;
@@ -55,12 +59,16 @@ export function createSimulation(
       const slots = node.seatIndex === undefined ? jurorCount : 5;
       const angle = ((slot % slots) / slots) * Math.PI * 2 - Math.PI / 2;
       jurorIndex += 1;
+      const homeX = centre.x + Math.cos(angle) * radialRadius;
+      const homeY = centre.y + Math.sin(angle) * radialRadius;
       return {
         id: node.id,
         kind: node.kind,
         seatIndex: node.seatIndex,
-        x: centre.x + Math.cos(angle) * radialRadius,
-        y: centre.y + Math.sin(angle) * radialRadius,
+        x: homeX,
+        y: homeY,
+        homeX,
+        homeY,
       };
     }
     return { id: node.id, kind: node.kind };
@@ -92,11 +100,18 @@ export function createSimulation(
         .distance(linkDistance)
         .strength((link) => link.kind === "seat" ? 0.9 : 0.5),
     )
-    // A zero strength keeps non-juror nodes free to form linked clusters.
+    // Zero strength keeps non-juror nodes free to form linked clusters; a
+    // juror is pulled toward its OWN pentagon slot, so the full-graph
+    // equilibrium keeps the even 72-degree spacing the spawn promises.
     .force(
-      "juror-ring",
-      forceRadial<LayoutNode>(radialRadius, centre.x, centre.y)
-        .strength((node) => node.kind === "juror" ? 0.35 : 0),
+      "juror-home-x",
+      forceX<LayoutNode>((node) => node.homeX ?? centre.x)
+        .strength((node) => node.kind === "juror" && node.homeX !== undefined ? 0.3 : 0),
+    )
+    .force(
+      "juror-home-y",
+      forceY<LayoutNode>((node) => node.homeY ?? centre.y)
+        .strength((node) => node.kind === "juror" && node.homeY !== undefined ? 0.3 : 0),
     )
     .force("charge", forceManyBody<LayoutNode>().strength(-120))
     .force("collide", forceCollide<LayoutNode>((node) => collisionRadius(node) + 4))
