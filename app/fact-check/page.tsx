@@ -227,9 +227,6 @@ function FactCheckContent() {
         <h1 className="ov-display text-5xl text-ocean md:text-6xl">
           Verify any claim
         </h1>
-        <p className="text-base text-muted-foreground">
-          No wallet, no account, no gas.
-        </p>
       </div>
 
       <div className="mx-auto w-full max-w-3xl space-y-3">
