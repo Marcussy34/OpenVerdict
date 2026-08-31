@@ -628,8 +628,19 @@ provenance. Two live-found defects: a 300-token output cap starved
 reasoning models into empty replies (raised to 1500, verified live:
 simple.wikipedia/Bitcoin -> "In June 2021, El Salvador became the first
 country in the world to make Bitcoin a legal tender.",
-devshard-67806-387); slightly malformed model JSON still 422s, repair
-round + prose windowing running as a Codex follow-up. ROUND-2 DISCUSSION
+devshard-67806-387); slightly malformed model JSON still 422s, so a
+follow-up (commit `e62e446`, deployment `14bfeded`, line-reviewed) added
+exactly one REPAIR completion (promptSpec repair language, jsonMode,
+prior content appended, ids from the accepted reply) and
+selectProseWindow (start at the first line with >= 160 trimmed chars,
+head fallback, 12k cap). Verified live: the FULL en.wikipedia
+Bitcoin article, whose lead sits ~30k chars deep, now returns "On 31
+October 2008, a white paper authored by Satoshi Nakamoto titled
+'Bitcoin: A Peer-to-Peer Electronic Cash System' was posted to a
+cryptography mailing list." (devshard-67842-201). 485/485 vitest.
+Worker process lesson recorded: codex-companion --resume-last resumes
+whatever thread is newest in the shared runtime; send fresh
+self-contained briefs instead. ROUND-2 DISCUSSION
 (Codex-built, line-reviewed): split first rounds now inject the revealed
 round-1 public record (seat index, model, outcome, confidenceBps, public
 reasoning trace) into every round-2 juror input and freeze it canonically
