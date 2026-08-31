@@ -1,0 +1,642 @@
+"use client";
+
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type PointerEvent as ReactPointerEvent,
+  type ReactNode,
+  type WheelEvent as ReactWheelEvent,
+} from "react";
+import { motion, useReducedMotion } from "motion/react";
+
+import {
+  CloseCircle,
+  DocumentText,
+  Lock,
+  SearchNormal1,
+  ShieldSearch,
+  ShieldTick,
+  TickCircle,
+} from "@/components/icons";
+import { cn } from "@/lib/utils";
+import type {
+  DeliberationGraph,
+  GraphNode,
+  JurorFamily,
+} from "@/lib/viz/deliberation-graph";
+import { useForceLayout } from "./use-force-layout";
+
+type Position = { x: number; y: number };
+type Viewport = { x: number; y: number; scale: number };
+type DragState = {
+  pointerId: number;
+  startX: number;
+  startY: number;
+  originX: number;
+  originY: number;
+  moved: boolean;
+};
+
+const FAMILY_STYLE: Record<JurorFamily, {
+  disc: string;
+  initial: string;
+  ring: string;
+}> = {
+  deepseek: {
+    disc: "bg-[#0e76ff] text-white",
+    initial: "D",
+    ring: "ring-[#0e76ff]",
+  },
+  kimi: {
+    disc: "bg-[#e2b93b] text-[#04122b]",
+    initial: "K",
+    ring: "ring-[#e2b93b]",
+  },
+  minimax: {
+    disc: "bg-[#ff6f61] text-white",
+    initial: "M",
+    ring: "ring-[#ff6f61]",
+  },
+  unknown: {
+    disc: "bg-white/15 text-white/80",
+    initial: "?",
+    ring: "ring-white/30",
+  },
+};
+
+const OUTCOME_STYLE = {
+  YES: "bg-yes/20 text-yes",
+  NO: "bg-no/20 text-no",
+  UNSURE: "bg-unsure/20 text-unsure",
+} as const;
+const NODE_ENTRY_DURATION_SECONDS = 0.24;
+const NODE_ENTRY_EASE: [number, number, number, number] = [0.33, 1, 0.68, 1];
+
+function hash(value: string): number {
+  let result = 0;
+  for (let index = 0; index < value.length; index += 1) {
+    result = (result * 31 + value.charCodeAt(index)) >>> 0;
+  }
+  return result;
+}
+
+function labelAtMost(value: string, limit: number): string {
+  return value.length <= limit ? value : `${value.slice(0, limit - 3)}...`;
+}
+
+function clampScale(value: number): number {
+  return Math.min(2.5, Math.max(0.4, value));
+}
+
+function outgoingSubtree(
+  startId: string,
+  graph: DeliberationGraph,
+): Set<string> {
+  const outgoing = new Map<string, string[]>();
+  for (const edge of graph.edges) {
+    const targets = outgoing.get(edge.from) ?? [];
+    targets.push(edge.to);
+    outgoing.set(edge.from, targets);
+  }
+
+  const visited = new Set([startId]);
+  const pending = [startId];
+  while (pending.length > 0) {
+    const current = pending.shift();
+    if (current === undefined) continue;
+    for (const target of outgoing.get(current) ?? []) {
+      if (visited.has(target)) continue;
+      visited.add(target);
+      pending.push(target);
+    }
+  }
+  return visited;
+}
+
+function nodeClassName(node: GraphNode, selected: boolean): string {
+  const selectedRing = selected ? "ring-2 ring-white/70" : undefined;
+
+  switch (node.kind) {
+    case "claim":
+      return cn(
+        "size-[84px] rounded-full border border-white/25 bg-white/8 text-white/85",
+        selectedRing,
+      );
+    case "juror": {
+      const family = node.family ?? "unknown";
+      return cn(
+        "size-14 rounded-full ring-2",
+        selected ? "ring-white/70" : FAMILY_STYLE[family].ring,
+        node.state === "sealed" && "opacity-80",
+      );
+    }
+    case "sealedAction":
+      return cn(
+        "size-[22px] rounded-md bg-white/10 text-white/75 opacity-70",
+        "after:absolute after:-inset-2.5 after:content-['']",
+        selectedRing,
+      );
+    case "search":
+      return cn(
+        "size-[26px] rounded-full text-white/85",
+        "after:absolute after:-inset-2.5 after:content-['']",
+        node.intent === "challenge" ? "bg-[#ff8f3f]/25" : "bg-[#0e76ff]/25",
+        selectedRing,
+      );
+    case "page":
+      return cn(
+        "size-6 rounded-md bg-white/12 text-white/75",
+        "after:absolute after:-inset-2.5 after:content-['']",
+        selectedRing,
+      );
+    case "verdict": {
+      const outcome = node.outcome ?? "UNSURE";
+      return cn(
+        "size-11 rounded-xl",
+        OUTCOME_STYLE[outcome],
+        selectedRing,
+      );
+    }
+    case "failure":
+      return cn(
+        "size-[30px] rounded-md bg-no/15 text-no",
+        "after:absolute after:-inset-2.5 after:content-['']",
+        selectedRing,
+      );
+    case "certificate":
+      return cn(
+        "size-16 rounded-2xl border border-yes/40 bg-yes/15 text-yes",
+        selectedRing,
+      );
+  }
+}
+
+function jurorAvatar(
+  node: GraphNode,
+  avatars: Partial<Record<JurorFamily, string[]>>,
+): string | undefined {
+  const family = node.family ?? "unknown";
+  const available = avatars[family];
+  if (available === undefined || available.length === 0) return undefined;
+  const seatId = node.seatId ?? node.id;
+  return available[hash(seatId) % available.length];
+}
+
+function JurorContent({
+  node,
+  avatars,
+  verdict,
+  reduceMotion,
+}: {
+  node: GraphNode;
+  avatars: Partial<Record<JurorFamily, string[]>>;
+  verdict?: GraphNode;
+  reduceMotion: boolean;
+}) {
+  const family = node.family ?? "unknown";
+  const avatar = jurorAvatar(node, avatars);
+  const outcome = node.outcome ?? verdict?.outcome;
+  const confidenceBps = node.confidenceBps ?? verdict?.confidenceBps;
+
+  return (
+    <>
+      {node.state === "failed" ? (
+        <span
+          aria-hidden
+          className={cn(
+            "absolute -inset-1 rounded-full border border-no/70",
+            !reduceMotion && "animate-ping",
+          )}
+        />
+      ) : null}
+      {avatar === undefined ? (
+        <span
+          className={cn(
+            "grid size-full place-items-center rounded-full text-sm font-bold",
+            FAMILY_STYLE[family].disc,
+          )}
+        >
+          {FAMILY_STYLE[family].initial}
+        </span>
+      ) : (
+        <img
+          src={avatar}
+          alt=""
+          draggable={false}
+          className="size-full rounded-full object-cover"
+        />
+      )}
+      {node.state === "sealed" ? (
+        <span className="absolute -top-1 -right-1 grid size-5 place-items-center rounded-full bg-[#04122b] text-white">
+          <Lock size="11" variant="Bold" />
+        </span>
+      ) : null}
+      {node.state === "failed" ? (
+        <span className="absolute -right-1 -bottom-1 grid size-5 place-items-center rounded-full bg-[#04122b] text-no">
+          <CloseCircle size="13" variant="Bold" />
+        </span>
+      ) : null}
+      {node.state === "revealed" && outcome !== undefined ? (
+        <span
+          className={cn(
+            "pointer-events-none absolute top-[calc(100%+6px)] left-1/2 -translate-x-1/2",
+            "whitespace-nowrap rounded-full px-1.5 py-0.5 text-[9px] font-semibold tabular-nums",
+            OUTCOME_STYLE[outcome],
+          )}
+        >
+          {outcome}
+          {confidenceBps === undefined ? null : ` · ${confidenceBps} bps`}
+        </span>
+      ) : null}
+    </>
+  );
+}
+
+function nodeContent(
+  node: GraphNode,
+  options: {
+    avatars: Partial<Record<JurorFamily, string[]>>;
+    cited: boolean;
+    jurorVerdict?: GraphNode;
+    reduceMotion: boolean;
+  },
+): ReactNode {
+  switch (node.kind) {
+    case "claim":
+      return (
+        <>
+          <ShieldSearch size="30" variant="Bulk" />
+          <span className="pointer-events-none absolute top-[calc(100%+7px)] left-1/2 w-40 -translate-x-1/2 truncate text-center text-[11px] text-white/85">
+            {labelAtMost(node.label, 60)}
+          </span>
+        </>
+      );
+    case "juror":
+      return (
+        <JurorContent
+          node={node}
+          avatars={options.avatars}
+          verdict={options.jurorVerdict}
+          reduceMotion={options.reduceMotion}
+        />
+      );
+    case "sealedAction":
+      return <Lock size="12" variant="Bold" />;
+    case "search":
+      return (
+        <>
+          <SearchNormal1 size="13" variant="Bold" />
+          <span className="pointer-events-none absolute top-[calc(100%+5px)] left-1/2 w-24 -translate-x-1/2 truncate text-center text-[9px] text-white/60">
+            {node.label}
+          </span>
+        </>
+      );
+    case "page":
+      return (
+        <>
+          <DocumentText size="13" variant="Bold" />
+          {options.cited ? (
+            <span className="absolute -right-1 -bottom-1 text-yes">
+              <TickCircle size="10" variant="Bold" />
+            </span>
+          ) : null}
+        </>
+      );
+    case "verdict": {
+      const outcome = node.outcome ?? "UNSURE";
+      return (
+        <span className="flex flex-col items-center leading-none">
+          <span className="text-[9px] font-bold">{outcome}</span>
+          <span className="mt-1 text-[8px] font-semibold tabular-nums opacity-80">
+            {node.confidenceBps === undefined
+              ? "N/A"
+              : `${node.confidenceBps} bps`}
+          </span>
+        </span>
+      );
+    }
+    case "failure":
+      return <CloseCircle size="16" variant="Bold" />;
+    case "certificate":
+      return (
+        <span className="flex flex-col items-center gap-1">
+          <ShieldTick size="24" variant="Bold" />
+          <span className="text-[9px] font-semibold">Certificate</span>
+        </span>
+      );
+  }
+}
+
+function CanvasNode({
+  node,
+  position,
+  selected,
+  highlighted,
+  highlightActive,
+  avatars,
+  cited,
+  jurorVerdict,
+  reduceMotion,
+  onSelect,
+  onJurorHover,
+}: {
+  node: GraphNode;
+  position: Position;
+  selected: boolean;
+  highlighted: boolean;
+  highlightActive: boolean;
+  avatars: Partial<Record<JurorFamily, string[]>>;
+  cited: boolean;
+  jurorVerdict?: GraphNode;
+  reduceMotion: boolean;
+  onSelect: (node: GraphNode) => void;
+  onJurorHover: (id: string | null) => void;
+}) {
+  return (
+    <div
+      className="absolute top-0 left-0 will-change-transform"
+      style={{ transform: `translate3d(${position.x}px, ${position.y}px, 0)` }}
+    >
+      <div className="-translate-x-1/2 -translate-y-1/2">
+        <div
+          className={cn(
+            "relative",
+            !reduceMotion && "transition-[opacity,transform] duration-100 ease-out",
+            highlightActive && !highlighted && "opacity-60",
+            highlightActive && highlighted && !reduceMotion && "scale-105",
+          )}
+        >
+          <motion.button
+            type="button"
+            aria-label={`Select ${node.kind}: ${node.label}`}
+            className={cn(
+              "relative grid place-items-center focus-visible:outline-none",
+              "focus-visible:ring-2 focus-visible:ring-white/90 focus-visible:ring-offset-2",
+              "focus-visible:ring-offset-[#04122b]",
+              nodeClassName(node, selected),
+            )}
+            initial={reduceMotion ? false : { scale: 0 }}
+            animate={reduceMotion ? undefined : { scale: 1 }}
+            transition={reduceMotion ? undefined : {
+              duration: NODE_ENTRY_DURATION_SECONDS,
+              ease: NODE_ENTRY_EASE,
+            }}
+            onClick={(event) => {
+              event.stopPropagation();
+              onSelect(node);
+            }}
+            onPointerDown={(event) => event.stopPropagation()}
+            onMouseEnter={() => {
+              if (node.kind === "juror") onJurorHover(node.id);
+            }}
+            onMouseLeave={() => {
+              if (node.kind === "juror") onJurorHover(null);
+            }}
+          >
+            {nodeContent(node, {
+              avatars,
+              cited,
+              jurorVerdict,
+              reduceMotion,
+            })}
+          </motion.button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export function DeliberationCanvas({
+  graph,
+  selectedId,
+  onSelect,
+  avatars,
+  reducedMotion,
+}: {
+  graph: DeliberationGraph;
+  selectedId: string | null;
+  onSelect: (node: GraphNode | null) => void;
+  avatars: Partial<Record<JurorFamily, string[]>>;
+  reducedMotion?: boolean;
+}) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const dragRef = useRef<DragState | null>(null);
+  const systemReducedMotion = useReducedMotion();
+  const shouldReduceMotion = reducedMotion === true || systemReducedMotion === true;
+  const [size, setSize] = useState({ width: 0, height: 0 });
+  const [viewport, setViewport] = useState<Viewport>({ x: 0, y: 0, scale: 1 });
+  const [hoveredJurorId, setHoveredJurorId] = useState<string | null>(null);
+  const positions = useForceLayout(graph, size);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (container === null) return;
+
+    // Force coordinates track the canvas content box in whole CSS pixels.
+    const updateSize = (width: number, height: number): void => {
+      const next = { width: Math.round(width), height: Math.round(height) };
+      setSize((current) =>
+        current.width === next.width && current.height === next.height
+          ? current
+          : next,
+      );
+    };
+    const rect = container.getBoundingClientRect();
+    updateSize(rect.width, rect.height);
+
+    const observer = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (entry === undefined) return;
+      updateSize(entry.contentRect.width, entry.contentRect.height);
+    });
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, []);
+
+  const nodesById = useMemo(
+    () => new Map(
+      graph.nodes.map((node): [string, GraphNode] => [node.id, node]),
+    ),
+    [graph.nodes],
+  );
+  const verdictBySeat = useMemo(() => {
+    const verdicts = new Map<string, GraphNode>();
+    for (const node of graph.nodes) {
+      if (node.kind === "verdict" && node.seatId !== undefined) {
+        verdicts.set(node.seatId, node);
+      }
+    }
+    return verdicts;
+  }, [graph.nodes]);
+  const citedPageIds = useMemo(
+    () => new Set(
+      graph.edges
+        .filter((edge) => edge.kind === "citation")
+        .map((edge) => edge.from),
+    ),
+    [graph.edges],
+  );
+  const highlightedIds = useMemo(() => {
+    if (hoveredJurorId === null || !nodesById.has(hoveredJurorId)) return null;
+    return outgoingSubtree(hoveredJurorId, graph);
+  }, [graph, hoveredJurorId, nodesById]);
+
+  const handlePointerDown = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>): void => {
+      if (event.button !== 0 || dragRef.current !== null) return;
+      event.currentTarget.setPointerCapture(event.pointerId);
+      dragRef.current = {
+        pointerId: event.pointerId,
+        startX: event.clientX,
+        startY: event.clientY,
+        originX: viewport.x,
+        originY: viewport.y,
+        moved: false,
+      };
+    },
+    [viewport.x, viewport.y],
+  );
+
+  const handlePointerMove = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>): void => {
+      const drag = dragRef.current;
+      if (drag === null || drag.pointerId !== event.pointerId) return;
+      const deltaX = event.clientX - drag.startX;
+      const deltaY = event.clientY - drag.startY;
+      if (Math.hypot(deltaX, deltaY) > 3) drag.moved = true;
+      setViewport((current) => ({
+        ...current,
+        x: drag.originX + deltaX,
+        y: drag.originY + deltaY,
+      }));
+    },
+    [],
+  );
+
+  const finishPointer = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>): void => {
+      const drag = dragRef.current;
+      if (drag === null || drag.pointerId !== event.pointerId) return;
+      dragRef.current = null;
+      if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+        event.currentTarget.releasePointerCapture(event.pointerId);
+      }
+      if (!drag.moved) onSelect(null);
+    },
+    [onSelect],
+  );
+
+  const cancelPointer = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>): void => {
+      const drag = dragRef.current;
+      if (drag === null || drag.pointerId !== event.pointerId) return;
+      dragRef.current = null;
+      if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+        event.currentTarget.releasePointerCapture(event.pointerId);
+      }
+    },
+    [],
+  );
+
+  const handleWheel = useCallback((event: ReactWheelEvent<HTMLDivElement>): void => {
+    event.preventDefault();
+    const rect = event.currentTarget.getBoundingClientRect();
+    const pointerX = event.clientX - rect.left;
+    const pointerY = event.clientY - rect.top;
+
+    setViewport((current) => {
+      const nextScale = clampScale(current.scale * Math.exp(-event.deltaY * 0.001));
+      if (nextScale === current.scale) return current;
+      // Keep the graph coordinate under the pointer fixed while zooming.
+      const graphX = (pointerX - current.x) / current.scale;
+      const graphY = (pointerY - current.y) / current.scale;
+      return {
+        scale: nextScale,
+        x: pointerX - graphX * nextScale,
+        y: pointerY - graphY * nextScale,
+      };
+    });
+  }, []);
+
+  return (
+    <div
+      ref={containerRef}
+      role="application"
+      aria-label="Deliberation graph canvas"
+      className="relative h-full w-full touch-none cursor-grab overflow-hidden bg-[#04122b] select-none active:cursor-grabbing"
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={finishPointer}
+      onPointerCancel={cancelPointer}
+      onWheel={handleWheel}
+    >
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_35%,rgba(0,0,0,0.42)_100%)]"
+      />
+      <div
+        className="absolute inset-0 origin-top-left"
+        style={{
+          transform: `translate3d(${viewport.x}px, ${viewport.y}px, 0) scale(${viewport.scale})`,
+        }}
+      >
+        {/* Edges and nodes share one viewport transform. */}
+        <svg
+          aria-hidden
+          className="pointer-events-none absolute top-0 left-0"
+          width={size.width}
+          height={size.height}
+          viewBox={`0 0 ${size.width} ${size.height}`}
+        >
+          {graph.edges.map((edge) => {
+            const from = positions.get(edge.from);
+            const to = positions.get(edge.to);
+            if (from === undefined || to === undefined) return null;
+            const highlighted = highlightedIds !== null
+              && (highlightedIds.has(edge.from) || highlightedIds.has(edge.to));
+            return (
+              <line
+                key={edge.id}
+                x1={from.x}
+                y1={from.y}
+                x2={to.x}
+                y2={to.y}
+                stroke="#ffffff"
+                strokeOpacity={highlighted ? 0.3 : 0.12}
+                strokeWidth="1"
+              />
+            );
+          })}
+        </svg>
+
+        {graph.nodes.map((node) => {
+          const position = positions.get(node.id);
+          if (position === undefined) return null;
+          const nodeHighlighted = highlightedIds?.has(node.id) ?? false;
+          const cited = node.detail?.cited === true || citedPageIds.has(node.id);
+          return (
+            <CanvasNode
+              key={node.id}
+              node={node}
+              position={position}
+              selected={selectedId === node.id}
+              highlighted={nodeHighlighted}
+              highlightActive={highlightedIds !== null}
+              avatars={avatars}
+              cited={cited}
+              jurorVerdict={
+                node.seatId === undefined ? undefined : verdictBySeat.get(node.seatId)
+              }
+              reduceMotion={shouldReduceMotion}
+              onSelect={onSelect}
+              onJurorHover={setHoveredJurorId}
+            />
+          );
+        })}
+      </div>
+    </div>
+  );
+}
