@@ -733,6 +733,40 @@ cannes2026/ (DIVE comparison clone). Key fingerprints unchanged (Gonka
 key in .env + Railway, never print). MCP memory entity "OpenVerdict
 production topology" mirrors all of this.
 
+## 3l. POST-COMPACTION ROUND 2026-09-01 00:10 (owner-directed)
+
+Three deploys tonight, all verified in a real browser, tree clean and
+pushed after each. Live deployment: `c3f7916e` (main `2b79dd1`).
+
+- Wave word, v1 then v2: /fact-check hero "claim" first got a flowing
+  gradient plus sine underline (`2b71164`); owner redirected ("the entire
+  word will be like a wave, not additional animation around it"), so v2
+  (`caf22bf`) removed the underline and made the letters themselves
+  undulate: per-letter spans, one keyframe driving bob + gradient crest,
+  negative delay stagger (-0.22s * --i), aria-label on the wrapper,
+  static gradient under prefers-reduced-motion. Verified live: 5 letters,
+  staggered delays, clip text, no ::after.
+- Explorer link sweep (`05fbf21`), owner: "everything that can be found
+  on chain is a clickable explorer link". Added hrefs: timeline finalize
+  tx (Suiscan tx), Seal policy package + identity claim/seat + key
+  servers (Suiscan objects), canvas seat-inspector certificate chip,
+  report frozen EvidenceBundle id, evidence page blob id (Walrus
+  aggregator) + blob object id. Verified live on claim 0x21aa5a7b…:
+  report 17 collapsed / 76 expanded Suiscan links, canvas cert chip ok.
+  Left unlinked by design: pure hashes (content/prompt/policy/core),
+  evidence ids, run ids. Content-hash answer for the owner: page hash =
+  blake2b256(bytes), lives in evidence_artifacts.content_hash, the
+  revealed run bundle, the evidence manifest (Walrus), and is anchored
+  on-chain only via the frozen manifest merkle root.
+- README thesis (`2b79dd1`): recomputability stance paragraph atop
+  "What is auditable" (independence before the fact, integrity after,
+  two honest caveats, "manipulation cannot hide").
+- Operator funded by owner: 51.7 SUI confirmed via balances.mts
+  (agents ~0.6 each). Faucet open item CLOSED.
+- Incident, benign: post-deploy warm took 104s on one proof and browned
+  out the container; monitor "claims api unreachable x5" fired during
+  that window; all endpoints 200 in <1s right after. No action.
+
 ## 4. Planned next (owner-approved direction)
 
 - Attestation (docs/superpowers/specs/2026-08-30-attested-inference-design.md):
