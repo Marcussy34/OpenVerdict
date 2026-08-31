@@ -21,6 +21,7 @@ import {
   ShieldTick,
   TickCircle,
 } from "@/components/icons";
+import { avatarAssetNumber } from "@/components/agents/avatar";
 import { cn } from "@/lib/utils";
 import type {
   DeliberationGraph,
@@ -77,14 +78,6 @@ const OUTCOME_STYLE = {
 } as const;
 const NODE_ENTRY_DURATION_SECONDS = 0.24;
 const NODE_ENTRY_EASE: [number, number, number, number] = [0.33, 1, 0.68, 1];
-
-function hash(value: string): number {
-  let result = 0;
-  for (let index = 0; index < value.length; index += 1) {
-    result = (result * 31 + value.charCodeAt(index)) >>> 0;
-  }
-  return result;
-}
 
 function labelAtMost(value: string, limit: number): string {
   return value.length <= limit ? value : `${value.slice(0, limit - 3)}...`;
@@ -190,8 +183,14 @@ function jurorAvatar(
   const family = node.family ?? "unknown";
   const available = avatars[family];
   if (available === undefined || available.length === 0) return undefined;
-  const seatId = node.seatId ?? node.id;
-  return available[hash(seatId) % available.length];
+  // The AGENT is the stable identity: the shared picker keeps this face in
+  // lockstep with the inspector's JurorAvatar for the same juror.
+  const agentProfileId = node.detail?.agentProfileId;
+  const key = typeof agentProfileId === "string" && agentProfileId.length > 0
+    ? agentProfileId
+    : node.seatId ?? node.id;
+  const assetNumber = avatarAssetNumber(family, key);
+  return assetNumber === undefined ? undefined : available[assetNumber - 1];
 }
 
 function JurorContent({

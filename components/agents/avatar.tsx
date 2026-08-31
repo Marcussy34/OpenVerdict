@@ -10,14 +10,35 @@ export const FAMILY_ASSET_COUNT: Record<JurorFamily, number> = {
   unknown: 0,
 };
 
+/**
+ * One deterministic variant pick shared by every surface (canvas nodes and
+ * inspector alike), so a juror always wears the same face. Key it by the
+ * agent's stable identity (agentProfileId) wherever possible.
+ */
+export function avatarAssetNumber(
+  family: JurorFamily,
+  key: string,
+): number | undefined {
+  const count = FAMILY_ASSET_COUNT[family];
+  if (count === 0) return undefined;
+  let hash = 0;
+  for (let index = 0; index < key.length; index += 1) {
+    hash = (hash * 31 + key.charCodeAt(index)) >>> 0;
+  }
+  return (hash % count) + 1;
+}
+
 export function JurorAvatar({
   family,
   ordinal,
+  avatarKey,
   size = 48,
   className,
 }: {
   family: JurorFamily;
   ordinal: number;
+  /** Stable identity for the variant pick; falls back to ordinal. */
+  avatarKey?: string;
   size?: number;
   className?: string;
 }) {
@@ -38,7 +59,9 @@ export function JurorAvatar({
     );
   }
 
-  const assetNumber = (ordinal % count) + 1;
+  const assetNumber =
+    (avatarKey === undefined ? undefined : avatarAssetNumber(family, avatarKey))
+    ?? (ordinal % count) + 1;
 
   return (
     <Image

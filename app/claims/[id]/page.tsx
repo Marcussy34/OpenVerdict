@@ -502,6 +502,7 @@ function SeatInspector({
         <JurorAvatar
           family={family}
           ordinal={familyOrdinal < 0 ? seatIndex : familyOrdinal}
+          avatarKey={commitment.agentProfileId}
           size={56}
           className="ring-2 ring-white/15"
         />

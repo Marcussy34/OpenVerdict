@@ -17,6 +17,7 @@ import type {
 type LayoutNode = SimulationNodeDatum & {
   id: string;
   kind: GraphNode["kind"];
+  seatIndex?: number;
 };
 
 type LayoutLink = SimulationLinkDatum<LayoutNode>;
@@ -48,12 +49,16 @@ export function createSimulation(
       return { id: node.id, kind: node.kind, fx: centre.x, fy: centre.y };
     }
     if (node.kind === "juror" && jurorCount > 0) {
-      // Even seed angles keep the committee legible while the forces settle.
-      const angle = (jurorIndex / jurorCount) * Math.PI * 2 - Math.PI / 2;
+      // Stable pentagon slots: a seat's committee index fixes its angle, so
+      // five jurors spawn evenly spaced even when they appear one by one.
+      const slot = node.seatIndex ?? jurorIndex;
+      const slots = node.seatIndex === undefined ? jurorCount : 5;
+      const angle = ((slot % slots) / slots) * Math.PI * 2 - Math.PI / 2;
       jurorIndex += 1;
       return {
         id: node.id,
         kind: node.kind,
+        seatIndex: node.seatIndex,
         x: centre.x + Math.cos(angle) * radialRadius,
         y: centre.y + Math.sin(angle) * radialRadius,
       };

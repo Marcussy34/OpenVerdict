@@ -10,6 +10,8 @@ export type GraphNode = {
   label: string;
   atMs: number;
   seatId?: string;
+  /** The seat's stable committee position (0-4), for even juror placement. */
+  seatIndex?: number;
   runId?: string;
   family?: JurorFamily;
   state?: "researching" | "sealed" | "revealed" | "failed";
@@ -345,6 +347,7 @@ export function buildDeliberationGraph(input: {
       label: `Juror ${index + 1}`,
       atMs: committeeAtMs,
       seatId: commitment.jurySeatId,
+      seatIndex: index,
       // The commitment's manifest model id is authoritative; the event scan
       // is only a fallback for records saved before modelId was exposed.
       family: familyOfModelId(

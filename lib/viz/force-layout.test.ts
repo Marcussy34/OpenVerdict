@@ -87,4 +87,40 @@ describe("force layout", () => {
 
     expect(Math.hypot(alpha.x - beta.x, alpha.y - beta.y)).toBeGreaterThan(80);
   });
+
+  it("seeds seat-indexed jurors on stable pentagon slots", () => {
+    const size = { width: 640, height: 480 };
+    const centre = { x: 320, y: 240 };
+    const radius = Math.min(size.width, size.height) / 3.2;
+    const graph: DeliberationGraph = {
+      nodes: [
+        { id: "claim", kind: "claim", label: "Claim", atMs: 0 },
+        ...Array.from({ length: 5 }, (_, index) => ({
+          id: `seat:${index}`,
+          kind: "juror" as const,
+          label: `Juror ${index + 1}`,
+          atMs: 1,
+          seatId: `seat-${index}`,
+          seatIndex: index,
+        })),
+      ],
+      edges: Array.from({ length: 5 }, (_, index) => ({
+        id: `seat-${index}`,
+        from: "claim",
+        to: `seat:${index}`,
+        kind: "seat" as const,
+      })),
+    };
+
+    const { simulation, positions } = createSimulation(graph, size);
+    simulation.stop();
+    // No ticks: assert the raw seeds, which is what a spawning juror gets.
+    const seeds = positions();
+    for (let index = 0; index < 5; index += 1) {
+      const angle = (index / 5) * Math.PI * 2 - Math.PI / 2;
+      const seed = seeds.get(`seat:${index}`);
+      expect(seed?.x).toBeCloseTo(centre.x + Math.cos(angle) * radius, 6);
+      expect(seed?.y).toBeCloseTo(centre.y + Math.sin(angle) * radius, 6);
+    }
+  });
 });

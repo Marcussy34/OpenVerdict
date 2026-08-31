@@ -79,7 +79,10 @@ export function useForceLayout(
         connect(edge.to, edge.from);
       }
       for (const node of layout.simulation.nodes()) {
-        if (node.kind === "claim" || positionsRef.current.has(node.id)) continue;
+        // Jurors keep their pentagon seeds; only research nodes branch out
+        // of the node they attach to.
+        if (node.kind === "claim" || node.kind === "juror") continue;
+        if (positionsRef.current.has(node.id)) continue;
         const anchorId = (neighbours.get(node.id) ?? [])
           .find((id) => positionsRef.current.has(id));
         if (anchorId === undefined) continue;
