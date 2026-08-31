@@ -76,18 +76,20 @@ module openverdict::claim {
         all_seats_committed: bool,
     }
 
-    /// Keeps challenge audit pointers together within the validator's 32-field struct limit.
+    /// Packs challenge audit pointers AND the fee policy snapshot together:
+    /// the Claim struct sits exactly at the validator's 32-field limit, so
+    /// new scalar state must live inside this sub-struct, never on Claim.
     public struct ChallengeReason has store, drop {
         hash: vector<u8>,
         blob_id: vector<u8>,
+        treasury: address,
+        protocol_fee_bps: u64,
     }
 
     /// Shared claim object. All deposited value remains in these vaults until withdrawal.
     public struct Claim<phantom T> has key {
         id: UID,
         protocol_version: u64,
-        treasury: address,
-        protocol_fee_bps: u64,
         claim_mode: u8,
         creator: address,
         content_hash: vector<u8>,
@@ -305,7 +307,8 @@ module openverdict::claim {
         assert!(amount > 0 && amount == balance::value(&claim.proposer_bond), E_BOND_MISMATCH);
         balance::join(&mut claim.challenger_bond, coin::into_balance(challenger_bond));
         claim.challenger = option::some(ctx.sender());
-        claim.challenge_reason = ChallengeReason { hash: reason_hash, blob_id: reason_blob_id };
+        claim.challenge_reason.hash = reason_hash;
+        claim.challenge_reason.blob_id = reason_blob_id;
         claim.state = STATE_CHALLENGED;
         event::emit(OutcomeChallenged {
             claim_id: object::id(claim),
@@ -468,8 +471,6 @@ module openverdict::claim {
         Claim {
             id: object::new(ctx),
             protocol_version: PROTOCOL_VERSION,
-            treasury: agent_registry::treasury(registry),
-            protocol_fee_bps: agent_registry::protocol_fee_bps(registry),
             claim_mode: params.claim_mode,
             creator: ctx.sender(),
             content_hash,
@@ -491,7 +492,12 @@ module openverdict::claim {
             second_reveal_deadline_ms: params.second_reveal_deadline_ms,
             proposer: option::none(),
             challenger: option::none(),
-            challenge_reason: ChallengeReason { hash: vector[], blob_id: vector[] },
+            challenge_reason: ChallengeReason {
+                hash: vector[],
+                blob_id: vector[],
+                treasury: agent_registry::treasury(registry),
+                protocol_fee_bps: agent_registry::protocol_fee_bps(registry),
+            },
             proposal: OUTCOME_NONE,
             result: OUTCOME_NONE,
             state: STATE_CREATED,
@@ -621,8 +627,8 @@ module openverdict::claim {
     public(package) fun proposer_bond_value<T>(claim: &Claim<T>): u64 { balance::value(&claim.proposer_bond) }
     public(package) fun challenger_bond_value<T>(claim: &Claim<T>): u64 { balance::value(&claim.challenger_bond) }
     public(package) fun evidence_policy_id<T>(claim: &Claim<T>): &vector<u8> { &claim.evidence_policy_id }
-    public(package) fun treasury<T>(claim: &Claim<T>): address { claim.treasury }
-    public(package) fun protocol_fee_bps<T>(claim: &Claim<T>): u64 { claim.protocol_fee_bps }
+    public(package) fun treasury<T>(claim: &Claim<T>): address { claim.challenge_reason.treasury }
+    public(package) fun protocol_fee_bps<T>(claim: &Claim<T>): u64 { claim.challenge_reason.protocol_fee_bps }
 
     public(package) fun set_terminal<T>(claim: &mut Claim<T>, result: u8, reviewed: bool, certificate_id: ID) {
         assert!(!is_terminal_state(claim.state), E_INVALID_STATE);
@@ -746,8 +752,6 @@ module openverdict::claim {
         let Claim {
             id,
             protocol_version: _,
-            treasury: _,
-            protocol_fee_bps: _,
             claim_mode: _,
             creator: _,
             content_hash: _,
