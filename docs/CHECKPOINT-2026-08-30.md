@@ -765,9 +765,20 @@ pushed after each. Live deployment: `c3f7916e` (main `2b79dd1`).
   two honest caveats, "manipulation cannot hide").
 - Operator funded by owner: 51.7 SUI confirmed via balances.mts
   (agents ~0.6 each). Faucet open item CLOSED.
-- Incident, benign: post-deploy warm took 104s on one proof and browned
-  out the container; monitor "claims api unreachable x5" fired during
-  that window; all endpoints 200 in <1s right after. No action.
+- Incident, RITUAL CHANGE: the warm-proofs script browned out the
+  container twice (zero bytes served for minutes; owner hit it live:
+  "why is the app not loading"). Concurrent per-seat recomputes were the
+  trigger; a sequential + 3s-gap rewrite STILL degraded the site (6s+
+  stalls, owner: "its a bit slow"). Killing the warmer restored <1s
+  responses within seconds both times. Verdict: the single Railway
+  container cannot rebuild proofs and serve traffic at any concurrency.
+  RITUAL: do NOT run warm-proofs after deploys any more; first viewer
+  of a run-proof panel pays the recompute instead. Real fixes, owner's
+  choice, none started: (a) scale the Railway service, (b) persist
+  proof bundles at finalization (engine writes them once to Postgres,
+  API serves static reads; Codex-scale backend task), (c) accept the
+  first-viewer cost. The sequential warmer stays in scratchpad for
+  quiet-hours use only.
 
 ## 4. Planned next (owner-approved direction)
 
