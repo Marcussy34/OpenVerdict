@@ -465,6 +465,50 @@ propose the format. No reply to the Gonka team is needed; nothing pending
 on their thread. Verified live via chrome-devtools each deploy; demo-claim
 proof caches warmed after every container restart.
 
+## 3i. CLOSING STATE 2026-08-31 16:45 (pre-compaction #10): read 3d through 3i and continue as if nothing happened
+
+- main = `48c6220`, pushed, tree clean; live deployment `b15b9b8d`
+  (SUCCESS 16:12), /api/status healthy. No Codex or Gemini job, no
+  background build running. One persistent session monitor still watches
+  the claims feed and narrates any new claim end to end.
+- The product today: statement-only submission; the claim page is the
+  interactive deliberation canvas (avatars, drag, crisp 2D transforms,
+  opaque genesis circle with the full statement beneath, inspector only
+  while a node is selected, auto-fit until the user pans, replay 1x/10x/60x,
+  sealed pulses wired but never yet seen live because every claim predates
+  RESEARCH_TICK); audit view at /claims/[id]/report; observer redirects;
+  Gateway receipt cross-check on every revealed run; X-Gonka-No-Fallback
+  pinned on every juror call. All docs synced (README, PRD 16+17, STATUS
+  16:20, runbook, specs, plan ticked, memory).
+- Deploy ritual (unchanged plus one step): check no live claim, commit,
+  push, `git -C <railway-tree> checkout --detach <sha>`, `railway up -s app
+  -d`, poll `railway deployment list -s app --json` to SUCCESS, then WARM
+  THE PROOF CACHES for the three demo claims (in-memory per container; the
+  warm script pattern is in 3g/memory; cold is 40 to 90 s per claim).
+  Verify canvases in a REAL browser via chrome-devtools MCP (firecrawl
+  headless throttles RAF and renders them broken); always close the tabs,
+  it is the owner's Chrome.
+- Demo claims: tariffs `0x21aa5a7bdd80…` (YES 9525, certificate
+  `0xc842…e0a8`, four seats plus an honest INVALID_SCHEMA failed seat),
+  #25 `0xbdab0011dadff…` (Seal), #26 `0x089c6c7c6d09f…` (hedges).
+- GonkaRouter thread: closed, nothing pending. Receipts lookup live and
+  integrated (no CORS upstream, hence the relay); signed receipts on their
+  roadmap (they propose the format); Kimi capacity planned around judging
+  days; no reply needed.
+- Waiting on the owner only: a fresh claim to show sealed pulses live, a
+  faucet top-up before a heavy demo day (operator ~1.95 SUI, ~7 claims;
+  2.4 WAL), the submission format when known, Nautilus still deferred.
+- Keys: GEMINI_API_KEY in ~/.zshenv (fingerprint 502aee78e649, Nano Banana
+  Pro works; avatar generators in scratchpad/avatars/gen*.sh). Firecrawl
+  CLI key fingerprint 3cdcdc21054f. Never print keys.
+- Worker lessons added tonight: the codex-worker bridge's foreground call
+  can hit its own 10-minute timeout while the Codex job keeps running
+  server-side (poll `status --all --json`, cancel only after 10 minutes of
+  no progress); the agy job registry misreports finished jobs as
+  failed/missing, judge by the diff and run the gate yourself; one wave-2
+  stall was finished by hand (React Compiler forbids ref writes and
+  setState-in-effect: derive instead).
+
 ## 4. Planned next (owner-approved direction)
 
 - Attestation (docs/superpowers/specs/2026-08-30-attested-inference-design.md):
