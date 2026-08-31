@@ -332,39 +332,40 @@ function FactCheckContent() {
         )}
 
         {/* The bar: one input, the button inside it, nothing else. */}
+        {/* One flat row: icon, input and button are siblings under
+            items-center, and the input's padding makes it exactly the
+            button's 48px, so all three sit on one line at every width. */}
         <form
           onSubmit={handleSubmit}
-          className="ov-edge flex flex-col gap-2 rounded-2xl border border-border bg-card p-2 shadow-xs focus-within:ring-2 focus-within:ring-ring sm:flex-row sm:items-stretch"
+          className="ov-edge flex items-center gap-2 rounded-2xl border border-border bg-card p-2 pl-4 shadow-xs focus-within:ring-2 focus-within:ring-ring"
         >
-          <div className="flex min-w-0 flex-1 items-center gap-2.5 pl-2.5">
-            <SearchNormal1 size="16" className="shrink-0 text-muted-foreground" />
-            <Textarea
-              id="claim-text"
-              required
-              rows={1}
-              placeholder="e.g. The first Bitcoin halving took place in November 2012"
-              className="field-sizing-content max-h-32 min-h-11 flex-1 resize-none border-0 bg-transparent p-0 py-2.5 text-base shadow-none placeholder:text-muted-foreground/45 focus-visible:ring-0 dark:bg-transparent"
-              value={claim}
-              onChange={(e) => {
-                setClaim(e.target.value);
-                setExtractError(null);
-              }}
-              onKeyDown={(e) => {
-                // Enter submits like a search bar; Shift+Enter makes a newline.
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
-                  e.currentTarget.form?.requestSubmit();
-                }
-              }}
-              maxLength={MAX_CLAIM}
-              aria-label="Claim statement to verify"
-            />
-          </div>
+          <SearchNormal1 size="18" className="shrink-0 text-muted-foreground" />
+          <Textarea
+            id="claim-text"
+            required
+            rows={1}
+            placeholder="e.g. The first Bitcoin halving took place in November 2012"
+            className="field-sizing-content max-h-40 min-h-12 min-w-0 flex-1 resize-none border-0 bg-transparent p-0 py-3 text-base leading-6 shadow-none placeholder:text-muted-foreground/45 focus-visible:ring-0 dark:bg-transparent"
+            value={claim}
+            onChange={(e) => {
+              setClaim(e.target.value);
+              setExtractError(null);
+            }}
+            onKeyDown={(e) => {
+              // Enter submits like a search bar; Shift+Enter makes a newline.
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                e.currentTarget.form?.requestSubmit();
+              }
+            }}
+            maxLength={MAX_CLAIM}
+            aria-label="Claim statement to verify"
+          />
           <Button
             type="submit"
             disabled={submitting || extracting || !claim.trim()}
             aria-busy={submitting || extracting}
-            className="min-h-[52px] shrink-0 px-7 font-semibold shadow-xs"
+            className="min-h-12 shrink-0 px-6 font-semibold shadow-xs"
           >
             {submitting ? (
               <>
