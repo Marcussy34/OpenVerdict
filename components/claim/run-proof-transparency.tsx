@@ -263,7 +263,7 @@ export function ProvenanceStrip({
         )}
       </div>
 
-      <dl className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+      <dl className="grid gap-2 @xs:grid-cols-2 @2xl:grid-cols-4">
         <ProvenanceValue label="Requested model" value={requestedModel ?? "Not recorded"} />
         <ProvenanceValue label="Served model" value={servedModel ?? "Not recorded"} />
         <ProvenanceValue
@@ -331,7 +331,7 @@ export function ProvenanceStrip({
       </div>
 
       {(proof.sealedBlobId || proof.revealedBlobId) && (
-        <div className="grid gap-2 sm:grid-cols-2">
+        <div className="grid gap-2 @xs:grid-cols-2">
           {proof.sealedBlobId && (
             <ExternalProofLink
               label="Sealed Walrus blob"
@@ -350,7 +350,7 @@ export function ProvenanceStrip({
       )}
 
       {(objectLinks.length > 0 || transactionLinks.length > 0) && (
-        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-2 @xs:grid-cols-2 @2xl:grid-cols-3">
           {objectLinks.map((item) => (
             <ExternalProofLink
               key={item.label}
@@ -389,7 +389,7 @@ function KeyValueGrid({
   }
 
   return (
-    <dl className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+    <dl className="grid gap-2 @xs:grid-cols-2 @2xl:grid-cols-3">
       {values.map(([key, value]) => (
         <div key={key} className="min-w-0 rounded-lg border border-border bg-surface p-2.5">
           <dt className="font-mono text-[10px] break-all text-muted-foreground">{key}</dt>
@@ -579,7 +579,7 @@ export function EvidenceSidesPanel({ bundle }: { bundle: TransparentBundle }) {
         )}
       </summary>
       <div className="space-y-5 border-t border-border p-3">
-        <div className="grid gap-3 lg:grid-cols-2">
+        <div className="grid gap-3 @lg:grid-cols-2">
           <section className="space-y-2" aria-labelledby="supports-claim-heading">
             <h4 id="supports-claim-heading" className="text-sm font-semibold text-yes">
               Supports the claim
@@ -602,7 +602,7 @@ export function EvidenceSidesPanel({ bundle }: { bundle: TransparentBundle }) {
           </section>
         </div>
 
-        <div className="grid gap-3 lg:grid-cols-2">
+        <div className="grid gap-3 @lg:grid-cols-2">
           <section className="space-y-2">
             <h4 className="text-sm font-semibold text-ocean">Unsupported claims</h4>
             {unsupportedClaims.length > 0 ? (

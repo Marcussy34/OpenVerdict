@@ -183,6 +183,9 @@ export type FinalizeReport = {
 export type CommitmentStatus = {
   jurySeatId: string;
   agentProfileId: string;
+  /** The seat's model, from the agent's registered manifest; resolves juror
+      identity even for seats that failed before any inference completed. */
+  modelId?: string;
   committed: boolean;
   revealed: boolean;
   outcome?: VoteOutcome;

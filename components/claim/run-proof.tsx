@@ -83,7 +83,7 @@ function CheckRow({ check }: { check: RunProofCheck }) {
           {check.ok ? "Match" : "Mismatch"}
         </span>
       </div>
-      <div className="mt-2 grid gap-1.5 sm:grid-cols-2">
+      <div className="mt-2 grid gap-1.5 @xs:grid-cols-2">
         <div className="space-y-1">
           <span className="text-[10px] text-muted-foreground">Expected</span>
           <HashChip value={check.expected} tone="muted" head={10} tail={8} />
@@ -269,7 +269,7 @@ function ReexecuteRunBlock({
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
-            <div className="grid gap-2 sm:grid-cols-2">
+            <div className="grid gap-2 @xs:grid-cols-2">
               <div className="rounded-lg border border-border bg-surface p-2.5">
                 <FieldLabel>Recorded verdict</FieldLabel>
                 <p className="mt-1 text-sm font-semibold text-ocean">
@@ -346,7 +346,7 @@ export function RunProofDetails({ proof }: { proof: TransparentRunProof }) {
   }, [proof]);
 
   return (
-    <div className="space-y-4">
+    <div className="@container space-y-4">
       <ProvenanceStrip
         proof={proof}
         bundle={bundle ?? failureBundle}
@@ -361,7 +361,7 @@ export function RunProofDetails({ proof }: { proof: TransparentRunProof }) {
         />
       ) : (
         <>
-          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid gap-2 @xs:grid-cols-2 @2xl:grid-cols-4">
             <ProofValue label="Prompt hash" value={proof.promptHash} tone="sealed" />
             <ProofValue label="Input hash" value={proof.inputHash} tone="chain" />
             <ProofValue label="Output hash" value={proof.outputHash} tone="chain" />
@@ -420,7 +420,7 @@ export function RunProofDetails({ proof }: { proof: TransparentRunProof }) {
               )}
 
               {checks && (
-                <ul className="grid gap-2 lg:grid-cols-2">
+                <ul className="grid gap-2 @lg:grid-cols-2">
                   {checks.map((check) => (
                     <CheckRow key={check.key} check={check} />
                   ))}
@@ -487,7 +487,7 @@ export function RunProof({
 
   return (
     <details
-      className="group rounded-xl border border-border bg-card open:bg-surface"
+      className="group @container rounded-xl border border-border bg-card open:bg-surface"
       onToggle={(event) => {
         if (event.currentTarget.open && !requested) void loadProof();
       }}

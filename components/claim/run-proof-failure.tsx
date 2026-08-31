@@ -132,7 +132,7 @@ export function RunProofFailure({
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
-          <div className="grid gap-2 sm:grid-cols-2">
+          <div className="grid gap-2 @xs:grid-cols-2">
             <div className="rounded-lg border border-no/20 bg-card p-2.5">
               <FieldLabel>Engine message</FieldLabel>
               <p className="mt-1 text-xs leading-relaxed whitespace-pre-wrap text-foreground/85">

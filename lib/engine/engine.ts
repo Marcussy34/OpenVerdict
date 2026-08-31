@@ -1292,13 +1292,24 @@ class OpenVerdictEngine implements Engine {
         .filter((run) => run.failure !== undefined)
         .map((run) => [run.jurySeatId, run.failure?.status ?? "PROVIDER_ERROR"]),
     );
+    // Each seat's model comes from its agent's registered manifest, so juror
+    // identity (and the canvas family mascot) resolves even for seats that
+    // failed before any inference completed.
+    const modelByAgent = new Map<string, string>();
+    for (const agentProfileId of new Set(seats.map((seat) => seat.agentProfileId))) {
+      const manifest = await this.#repository.getAgentManifest(agentProfileId);
+      const modelId = manifest?.manifest.modelId;
+      if (modelId !== undefined) modelByAgent.set(agentProfileId, modelId);
+    }
     const commitments: CommitmentStatus[] = seats.map((seat) => {
       const item = packageBySeat.get(seat.jurySeatId);
       const reveal = revealBySeat.get(seat.jurySeatId);
       const failureStatus = failureBySeat.get(seat.jurySeatId);
+      const modelId = modelByAgent.get(seat.agentProfileId);
       return {
         jurySeatId: seat.jurySeatId,
         agentProfileId: seat.agentProfileId,
+        ...(modelId === undefined ? {} : { modelId }),
         committed: item?.committed ?? false,
         revealed: item?.revealed ?? false,
         ...(reveal === undefined

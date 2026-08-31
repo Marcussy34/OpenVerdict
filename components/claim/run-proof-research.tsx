@@ -224,7 +224,7 @@ function ResearchStepCard({
             <FieldLabel>Gonka node for this turn</FieldLabel>
             {attempt?.kind && <Badge variant="secondary">{attempt.kind}</Badge>}
           </div>
-          <dl className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+          <dl className="grid gap-2 @xs:grid-cols-2 @2xl:grid-cols-3">
             <TurnMetric label="served model" value={servedModel ?? "Not recorded"} />
             <TurnMetric label="devshard" value={audit?.devshardId ?? "Not recorded"} />
             <TurnMetric
@@ -267,7 +267,7 @@ function ResearchStepCard({
           )}
         </div>
 
-        <div className="grid gap-2 lg:grid-cols-2">
+        <div className="grid gap-2 @lg:grid-cols-2">
           <ConversationExpander
             label="What the model was sent"
             content={modelInput}
@@ -400,7 +400,7 @@ function ResearchStepCard({
                   </p>
                 )}
               </div>
-              <dl className="grid gap-2 sm:grid-cols-3">
+              <dl className="grid gap-2 @sm:grid-cols-3">
                 <TurnMetric label="from" value={displayValue(result.from)} />
                 <TurnMetric label="chars" value={displayValue(result.chars)} />
                 <TurnMetric

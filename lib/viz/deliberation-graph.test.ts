@@ -427,4 +427,16 @@ describe("deliberation graph", () => {
     expect(familyOfModelId("other/model")).toBe("unknown");
     expect(familyOfModelId(undefined)).toBe("unknown");
   });
+
+  it("resolves juror family from the commitment's model id without any events", () => {
+    const claim = inspection();
+    claim.commitments = claim.commitments.map((commitment, index) =>
+      index === 0 ? { ...commitment, modelId: "moonshotai/Kimi-K2.5" } : commitment,
+    );
+    const graph = buildDeliberationGraph({ claim, nowMs: NOW_MS });
+    const withModel = graph.nodes.find((node) => node.id === `seat:${SEAT_IDS[0]}`);
+    expect(withModel?.family).toBe("kimi");
+    const withoutModel = graph.nodes.find((node) => node.id === `seat:${SEAT_IDS[1]}`);
+    expect(withoutModel?.family).toBe("unknown");
+  });
 });

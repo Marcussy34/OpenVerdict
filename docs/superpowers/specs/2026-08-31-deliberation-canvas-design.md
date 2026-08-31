@@ -85,7 +85,8 @@ node blooms into its real content. Content never leaves the engine early.
    event carries `occurredAt`; research steps additionally arrive as
    RESEARCH_TICK events with their own timestamps. The canvas gets a
    replay mode: a play/pause control with a scrubber and speed presets
-   (10x default, 1x and 60x) that rebuilds the canvas as of time t, so
+   (10x default, 1x and 30x; the top preset was 60x until 2026-08-31,
+   when the owner tuned it down) that rebuilds the canvas as of time t, so
    the claim plays out from creation through committee, freeze, sealed
    pulses, reveals and certificate exactly in recorded order. Claims
    finalized before ticks existed replay with research steps spread in

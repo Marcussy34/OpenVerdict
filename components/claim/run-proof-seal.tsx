@@ -354,8 +354,8 @@ export function RunProofSeal({ proof }: { proof: TransparentRunProof }) {
 
       {metadata?.ok ? (
         <>
-          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-            <div className="rounded-lg border border-border bg-card p-2.5 sm:col-span-2">
+          <div className="grid gap-2 @xs:grid-cols-2 @2xl:grid-cols-4">
+            <div className="rounded-lg border border-border bg-card p-2.5 @xs:col-span-2">
               <FieldLabel>Policy package id</FieldLabel>
               <HashChip
                 value={metadata.value.packageId}
@@ -377,11 +377,11 @@ export function RunProofSeal({ proof }: { proof: TransparentRunProof }) {
                 Phase {metadata.value.identity.phase}
               </p>
             </div>
-            <div className="rounded-lg border border-border bg-card p-2.5 sm:col-span-2">
+            <div className="rounded-lg border border-border bg-card p-2.5 @xs:col-span-2">
               <FieldLabel>Identity claim</FieldLabel>
               <HashChip value={metadata.value.identity.claimId} head={12} tail={10} />
             </div>
-            <div className="rounded-lg border border-border bg-card p-2.5 sm:col-span-2">
+            <div className="rounded-lg border border-border bg-card p-2.5 @xs:col-span-2">
               <FieldLabel>Identity seat</FieldLabel>
               <HashChip value={metadata.value.identity.jurySeatId} head={12} tail={10} />
             </div>
@@ -415,7 +415,7 @@ export function RunProofSeal({ proof }: { proof: TransparentRunProof }) {
 
           <div className="space-y-2">
             <FieldLabel>Key servers</FieldLabel>
-            <ul className="grid gap-2 lg:grid-cols-2">
+            <ul className="grid gap-2 @lg:grid-cols-2">
               {metadata.value.keyServers.map((server) => (
                 <li
                   key={server.objectId}
@@ -516,7 +516,7 @@ export function RunProofSeal({ proof }: { proof: TransparentRunProof }) {
             </div>
 
             {result.kind === "unrevealed" && (
-              <div className="grid gap-2 sm:grid-cols-2">
+              <div className="grid gap-2 @xs:grid-cols-2">
                 <div className="rounded-lg border border-border bg-surface p-2.5">
                   <FieldLabel>Recovered outcome</FieldLabel>
                   <p className="mt-1 text-sm font-semibold text-ocean">
@@ -527,7 +527,7 @@ export function RunProofSeal({ proof }: { proof: TransparentRunProof }) {
                   <FieldLabel>Recovered confidence</FieldLabel>
                   <Confidence basisPoints={result.confidenceBps} />
                 </div>
-                <div className="rounded-lg border border-border bg-surface p-2.5 sm:col-span-2">
+                <div className="rounded-lg border border-border bg-surface p-2.5 @xs:col-span-2">
                   <FieldLabel>Recomputed sealed core hash</FieldLabel>
                   <HashChip
                     value={result.coreHash}

@@ -138,7 +138,7 @@ export function GatewayReceiptCheck({
       )}
 
       {receipt && (
-        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-2 @xs:grid-cols-2 @2xl:grid-cols-4">
           <MatchRow
             label="Model"
             value={receipt.model}

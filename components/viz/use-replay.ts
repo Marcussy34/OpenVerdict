@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { DeliberationGraph } from "@/lib/viz/deliberation-graph";
 import { graphSpan, visibleAt } from "@/lib/viz/replay";
 
-type ReplaySpeed = 1 | 10 | 60;
+type ReplaySpeed = 1 | 10 | 30;
 
 function clampTime(value: number, startMs: number, endMs: number): number {
   return Math.min(endMs, Math.max(startMs, value));

@@ -11,7 +11,7 @@ Node ≥22, pnpm, Sui CLI ≥1.52. `pnpm install` at the repo root.
 ## 1. Offline proof (no network, no keys)
 
 ```bash
-pnpm test && pnpm test:move   # 464 TS + 70 Move (66 protocol, 4 Seal policy)
+pnpm test && pnpm test:move   # 465 TS + 70 Move (66 protocol, 4 Seal policy)
 pnpm e2e:localnet             # spawns a local Sui network, deploys, runs 3 full
                               # lifecycles + sponsored deposit, exits 0 on success
 ```
@@ -265,8 +265,11 @@ against the recorded model, or opened through Seal after the deadline.
 2. Watch the deliberation canvas: jurors sprout locked pulses while they
    research (content-free ticks), the graph blooms into real searches, pages
    and citations at reveal, the certificate lands at settlement. Click any
-   node for the inspector; after settlement press Play for the replay
-   (10x default). In a juror's proof, "Check with GonkaRouter" fetches the
+   node for the inspector (an overlay: opening it never shifts the graph;
+   drag its left edge to resize it). The stage pill at the top centre
+   tracks the protocol round, live and during replay. After settlement
+   press Play for the replay (10x default, 1x/30x presets). In a juror's
+   proof, "Check with GonkaRouter" fetches the
    gateway's own public receipt for the recorded request id and compares
    model, devshard and timing. The full audit view is behind "Full report".
 3. `/verify`: paste a revealed vote's fields → commitment matches.

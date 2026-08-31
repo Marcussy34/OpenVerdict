@@ -67,10 +67,13 @@ const FAMILY_STYLE: Record<JurorFamily, {
   },
 };
 
+// Bright dark-stage variants: the light-theme signal tokens are tuned for
+// white paper and read too dim on the navy canvas, so the chips carry their
+// own high-contrast values.
 const OUTCOME_STYLE = {
-  YES: "bg-yes/20 text-yes",
-  NO: "bg-no/20 text-no",
-  UNSURE: "bg-unsure/20 text-unsure",
+  YES: "bg-[#0e7a4b]/35 text-[#43e5a0]",
+  NO: "bg-[#a02121]/35 text-[#ff8d84]",
+  UNSURE: "bg-[#8a5a00]/40 text-[#ffc65c]",
 } as const;
 const NODE_ENTRY_DURATION_SECONDS = 0.24;
 const NODE_ENTRY_EASE: [number, number, number, number] = [0.33, 1, 0.68, 1];
@@ -85,6 +88,12 @@ function hash(value: string): number {
 
 function labelAtMost(value: string, limit: number): string {
   return value.length <= limit ? value : `${value.slice(0, limit - 3)}...`;
+}
+
+/** Short public identifier shown under each juror node, e.g. 0x5fa1d2cd…6b12. */
+function shortSeatId(seatId: string | undefined): string | undefined {
+  if (seatId === undefined) return undefined;
+  return seatId.length <= 14 ? seatId : `${seatId.slice(0, 8)}…${seatId.slice(-4)}`;
 }
 
 function clampScale(value: number): number {
@@ -135,7 +144,7 @@ function nodeClassName(node: GraphNode, selected: boolean): string {
     }
     case "sealedAction":
       return cn(
-        "size-[22px] rounded-md bg-white/10 text-white/75 opacity-70",
+        "size-[22px] rounded-md bg-white/10 text-white/85 opacity-80",
         "after:absolute after:-inset-2.5 after:content-['']",
         selectedRing,
       );
@@ -148,7 +157,7 @@ function nodeClassName(node: GraphNode, selected: boolean): string {
       );
     case "page":
       return cn(
-        "size-6 rounded-md bg-white/12 text-white/75",
+        "size-6 rounded-md bg-white/15 text-white/85",
         "after:absolute after:-inset-2.5 after:content-['']",
         selectedRing,
       );
@@ -168,7 +177,7 @@ function nodeClassName(node: GraphNode, selected: boolean): string {
       );
     case "certificate":
       return cn(
-        "size-16 rounded-2xl border border-yes/40 bg-yes/15 text-yes",
+        "size-16 rounded-2xl border border-[#43e5a0]/45 bg-[#0e7a4b]/25 text-[#43e5a0]",
         selectedRing,
       );
   }
@@ -200,6 +209,7 @@ function JurorContent({
   const avatar = jurorAvatar(node, avatars);
   const outcome = node.outcome ?? verdict?.outcome;
   const confidenceBps = node.confidenceBps ?? verdict?.confidenceBps;
+  const seatTag = shortSeatId(node.seatId);
 
   return (
     <>
@@ -239,18 +249,25 @@ function JurorContent({
           <CloseCircle size="13" variant="Bold" />
         </span>
       ) : null}
-      {node.state === "revealed" && outcome !== undefined ? (
-        <span
-          className={cn(
-            "pointer-events-none absolute top-[calc(100%+6px)] left-1/2 -translate-x-1/2",
-            "whitespace-nowrap rounded-full px-1.5 py-0.5 text-[9px] font-semibold tabular-nums",
-            OUTCOME_STYLE[outcome],
-          )}
-        >
-          {outcome}
-          {confidenceBps === undefined ? null : ` · ${confidenceBps} bps`}
-        </span>
-      ) : null}
+      <span className="pointer-events-none absolute top-[calc(100%+6px)] left-1/2 flex w-36 -translate-x-1/2 flex-col items-center gap-1">
+        {node.state === "revealed" && outcome !== undefined ? (
+          <span
+            className={cn(
+              "rounded-full px-2 py-0.5 text-[10px] font-semibold whitespace-nowrap tabular-nums",
+              "drop-shadow-[0_1px_4px_rgba(2,8,20,0.9)]",
+              OUTCOME_STYLE[outcome],
+            )}
+          >
+            {outcome}
+            {confidenceBps === undefined ? null : ` · ${confidenceBps} bps`}
+          </span>
+        ) : null}
+        {seatTag === undefined ? null : (
+          <span className="rounded-full bg-[#04122b]/85 px-2 py-0.5 font-mono text-[9px] font-medium tracking-tight text-white/80">
+            {seatTag}
+          </span>
+        )}
+      </span>
     </>
   );
 }
@@ -272,10 +289,10 @@ function nodeContent(
             <ShieldSearch size="26" variant="Bold" />
           </span>
           <span className="pointer-events-none absolute top-[calc(100%+10px)] left-1/2 w-64 -translate-x-1/2 text-center">
-            <span className="text-[9px] font-bold tracking-[0.16em] text-[#7fb4ff]">
+            <span className="text-[10px] font-bold tracking-[0.16em] text-[#a8cbff] drop-shadow-[0_1px_4px_rgba(2,8,20,0.9)]">
               CLAIM ON TRIAL
             </span>
-            <span className="mt-1 block text-[12px] leading-snug font-medium break-words text-white/90">
+            <span className="mt-1 block text-[13px] leading-snug font-medium break-words text-white drop-shadow-[0_2px_10px_rgba(2,8,20,0.85)]">
               {labelAtMost(node.label, 300)}
             </span>
           </span>
@@ -296,7 +313,7 @@ function nodeContent(
       return (
         <>
           <SearchNormal1 size="13" variant="Bold" />
-          <span className="pointer-events-none absolute top-[calc(100%+5px)] left-1/2 w-24 -translate-x-1/2 truncate text-center text-[9px] text-white/60">
+          <span className="pointer-events-none absolute top-[calc(100%+5px)] left-1/2 w-28 -translate-x-1/2 truncate text-center text-[10px] font-medium text-white/85 drop-shadow-[0_1px_4px_rgba(2,8,20,0.9)]">
             {node.label}
           </span>
         </>
@@ -317,7 +334,7 @@ function nodeContent(
       return (
         <span className="flex flex-col items-center leading-none">
           <span className="text-[9px] font-bold">{outcome}</span>
-          <span className="mt-1 text-[8px] font-semibold tabular-nums opacity-80">
+          <span className="mt-1 text-[8px] font-semibold tabular-nums opacity-90">
             {node.confidenceBps === undefined
               ? "N/A"
               : `${node.confidenceBps} bps`}
@@ -326,7 +343,14 @@ function nodeContent(
       );
     }
     case "failure":
-      return <CloseCircle size="16" variant="Bold" />;
+      return (
+        <>
+          <CloseCircle size="16" variant="Bold" />
+          <span className="pointer-events-none absolute top-[calc(100%+5px)] left-1/2 w-28 -translate-x-1/2 truncate text-center text-[9px] font-semibold text-[#ff8d84] drop-shadow-[0_1px_4px_rgba(2,8,20,0.9)]">
+            {node.label}
+          </span>
+        </>
+      );
     case "certificate":
       return (
         <span className="flex flex-col items-center gap-1">

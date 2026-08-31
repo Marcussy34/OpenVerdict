@@ -345,8 +345,10 @@ export function buildDeliberationGraph(input: {
       label: `Juror ${index + 1}`,
       atMs: committeeAtMs,
       seatId: commitment.jurySeatId,
+      // The commitment's manifest model id is authoritative; the event scan
+      // is only a fallback for records saved before modelId was exposed.
       family: familyOfModelId(
-        modelIdForSeat(
+        commitment.modelId ?? modelIdForSeat(
           events,
           commitment.agentProfileId,
           commitment.jurySeatId,

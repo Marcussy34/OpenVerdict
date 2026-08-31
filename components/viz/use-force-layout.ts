@@ -64,6 +64,32 @@ export function useForceLayout(
       node.y = previous.y;
     }
 
+    // A node arriving on an already-laid-out graph grows OUT of the node it
+    // attaches to (seeded at a positioned neighbour plus a small nudge, then
+    // pushed outward by the forces) instead of flying in from free space.
+    if (positionsRef.current.size > 0) {
+      const neighbours = new Map<string, string[]>();
+      const connect = (from: string, to: string): void => {
+        const list = neighbours.get(from);
+        if (list === undefined) neighbours.set(from, [to]);
+        else list.push(to);
+      };
+      for (const edge of currentGraph.edges) {
+        connect(edge.from, edge.to);
+        connect(edge.to, edge.from);
+      }
+      for (const node of layout.simulation.nodes()) {
+        if (node.kind === "claim" || positionsRef.current.has(node.id)) continue;
+        const anchorId = (neighbours.get(node.id) ?? [])
+          .find((id) => positionsRef.current.has(id));
+        if (anchorId === undefined) continue;
+        const anchor = positionsRef.current.get(anchorId);
+        if (anchor === undefined) continue;
+        node.x = anchor.x + (Math.random() - 0.5) * 24;
+        node.y = anchor.y + (Math.random() - 0.5) * 24;
+      }
+    }
+
     const publish = (): void => {
       frameId = null;
       const next = layout.positions();

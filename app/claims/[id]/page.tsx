@@ -11,6 +11,8 @@ import {
   type ReactNode,
 } from "react";
 
+import { motion } from "motion/react";
+
 import { JurorAvatar } from "@/components/agents/avatar";
 import { RunProof } from "@/components/claim/run-proof";
 import { StateBadge } from "@/components/claim/state-badge";
@@ -35,6 +37,7 @@ import { HashChip } from "@/components/viz/hash-chip";
 import { outcomeLabel } from "@/components/viz/seat-seal";
 import type { ClaimInspection, ResolutionEvent } from "@/lib/engine/contract";
 import { isStrandedDiscussion } from "@/lib/engine/claim-lifecycle";
+import { CLAIM_STATE } from "@/lib/protocol/constants";
 import { cn } from "@/lib/utils";
 import {
   buildDeliberationGraph,
@@ -159,6 +162,141 @@ function searchResultUrls(node: GraphNode): string[] {
   )];
 }
 
+type StageTone = "form" | "research" | "reveal" | "discuss" | "yes" | "no";
+type StageInfo = { key: string; label: string; tone: StageTone };
+
+const STAGE_TONE: Record<StageTone, string> = {
+  form: "border-[#2f8bff]/50 bg-[#0b2a55]/95 text-[#a8cbff]",
+  research: "border-[#2f8bff]/50 bg-[#0b2a55]/95 text-[#a8cbff]",
+  reveal: "border-[#b3a7ff]/50 bg-[#231d55]/95 text-[#cdc5ff]",
+  discuss: "border-[#ffc65c]/50 bg-[#3a2a0c]/95 text-[#ffd98c]",
+  yes: "border-[#43e5a0]/50 bg-[#0b3527]/95 text-[#43e5a0]",
+  no: "border-[#ff8d84]/50 bg-[#3a1512]/95 text-[#ff8d84]",
+};
+
+function earliestAt(
+  graph: DeliberationGraph,
+  kinds: ReadonlyArray<GraphNode["kind"]>,
+): number | undefined {
+  let earliest: number | undefined;
+  for (const node of graph.nodes) {
+    if (!kinds.includes(node.kind)) continue;
+    if (earliest === undefined || node.atMs < earliest) earliest = node.atMs;
+  }
+  return earliest;
+}
+
+function finalStage(claim: ClaimInspection): StageInfo {
+  const result = claim.result?.result;
+  return {
+    key: "finalized",
+    label: `Finalized · ${result ?? "settled"}`,
+    tone: result === "NO" || result === "UNRESOLVED" ? "no" : "yes",
+  };
+}
+
+/** The live protocol stage, from the on-chain claim state. */
+function liveStage(claim: ClaimInspection, stranded: boolean): StageInfo {
+  if (stranded) return { key: "stranded", label: "Discussion · expired", tone: "no" };
+  switch (claim.state) {
+    case CLAIM_STATE.CREATED:
+    case CLAIM_STATE.PROPOSED:
+    case CLAIM_STATE.CHALLENGED:
+    case CLAIM_STATE.REVIEW_REQUESTED:
+      return { key: "forming", label: "Jury forming", tone: "form" };
+    case CLAIM_STATE.COMMIT_1:
+      return { key: "commit1", label: "Round 1 · research & sealed votes", tone: "research" };
+    case CLAIM_STATE.REVEAL_1:
+      return { key: "reveal1", label: "Round 1 · votes revealing", tone: "reveal" };
+    case CLAIM_STATE.DISCUSSION:
+      return { key: "discussion", label: "Discussion round", tone: "discuss" };
+    case CLAIM_STATE.COMMIT_2:
+      return { key: "commit2", label: "Round 2 · research & sealed votes", tone: "research" };
+    case CLAIM_STATE.REVEAL_2:
+      return { key: "reveal2", label: "Round 2 · votes revealing", tone: "reveal" };
+    case CLAIM_STATE.UNRESOLVED:
+      return { key: "unresolved", label: "Finalized · unresolved", tone: "no" };
+    case CLAIM_STATE.CANCELLED:
+      return { key: "cancelled", label: "Cancelled", tone: "no" };
+    default:
+      return finalStage(claim);
+  }
+}
+
+/** The stage at replay time t, from the milestones the graph carries. */
+function replayStage(
+  claim: ClaimInspection,
+  graph: DeliberationGraph,
+  t: number,
+): StageInfo {
+  const certificateAt = earliestAt(graph, ["certificate"]);
+  const verdictAt = earliestAt(graph, ["verdict", "failure"]);
+  const researchAt = earliestAt(graph, ["sealedAction", "search", "page"]);
+  const committeeAt = earliestAt(graph, ["juror"]);
+  if (certificateAt !== undefined && t >= certificateAt) return finalStage(claim);
+  if (verdictAt !== undefined && t >= verdictAt) {
+    return { key: "reveal", label: "Votes revealing", tone: "reveal" };
+  }
+  if (researchAt !== undefined && t >= researchAt) {
+    return { key: "research", label: "Research & sealed votes", tone: "research" };
+  }
+  if (committeeAt !== undefined && t >= committeeAt) {
+    return { key: "committee", label: "Committee selected", tone: "form" };
+  }
+  return { key: "submitted", label: "Claim submitted", tone: "form" };
+}
+
+/**
+ * Always-visible protocol stage pill at the centre-top of the stage. A live
+ * claim shows its on-chain state; an active replay shows the stage at the
+ * scrubbed moment. Remounting on stage change replays the entry motion, so
+ * every state flip is visible.
+ */
+function StageBanner({
+  claim,
+  graph,
+  replay,
+  now,
+}: {
+  claim: ClaimInspection;
+  graph: DeliberationGraph;
+  replay: ReplayControls;
+  now: number | null;
+}) {
+  const stranded = now !== null && isStrandedDiscussion(claim, now);
+  const replaying = replay.active && replay.t < replay.endMs;
+  const stage = replaying
+    ? replayStage(claim, graph, replay.t)
+    : liveStage(claim, stranded);
+  const settled = !replaying && claim.state >= 9;
+  return (
+    <div className="pointer-events-none absolute inset-x-0 top-16 z-30 flex justify-center xl:top-4">
+      <motion.div
+        key={`${stage.key}-${replaying ? "replay" : "live"}`}
+        initial={{ opacity: 0, y: -12, scale: 0.94 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        transition={{ duration: 0.35, ease: "easeOut" }}
+        className={cn(
+          "flex items-center gap-2.5 rounded-full border px-4 py-2 shadow-xl backdrop-blur-md",
+          STAGE_TONE[stage.tone],
+        )}
+      >
+        {settled ? (
+          <ShieldTick size="14" variant="Bold" />
+        ) : (
+          <span aria-hidden className="relative flex size-2">
+            <span className="absolute inline-flex size-full animate-ping rounded-full bg-current opacity-60" />
+            <span className="relative inline-flex size-2 rounded-full bg-current" />
+          </span>
+        )}
+        <span className="text-[11px] font-bold tracking-[0.16em] whitespace-nowrap uppercase">
+          {replaying ? `Replay · ${stage.label}` : stage.label}
+        </span>
+      </motion.div>
+    </div>
+  );
+}
+
 function LeftRail({
   claim,
   now,
@@ -264,7 +402,7 @@ function LeftRail({
             className="w-full accent-[#0e76ff]"
           />
           <div className="grid grid-cols-3 gap-2">
-            {([1, 10, 60] as const).map((speed) => (
+            {([1, 10, 30] as const).map((speed) => (
               <button
                 key={speed}
                 type="button"
@@ -326,6 +464,7 @@ function SeatInspector({
     (candidate) => candidate.kind === "verdict" && candidate.seatId === seatId,
   );
   const modelId = proof?.bundle?.request.model
+    ?? commitment.modelId
     ?? modelIdFromEvents(events, seatId, commitment.agentProfileId);
   const family = node.family
     ?? seatNode?.family
@@ -356,8 +495,11 @@ function SeatInspector({
           <p className="text-sm font-semibold text-white">
             Juror {seatIndex + 1}
           </p>
-          <p className="mt-1 break-all text-[11px] leading-relaxed text-white/50">
+          <p className="mt-1 break-all text-[11px] leading-relaxed text-white/70">
             {modelId ?? "Model id unavailable"}
+          </p>
+          <p className="mt-1 font-mono text-[10px] tracking-tight text-white/45">
+            Seat {seatId.slice(0, 8)}…{seatId.slice(-6)}
           </p>
         </div>
       </div>
@@ -629,6 +771,8 @@ export default function ClaimCanvasPage({ params }: ClaimCanvasPageProps) {
   const [claim, setClaim] = useState<ClaimInspection | null>(null);
   const [proofsByRunId, setProofsByRunId] = useState<ProofCache>({});
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [inspectorWidth, setInspectorWidth] = useState(380);
+  const resizePointerRef = useRef<number | null>(null);
   const [leftOpen, setLeftOpen] = useState(false);
   const [inspectorOpen, setInspectorOpen] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -856,6 +1000,7 @@ export default function ClaimCanvasPage({ params }: ClaimCanvasPageProps) {
             Verify
           </Link>
         </nav>
+        <StageBanner claim={claim} graph={graph} replay={replay} now={now} />
         <DeliberationCanvas
           graph={replay.visible}
           selectedId={selectedId}
@@ -888,16 +1033,56 @@ export default function ClaimCanvasPage({ params }: ClaimCanvasPageProps) {
       </main>
 
       {/* The inspector exists only while a node is selected; clicking empty
-          canvas deselects and gives the stage the full width. */}
+          canvas deselects and gives the stage the full width. It OVERLAYS the
+          canvas (absolute, not in flow) so opening or closing it never
+          resizes the stage and the node positions stay exactly put. */}
       {selectedNode !== null && (
-        <aside className="hidden h-dvh w-[380px] shrink-0 overflow-y-auto border-l border-white/10 bg-white/[0.04] p-5 lg:block">
-          <NodeInspector
-            claim={claim}
-            events={events}
-            graph={graph}
-            node={selectedNode}
-            proofsByRunId={proofsByRunId}
+        <aside
+          style={{ width: inspectorWidth }}
+          className="ov-inspector-dark @container absolute inset-y-0 right-0 z-30 hidden max-w-[calc(100vw-28rem)] overflow-y-auto border-l border-white/12 bg-[#061532]/95 shadow-[-28px_0_60px_rgba(1,8,22,0.55)] backdrop-blur-md lg:block"
+        >
+          {/* Drag this edge to widen or narrow the panel. */}
+          <div
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="Resize inspector"
+            className="absolute inset-y-0 left-0 z-10 w-1.5 cursor-col-resize touch-none hover:bg-[#0e76ff]/50 active:bg-[#0e76ff]/70"
+            onPointerDown={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              event.currentTarget.setPointerCapture(event.pointerId);
+              resizePointerRef.current = event.pointerId;
+            }}
+            onPointerMove={(event) => {
+              if (resizePointerRef.current !== event.pointerId) return;
+              const max = Math.max(320, Math.min(680, window.innerWidth - 460));
+              const next = Math.round(window.innerWidth - event.clientX);
+              setInspectorWidth(Math.min(Math.max(next, 320), max));
+            }}
+            onPointerUp={(event) => {
+              if (resizePointerRef.current !== event.pointerId) return;
+              resizePointerRef.current = null;
+              if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+                event.currentTarget.releasePointerCapture(event.pointerId);
+              }
+            }}
+            onPointerCancel={(event) => {
+              if (resizePointerRef.current !== event.pointerId) return;
+              resizePointerRef.current = null;
+              if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+                event.currentTarget.releasePointerCapture(event.pointerId);
+              }
+            }}
           />
+          <div className="p-5">
+            <NodeInspector
+              claim={claim}
+              events={events}
+              graph={graph}
+              node={selectedNode}
+              proofsByRunId={proofsByRunId}
+            />
+          </div>
         </aside>
       )}
 
@@ -921,7 +1106,7 @@ export default function ClaimCanvasPage({ params }: ClaimCanvasPageProps) {
 
       {inspectorOpen ? (
         <MobileSheet title="Node inspector" onClose={() => setInspectorOpen(false)}>
-          <div className="p-5">
+          <div className="ov-inspector-dark @container p-5">
             <NodeInspector
               claim={claim}
               events={events}
