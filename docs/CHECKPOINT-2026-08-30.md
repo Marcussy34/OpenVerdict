@@ -827,6 +827,20 @@ Two deploys, live: `5f8841f9` (main `95f4441`). Earlier `f614929e`.
   (0280bf3, deploy 0f8e877f, shared with /fact-check). Verified live:
   jargon regex (canonicalise|SSRF|preimage|Blake2b|bps|BCS) fully
   clean, nav Learn active.
+- /claims and /agents joined the explorer look (1f817ca, deploy
+  1a047e53), owner: "very cluttered... only show what's important on
+  preview". Both pages: one-word ov-display hero, centered counted
+  filter chips (rounded-full), single row-list in the verify page's
+  RecentFactChecks anatomy, details behind the click. Claims adds one
+  flat bar (search + Verify-a-claim button); agents adds the micro
+  truth-line (7 registered / 7 active / 3 families), JurorAvatar faces
+  per row (avatarKey=agentProfileId), Active chip; zkLogin registration
+  card stays as the page's one action. Dropped: PageHeader banners,
+  4 StatTiles, ClaimCard/AgentCard grids, agents search + active-only
+  toggle (7 rows need neither). Gate lesson: setState cannot run
+  synchronously in an effect (React Compiler); the async-init ignore
+  pattern is the house style for fetch-on-mount. Verified live: 31
+  claim rows / 6 chips; 7 agent rows, all avatars loaded.
 
 ## 4. Planned next (owner-approved direction)
 
