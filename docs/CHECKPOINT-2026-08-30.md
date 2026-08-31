@@ -842,6 +842,36 @@ Two deploys, live: `5f8841f9` (main `95f4441`). Earlier `f614929e`.
   pattern is the house style for fetch-on-mount. Verified live: 31
   claim rows / 6 chips; 7 agent rows, all avatars loaded.
 
+## 3n. OVERNIGHT COMMAND 2026-09-01 02:10 (owner asleep, full delegation)
+
+Owner: "make the best decision... I leave you in charge as team lead and
+lead orchestrator... update me in the morning with a full breakdown."
+Decisions locked in the pre-sleep design talk:
+
+- ARCHITECTURE: validator-slot model (NOT DIVE's bring-your-own-agent).
+  Standardized manifest-pinned jurors; backing = identity + stake + the
+  gate on the earning faucet; Gonka decentralizes computation, backing
+  decentralizes control of the five votes; the two compose. Seat rewards
+  ALREADY exist on-chain (settlement.move: committee_budget/valid_count
+  to seat owners, REASON_JURY_REWARD). Treasury fee absent = to build.
+- OVERNIGHT QUEUE (strictly serialized around worker file conflicts):
+  P0 economics docs (DONE, 9ad6f1b). P1 reveal-early worker A lands ->
+  my review + pnpm test + sui move test. P2 worker B: treasury fee bps
+  in Move (AFTER A commits; same files). P3 ONE republish carrying A+B:
+  publish package, new registry, re-register 7 jurors, config update,
+  deploy, then a REAL E2E claim on the new package to prove early
+  reveals live. P4 worker C: proof persistence at finalization. P5
+  worker D: backing surface + computed track record + earnings in the
+  read path; then my UI pass (Human-backed chips, track record,
+  earnings, N/5 backed). P6 docs/STATUS/report. Owner explicitly chose
+  DOCS-ONLY for optimistic quick-verify exposure: do NOT ship that UI.
+- Owner morning actions: back 1-2 jurors via Google zkLogin, video.
+- Autonomy granted: full sequence including republish + re-registration
+  + deploys while asleep, with the no-live-claims guard (my own E2E
+  test claim excepted, under my control).
+- Worker A (reveal-early) still in flight at write time; fallback
+  status watcher brsee8z2a polls its Codex job every 3 min.
+
 ## 4. Planned next (owner-approved direction)
 
 - Attestation (docs/superpowers/specs/2026-08-30-attested-inference-design.md):
