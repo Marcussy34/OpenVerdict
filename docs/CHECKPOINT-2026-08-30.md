@@ -417,6 +417,29 @@ the new copy; screenshot checked. Note: `components/landing/claim-form.tsx`
 (also reduced to one row) is not mounted anywhere on the landing; dead
 component, left in place.
 
+## 3g. DONE 2026-08-31 morning: canvas shipped end to end, hardened, live
+
+Overnight under full delegation (owner asleep, then reviewing): the
+deliberation canvas is the claim page in production. Commits `c31f4a7`
+(canvas page, report move, observer redirect, avatars, Play/Pause icons),
+`f54e081` (per-edge link distances), `55a9676` (full-viewport stage without
+the global chrome, quick-nav pill, immutable proof cache, parallel Walrus
+proof reads), `bd53ca9` (auto-fit view; X-Gonka-No-Fallback enforced and
+fallback notices audited). Deployments through `c7f25f24` (SUCCESS 15:18).
+Facts that matter later: a revealed proof costs two Walrus testnet reads
+(about 40 s cold per claim, warmed per container into an in-memory
+immutable cache; I warm the three demo claims after each deploy); the
+GonkaRouter team confirmed model substitution is an availability fallback,
+announced via X-Gonka-Fallback, and X-Gonka-No-Fallback: true pins the
+exact model (a saturated upstream then 429s, which retry and hedge absorb);
+firecrawl's headless screenshots throttle requestAnimationFrame, so a
+RAF-driven canvas must be verified in a real browser (chrome-devtools MCP),
+where it renders perfectly (auto-fit framed graph, avatars, verdict chips,
+failed seat, certificate, replay). Still open for the owner: send the
+remaining GonkaRouter asks (signed receipts, request lookup by id, Kimi
+capacity for demo day), and a fresh claim submission to see sealed pulses
+live (every claim so far predates RESEARCH_TICK).
+
 ## 4. Planned next (owner-approved direction)
 
 - Attestation (docs/superpowers/specs/2026-08-30-attested-inference-design.md):
