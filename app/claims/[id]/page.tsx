@@ -37,7 +37,7 @@ import { HashChip } from "@/components/viz/hash-chip";
 import { outcomeLabel } from "@/components/viz/seat-seal";
 import type { ClaimInspection, ResolutionEvent } from "@/lib/engine/contract";
 import { isStrandedDiscussion } from "@/lib/engine/claim-lifecycle";
-import { CLAIM_STATE } from "@/lib/protocol/constants";
+import { CLAIM_MODE, CLAIM_STATE } from "@/lib/protocol/constants";
 import { cn } from "@/lib/utils";
 import {
   buildDeliberationGraph,
@@ -164,6 +164,19 @@ function searchResultUrls(node: GraphNode): string[] {
 
 type StageTone = "form" | "research" | "reveal" | "discuss" | "yes" | "no";
 type StageInfo = { key: string; label: string; tone: StageTone };
+
+/** Plain-English explanations for seat failure statuses (the engine fails
+    closed: malformed or unverifiable output never becomes a vote). */
+const FAILURE_EXPLANATIONS: Record<string, string> = {
+  INVALID_SCHEMA:
+    "Every attempt from this juror's model came back malformed: the reply never matched the strict verdict schema (outcome, confidence in bps, citations). Malformed output is never turned into a vote, so the seat failed closed instead of guessing.",
+  CITATION_INVALID:
+    "The verdict cited evidence this juror had not actually opened through the engine, so the citation could not be verified and the vote was refused.",
+  PROVIDER_ERROR:
+    "The inference provider kept erroring before a valid reply arrived, so this seat never produced a verdict.",
+  DEFAULT:
+    "This seat failed before committing a valid vote and was excluded from settlement.",
+};
 
 const STAGE_TONE: Record<StageTone, string> = {
   form: "border-[#2f8bff]/50 bg-[#0b2a55]/95 text-[#a8cbff]",
@@ -684,40 +697,268 @@ function NodeInspector({
     const status = stringField(node.detail, "failureStatus") ?? node.label;
     const message = stringField(node.detail, "message")
       ?? stringField(node.detail?.failure, "message");
+    const explanation = FAILURE_EXPLANATIONS[status] ?? FAILURE_EXPLANATIONS.DEFAULT;
     return (
       <div className="space-y-4">
         <span className="inline-flex rounded-full border border-no/35 bg-no/10 px-2 py-1 text-[10px] font-semibold text-no uppercase">
           {status}
         </span>
-        <p className="text-sm leading-relaxed text-white/75">
-          {message ?? "No failure message was recorded."}
+        <p className="text-sm leading-relaxed text-white/85">{explanation}</p>
+        {message !== undefined ? (
+          <p className="rounded-xl border border-white/10 bg-white/[0.04] p-3 text-xs leading-relaxed whitespace-pre-wrap text-white/70">
+            {message}
+          </p>
+        ) : null}
+        <div className="rounded-xl border border-white/10 bg-white/[0.04] p-3 text-xs leading-relaxed text-white/60">
+          A failed seat never becomes a vote: the engine fails closed and the
+          claim settles on the seats that did reveal. The seat keeps its full
+          attempt log and research trail on the public record.
+        </div>
+        {node.seatId !== undefined ? (
+          <p className="font-mono text-[10px] text-white/45">
+            Seat {node.seatId.slice(0, 8)}…{node.seatId.slice(-6)}
+          </p>
+        ) : null}
+        <p className="text-[11px] leading-relaxed text-white/50">
+          Click the juror avatar connected to this node for the full proof
+          and attempt-by-attempt log.
         </p>
       </div>
     );
   }
 
   if (node.kind === "certificate") {
-    const certificateId = stringField(node.detail, "certificateId");
+    const result = claim.result;
+    const certificateId = stringField(node.detail, "certificateId") ?? result?.certificateId;
+    const digest = stringField(node.detail, "digest") ?? result?.digest;
+    const outcome = result?.result ?? "UNRESOLVED";
+    const revealedCount = claim.commitments.filter((commitment) => commitment.revealed).length;
+    const familyCount = new Set(
+      graph.nodes
+        .filter((candidate) => candidate.kind === "juror"
+          && candidate.family !== undefined && candidate.family !== "unknown")
+        .map((candidate) => candidate.family),
+    ).size;
+    const tone = outcome === "YES"
+      ? { frame: "border-[#43e5a0]/40 ring-[#43e5a0]/15", text: "text-[#43e5a0]", badge: "bg-[#0e7a4b]/35 text-[#43e5a0]" }
+      : outcome === "NO"
+        ? { frame: "border-[#ff8d84]/40 ring-[#ff8d84]/15", text: "text-[#ff8d84]", badge: "bg-[#a02121]/35 text-[#ff8d84]" }
+        : { frame: "border-[#ffc65c]/40 ring-[#ffc65c]/15", text: "text-[#ffc65c]", badge: "bg-[#8a5a00]/40 text-[#ffc65c]" };
     return (
       <div className="space-y-4">
-        <HashChip
-          value={certificateId}
-          label="certificate"
-          tone="yes"
-          full
-          className="max-w-full bg-white/5"
-        />
-        {certificateId !== undefined ? (
+        {/* The certificate itself: a framed document, not a bare hash. */}
+        <div
+          className={cn(
+            "relative overflow-hidden rounded-2xl border-2 bg-[#071a36] p-5 ring-4 ring-inset",
+            tone.frame,
+          )}
+        >
+          <div aria-hidden className="pointer-events-none absolute inset-2 rounded-xl border border-white/10" />
+          <div className="relative space-y-4 text-center">
+            <span className={cn("mx-auto grid size-12 place-items-center rounded-full", tone.badge)}>
+              <ShieldTick size="26" variant="Bold" />
+            </span>
+            <div>
+              <p className="text-[9px] font-bold tracking-[0.3em] text-white/45 uppercase">
+                OpenVerdict
+              </p>
+              <p className="mt-1 text-[11px] font-bold tracking-[0.2em] text-white/80 uppercase">
+                Resolution certificate
+              </p>
+            </div>
+            <div>
+              <p className={cn("text-3xl font-bold tracking-tight", tone.text)}>{outcome}</p>
+              <p className="mt-1 font-mono text-sm text-white/80">
+                Truth Score {truthScoreLabel(result?.truthScoreBps)}
+              </p>
+            </div>
+            <p className="mx-auto max-w-[30ch] text-xs leading-relaxed text-white/70">
+              “{claim.statement}”
+            </p>
+            <p className="text-[10px] text-white/50">
+              {revealedCount}/{claim.commitments.length} jurors revealed
+              {familyCount > 0 ? ` · ${familyCount} model families` : ""} · equal weight
+            </p>
+            <p className="text-[10px] text-white/40 tabular-nums">
+              Finalized {new Date(node.atMs).toLocaleString()} · Sui testnet
+            </p>
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <p className="text-[10px] font-semibold tracking-[0.14em] text-white/40 uppercase">
+            On-chain record
+          </p>
+          <HashChip
+            value={certificateId}
+            label="certificate"
+            tone={outcome === "YES" ? "yes" : "default"}
+            className="max-w-full bg-white/5"
+          />
+          <HashChip
+            value={claim.claimId}
+            label="claim"
+            className="max-w-full bg-white/5 text-white/75"
+          />
+          {digest !== undefined ? (
+            <HashChip
+              value={digest}
+              label="finalize tx"
+              className="max-w-full bg-white/5 text-white/75"
+            />
+          ) : null}
+          {claim.committeeId !== undefined ? (
+            <HashChip
+              value={claim.committeeId}
+              label="committee"
+              className="max-w-full bg-white/5 text-white/75"
+            />
+          ) : null}
+        </div>
+
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+          {certificateId !== undefined ? (
+            <a
+              href={`https://suiscan.xyz/testnet/object/${certificateId}`}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-2 text-xs font-semibold text-[#72b6ff] hover:underline"
+            >
+              <ExportSquare size="14" variant="Bold" />
+              Certificate on Suiscan
+            </a>
+          ) : null}
+          {digest !== undefined ? (
+            <a
+              href={`https://suiscan.xyz/testnet/tx/${digest}`}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-2 text-xs font-semibold text-[#72b6ff] hover:underline"
+            >
+              <ExportSquare size="14" variant="Bold" />
+              Finalize transaction
+            </a>
+          ) : null}
+        </div>
+      </div>
+    );
+  }
+
+  if (node.kind === "claim") {
+    const sealedCount = claim.commitments.filter((commitment) => commitment.committed).length;
+    const revealedCount = claim.commitments.filter((commitment) => commitment.revealed).length;
+    const failedCount = claim.commitments.filter(
+      (commitment) => commitment.failureStatus !== undefined,
+    ).length;
+    const result = claim.result;
+    return (
+      <div className="space-y-5">
+        <div className="space-y-2">
+          <p className="text-[10px] font-semibold tracking-[0.14em] text-white/40 uppercase">
+            Claim on trial
+          </p>
+          <p className="text-sm leading-relaxed text-white/90">{claim.statement}</p>
+        </div>
+
+        {result !== undefined ? (
+          <div className="space-y-3 rounded-xl border border-yes/25 bg-yes/8 p-4">
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-[10px] font-semibold tracking-[0.12em] text-white/45 uppercase">
+                Verdict · Truth Score
+              </p>
+              <span className="rounded-full bg-yes/20 px-2 py-0.5 text-[11px] font-bold text-yes">
+                {result.result}
+              </span>
+            </div>
+            <p className="font-mono text-xl font-semibold text-yes">
+              {truthScoreLabel(result.truthScoreBps)}
+            </p>
+            <HashChip
+              value={result.certificateId}
+              label="certificate"
+              tone="yes"
+              className="max-w-full bg-white/5"
+            />
+          </div>
+        ) : null}
+
+        <div className="space-y-2">
+          <p className="text-[10px] font-semibold tracking-[0.14em] text-white/40 uppercase">
+            Resolution criteria
+          </p>
+          <p className="text-xs leading-relaxed text-white/75">
+            {claim.resolutionCriteria}
+          </p>
+        </div>
+
+        <dl className="grid grid-cols-2 gap-2">
+          <div className="rounded-xl border border-white/10 bg-white/[0.04] p-3">
+            <dt className="text-[10px] tracking-[0.12em] text-white/40 uppercase">Jury</dt>
+            <dd className="mt-1 text-sm font-semibold text-white">
+              {revealedCount}/{claim.commitments.length} revealed
+            </dd>
+            <dd className="mt-0.5 text-[11px] text-white/55">
+              {sealedCount} sealed{failedCount > 0 ? `, ${failedCount} failed` : ""}
+            </dd>
+          </div>
+          <div className="rounded-xl border border-white/10 bg-white/[0.04] p-3">
+            <dt className="text-[10px] tracking-[0.12em] text-white/40 uppercase">Mode</dt>
+            <dd className="mt-1 text-sm font-semibold text-white">
+              {claim.mode === CLAIM_MODE.DIRECT_REVIEW ? "Direct review" : "Optimistic"}
+            </dd>
+            <dd className="mt-0.5 text-[11px] text-white/55">
+              3 model families, equal weight
+            </dd>
+          </div>
+        </dl>
+
+        <div className="space-y-2">
+          <p className="text-[10px] font-semibold tracking-[0.14em] text-white/40 uppercase">
+            Evidence cutoff
+          </p>
+          <p className="text-xs text-white/75 tabular-nums">
+            {new Date(claim.deadlines.evidenceCutoffMs).toLocaleString()}
+          </p>
+          <p className="text-[11px] leading-relaxed text-white/45">
+            Jurors judge the statement as of this moment; later coverage does
+            not count.
+          </p>
+        </div>
+
+        <div className="space-y-2">
+          <p className="text-[10px] font-semibold tracking-[0.14em] text-white/40 uppercase">
+            On chain
+          </p>
+          <HashChip
+            value={claim.claimId}
+            label="claim"
+            className="max-w-full bg-white/5 text-white/75"
+          />
+          {claim.committeeId !== undefined ? (
+            <HashChip
+              value={claim.committeeId}
+              label="committee"
+              className="max-w-full bg-white/5 text-white/75"
+            />
+          ) : null}
           <a
-            href={`https://suiscan.xyz/testnet/object/${certificateId}`}
+            href={`https://suiscan.xyz/testnet/object/${claim.claimId}`}
             target="_blank"
             rel="noreferrer"
             className="inline-flex items-center gap-2 text-xs font-semibold text-[#72b6ff] hover:underline"
           >
             <ExportSquare size="14" variant="Bold" />
-            Open in Suiscan
+            Open claim object in Suiscan
           </a>
-        ) : null}
+        </div>
+
+        <Link
+          href={`/claims/${claim.claimId}/report`}
+          className="inline-flex min-h-9 items-center gap-2 rounded-lg border border-white/15 bg-white/[0.04] px-3 text-xs font-semibold text-white/80 transition-colors hover:bg-white/10 hover:text-white"
+        >
+          <DocumentText size="14" variant="Bold" />
+          Full audit report
+        </Link>
       </div>
     );
   }

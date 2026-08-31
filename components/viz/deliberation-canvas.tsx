@@ -721,9 +721,13 @@ export function DeliberationCanvas({
         }}
       >
         {/* Edges and nodes share one viewport transform. */}
+        {/* overflow-visible is load-bearing: an svg clips to its own box by
+            default, and graph coordinates routinely extend past the viewport
+            rectangle once the view is fitted, which silently erased every
+            edge whose endpoints sat outside it. */}
         <svg
           aria-hidden
-          className="pointer-events-none absolute top-0 left-0"
+          className="pointer-events-none absolute top-0 left-0 overflow-visible"
           width={size.width}
           height={size.height}
           viewBox={`0 0 ${size.width} ${size.height}`}
