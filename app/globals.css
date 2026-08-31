@@ -952,6 +952,56 @@
     animation-play-state: paused;
 }
 
+/* --- Wave word: the hero's "claim" carries a flowing water-blue tide ----- */
+/* The gradient tiles (ends on its start color) so the drift loops seamlessly. */
+.ov-wave-word {
+    position: relative;
+    display: inline-block;
+    background-image: linear-gradient(
+        90deg,
+        var(--brand-sea-ink),
+        var(--brand-sea) 30%,
+        #5aa5ff 52%,
+        var(--brand-sea) 74%,
+        var(--brand-sea-ink)
+    );
+    background-size: 200% 100%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    animation: ov-wave-text 7s linear infinite;
+}
+
+/* Drifting sine underline: one 1.3em tile, shifted exactly one tile per loop. */
+/* Stroke is --brand-sea (#0e76ff) hardcoded: data URIs cannot read tokens. */
+.ov-wave-word::after {
+    content: "";
+    position: absolute;
+    right: 0.05em;
+    bottom: -0.16em;
+    left: 0.05em;
+    height: 0.22em;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 12' preserveAspectRatio='none'%3E%3Cpath d='M0 6 Q10 0 20 6 T40 6' fill='none' stroke='%230e76ff' stroke-width='3.5' stroke-linecap='round'/%3E%3C/svg%3E");
+    background-repeat: repeat-x;
+    background-size: 1.3em 100%;
+    animation: ov-wave-drift 2.6s linear infinite;
+}
+
+@keyframes ov-wave-text {
+    from {
+        background-position: 200% 0;
+    }
+    to {
+        background-position: -200% 0;
+    }
+}
+
+@keyframes ov-wave-drift {
+    to {
+        background-position-x: 1.3em;
+    }
+}
+
 @media (prefers-reduced-motion: reduce) {
     *,
     *::before,
@@ -981,5 +1031,10 @@
     /* No scroll-driven dimming: every proposition stays fully legible. */
     [data-proposition] {
         opacity: 1 !important;
+    }
+    /* The wave word parks as a static blue gradient with a still underline. */
+    .ov-wave-word,
+    .ov-wave-word::after {
+        animation: none !important;
     }
 }

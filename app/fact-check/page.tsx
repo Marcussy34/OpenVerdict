@@ -294,7 +294,7 @@ function FactCheckContent() {
       {/* Hero: explorer style, almost no words on screen. */}
       <div className="mx-auto max-w-3xl space-y-4 text-center">
         <h1 className="ov-display text-5xl text-ocean md:text-6xl">
-          Verify any claim
+          Verify any <span className="ov-wave-word">claim</span>
         </h1>
       </div>
 
