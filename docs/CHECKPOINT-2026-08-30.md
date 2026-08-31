@@ -600,6 +600,24 @@ a `{ claims: [...] }` envelope, not a bare array; the list fix is
 `67fa207`. Verified in Chrome: 8 rows rendering, skeletons gone, helper
 hidden until typing, old side panel gone.
 
+Round 5 (commit `e034562`, deployment `f42f71dd`, verified live): the
+product speaks open-verification language and the landing got bigger and
+emptier per the owner's reference. /fact-check hero: "Verify any claim"
+at text-5xl/6xl over "No wallet, no account, no gas.", a max-w-3xl bar
+with a taller input, one-sentence placeholder faded to 45%, and the
+button "Verify claim"; the experimental tag, micro strip and auditable
+line are deleted. List heading "Recent verifications", expandable "How
+verification runs". Nav is Verify / Claims / Agents / Audit / Status:
+claim submission owns "Verify", the independent run auditor at /verify
+is "Audit" (collision resolved deliberately). Same rewording applied to
+the canvas quick-nav, claims directory action ("New verification"),
+report panel ("Public verification report & audit bundle"), timeline,
+privacy, learn and the submission error string. Routes and API paths
+(/fact-check, /api/fact-checks) are unchanged for link stability;
+internal type names (FactCheckReport) untouched. Verified in Chrome:
+hero, faded placeholder, VERIFY CLAIM button, nav labels, no user-facing
+"fact-check" text anywhere on the page, 8 explorer rows rendering.
+
 ## 4. Planned next (owner-approved direction)
 
 - Attestation (docs/superpowers/specs/2026-08-30-attested-inference-design.md):
