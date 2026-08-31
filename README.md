@@ -364,6 +364,50 @@ Known limitations (V1, disclosed by design):
 Both public track pages were placeholders at spec time; final submission
 requirements must be reconfirmed against organizer material (PRD §7.3).
 
+## 🧩 Sponsor tech, one by one
+
+One table per sponsor technology: what it does inside OpenVerdict, and where
+a judge can see it working. Nothing here is aspirational; every row is live
+on testnet at https://app.openverdict.info.
+
+### GonkaRouter (Gonka)
+
+| Used for | How | Check it |
+| --- | --- | --- |
+| Every juror reasoning pass | One adapter, `/v1/chat/completions`, no other provider, fail closed on outage | `lib/gonka/adapter.ts`; any revealed run shows the raw request/response and their hashes |
+| Multi-model consensus | 5 seats drawn across all three GonkaRouter families (DeepSeek, Kimi, MiniMax), at most 2 seats per model, equal weight | Committee rules in `move/openverdict/sources/jury.move`; jury card on any claim page |
+| Claim extraction from a URL | Paste a link on `/fact-check`; a Gonka model distills one bounded claim, with a JSON repair round when needed | `POST /api/extract-claim`; the provenance card names the model and request id |
+| Inference provenance | Response `id`, `x-request-id`, devshard id and fingerprint stored for every attempt (retries, repairs, hedges) and cross-checked against Gonka's public receipts lookup | "Run provenance" on any revealed run |
+| Latency hedging | A same-model hedge fires after a 25 s stall; every attempt lands in the audit trail | Revealed run bundle on Walrus |
+
+### Sui
+
+| Used for | How | Check it |
+| --- | --- | --- |
+| Protocol of record | Claims, committees, jury seats, revealed votes, certificates and payout tickets are Sui objects; deadlines, thresholds and payouts enforced in Move (66 tests) | Every object and tx in the UI opens on Suiscan |
+| Jury selection | Native `Random` draw under the model-family constraints | `move/openverdict/sources/jury.move` |
+| Commit-reveal voting | Commitments bind the approved run hash on-chain before any reveal; `blake2b256(BCS(preimage))` is recomputable by anyone | `/verify` recomputes it in the browser |
+| Evidence freezing | The manifest merkle root is frozen into an `EvidenceBundle` object before any vote reveals | Report page, evidence bundle chip |
+| Onboarding | zkLogin (Enoki): a Google login yields a self-custodial address backing a juror registration, authentication rather than proof of personhood | `/agents`; env-gated |
+| Wallet rendering | Object Display metadata on certificates, profiles and positions | `move/openverdict/sources/display_meta.move` |
+
+### Walrus
+
+| Used for | How | Check it |
+| --- | --- | --- |
+| Claim inputs | Statement and resolution-criteria blobs; their hashes ride the `create_claim` transaction | Claim dossier chips on the canvas |
+| Evidence bytes | Raw and canonical copies of every page a juror opened, blake2b-256 hashed into the manifest | Evidence pages link straight to the aggregator |
+| Evidence manifests | The merkle leaves behind each frozen on-chain root | `evidence-<claim>-<phase>.json` blob |
+| Juror work product | The sealed run bundle is stored and cited on-chain before the commit; the revealed bundle and any failure record follow | Run pages link both blobs |
+
+### Seal (Mysten)
+
+| Used for | How | Check it |
+| --- | --- | --- |
+| Reveal-key escrow | Each seat's reveal key is Seal-encrypted at commit time under an on-chain time-lock policy | `move/openverdict_seal/sources/reveal_lock.move` |
+| Operator-independent opening | After the reveal deadline anyone recovers the key from the threshold key servers and opens the sealed bundle; the operator is not needed | `/verify` performs the recovery live; the Seal panel links every key server object |
+| Safety stance | Escrow is insurance only; it can never cost a seat its vote | 4 dedicated Move policy tests |
+
 ## ❓ Judge defence (short form)
 
 - **“AI agents aren't reliable.”** Five independent agents, frozen evidence,
