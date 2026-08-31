@@ -1,28 +1,204 @@
 "use client";
 
-import { useState, Suspense } from "react";
+import { useEffect, useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { PageHeader, ExperimentalTag } from "@/components/viz/page-header";
-import { Panel, FieldLabel } from "@/components/viz/panel";
+import { ExperimentalTag } from "@/components/viz/page-header";
+import { FieldLabel } from "@/components/viz/panel";
 import { PIPELINE_STAGES } from "@/components/viz/pipeline";
+import { StateBadge } from "@/components/claim/state-badge";
 import {
   useClaimSubmission,
   MAX_CLAIM,
 } from "@/components/claim/use-claim-submission";
+import { useNow } from "@/components/use-now";
 import { cn } from "@/lib/utils";
 import {
-  ShieldSearch,
-  InfoCircle,
-  DocumentText,
-  Warning2,
-  Judge,
+  ArrowDown2,
   ArrowRight,
+  ArrowRight2,
   Refresh,
+  SearchNormal1,
+  ShieldSearch,
+  Warning2,
 } from "@/components/icons";
+
+/** The slice of a claim inspection the explorer rows need. */
+type ExplorerRow = {
+  claimId: string;
+  statement: string;
+  state: number;
+  deadlines?: { evidenceCutoffMs?: number };
+  result?: {
+    result: "YES" | "NO" | "UNSURE" | "UNRESOLVED";
+    truthScoreBps: number | null;
+  };
+};
+
+const OUTCOME_CHIP: Record<string, string> = {
+  YES: "bg-yes/10 text-yes",
+  NO: "bg-no/10 text-no",
+  UNSURE: "bg-unsure/10 text-unsure",
+  UNRESOLVED: "bg-muted text-muted-foreground",
+};
+
+function shortClaimId(claimId: string): string {
+  return claimId.length <= 14
+    ? claimId
+    : `${claimId.slice(0, 8)}…${claimId.slice(-4)}`;
+}
+
+function truthScoreChip(row: ExplorerRow): string | null {
+  const bps = row.result?.truthScoreBps;
+  if (bps === null || bps === undefined) return null;
+  const score = bps / 100;
+  return Number.isInteger(score) ? score.toFixed(0) : score.toFixed(2);
+}
+
+/** Coarse relative time; empty during SSR so hydration stays stable. */
+function timeAgo(now: number | null, atMs: number | undefined): string {
+  if (now === null || atMs === undefined) return "";
+  const delta = Math.max(0, now - atMs);
+  const minutes = Math.round(delta / 60_000);
+  if (minutes < 1) return "just now";
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 48) return `${hours}h ago`;
+  return `${Math.round(hours / 24)}d ago`;
+}
+
+/** Latest fact-checks, explorer style: quiet rows straight into the canvas. */
+function RecentFactChecks() {
+  const now = useNow();
+  const [rows, setRows] = useState<ExplorerRow[] | null>(null);
+
+  useEffect(() => {
+    let ignore = false;
+    const load = async () => {
+      try {
+        const response = await fetch("/api/claims");
+        if (!response.ok) return;
+        const data = (await response.json()) as ExplorerRow[];
+        if (!ignore && Array.isArray(data)) setRows(data.slice(0, 8));
+      } catch {
+        // The explorer list is a convenience; the form works without it.
+      }
+    };
+    void load();
+    const timer = setInterval(() => void load(), 15_000);
+    return () => {
+      ignore = true;
+      clearInterval(timer);
+    };
+  }, []);
+
+  return (
+    <section className="mx-auto w-full max-w-3xl space-y-2">
+      <p className="ov-micro ov-micro-sm text-muted-foreground">
+        Recent fact-checks
+      </p>
+
+      {rows === null ? (
+        <div className="space-y-2">
+          {[0, 1, 2].map((index) => (
+            <div key={index} className="h-14 animate-pulse rounded-xl bg-surface-2" />
+          ))}
+        </div>
+      ) : rows.length === 0 ? (
+        <p className="rounded-xl border border-dashed border-border bg-surface p-4 text-xs text-muted-foreground">
+          No fact-checks yet. Yours can be the first.
+        </p>
+      ) : (
+        <ul className="ov-edge divide-y divide-border overflow-hidden rounded-2xl border border-border bg-card">
+          {rows.map((row) => {
+            const score = truthScoreChip(row);
+            const ago = timeAgo(now, row.deadlines?.evidenceCutoffMs);
+            return (
+              <li key={row.claimId}>
+                <Link
+                  href={`/claims/${row.claimId}`}
+                  className="flex items-center gap-3 px-4 py-3 transition-colors hover:bg-surface focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset focus-visible:outline-none"
+                >
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium text-ocean">
+                      {row.statement}
+                    </p>
+                    <p className="mt-0.5 font-mono text-[11px] text-muted-foreground">
+                      {shortClaimId(row.claimId)}
+                      {ago ? ` · ${ago}` : ""}
+                    </p>
+                  </div>
+                  {row.result && (
+                    <span
+                      className={cn(
+                        "shrink-0 rounded-full px-2 py-0.5 font-mono text-[10px] font-bold tabular-nums",
+                        OUTCOME_CHIP[row.result.result] ?? OUTCOME_CHIP.UNRESOLVED,
+                      )}
+                    >
+                      {row.result.result}
+                      {score ? ` ${score}` : ""}
+                    </span>
+                  )}
+                  <StateBadge state={row.state} size="sm" className="shrink-0" />
+                  <ArrowRight2 size="14" className="shrink-0 text-muted-foreground" />
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+/** All the explanation, folded away until asked for. */
+function HowItRuns() {
+  return (
+    <details className="group mx-auto w-full max-w-3xl rounded-2xl border border-border bg-card">
+      <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 px-4 py-3 text-sm font-semibold text-ocean focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset focus-visible:outline-none">
+        <ArrowDown2
+          size="14"
+          variant="Bold"
+          className="text-muted-foreground motion-safe:transition-transform group-open:rotate-180"
+        />
+        <ShieldSearch size="15" variant="Bold" className="text-primary" />
+        How a fact-check runs
+      </summary>
+      <div className="space-y-4 border-t border-border p-4">
+        <ol className="space-y-3">
+          {PIPELINE_STAGES.map((stage) => (
+            <li key={stage.index} className="flex gap-3">
+              <span className="ov-micro ov-micro-sm mt-0.5 grid size-7 shrink-0 place-items-center rounded-lg bg-surface text-muted-foreground">
+                {stage.index}
+              </span>
+              <div className="min-w-0">
+                <FieldLabel>{stage.kicker}</FieldLabel>
+                <p className="text-xs font-semibold text-ocean">{stage.title}</p>
+                <p className="mt-0.5 text-[11px] leading-snug text-muted-foreground">
+                  {stage.body}
+                </p>
+              </div>
+            </li>
+          ))}
+        </ol>
+        <p className="border-t border-border pt-3 text-[11px] leading-relaxed text-muted-foreground">
+          Direct review bypasses the optimistic disputation window: the engine
+          locks the evidence manifest immediately, draws five jurors across ≥3
+          model families with Sui native randomness, and executes the sealed
+          commit-reveal round.
+        </p>
+        <p className="text-[11px] leading-relaxed text-muted-foreground">
+          Write one falsifiable sentence with the who, what and when, for
+          example: The first Bitcoin halving took place in November 2012. Avoid
+          opinions, predictions and compound claims.
+        </p>
+      </div>
+    </details>
+  );
+}
 
 function FactCheckContent() {
   const searchParams = useSearchParams();
@@ -42,133 +218,130 @@ function FactCheckContent() {
   const claimTooLong = claim.length > MAX_CLAIM * 0.9;
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6 px-5 py-10 md:px-7 lg:py-12">
-      <PageHeader
-        eyebrow="Direct review"
-        title="Submit a fact-check"
-        description="State one bounded factual claim. Five jurors from three model families research it on the open web, for and against, and vote under commit-reveal. Nothing else is needed."
-        icon={ShieldSearch}
-        badges={<ExperimentalTag />}
-      />
+    <div className="mx-auto max-w-5xl space-y-10 px-5 py-14 md:px-7 md:py-20">
+      {/* Hero: explorer style, almost no words on screen. */}
+      <div className="mx-auto max-w-2xl space-y-3 text-center">
+        <div className="flex justify-center">
+          <ExperimentalTag />
+        </div>
+        <h1 className="ov-display text-4xl text-ocean md:text-5xl">
+          Fact-check a claim
+        </h1>
+        <p className="text-sm text-muted-foreground">
+          No wallet, no account, no gas.
+        </p>
+      </div>
 
-      {isEngineOffline && (
-        <Alert className="border-unsure/35 bg-unsure/8">
-          <Warning2 size="18" variant="Bold" className="text-unsure" />
-          <AlertTitle className="text-sm font-semibold text-ocean">
-            Engine backend offline / not wired
-          </AlertTitle>
-          <AlertDescription className="mt-1 space-y-2 text-xs text-muted-foreground">
-            <p>
-              The verification engine returned 503. In full deployment this submission triggers
-              an on-chain Move claim creation and schedules the five-agent jury.
-            </p>
-            <p>
-              You can still exercise the client-side commit-reveal and Truth Score recomputation
-              on the{" "}
-              <Link href="/verify" className="font-semibold text-primary hover:underline">
-                verifier page
-              </Link>
-              .
-            </p>
-          </AlertDescription>
-        </Alert>
-      )}
-
-      {errorMessage && (
-        <Alert variant="destructive">
-          <Warning2 size="18" variant="Bold" />
-          <AlertTitle className="text-sm font-semibold">Validation error</AlertTitle>
-          <AlertDescription className="text-xs">{errorMessage}</AlertDescription>
-        </Alert>
-      )}
-
-      <div className="grid gap-6 lg:grid-cols-3">
-        {/* Form */}
-        <form onSubmit={handleSubmit} className="space-y-5 lg:col-span-2">
-          <Panel label="Claim statement" icon={DocumentText} tone="primary">
-            <div className="space-y-2">
-              <div className="flex items-center justify-between gap-2">
-                <label htmlFor="claim-text" className="text-sm font-semibold text-ocean">
-                  What should the jury verify? <span className="text-no">*</span>
-                </label>
-                <span
-                  className={cn(
-                    "text-[11px] tabular-nums",
-                    claimTooLong ? "text-unsure" : "text-muted-foreground",
-                  )}
-                >
-                  {claim.length}/{MAX_CLAIM}
-                </span>
-              </div>
-              <Textarea
-                id="claim-text"
-                required
-                placeholder="State the exact factual assertion to be verified, e.g. “DeepSeek released the V4 model weights on August 15, 2026”…"
-                className="min-h-[110px] text-sm"
-                value={claim}
-                onChange={(e) => setClaim(e.target.value)}
-                maxLength={MAX_CLAIM}
-              />
-              <p className="text-[11px] text-muted-foreground">
-                Write one falsifiable sentence with the who, what and when, for example: The first Bitcoin halving took place in November 2012. Avoid opinions, predictions and compound claims.
+      <div className="mx-auto w-full max-w-2xl space-y-3">
+        {isEngineOffline && (
+          <Alert className="border-unsure/35 bg-unsure/8">
+            <Warning2 size="18" variant="Bold" className="text-unsure" />
+            <AlertTitle className="text-sm font-semibold text-ocean">
+              Engine backend offline / not wired
+            </AlertTitle>
+            <AlertDescription className="mt-1 space-y-2 text-xs text-muted-foreground">
+              <p>
+                The verification engine returned 503. In full deployment this
+                submission triggers an on-chain Move claim creation and
+                schedules the five-agent jury.
               </p>
-            </div>
-          </Panel>
+              <p>
+                You can still exercise the client-side commit-reveal and Truth
+                Score recomputation on the{" "}
+                <Link href="/verify" className="font-semibold text-primary hover:underline">
+                  verifier page
+                </Link>
+                .
+              </p>
+            </AlertDescription>
+          </Alert>
+        )}
 
-          <div className="ov-edge flex flex-col items-stretch justify-between gap-3 rounded-2xl border border-border bg-card p-4 sm:flex-row sm:items-center">
-            <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
-              <InfoCircle size="14" variant="Bold" className="mt-px shrink-0" />
-              No gas fees and no wallet are required for direct-review submissions.
-            </p>
-            <Button
-              type="submit"
-              disabled={submitting || !claim.trim()}
-              aria-busy={submitting}
-              className="min-h-[44px] w-full px-7 font-semibold shadow-xs sm:w-auto"
-            >
-              {submitting ? (
-                <>
-                  <Refresh size="16" variant="Linear" className="motion-safe:animate-spin" />
-                  Freezing to Walrus (about 20 s)…
-                </>
-              ) : (
-                <>
-                  Start fact-check
-                  <ArrowRight size="16" variant="Bold" />
-                </>
-              )}
-            </Button>
+        {errorMessage && (
+          <Alert variant="destructive">
+            <Warning2 size="18" variant="Bold" />
+            <AlertTitle className="text-sm font-semibold">Validation error</AlertTitle>
+            <AlertDescription className="text-xs">{errorMessage}</AlertDescription>
+          </Alert>
+        )}
+
+        {/* The bar: one input, the button inside it, nothing else. */}
+        <form
+          onSubmit={handleSubmit}
+          className="ov-edge flex flex-col gap-2 rounded-2xl border border-border bg-card p-2 shadow-xs focus-within:ring-2 focus-within:ring-ring sm:flex-row sm:items-center"
+        >
+          <div className="flex min-w-0 flex-1 items-center gap-2.5 pl-2.5">
+            <SearchNormal1 size="16" className="shrink-0 text-muted-foreground" />
+            <Textarea
+              id="claim-text"
+              required
+              rows={1}
+              placeholder="State one factual claim, e.g. The first Bitcoin halving took place in November 2012"
+              className="field-sizing-content max-h-28 min-h-9 flex-1 resize-none border-0 bg-transparent p-0 py-2 text-sm shadow-none focus-visible:ring-0 dark:bg-transparent"
+              value={claim}
+              onChange={(e) => setClaim(e.target.value)}
+              onKeyDown={(e) => {
+                // Enter submits like a search bar; Shift+Enter makes a newline.
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  e.currentTarget.form?.requestSubmit();
+                }
+              }}
+              maxLength={MAX_CLAIM}
+              aria-label="Claim statement to verify"
+            />
           </div>
+          <Button
+            type="submit"
+            disabled={submitting || !claim.trim()}
+            aria-busy={submitting}
+            className="min-h-[44px] shrink-0 px-6 font-semibold shadow-xs"
+          >
+            {submitting ? (
+              <>
+                <Refresh size="16" variant="Linear" className="motion-safe:animate-spin" />
+                Freezing to Walrus (about 20 s)…
+              </>
+            ) : (
+              <>
+                Start fact-check
+                <ArrowRight size="16" variant="Bold" />
+              </>
+            )}
+          </Button>
         </form>
 
-        {/* What happens next */}
-        <aside className="space-y-4">
-          <Panel label="What happens next" icon={Judge} tone="sealed" className="lg:sticky lg:top-24">
-            <ol className="space-y-3">
-              {PIPELINE_STAGES.map((stage) => (
-                <li key={stage.index} className="flex gap-3">
-                  <span className="ov-micro ov-micro-sm mt-0.5 grid size-7 shrink-0 place-items-center rounded-lg bg-surface text-muted-foreground">
-                    {stage.index}
-                  </span>
-                  <div className="min-w-0">
-                    <FieldLabel>{stage.kicker}</FieldLabel>
-                    <p className="text-xs font-semibold text-ocean">{stage.title}</p>
-                    <p className="mt-0.5 text-[11px] leading-snug text-muted-foreground">
-                      {stage.body}
-                    </p>
-                  </div>
-                </li>
-              ))}
-            </ol>
-
-            <p className="mt-4 border-t border-border pt-3 text-[11px] leading-relaxed text-muted-foreground">
-              Direct review bypasses the optimistic disputation window: the engine locks the
-              evidence manifest immediately, draws five jurors across ≥3 model families with Sui
-              native randomness, and executes the sealed commit-reveal round.
+        {/* Helper details only surface once the user starts typing. */}
+        {claim.length > 0 && (
+          <div className="flex items-start justify-between gap-3 px-1">
+            <p className="text-[11px] text-muted-foreground">
+              One falsifiable sentence with the who, what and when. Avoid
+              opinions, predictions and compound claims.
             </p>
-          </Panel>
-        </aside>
+            <span
+              className={cn(
+                "shrink-0 text-[11px] tabular-nums",
+                claimTooLong ? "text-unsure" : "text-muted-foreground",
+              )}
+            >
+              {claim.length}/{MAX_CLAIM}
+            </span>
+          </div>
+        )}
+
+        <div className="space-y-1.5 pt-2 text-center">
+          <p className="ov-micro ov-micro-sm text-muted-foreground">
+            5 jurors · 3 model families · sealed votes
+          </p>
+          <p className="text-xs text-muted-foreground">
+            Everything becomes public and auditable after reveal.
+          </p>
+        </div>
       </div>
+
+      <RecentFactChecks />
+
+      <HowItRuns />
     </div>
   );
 }
@@ -177,8 +350,8 @@ export default function FactCheckPage() {
   return (
     <Suspense
       fallback={
-        <div className="mx-auto max-w-5xl px-5 py-16 md:px-7">
-          <div className="h-72 animate-pulse rounded-2xl bg-surface" />
+        <div className="mx-auto max-w-2xl px-5 py-24 md:px-7">
+          <div className="h-40 animate-pulse rounded-2xl bg-surface" />
         </div>
       }
     >
