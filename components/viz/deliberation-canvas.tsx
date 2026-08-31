@@ -122,7 +122,7 @@ function nodeClassName(node: GraphNode, selected: boolean): string {
   switch (node.kind) {
     case "claim":
       return cn(
-        "w-[280px] rounded-2xl border-2 border-[#0e76ff]/60 bg-[#0a1f3d] p-4 text-left shadow-2xl",
+        "size-[92px] rounded-full border-2 border-[#0e76ff]/70 bg-[#0a1f3d] text-white shadow-2xl",
         selectedRing,
       );
     case "juror": {
@@ -267,19 +267,19 @@ function nodeContent(
   switch (node.kind) {
     case "claim":
       return (
-        <span className="flex w-full flex-col gap-2.5">
-          <span className="flex items-center gap-2">
-            <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-[#0e76ff] text-white">
-              <ShieldSearch size="18" variant="Bold" />
-            </span>
-            <span className="text-[10px] font-bold tracking-[0.14em] text-[#7fb4ff]">
+        <>
+          <span className="grid size-12 place-items-center rounded-full bg-[#0e76ff] text-white">
+            <ShieldSearch size="26" variant="Bold" />
+          </span>
+          <span className="pointer-events-none absolute top-[calc(100%+10px)] left-1/2 w-64 -translate-x-1/2 text-center">
+            <span className="text-[9px] font-bold tracking-[0.16em] text-[#7fb4ff]">
               CLAIM ON TRIAL
             </span>
+            <span className="mt-1 block text-[12px] leading-snug font-medium break-words text-white/90">
+              {labelAtMost(node.label, 300)}
+            </span>
           </span>
-          <span className="text-[13px] leading-snug font-medium break-words text-white">
-            {labelAtMost(node.label, 300)}
-          </span>
-        </span>
+        </>
       );
     case "juror":
       return (
@@ -526,7 +526,7 @@ export function DeliberationCanvas({
       if (point.x > maxX) maxX = point.x;
       if (point.y > maxY) maxY = point.y;
     }
-    const pad = 90;
+    const pad = 140;
     const spanX = Math.max(1, maxX - minX + pad * 2);
     const spanY = Math.max(1, maxY - minY + pad * 2);
     const scale = clampScale(Math.min(size.width / spanX, size.height / spanY, 1));

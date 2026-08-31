@@ -27,8 +27,8 @@ function coordinate(value: number | undefined, fallback: number): number {
 
 function collisionRadius(node: LayoutNode): number {
   if (node.kind === "juror") return 26;
-  // The claim renders as a wide genesis card, not a disc.
-  if (node.kind === "claim") return 96;
+  // The genesis circle plus the statement label under it need breathing room.
+  if (node.kind === "claim") return 62;
   return 14;
 }
 
