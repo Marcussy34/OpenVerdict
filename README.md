@@ -59,52 +59,80 @@ disputes, and other bounded questions.
 
 ## ⚙️ How it works
 
-1. **Human-backed agent pool** — versioned `AgentProfile` objects with owner
-   capabilities; one committee seat per owner and human-backing record. Two
-   backing kinds ship: the reviewed demo allowlist (labelled as such) and
-   `ZKLOGIN_BACKED` — a Google zkLogin address signs a canonical message, only
-   its blake2b backing hash persists, one social account backs one seat.
-   Authentication and Sybil-cost raise — never proof of personhood.
-2. **Diversity-constrained random selection**: Sui's native `Random` (0x8)
-   drives committee selection inside a single private `entry` function; no
-   owner holds two seats, no model holds more than two of five, at least three
-   distinct GonkaRouter model IDs per committee. Every eligible agent carries
-   an equal selection weight in v1: reputation counters are registered
-   on-chain but do not yet move the draw.
-3. **Optimistic resolution** — a bonded proposer answers `YES`/`NO`/`UNSURE`;
-   unchallenged proposals finalize cheaply with no AI spend.
-4. **Bonded dispute** — a matching challenge bond escalates to a full jury
-   review with reasons and initial evidence.
-5. **Frozen evidence** — the SSRF-hardened retriever fetches sources, raw and
-   canonical artifacts go to Walrus, and an immutable `EvidenceBundle` object
-   pins the Merkle root before any agent reasons about anything.
-6. **GonkaRouter jury** — five seats research the claim themselves
-   through the engine with no peer visibility: support and challenge searches,
-   page opens on both sides (up to three per turn), citations quoted verbatim
-   from at least two different sites, and a counter-evidence summary. Models
-   never fetch and never hold keys; every step is engine-executed and recorded
-   in the sealed run transcript whose hash rides the on-chain run hash, and
-   every response's `id` is preserved verbatim as the public Gonka Request ID.
-   A seat that cannot deliver fails closed with a public failure record
-   instead of a guessed vote.
-7. **Commit–reveal on Sui** — each vote commitment is
-   `blake2b256(BCS(VotePreimageV1))` binding outcome, confidence, evidence
-   root, output hash, run hash, and salt; reveals recompute the commitment
-   on-chain, consume the owned `JurySeat`, and update a bounded `RoundTally`.
-   Each run's reveal key is also escrowed under the Mysten Seal time-lock
-   policy, so a sealed bundle opens after its deadline without the operator.
-8. **Consensus with honest uncertainty** — 4-of-5 matching valid votes
-   finalize round one. A split sends the claim to a public deliberation: the
-   revealed jurors debate in seat order over two exchanges, strict JSON turns
-   citing only evidence already on the record, every turn streamed live into
-   the claim page's chat and the whole transcript frozen as hashed phase-2
-   evidence. A second commit-reveal round then votes carrying the revealed
-   round-one record and that transcript, and no threshold finalizes
-   `UNRESOLVED` rather than a manufactured answer. The Truth Score (0–100) is
-   recomputable from the revealed votes and never marketed as objective truth.
-9. **Settlement** — finalization freezes an immutable `ResolutionCertificate`,
-   creates one-time `PayoutTicket` objects, and the demo binary pool consumes
-   the certificate for capped payouts or unresolved refunds.
+A claim's life, from submission to certificate:
+
+1. **📝 Submit a claim.** Paste a statement or a URL on the app; a Gonka model
+   distills a URL into one bounded, checkable claim and you confirm the
+   wording. A shared `Claim` object is created on Sui with escrowed budget
+   vaults, and every deadline starts ticking from that transaction. The
+   public demo form is a rate-limited, team-subsidized tier of the
+   requester-funded flow (in future: paid verification in SUI is the
+   default, with delegated SUI staking behind seats sharing jury earnings).
+   👉 The clock and the money live on-chain from the first second.
+
+2. **🎲 A jury is drawn on-chain.** Sui's native randomness selects five
+   seats from the registered pool inside one Move call: at most two seats
+   per model family, at least three families (DeepSeek, Kimi, MiniMax), one
+   seat per owner and backing record. Every eligible agent carries an equal
+   selection weight in v1 (in future: draws weighted by on-chain track
+   record). Today's seven jurors are operated by the team and labelled as
+   such; anyone can back a seat with a Google account via zkLogin: one
+   account, one seat, a Sybil-cost raise, never proof of personhood. Juries
+   run fine without any human-backed seat; backing is how the pool opens
+   up, not a precondition.
+   👉 No operator chooses who judges, and no vendor can hold a majority.
+
+3. **🧊 Evidence freezes first.** Submitter material is fetched through an
+   SSRF-hardened retriever, canonicalized, Merkle-rooted into an immutable
+   on-chain `EvidenceBundle`, and stored on Walrus before any model reasons
+   about anything.
+   👉 Nobody can slip evidence in or out after the jury convenes.
+
+4. **🔎 Each juror researches alone.** Every seat runs its own
+   investigation through the engine on GonkaRouter, the only inference
+   provider; the adapter refuses any other host in code. Support searches
+   AND challenge searches, pages opened on both sides, quotes copied
+   verbatim from at least two different sites, and a counter-evidence
+   summary. Models never fetch and never hold keys; every step lands in a
+   sealed transcript hashed into the on-chain run record. A juror that
+   cannot deliver fails closed with a public failure record; no vote is
+   ever invented.
+   👉 Verdicts must be researched and cited, or they do not count.
+
+5. **🔒 Votes lock in secret, then open together.** Each vote commits on
+   Sui as a salted hash before anything is revealed, the sealed run bundle
+   is published with its reveal key escrowed under a Mysten Seal time-lock,
+   and every reveal must match its commitment byte-for-byte. Four matching
+   votes out of five settle the claim, about ten minutes end to end.
+   👉 No juror can copy, herd, or change a vote after the fact.
+
+6. **⚖️ If the jury splits: public debate, then a second round.** The
+   revealed jurors argue in seat order over two exchanges, citing only
+   evidence already on the record; every turn streams live into the claim
+   page and the whole transcript freezes as phase-2 evidence. A fresh
+   commit-reveal round then votes carrying the round-one public record and
+   that transcript (about twenty-one minutes total). Still no supermajority
+   finalizes `UNRESOLVED`.
+   👉 Adversarial verification in the open; the system never forces fake
+   certainty.
+
+7. **💰 Settlement in SUI.** Finalization freezes an immutable
+   `ResolutionCertificate` with its 0-100 Truth Score and mints one-time
+   `PayoutTicket` objects: jury rewards to every validly revealed seat,
+   refunds by claim policy, a protocol fee. The demo binary pool consumes
+   certificates for capped payouts or unresolved refunds. Bonded claims
+   also have an optimistic lane: an unchallenged proposal finalizes with
+   zero AI spend, and a challenge convenes the jury with the loser's bond
+   funding it.
+   👉 Seats are paid for valid work, never for agreeing with the majority.
+
+8. **🔍 Anyone can recheck everything.** The browser verifier reruns 15
+   checks per juror run, recomputes every commitment, Merkle root and Truth
+   Score, re-sends a juror's exact recorded conversation to the same model,
+   and opens sealed bundles through Seal after the deadline without the
+   operator (in future: Nautilus attested execution and gateway-signed
+   receipts close the two disclosed trust gaps).
+   👉 Trust is optional; recomputation is not.
 
 ## 🏗️ Architecture
 
