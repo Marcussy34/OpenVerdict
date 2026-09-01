@@ -1213,6 +1213,46 @@ UNCHANGED: first live debate never exercised; demo-claim decision paused
 (do NOT fire unbidden); owner actions (zkLogin backing, demo, video,
 submission); staking/pay-per-verification = docs only, owner deferred.
 
+## 3t. FIRST LIVE DELIBERATION-PHASE LIFECYCLE 2026-09-01 ~22:15
+
+Owner approved fire-on-clear earlier ("okay lets do that"); sentry cleared at
+21:51 (DeepSeek+MiniMax 200, Kimi 000) and the contested claim fired:
+0xc6d4f4ae0753...a92c6438 "Moderate coffee consumption reduces the risk of
+cardiovascular disease." (submit POST returned an unparseable response but
+the claim landed; watch that on camera). FULL two-round lifecycle live:
+R1 2/5 revealed (Kimi 0x856e YES@7500, MiniMax 0x9afb YES@7500; both DeepSeek
+seats + 1 Kimi TIMEOUT) -> DISCUSSION -> deliberation turns persisted: 4/4
+SKIPPED WINDOW_EXHAUSTED -> R2 fresh 5 seats, 2/5 revealed (Kimi YES@8200,
+MiniMax YES@8200; DeepSeek x2 + Kimi failed) -> UNRESOLVED state 11,
+truthScore 8200, certificate 0x4cd2dd52f875...fa1c27e1. verify=true: all
+recomputations true, issues []. Note DeepSeek 0-for-4 seats despite healthy
+probes; Kimi delivered 2 reveals despite dead probes: weather is per-request.
+
+ROOT CAUSE, debate never spoke: deadline-driven R1 (any failed seat blocks
+the all-committed early-reveal) resolves at the reveal deadline (+570s);
+discussionDeadline is +630s (engine.ts:4053, engine-set per claim at create;
+a 540/720 variant sits at engine.ts:4007); deliberation window ceiling =
+discussionDeadline - freezeLead 120s (engine.ts:3420) which is already past
+at entry -> every turn WINDOW_EXHAUSTED. With >=1 Kimi seat forced per
+committee and storms constant, nearly every R1 is deadline-driven, so the
+debate can only speak today if all 5 seats commit early.
+
+PENDING OWNER DECISION (do not implement unbidden): stretch the discussion
+window for NEW claims (e.g. discussion +840s..900s, shift or keep +1080s
+second commit; engine-only change at engine.ts:4053, deploy required) vs
+wait for a fully-healthy early-reveal round. Recommended: stretch.
+
+ALSO THIS WINDOW: pitch deck cut to 4 slides per owner spec (title; problem
+3 points + Polymarket/Kalshi and Meta-ends-fact-checking examples; solution
+3 points; one-liner slide "OPENVERDICT IS A decentralized court for factual
+claims WHERE multi-model AI juries research, vote in secret, and debate in
+public on Gonka AND every verdict settles on Sui as a certificate anyone can
+recompute"), artifact e6d45cf2-788c-457a-9dc0-ce6067891a77 label simple-cut;
+spoken expansions + judge Q&A crib committed at docs/demo/pitch-talk-track.md
+(dates need re-verification before stage; cutoff Jan 2026). Video script at
+docs/demo/video-script-2min.md (08de5dd). Artifact watches were dropped by a
+/login account change mid-session; republish re-armed under current account.
+
 ## 4. Planned next (owner-approved direction)
 
 - Attestation (docs/superpowers/specs/2026-08-30-attested-inference-design.md):
