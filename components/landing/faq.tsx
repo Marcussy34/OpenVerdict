@@ -33,6 +33,10 @@ const ITEMS = [
     a: "Today, the OpenVerdict engine executes every juror run itself, and all AI reasoning goes through GonkaRouter only: the adapter refuses any other inference host in code, and a juror that cannot reach Gonka fails closed instead of falling back. Jurors are standardized seats, not user-owned bots: prompts and tool policies are hashed into on-chain manifests, so nobody, including the operator, can steer a seat without breaking hashes anyone can recheck. Trust here comes from verifiability rather than decentralized execution; an attested executor (Sui Nautilus) is the disclosed roadmap step.",
   },
   {
+    q: "Who pays, and who earns?",
+    a: "Requesters fund a claim's budgets in SUI when it is created; the public demo form is a team-subsidized tier of the same flow. At settlement the committee budget splits across the seats that validly revealed, as one-time payout tickets: commit late, fail the schema or refuse to reveal, and that seat earns nothing. The recorded next step is delegated seat backing: stake SUI behind a seat and share its jury rewards pro rata after fees. That part is documented direction rather than shipped code, and majority-only winner pay is rejected by design, so juries are never paid for herding.",
+  },
+  {
     q: "What happens when a juror fails?",
     a: "It casts no vote and no vote is invented for it. The seat's research trail up to the failure stays public, and a verdict still needs four matching reveals out of five; otherwise the claim finalizes as UNRESOLVED.",
   },

@@ -37,6 +37,7 @@ const KEY_FACTS: Array<[string, string]> = [
   ["Chain", "Sui testnet: verdicts and certificates live on-chain"],
   ["Evidence storage", "Walrus: every source and juror work file, public"],
   ["AI inference", "GonkaRouter only, by protocol rule: DeepSeek, Kimi and MiniMax families; a juror that cannot reach Gonka fails closed, never falls back"],
+  ["Currency", "SUI: requesters fund claim budgets; validly revealed seats earn jury-reward payout tickets"],
   ["Jury", "5 jurors; 4 of 5 must agree to decide"],
   ["Outcomes", "YES, NO or UNRESOLVED, each with a 0-100 Truth Score"],
   ["Cost to read or verify", "Free: no account, no wallet, no gas"],

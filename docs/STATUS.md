@@ -40,6 +40,11 @@ Postgres. Tests: 512 vitest, 70 Move.
 
 ## What is NOT true yet
 
+- Positioning UPDATED 2026-09-01: the Sui x Gonka model is now the stated
+  product story (README one-liner + idea + track fit, landing FAQ "Who pays,
+  and who earns?", /learn Currency row): Gonka the only mind, Sui the judge
+  and the currency, delegated seat backing the recorded next rung. On-chain
+  surface unchanged.
 - Economic direction RECORDED 2026-09-01 (roadmap, NOT implemented):
   requester-paid SUI per verification funds the round's jury pool; backers
   delegate SUI stake behind seats and share those seats' jury rewards pro

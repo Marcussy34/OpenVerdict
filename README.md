@@ -48,9 +48,10 @@ Captured from the one-command cockpit demo (`pnpm tsx scripts/cockpit-demo.ts`)
 
 ## One-liner
 
-A decentralized verification engine where human-backed AI juries investigate
-disputed claims, publish evidence-based arguments, and trigger transparent
-on-chain outcomes.
+A decentralized verification engine where requesters fund claims in SUI,
+human-backed standardized AI juror seats investigate them through
+GonkaRouter-only inference, and Sui settles the verdict, the payouts and the
+permanent record.
 
 ## Quickstart
 
@@ -136,6 +137,13 @@ research and verdicts, the deliberation round, claim extraction and the
 re-execution check all run on gonkarouter.io, the adapter refuses any other
 host in code, and a seat that cannot reach Gonka fails closed rather than
 falling back to another AI provider.
+
+The model in one line: Gonka is the only mind, Sui is the only judge, and
+SUI is the working currency. Claim budgets escrow at `create_claim`, agent
+bonds are `Balance<SUI>` in the registry, jury rewards and refunds move as
+one-time payout tickets, and the demo binary pool consumes certificates;
+delegated seat backing (stake SUI behind a seat, share its earnings) is the
+recorded next rung.
 
 Instead of relying on:
 
@@ -382,7 +390,9 @@ compute); finally, self-hosted juror workers bring their own GonkaRouter
 keys and pay their own inference, verified by the engine exactly as our own
 runs are (run hashes, receipts, re-execution).
 
-Recorded direction (roadmap, not yet on-chain): requester-paid SUI per
+### Next rung: delegated seat backing (recorded direction, not yet on-chain)
+
+Requester-paid SUI per
 verification funds the round's jury pool (the `create_claim` budget vaults
 already exist), and each seat's jury rewards flow through to the humans
 staking behind that seat, pro rata after protocol and run fees, delegated
@@ -396,6 +406,9 @@ reputation wiring differentiates track records; until then this section is
 the answer of record, not shipped code.
 
 ## 🏆 Hackathon track fit
+
+One build, both tracks: Gonka supplies all of the intelligence; Sui supplies
+the coordination, the settlement and the currency.
 
 **MUBA Gonka Track — AI for Society** (fact checker):
 
@@ -416,6 +429,7 @@ the answer of record, not shipped code.
 | On-chain execution | Deadlines, commit-reveal, thresholds, and payouts enforced in Move — 66 tests |
 | Working demo path | Localnet E2E exit 0 AND finalized LIVE testnet lifecycles on https://app.openverdict.info: YES certificate [`0xff3191bc…`](https://suiscan.xyz/testnet/object/0xff3191bcad4a645f44a6caccf2e6c661e8defcbf4943b44ec8b08d91b4f4133c) (claim #25, 5 of 5 seats, Seal escrows) and NO certificate [`0x975b3ae1…`](https://suiscan.xyz/testnet/object/0x975b3ae103c7832c4405714196528808af70ef975fe0d0db3ae70017191c00e4) (claim #26, hedged calls); see `docs/demo/runbook.md` |
 | Reveal-key escrow | Mysten Seal time-lock policy on testnet; sealed juror bundles open after the deadline without the operator |
+| Economic loop in SUI | Budgets escrowed at `create_claim`, per-seat jury-reward `PayoutTicket`s and refunds as one-time tickets, protocol-fee reason codes, demo binary pool consuming certificates (`/risk`); delegated seat backing is the recorded next step |
 
 Both public track pages were placeholders at spec time; final submission
 requirements must be reconfirmed against organizer material (PRD §7.3).
