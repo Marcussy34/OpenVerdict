@@ -1486,25 +1486,20 @@ function CollapsibleRail({ children }: { children: ReactNode }) {
         >
           {children}
         </aside>
-        <button
-          type="button"
-          onClick={() => setOpen(false)}
-          aria-label="Hide the claim panel"
-          className="absolute top-1/2 right-0 z-10 -translate-y-1/2 rounded-l-lg border border-r-0 border-white/15 bg-[#07162f]/90 py-3 pr-0.5 pl-1 text-white/70 shadow-xl transition-colors hover:bg-white/10 hover:text-white"
-        >
-          <ArrowLeft2 size="14" />
-        </button>
       </div>
-      {!open && (
-        <button
-          type="button"
-          onClick={() => setOpen(true)}
-          aria-label="Show the claim panel"
-          className="absolute top-1/2 left-0 z-40 hidden -translate-y-1/2 rounded-r-lg border border-l-0 border-white/15 bg-[#07162f]/90 py-3 pr-1 pl-0.5 text-white/70 shadow-xl transition-colors hover:bg-white/10 hover:text-white lg:grid"
-        >
-          <ArrowRight2 size="14" />
-        </button>
-      )}
+      {/* One toggle tab riding the panel's outer edge: it protrudes into the
+          canvas and slides with the rail as it opens and closes. */}
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        aria-label={open ? "Hide the claim panel" : "Show the claim panel"}
+        className={cn(
+          "absolute top-1/2 z-40 hidden -translate-y-1/2 rounded-r-lg border border-l-0 border-white/15 bg-[#07162f]/90 py-3 pr-1 pl-0.5 text-white/70 shadow-xl transition-[left] duration-300 ease-out hover:bg-white/10 hover:text-white lg:grid",
+          open ? "left-[320px]" : "left-0",
+        )}
+      >
+        {open ? <ArrowLeft2 size="14" /> : <ArrowRight2 size="14" />}
+      </button>
     </>
   );
 }
