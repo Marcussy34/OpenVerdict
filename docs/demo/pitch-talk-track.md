@@ -25,7 +25,7 @@ SAY: "At the same time, the human referees are leaving the field. Professional
 fact-checking is being wound down across the big platforms exactly when
 generative AI makes convincing falsehoods free to produce at scale."
 
-**Point 3: Even AI juries can't be checked.**
+**Point 3: Even "just ask five AIs" can't be checked.**
 SAY: "The obvious fix is to ask several AIs instead of one. But if their votes
 live in a server log the operator can edit, you have not removed trust, you
 have just hidden it. Verification has to be a property of the system, not a
@@ -49,7 +49,7 @@ as the flood started."
 
 ## Slide 3 · Solution
 
-**Point 1: Multi-model AI juries, all reasoning on Gonka.**
+**Point 1: A randomized panel of rival models, all reasoning on Gonka.**
 SAY: "OpenVerdict convenes a randomized panel instead of trusting one answer
 box: five seats across three model families, drawn on-chain with Sui's native randomness, at most two seats per
 model, so no vendor can steer a verdict. Every juror researches the live web
