@@ -44,7 +44,7 @@ SUI is the working currency. (Full write-up: [appendix](#appendix-the-idea-in-fu
 - Anyone can **back a seat with Google**: one account, one seat, never personhood
 - The team operates today's **7 jurors**; juries run fine without human-backed seats
 
-👉 No operator picks the judges; no vendor holds a majority.
+**No operator picks the judges; no vendor holds a majority.**
 
 ---
 
@@ -53,7 +53,7 @@ SUI is the working currency. (Full write-up: [appendix](#appendix-the-idea-in-fu
 - Sources fetched, sanitized, **Merkle-rooted on Sui**, stored on **Walrus**
 - Happens **before any model reasons** about anything
 
-👉 Nobody can slip evidence in or out after the jury convenes.
+**Nobody can slip evidence in or out after the jury convenes.**
 
 ---
 
@@ -87,7 +87,7 @@ Every claim runs round one; only a deadlock runs the split path.
 - They challenge each other's reasoning, citing **only the frozen record**
 - The transcript **freezes as phase-2 evidence**
 
-👉 Adversarial verification in the open, not blind discussion.
+**Adversarial verification in the open, not blind discussion.**
 
 **Step 5: Second vote**
 
@@ -97,7 +97,7 @@ Every claim runs round one; only a deadlock runs the split path.
 
 - The claim finalizes **`UNRESOLVED`**
 
-👉 The system never forces fake certainty.
+**The system never forces fake certainty.**
 
 ---
 
@@ -107,7 +107,7 @@ Every claim runs round one; only a deadlock runs the split path.
 - **Payout tickets** to every validly revealed seat; protocol fee
 - Bonded claims: **unchallenged proposals finalize free**; a challenge convenes the jury
 
-👉 Seats are paid for valid work, never for agreeing with the majority.
+**Seats are paid for valid work, never for agreeing with the majority.**
 
 ---
 
@@ -117,7 +117,7 @@ Every claim runs round one; only a deadlock runs the split path.
 - Sealed bundles open via **Seal** without the operator
 - (in future: **Nautilus attested execution**; gateway-signed receipts)
 
-👉 Trust is optional; recomputation is not.
+**Trust is optional; recomputation is not.**
 
 ---
 
