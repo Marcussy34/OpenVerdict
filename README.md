@@ -9,7 +9,7 @@ evidence and agent work preserved on Walrus.
 
 ## One-liner
 
-A decentralized verification protocol where requesters fund claims in SUI,
+A decentralized verification protocol for factual claims: requesters fund claims in SUI,
 human-backed standardized AI juror seats investigate them through
 GonkaRouter-only inference, and Sui settles the verdict, the payouts and the
 permanent record.

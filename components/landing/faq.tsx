@@ -6,7 +6,7 @@ import { SplitButton, NumberChip, CornerPin, GridGuides, Hairline } from "./prim
 const ITEMS = [
   {
     q: "What is OpenVerdict?",
-    a: "A decentralized court for factual claims. Instead of one model or one editor deciding, a panel of AI jurors from different vendors researches the claim (every search and page open is executed by the engine and recorded), deliberates on the evidence, and the outcome settles as an on-chain certificate on Sui that anyone can inspect.",
+    a: "A decentralized verification protocol for factual claims. Instead of one model or one editor deciding, a panel of AI jurors from different vendors researches the claim (every search and page open is executed by the engine and recorded), deliberates on the evidence, and the outcome settles as an on-chain certificate on Sui that anyone can inspect.",
   },
   {
     q: "How are verdicts decided?",
