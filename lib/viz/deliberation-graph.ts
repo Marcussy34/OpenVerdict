@@ -281,8 +281,14 @@ export function buildDeliberationGraph(input: {
     return leftSeat - rightSeat || left.runId.localeCompare(right.runId);
   });
   const revealedProofs = proofs.filter((proof) => proof.revealed);
-  const revealedSeats = new Set(
-    revealedProofs
+  // A trail is expandable once its steps are public: a revealed bundle, or a
+  // failed seat's failure record (published after the deadline). Seat STATE
+  // still keys off revealedProofs alone: a failed seat never reads revealed.
+  const expandableProofs = proofs.filter(
+    (proof) => proof.revealed || researchSteps(proof.transcript).length > 0,
+  );
+  const expandedSeats = new Set(
+    expandableProofs
       .filter((proof) => researchSteps(proof.transcript).length > 0)
       .map((proof) => proof.jurySeatId),
   );
@@ -329,6 +335,16 @@ export function buildDeliberationGraph(input: {
     events,
     (event) => event.kind === "committee_selected",
   ) ?? researchStartMs;
+  // Round-2 seats join the stage when their round actually convenes: the
+  // first event that references the seat (its offer, tick, or run) carries
+  // that moment; committee selection only stamps the round-1 five.
+  const phaseTwoSeats = new Set(
+    input.claim.rounds?.find((round: { phase: 1 | 2 }) => round.phase === 2)?.expectedJurySeatIds
+      ?? (commitments.length === 10
+        ? commitments.slice(5).map((commitment) => commitment.jurySeatId)
+        : []),
+  );
+
   for (const [index, commitment] of commitments.entries()) {
     const proofRevealed = revealedProofs.some(
       (proof) => proof.jurySeatId === commitment.jurySeatId,
@@ -341,11 +357,17 @@ export function buildDeliberationGraph(input: {
           ? "sealed"
           : "researching";
     const seatNodeId = `seat:${commitment.jurySeatId}`;
+    const seatAtMs = phaseTwoSeats.has(commitment.jurySeatId)
+      ? (firstEventTime(
+          events,
+          (event) => eventSeatId(event) === commitment.jurySeatId,
+        ) ?? committeeAtMs)
+      : committeeAtMs;
     addNode({
       id: seatNodeId,
       kind: "juror",
       label: `Juror ${index + 1}`,
-      atMs: committeeAtMs,
+      atMs: seatAtMs,
       seatId: commitment.jurySeatId,
       seatIndex: index,
       // The commitment's manifest model id is authoritative; the event scan
@@ -393,7 +415,7 @@ export function buildDeliberationGraph(input: {
   }
 
   for (const commitment of commitments) {
-    if (revealedSeats.has(commitment.jurySeatId)) continue;
+    if (expandedSeats.has(commitment.jurySeatId)) continue;
     const seatTicks = [...ticks.values()]
       .filter((tick) => tick.seatId === commitment.jurySeatId)
       .sort((left, right) => left.ordinal - right.ordinal);
@@ -416,7 +438,7 @@ export function buildDeliberationGraph(input: {
   }
 
   const verdictIds: string[] = [];
-  for (const proof of revealedProofs) {
+  for (const proof of expandableProofs) {
     if (!knownSeats.has(proof.jurySeatId)) continue;
     const transcript = record(proof.transcript);
     const steps = researchSteps(proof.transcript);

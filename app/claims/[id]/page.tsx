@@ -112,6 +112,12 @@ function proofTranscript(proof: BrowserRunProof): unknown {
     : undefined;
 }
 
+/** A failed seat's recorded trail, public on its failure record. */
+function failureTranscript(proof: BrowserRunProof): unknown {
+  const failure = (proof as { failure?: { transcript?: unknown } }).failure;
+  return failure?.transcript ?? undefined;
+}
+
 function formatRemaining(milliseconds: number): string {
   const totalSeconds = Math.max(0, Math.ceil(milliseconds / 1_000));
   const hours = Math.floor(totalSeconds / 3_600);
@@ -593,6 +599,47 @@ function NodeInspector({
         node={node}
         proofsByRunId={proofsByRunId}
       />
+    );
+  }
+
+  if (node.kind === "sealedAction") {
+    const kind = stringField(node.detail, "kind") === "search" ? "search" : "page open";
+    const seatFailure = claim.commitments.find(
+      (commitment) => commitment.jurySeatId === node.seatId,
+    )?.failureStatus;
+    return (
+      <div className="space-y-4">
+        <span className="inline-flex rounded-full border border-white/20 bg-white/[0.06] px-2 py-1 text-[10px] font-semibold text-white/75 uppercase">
+          Sealed {kind}
+        </span>
+        <p className="text-sm leading-relaxed text-white/85">
+          This juror performed a {kind} at this point in its research. What was
+          {kind === "search" ? " searched" : " opened"} stays sealed inside the
+          juror&apos;s run bundle so no other juror can copy the research and no
+          observer can front-run the vote while the round is live.
+        </p>
+        {seatFailure !== undefined ? (
+          <p className="rounded-xl border border-white/10 bg-white/[0.04] p-3 text-xs leading-relaxed text-white/70">
+            This seat later failed ({seatFailure}) and never revealed, so the
+            step&apos;s content remains sealed. The seat&apos;s recorded attempt
+            log is public on its failure record: click the juror avatar for it.
+          </p>
+        ) : (
+          <p className="rounded-xl border border-white/10 bg-white/[0.04] p-3 text-xs leading-relaxed text-white/70">
+            It unlocks automatically the moment this juror reveals: the sealed
+            tick is then replaced by the real step, checkable against the
+            bundle&apos;s hashes.
+          </p>
+        )}
+        {node.stepIndex !== undefined ? (
+          <p className="font-mono text-[10px] text-white/45">Step {node.stepIndex + 1}</p>
+        ) : null}
+        {node.seatId !== undefined ? (
+          <p className="font-mono text-[10px] text-white/45">
+            Seat {node.seatId.slice(0, 8)}…{node.seatId.slice(-6)}
+          </p>
+        ) : null}
+      </div>
     );
   }
 
@@ -1152,7 +1199,7 @@ export default function ClaimCanvasPage({ params }: ClaimCanvasPageProps) {
     () => Object.values(proofsByRunId).map((proof) => ({
       runId: proof.runId,
       jurySeatId: proof.jurySeatId,
-      transcript: proofTranscript(proof),
+      transcript: proofTranscript(proof) ?? failureTranscript(proof),
       output: proof.bundle?.validatedOutput,
       revealed: proof.revealed,
     })),
