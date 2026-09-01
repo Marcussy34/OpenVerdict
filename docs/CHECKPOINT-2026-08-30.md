@@ -1309,6 +1309,67 @@ trio, shadcn components.json, Railway Dockerfile/railway.json, etc.),
 explained to owner and accepted. Gate identical after the move: 512
 tests / 51 files.
 
+## 3x. CLOSING STATE 2026-09-02 ~01:40 (pre-compaction #14): read 3t/3u/3v/3w then THIS and continue as if nothing happened
+
+REPO: main = 037b1af (plus any owner edits after), tree clean at seal time.
+PRODUCTION = deploy 8983050e (commit 0d39213) and is now BEHIND main on app
+code: the owner's own commit e4b775f (app/globals.css + landing footer) is
+pushed but never deployed or gated by me. Next deploy: run the FULL gate
+first (it contains code I never checked), then the normal ritual. All 12
+sub-terminal claims remain the long-stranded state-6 set; coffee claim
+0xc6d4f4ae terminal (3t).
+
+TONIGHT'S README OVERHAUL (all pushed): scannable top (bold identity, Live
+links, "💡 Why" = 4 bullets + takeaway + model-in-one-line) with the dense
+prose moved to "## Appendix: the idea in full"; How-it-works = 6 stages
+with --- rules between sections; stage 4 nested: "### 🤫 Round One (every
+claim) 🤫" Steps 1-3 and "### ⚔️ Round Two (only when round one deadlocks)
+⚔️" Steps 4-6, separated by 1px hairlines (docs/assets/hairline.svg, an
+<img width=100% height=1>); Step 3 fork explicit ("Most claims end here" /
+"round two below 👇"); takeaway lines are bold text (owner converted from
+👉 in stage 4). Bullets are plain English with sponsor tech woven
+NATURALLY into sentences (owner-approved wording applied verbatim at
+037b1af; NO bracket toppings, owner rejected those). Track-fit section
+names Walrus+Seal in framing + "Walrus evidence layer" row. Why bullets
+split (whales / private desks separate). PRD lives at docs/PRD.md; parity
+test at lib/protocol/parity.test.ts (3w).
+
+OWNER EDITS CONCURRENTLY: they pushed their own commits mid-flow all night
+(rename sweep e4b775f, "## Round One" promotion, ⚔️/👇 tweaks, base moved
+repeatedly). LESSON (bit me once at a1c091a: my assert failed but a bare
+`git add README.md && git commit` swept THEIR uncommitted edit under my
+message): before ANY README patch, git status + fresh-read the anchors;
+never `git add` after a failed patch script.
+
+WEATHER at 01:30: DeepSeek 200/60s, Kimi 000/120s, MiniMax 200/116s =
+heavy shedding, NOT fire-worthy (jurors would timeout). Sentry NOT
+running. DISCUSSION-WINDOW STRETCH (engine.ts:4053): proposed twice,
+owner answered "its okay" = HOLD, do not ship unbidden; re-raise when
+execution resumes because it is the highest-leverage change for a SPOKEN
+debate (any failed seat forces deadline path; window then = zero).
+
+POST-COMPACTION PLAN (owner's words, the whole remaining scope):
+1) run everything END TO END once;
+2) deploy a FRESH NEW INSTANCE "so everything resets" - SCOPE UNCLEAR:
+   ask on resume whether reset means wiping Railway Postgres (destructive,
+   needs explicit confirmation), a new Railway service, and/or fresh
+   on-chain registry/package; do NOT wipe anything unbidden;
+3) run REAL IRL claims needing intelligence + evidence, not trivia:
+   candidates to offer: coffee/cardiovascular (used once), "Intermittent
+   fasting beats continuous calorie restriction for long-term weight
+   loss", "Moderate red wine consumption benefits heart health", "EVs
+   have lower lifecycle emissions than combustion cars even on
+   coal-heavy grids", "2024 was the hottest year on record" (easy-YES
+   control). Then owner: zkLogin backing, 2-min video
+   (docs/demo/video-script-2min.md), pitch (docs/demo/pitch-deck.html +
+   pitch-talk-track.md), submission.
+
+ARTIFACTS: account switch killed old-account artifacts; deck artifact
+6d743d22 unwatched at owner request; canonical deck = repo file. First
+SPOKEN debate still never happened (coffee run = all turns
+WINDOW_EXHAUSTED, 3t). Naming rule = PRD 1.1 item 21. cwd RESETS between
+Bash calls: ALWAYS cd first.
+
 ## 4. Planned next (owner-approved direction)
 
 - Attestation (docs/superpowers/specs/2026-08-30-attested-inference-design.md):
