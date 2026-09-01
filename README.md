@@ -30,21 +30,21 @@ SUI is the working currency. (Full write-up: [appendix](#appendix-the-idea-in-fu
 
 ### 📝 1. Submit a claim
 
-- Paste a **statement or URL**; a **GonkaRouter** model distills **one checkable claim**
-- A `Claim` object is created on **Sui**; budgets escrow, **deadlines start**
-- The statement and criteria archive to **Walrus**; their hashes ride the Sui transaction
+- Paste a **statement or URL**; a model distills **one checkable claim** *(GonkaRouter)*
+- The claim, its budget and its **deadlines go on-chain** *(Sui)*; its text is archived *(Walrus)*
 - Demo tier is **free today** (in future: **paid in SUI**; staked seats share earnings)
 
-**The clock and the money live on-chain from the first second.** 
+**The clock and the money live on-chain from the first second.**
 
 ---
 
 ### 🎲 2. Jury drawn on-chain
 
-- **Sui native randomness** picks 5 seats; **max 2 per GonkaRouter model family** (DeepSeek, Kimi, MiniMax)
+- An **on-chain random draw** picks 5 seats *(Sui native randomness)*
+- **Max 2 seats per AI family**: DeepSeek, Kimi, MiniMax *(GonkaRouter)*
 - **Equal weights** in v1 (in future: weighted by on-chain track record)
-- Anyone can **back a seat with Google** via **Sui zkLogin**: one account, one seat, never personhood
-- The team operates today's **7 jurors**; juries run fine without human-backed seats
+- Anyone can **back a seat with Google** *(Sui zkLogin)*: one account, one seat, never personhood
+- The team runs today's **7 jurors**; juries work fine without human-backed seats
 
 **No operator picks the judges; no vendor holds a majority.**
 
@@ -52,8 +52,8 @@ SUI is the working currency. (Full write-up: [appendix](#appendix-the-idea-in-fu
 
 ### 🧊 3. Evidence frozen
 
-- Sources fetched, sanitized, **Merkle-rooted on Sui**, stored on **Walrus**
-- Happens **before any model reasons** about anything
+- Sources are fetched, cleaned and **fingerprinted on-chain** *(Sui)*; the files stored publicly *(Walrus)*
+- All of it **before any model reasons** about anything
 
 **Nobody can slip evidence in or out after the jury convenes.**
 
@@ -67,18 +67,18 @@ Every claim runs round one; only a deadlock runs round two.
 
 **Step 1: Independent research**
 
-- Each juror, alone: **support AND challenge searches** on the live web, through the engine
-- **Verbatim quotes from 2+ sites** required; all inference on **Gonka only**
-- Every page a juror opens archives to **Walrus** as public evidence
-- A failed seat records a **public failure**; no vote is ever invented
+- Each juror, alone, searches the live web **for AND against** the claim
+- **Word-for-word quotes from 2+ sites** required; every AI call runs on **GonkaRouter only**
+- Every page a juror opens is **archived publicly** *(Walrus)*
+- A failed juror records a **public failure**; no vote is ever invented
 
 <img src="docs/assets/hairline.svg" width="100%" height="1" alt="" />
 
 **Step 2: First vote (commit-reveal)**
 
-- Private votes (**YES / NO / UNSURE**) lock on Sui as **salted hashes**
-- Each juror's sealed work bundle publishes to **Walrus**; its reveal key is escrowed in **Seal**
-- Votes **open together**, checked byte-for-byte
+- Private votes (**YES / NO / UNSURE**) are **locked on-chain** as fingerprints *(Sui)*
+- Each juror's sealed work file is published *(Walrus)*, its key **time-locked** *(Seal)*
+- Votes **open together**, checked against the locks
 
 <img src="docs/assets/hairline.svg" width="100%" height="1" alt="" />
 
@@ -93,9 +93,9 @@ Every claim runs round one; only a deadlock runs round two.
 
 **Step 4: Public debate**
 
-- Revealed jurors **argue in seat order**, every turn its own **GonkaRouter** run, streamed **live** on the claim page
+- Revealed jurors **argue in seat order**, streamed **live** on the claim page *(each turn one GonkaRouter run)*
 - They challenge each other's reasoning, citing **only the frozen record**
-- The transcript **freezes to Walrus as phase-2 evidence**
+- The transcript is **frozen as evidence** *(Walrus)*
 
 **Adversarial verification in the open, not blind discussion.**
 
@@ -117,8 +117,8 @@ Every claim runs round one; only a deadlock runs round two.
 
 ### 💰 5. Settlement in SUI
 
-- Immutable **certificate** + 0-100 **Truth Score**, minted as **Sui** objects (wallet-visible via Object Display)
-- **Payout tickets** to every validly revealed seat; protocol fee
+- Immutable **certificate** + 0-100 **Truth Score**, recorded forever *(Sui)*
+- **Payout tickets** for every juror who did valid work; protocol fee
 - Bonded claims: **unchallenged proposals finalize free**; a challenge convenes the jury
 
 **Seats are paid for valid work, never for agreeing with the majority.**
@@ -127,10 +127,10 @@ Every claim runs round one; only a deadlock runs round two.
 
 ### 🔍 6. Recheck everything
 
-- **15 browser checks** per run, from public **Walrus** artifacts and **Sui** roots
-- **Rerun any juror** on **GonkaRouter** against the exact recorded conversation
-- Sealed bundles open via **Seal** without the operator
-- (in future: **Nautilus attested execution**; gateway-signed receipts)
+- **15 checks re-run in your browser** from the public record *(Walrus + Sui)*
+- **Re-ask the same model** the exact recorded conversation *(GonkaRouter)*
+- Sealed files unlock after the deadline **without us** *(Seal)*
+- (in future: attested execution *(Sui Nautilus)*; signed gateway receipts)
 
 **Trust is optional; recomputation is not.**
 
