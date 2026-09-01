@@ -1370,6 +1370,52 @@ SPOKEN debate still never happened (coffee run = all turns
 WINDOW_EXHAUSTED, 3t). Naming rule = PRD 1.1 item 21. cwd RESETS between
 Bash calls: ALWAYS cd first.
 
+## 3y. FRESH INSTANCE RESET + JUROR RESTORE 2026-09-02 ~02:40
+
+OWNER DECISIONS (asked via 3-question prompt, answered): reset = DB WIPE
+ONLY (same service/domains/package/registry); discussion-window stretch
+STAYS HELD ("lets keep it as is first, ill wait till tmmrw and see how");
+fire timing = sentry fire-on-clear.
+
+EXECUTED: gate GREEN on main be483d5 (512/512, typecheck, lint 0 errors +
+2 warnings, build) covering BOTH previously ungated app commits e4b775f
+(footer) and 1a1c81a (claims grid/inline views). All 36 old claims were
+terminal or long-stranded (state 6, deadlines 21h+ past). Railway
+Postgres truncated from inside the app container (18 tables, 36 claims
+-> 0 rows total). Deploy 99d8386b (= be483d5) SUCCESS. Fresh instance
+verified: /api/status all healthy, claims [], all 5 public URLs 200.
+
+INCIDENT + LESSON (the wipe's one casualty): agent directory is DB-backed
+(agent_manifests.record_json is the real store; listAgents reads only it)
+and live-mode ensureAgent (engine.ts:3147) refuses to synthesize a missing
+manifest, so a bare wipe BREAKS the juror pipeline. Restored all 7 juror
+rows from chain + Walrus with a container-side tsx script (pattern in
+scratchpad/restore-agents.ts): per agent, read AgentProfile via
+client.core.getObject include json (public fullnode JSON-RPC is now
+DEPRECATED, use the app's gRPC client stack), fetch manifest blob from a
+Walrus aggregator, verify blake2b(bytes)==chain manifest_hash + model/
+role/human/owner hashes, then repo.saveAgentManifest. All 7 verified;
+docs are V5 (a re-registration wave post-dated the old agents.json
+snapshot, so chain hashes differ from that snapshot: chain wins).
+agentCapId left unset: gateway.findAgentCap re-derives at signing time.
+FUTURE RESETS: truncate everything EXCEPT agent_manifests, or re-run the
+restore afterward. zkLogin backings (none existed) also reset by wipe.
+
+PREFLIGHT: operator 49.5 SUI + 1.75 WAL (~0.26 SUI + 0.06 WAL per claim);
+agents0-6 all 0.55-0.59 SUI (floor 0.1).
+
+SENTRY ARMED (task b0lkjbz6e, scratchpad/weather-sentry.sh): every 10 min
+heavy-probes all 3 families (1728-char prompt, max_tokens 1500, healthy =
+HTTP 200 under 120s); on 3/3 healthy + app status healthy + no live claim
+it POSTs the EV validation claim to /api/fact-checks and exits. 48-cycle
+(8h) cap. Weather at 02:00: DeepSeek 200/61s (spent full budget thinking,
+empty content), MiniMax 200/86s, Kimi 524/125s = 2/3, holding.
+
+QUEUE after the validation claim completes: "Intermittent fasting beats
+continuous calorie restriction for long-term weight loss", "Moderate red
+wine consumption benefits heart health" (fire one at a time, monitor each
+lifecycle). Stretch decision revisits tomorrow with the owner.
+
 ## 4. Planned next (owner-approved direction)
 
 - Attestation (docs/superpowers/specs/2026-08-30-attested-inference-design.md):
