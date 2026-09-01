@@ -1253,6 +1253,35 @@ spoken expansions + judge Q&A crib committed at docs/demo/pitch-talk-track.md
 docs/demo/video-script-2min.md (08de5dd). Artifact watches were dropped by a
 /login account change mid-session; republish re-armed under current account.
 
+## 3u. NAMING OF RECORD + IDENTITY SWEEP 2026-09-01 ~23:35
+
+OWNER NAMING RULE (binding for all portrayal): top-level identity =
+"decentralized verification protocol for factual claims"; "oracle" reserved
+for integrator/market-slot contexts ("we fill the oracle slot"); jury/court
+are EXPLANATION-layer metaphors only ("the models argue their case like
+jurors"), never the leading identity; "factual claims" is the scope word
+(bounded, falsifiable, evidence-settleable; opinions and unresolved future
+events out of scope until they become factual questions). Owner confirmed
+the one-liner slide text word for word as true.
+
+STATE: an owner-side commit (f1f884c, before 8f625a7) had already swept
+engine->protocol across README title area, og image, package.json, STATUS
+and the GitHub description; CLAUDE.md first line likewise. This window
+finished the sweep: landing FAQ item 1 identity sentence court->protocol
+(panel-of-jurors explanation kept), README one-liner gains "for factual
+claims", PRD 1.1 item 21 records the naming rule (commit 19be80e, gate
+green, deploy 9b6bc18a in flight at checkpoint time; verify FAQ line live
+after SUCCESS). GitHub repo description set via gh: "Decentralized
+verification protocol for factual claims: independent AI models research
+and debate on Gonka; verdicts settle on Sui as recomputable certificates."
+Deck artifact 6d743d22-c3c8-4c7f-8df4-c2715b673990 (label protocol-first) +
+talk track dcdcc28 already carry the rule, incl. Q&A crib naming entry.
+Push hiccup: one transient github.com:443 connect failure, retried clean.
+
+UNCHANGED PENDING: discussion-window stretch decision (engine.ts:4053,
+recommended, awaiting owner go); owner actions (zkLogin backing, video via
+docs/demo/video-script-2min.md, submission); staking = docs-only.
+
 ## 4. Planned next (owner-approved direction)
 
 - Attestation (docs/superpowers/specs/2026-08-30-attested-inference-design.md):
