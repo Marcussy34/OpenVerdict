@@ -1079,6 +1079,55 @@ plus 2+ surviving reveals. 23:5x weather: total storm for juror-sized
 requests (all three families HTTP 000 at 100s) while tiny probes pass
 (200 in 1s). Sentry restart offer stands.
 
+## 3q. CLOSING STATE 2026-09-01 ~18:30 (pre-compaction #13): read 3p then 3q and continue as if nothing happened
+
+Main = 95397d3, pushed, tree CLEAN, PRODUCTION = 95397d3 (deploy 5ff6caf5
+SUCCESS, claim page verified 200). Four deploys tonight, every gate
+511/511 tests + build: 3ad25805 (708c729 canvas five-pack), 7b62353c
+(13fdd32 DELIBERATION, see 3p), a68d2ec4 (3dc0345 rail toggle: ONE tab
+sliding left-[320px]/left-0 with the panel, arrow flips, in
+CollapsibleRail), 5ff6caf5 (95397d3 SATELLITE rework).
+
+SATELLITE MODEL (owner: "same agents, different round, one disc per
+agent"): GraphNode.satellite flag + GraphEdge kind "round";
+deliberation-graph builds ringSeatByAgent from phase-1 commitments; a
+phase-2 seat whose agent is on the ring gets satellite:true and edge
+round(parentSeat -> seat) instead of a claim spoke; fresh R2-only agents
+still take ring slots (decagon only then). force-layout: satellites
+excluded from ring homes/jurorCount/twoRounds; BFS traverses THROUGH
+satellites; first-hop branches per juror fan +-0.5 rad max (spacing
+1.2/(n-1)) so R1 trail, verdict, and R2 chain never stack; link round
+distance 96 strength 0.8; collision satellite 22. Canvas: satellite disc
+size-10, EDGE_STYLE.round purple #b3a7ff, R2 badge keys off seatIndex>=5.
+
+DELIBERATION CHAT UI: components/viz/deliberation-chat.tsx dock
+bottom-centre; page merges claim.deliberation + DELIBERATION_TURN
+PUBLIC_NOW events by ordinal, replay filters atMs<=t, live pulse when
+state===DISCUSSION; stage label "Deliberation · jurors argue their case".
+Canvas chrome: nav pill REMOVED, "All claims" back link atop LeftRail.
+
+WEATHER at ~18:25 (probes, heavy juror-sized): DeepSeek 200/76s,
+MiniMax 200/11s, Kimi 000/120s (down). Tiny probes always 200/1s: not an
+outage, capacity shedding. Committee must seat >=1 Kimi, so best case
+now = 4 healthy + 1 dead seat. A contested claim splitting the 4
+survivors STILL fires the debate.
+
+PAUSED DECISION (owner went to sleep/compact before answering): fire the
+contested demo claim NOW ("Moderate coffee consumption reduces the risk
+of cardiovascular disease.") vs restart the weather sentry and wait for
+Kimi. THE FIRST LIVE DEBATE HAS NOT RUN YET: the feature is deployed but
+never exercised on a live claim. Do NOT fire unbidden; ask on resume.
+
+Unchanged open items: owner actions (zkLogin backing on /agents, demo
+run, 2-min video, submission); "1 seats" plural nit; retired jurors in
+raw agents API; Walrus MoveAbort refresh hardening queued. Codex worker
+verification path: ~/.codex/sessions/YYYY/MM/DD rollout turn_context
+(deliberation run was gpt-5.6-sol max); zombie registry job cancelled
+via codex-companion cancel. Deploy ritual unchanged (NO warm step; cwd
+RESETS between Bash calls: ALWAYS cd first). Morning-report artifact
+50cf84a3-45bb-4ed3-8705-c5962a03da80 republishes from
+scratchpad/morning-report.html.
+
 ## 4. Planned next (owner-approved direction)
 
 - Attestation (docs/superpowers/specs/2026-08-30-attested-inference-design.md):
