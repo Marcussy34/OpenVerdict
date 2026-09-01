@@ -1282,6 +1282,22 @@ UNCHANGED PENDING: discussion-window stretch decision (engine.ts:4053,
 recommended, awaiting owner go); owner actions (zkLogin backing, video via
 docs/demo/video-script-2min.md, submission); staking = docs-only.
 
+## 3v. REPO PRUNE 2026-09-02 ~00:15 (commit 6e22434)
+
+Tracked files 401 -> 358; gate 512/512 after. DELETED (git history keeps
+all): checkpoints 08-27/28/29 (THIS file is now the only checkpoint), all
+plans except 2026-08-26-openverdict-build.md, docs/demo/video-script.md
+(the -2min one is current) and workshop-brief.md, all docs/screenshots/*
+(README no longer embeds any; owner's rename commit f1f884c had already
+dropped the section), all diagrams except the three README-embedded sets
+(architecture / claim-lifecycle / jury-round: png + dark png + excalidraw
+each). STATUS claim-ids pointer now -> docs/demo/runbook.md. .gitignore now
+ignores artifacts/, output/, tools/; local scratch (output/, tools/, empty
+artifacts/, tsconfig.tsbuildinfo) removed from disk. All specs kept (PRD
+addendum cites them). Deck artifact 6d743d22 unwatched per owner ("close
+the claude artifact"); actual deletion is owner-side in the gallery; the
+in-repo copy docs/demo/pitch-deck.html is now canonical.
+
 ## 4. Planned next (owner-approved direction)
 
 - Attestation (docs/superpowers/specs/2026-08-30-attested-inference-design.md):
