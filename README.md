@@ -68,6 +68,7 @@ Every claim runs round one; only a deadlock runs round two.
 
 - Each juror, alone: **support AND challenge searches** on the live web, through the engine
 - **Verbatim quotes from 2+ sites** required; all inference on **Gonka only**
+- Every page a juror opens archives to **Walrus** as public evidence
 - A failed seat records a **public failure**; no vote is ever invented
 
 <img src="docs/assets/hairline.svg" width="100%" height="1" alt="" />
@@ -75,7 +76,8 @@ Every claim runs round one; only a deadlock runs round two.
 **Step 2: First vote (commit-reveal)**
 
 - Private votes (**YES / NO / UNSURE**) lock on Sui as **salted hashes**
-- Reveal keys escrowed in **Seal**; votes **open together**, checked byte-for-byte
+- Each juror's sealed work bundle publishes to **Walrus**; its reveal key is escrowed in **Seal**
+- Votes **open together**, checked byte-for-byte
 
 <img src="docs/assets/hairline.svg" width="100%" height="1" alt="" />
 
@@ -92,7 +94,7 @@ Every claim runs round one; only a deadlock runs round two.
 
 - Revealed jurors **argue in seat order**, streamed **live** on the claim page
 - They challenge each other's reasoning, citing **only the frozen record**
-- The transcript **freezes as phase-2 evidence**
+- The transcript **freezes to Walrus as phase-2 evidence**
 
 **Adversarial verification in the open, not blind discussion.**
 
