@@ -38,5 +38,7 @@ move/openverdict/build/
 .testnet/
 
 # Billable media-generation intermediates; only selected web assets are tracked.
-artifacts/landing-video/
+artifacts/
+output/
+tools/
 move/openverdict_seal/build/

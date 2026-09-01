@@ -115,7 +115,7 @@ Postgres. Tests: 512 vitest, 70 Move.
   `lib/sui/retention-epoch.ts`), and the worker tick lock was a session
   advisory lock that Neon's transaction pooler stranded (workers silent;
   now `pg_advisory_xact_lock` inside a transaction). Hosted end-to-end run:
-  see docs/CHECKPOINT-2026-08-29.md for the latest claim ids and results.
+  see docs/demo/runbook.md for the latest claim ids and results.
 - FAST MODE 2026-08-30 (measured through eleven hosted claims overnight):
   the hosted ladder is measured from the `create_claim` transaction
   (evidence cutoff +60 s, commit +450 s, reveal +570 s, discussion +630 s,
