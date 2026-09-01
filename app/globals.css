@@ -665,6 +665,73 @@
     mask-image: linear-gradient(to top, transparent 87.5%, #000 100%);
 }
 
+/* --- Progressive blur along the footer's bottom edge ---------------------- */
+/* The mirror of .ov-top-blur: the same four-layer ramp, flipped, but anchored
+   to the footer's own bottom edge instead of the viewport. So nothing blurs
+   mid-scroll; only the giant wordmark melts out of focus as the page bottoms
+   out, and the top and bottom of the view close the same way. Height tracks
+   the wordmark band (13.4vw) and caps at the header's 132px. */
+.ov-bottom-blur {
+    position: absolute;
+    inset: auto 0 0 0;
+    height: clamp(72px, 9vw, 132px);
+    z-index: 40;
+    pointer-events: none;
+}
+.ov-bottom-blur > span {
+    position: absolute;
+    inset: 0;
+    display: block;
+}
+.ov-bottom-blur > span:nth-child(1) {
+    -webkit-backdrop-filter: blur(1px);
+    backdrop-filter: blur(1px);
+    -webkit-mask-image: linear-gradient(
+        to bottom,
+        transparent 50%,
+        #000 62.5%,
+        #000 75%,
+        transparent 87.5%
+    );
+    mask-image: linear-gradient(
+        to bottom,
+        transparent 50%,
+        #000 62.5%,
+        #000 75%,
+        transparent 87.5%
+    );
+}
+.ov-bottom-blur > span:nth-child(2) {
+    -webkit-backdrop-filter: blur(2px);
+    backdrop-filter: blur(2px);
+    -webkit-mask-image: linear-gradient(
+        to bottom,
+        transparent 62.5%,
+        #000 75%,
+        #000 87.5%,
+        transparent 100%
+    );
+    mask-image: linear-gradient(
+        to bottom,
+        transparent 62.5%,
+        #000 75%,
+        #000 87.5%,
+        transparent 100%
+    );
+}
+.ov-bottom-blur > span:nth-child(3) {
+    -webkit-backdrop-filter: blur(4px);
+    backdrop-filter: blur(4px);
+    -webkit-mask-image: linear-gradient(to bottom, transparent 75%, #000 87.5%, #000 100%);
+    mask-image: linear-gradient(to bottom, transparent 75%, #000 87.5%, #000 100%);
+}
+.ov-bottom-blur > span:nth-child(4) {
+    -webkit-backdrop-filter: blur(8px);
+    backdrop-filter: blur(8px);
+    -webkit-mask-image: linear-gradient(to bottom, transparent 87.5%, #000 100%);
+    mask-image: linear-gradient(to bottom, transparent 87.5%, #000 100%);
+}
+
 /* --- Hairlines: dashed 1px guides, the page's structural furniture ------- */
 .ov-hr {
     height: 1px;

@@ -188,9 +188,10 @@ export function LandingFooter() {
 
       {/* The wordmark: sized to the full gutter width, cropped by the page's
           bottom edge, and climbing into place with the footer's scroll.
-          11.1vw shows 60% of the word's ink: the type's ink runs 15.8vw and
-          starts 1.6vw down from the band's top edge. */}
-      <div ref={bandRef} className="relative mt-2 h-[11.1vw] min-h-[59px] overflow-hidden">
+          13.4vw shows 75% of the word's ink: the type's ink runs 15.8vw and
+          starts 1.6vw down from the band's top edge. The min-height is a
+          legibility floor, not a crop, and only binds under ~440px wide. */}
+      <div ref={bandRef} className="relative mt-2 h-[13.4vw] min-h-[59px] overflow-hidden">
         <div ref={markRef} className="will-change-transform">
           <p
             aria-hidden
@@ -199,6 +200,17 @@ export function LandingFooter() {
             OpenVerdict
           </p>
         </div>
+      </div>
+
+      {/* The wordmark ramps out of focus as it meets the page's bottom edge,
+          the mirror of the header's .ov-top-blur. Anchored to the footer
+          rather than the viewport, so nothing blurs until the page bottoms
+          out. Last child so it sits over the band it softens. */}
+      <div aria-hidden className="ov-bottom-blur">
+        <span />
+        <span />
+        <span />
+        <span />
       </div>
     </footer>
   );
