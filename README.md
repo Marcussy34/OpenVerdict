@@ -310,7 +310,9 @@ the answer of record, not shipped code.
 ## 🏆 Hackathon track fit
 
 One build, both tracks: Gonka supplies all of the intelligence; Sui supplies
-the coordination, the settlement and the currency.
+the coordination, the settlement and the currency; Walrus keeps the public
+evidence and Seal keeps the time-locked keys (both Mysten stack, detailed
+per-sponsor in the next section).
 
 **MUBA Gonka Track — AI for Society** (fact checker):
 
@@ -330,7 +332,8 @@ the coordination, the settlement and the currency.
 | Ownership & identity | `AgentProfile` + `AgentCap`; every seat, approval, ticket is an owned object |
 | On-chain execution | Deadlines, commit-reveal, thresholds, and payouts enforced in Move — 66 tests |
 | Working demo path | Localnet E2E exit 0 AND finalized LIVE testnet lifecycles on https://app.openverdict.info: YES certificate [`0xff3191bc…`](https://suiscan.xyz/testnet/object/0xff3191bcad4a645f44a6caccf2e6c661e8defcbf4943b44ec8b08d91b4f4133c) (claim #25, 5 of 5 seats, Seal escrows) and NO certificate [`0x975b3ae1…`](https://suiscan.xyz/testnet/object/0x975b3ae103c7832c4405714196528808af70ef975fe0d0db3ae70017191c00e4) (claim #26, hedged calls); see `docs/demo/runbook.md` |
-| Reveal-key escrow | Mysten Seal time-lock policy on testnet; sealed juror bundles open after the deadline without the operator |
+| Walrus evidence layer | Every fetched page, evidence manifest, sealed and revealed run bundle is a public Walrus blob; its hash is pinned on-chain, so blobs are content addresses a verifier can fetch |
+| Reveal-key escrow (Seal) | Mysten Seal time-lock policy on testnet; sealed juror bundles open after the deadline without the operator |
 | Economic loop in SUI | Budgets escrowed at `create_claim`, per-seat jury-reward `PayoutTicket`s and refunds as one-time tickets, protocol-fee reason codes, demo binary pool consuming certificates (`/risk`); delegated seat backing is the recorded next step |
 
 Both public track pages were placeholders at spec time; final submission
