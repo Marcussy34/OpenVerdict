@@ -64,6 +64,7 @@ export const Play = icon(Iconsax.Play, "Play");
 export const Profile2User = icon(Iconsax.Profile2User, "Profile2User");
 export const Radar = icon(Iconsax.Radar, "Radar");
 export const Refresh = icon(Iconsax.Refresh, "Refresh");
+export const RowVertical = icon(Iconsax.RowVertical, "RowVertical");
 export const SearchNormal1 = icon(Iconsax.SearchNormal1, "SearchNormal1");
 export const SecuritySafe = icon(Iconsax.SecuritySafe, "SecuritySafe");
 export const Send2 = icon(Iconsax.Send2, "Send2");

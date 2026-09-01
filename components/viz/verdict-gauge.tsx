@@ -77,6 +77,13 @@ export function VerdictGauge({
   const progress = score === null ? 0 : (animated / 100) * ARC;
   const uid = React.useId().replace(/:/g, "");
 
+  // The dial art is an SVG viewBox and scales with `size` on its own, but the
+  // centre readout is HTML at fixed type sizes. Below ~160px the label and the
+  // bps line stop being legible, so a dense readout keeps only the number and
+  // derives its type from the dial. Every panel calls this at 190-200px, which
+  // takes the untouched path.
+  const dense = size < 160;
+
   return (
     <div className={cn("flex flex-col items-center", className)}>
       <div className="relative" style={{ width: size, height: size }}>
@@ -175,32 +182,48 @@ export function VerdictGauge({
         <div className="absolute inset-0 flex flex-col items-center justify-center">
           {score === null ? (
             <>
-              <span className="text-3xl font-medium text-muted-foreground">
+              <span
+                className={cn("font-medium text-muted-foreground", !dense && "text-3xl")}
+                style={dense ? { fontSize: Math.round(size * 0.2) } : undefined}
+              >
                 {emptyTitle}
               </span>
-              <span className="ov-micro ov-micro-sm mt-1 max-w-[9.5rem] text-center leading-tight whitespace-pre-line text-muted-foreground">
-                {emptyLabel}
-              </span>
+              {!dense && (
+                <span className="ov-micro ov-micro-sm mt-1 max-w-[9.5rem] text-center leading-tight whitespace-pre-line text-muted-foreground">
+                  {emptyLabel}
+                </span>
+              )}
             </>
           ) : (
             <>
               <div className="flex items-baseline">
                 <span
                   className={cn(
-                    "text-[2.75rem] leading-none font-medium tracking-tight tabular-nums",
+                    "leading-none font-medium tracking-tight tabular-nums",
+                    !dense && "text-[2.75rem]",
                     tier?.text,
                   )}
+                  style={dense ? { fontSize: Math.round(size * 0.26) } : undefined}
                 >
                   {Math.round(animated)}
                 </span>
-                <span className="ml-1 text-sm text-muted-foreground">/100</span>
+                <span
+                  className={cn("ml-1 text-muted-foreground", !dense && "text-sm")}
+                  style={dense ? { fontSize: Math.round(size * 0.085) } : undefined}
+                >
+                  /100
+                </span>
               </div>
-              <span className="ov-micro ov-micro-sm mt-1.5 text-muted-foreground">
-                Truth Score
-              </span>
-              <span className="mt-0.5 text-[11px] text-muted-foreground/70">
-                {scoreBps} bps
-              </span>
+              {!dense && (
+                <>
+                  <span className="ov-micro ov-micro-sm mt-1.5 text-muted-foreground">
+                    Truth Score
+                  </span>
+                  <span className="mt-0.5 text-[11px] text-muted-foreground/70">
+                    {scoreBps} bps
+                  </span>
+                </>
+              )}
             </>
           )}
         </div>

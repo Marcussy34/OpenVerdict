@@ -23,7 +23,7 @@ interface StateBadgeProps {
   size?: "sm" | "md" | "lg";
 }
 
-type Tone = "neutral" | "chain" | "sealed" | "warn" | "yes" | "no" | "primary";
+type Tone = "open" | "settled" | "unresolved";
 
 interface StateConfig {
   label: string;
@@ -33,14 +33,13 @@ interface StateConfig {
   tone: Tone;
 }
 
+// Three tones, so the badge answers one question at a glance: is this done,
+// and did it settle? Everything still in flight is amber, however far along it
+// is; only the two terminal outcomes earn a colour of their own.
 const TONE_CLASS: Record<Tone, string> = {
-  neutral: "border-border bg-surface text-muted-foreground",
-  chain: "border-chain/30 bg-chain/8 text-chain",
-  sealed: "border-sealed/30 bg-sealed/8 text-sealed",
-  warn: "border-unsure/30 bg-unsure/8 text-unsure",
-  yes: "border-yes/30 bg-yes/8 text-yes",
-  no: "border-no/30 bg-no/8 text-no",
-  primary: "border-sea/35 bg-sea/10 text-primary",
+  open: "border-unsure/30 bg-unsure/8 text-unsure",
+  settled: "border-yes/30 bg-yes/8 text-yes",
+  unresolved: "border-no/30 bg-no/8 text-no",
 };
 
 export function getStateConfig(
@@ -51,62 +50,62 @@ export function getStateConfig(
 
   switch (numericState) {
     case CLAIM_STATE.CREATED:
-      return { label: "Created", short: "Created", icon: Clock, tone: "neutral" };
+      return { label: "Created", short: "Created", icon: Clock, tone: "open" };
     case CLAIM_STATE.PROPOSED:
-      return { label: "Proposed", short: "Proposed", icon: DocumentText, tone: "chain" };
+      return { label: "Proposed", short: "Proposed", icon: DocumentText, tone: "open" };
     case CLAIM_STATE.CHALLENGED:
-      return { label: "Challenged", short: "Challenged", icon: Warning2, tone: "warn" };
+      return { label: "Challenged", short: "Challenged", icon: Warning2, tone: "open" };
     case CLAIM_STATE.REVIEW_REQUESTED:
       return {
         label: "Review requested",
         short: "In review",
         icon: ShieldSearch,
-        tone: "primary",
+        tone: "open",
       };
     case CLAIM_STATE.COMMIT_1:
-      return { label: "Phase 1 · Sealed commit", short: "Sealed", icon: Lock, tone: "sealed" };
+      return { label: "Phase 1 · Sealed commit", short: "Sealed", icon: Lock, tone: "open" };
     case CLAIM_STATE.REVEAL_1:
-      return { label: "Phase 1 · Reveal", short: "Revealing", icon: Unlock, tone: "chain" };
+      return { label: "Phase 1 · Reveal", short: "Revealing", icon: Unlock, tone: "open" };
     case CLAIM_STATE.DISCUSSION:
       if (stranded) {
         return {
           label: "Discussion · expired",
           short: "Expired",
           icon: CloseCircle,
-          tone: "neutral",
+          tone: "open",
         };
       }
-      return { label: "Discussion round", short: "Discussion", icon: Activity, tone: "warn" };
+      return { label: "Discussion round", short: "Discussion", icon: Activity, tone: "open" };
     case CLAIM_STATE.COMMIT_2:
-      return { label: "Phase 2 · Sealed commit", short: "Sealed", icon: Lock, tone: "sealed" };
+      return { label: "Phase 2 · Sealed commit", short: "Sealed", icon: Lock, tone: "open" };
     case CLAIM_STATE.REVEAL_2:
-      return { label: "Phase 2 · Reveal", short: "Revealing", icon: Unlock, tone: "chain" };
+      return { label: "Phase 2 · Reveal", short: "Revealing", icon: Unlock, tone: "open" };
     case CLAIM_STATE.FINALIZED_UNCHALLENGED:
       return {
         label: "Finalized · unchallenged",
         short: "Finalized",
         icon: TickCircle,
-        tone: "yes",
+        tone: "settled",
       };
     case CLAIM_STATE.FINALIZED_REVIEWED:
       return {
         label: "Finalized · jury consensus",
         short: "Finalized",
         icon: ShieldTick,
-        tone: "yes",
+        tone: "settled",
       };
     case CLAIM_STATE.UNRESOLVED:
       return {
         label: "Unresolved · no consensus",
         short: "Unresolved",
         icon: CloseCircle,
-        tone: "no",
+        tone: "unresolved",
       };
     case CLAIM_STATE.CANCELLED:
-      return { label: "Cancelled", short: "Cancelled", icon: CloseCircle, tone: "neutral" };
+      return { label: "Cancelled", short: "Cancelled", icon: CloseCircle, tone: "open" };
     default: {
       const fallback = typeof state === "string" ? state : `State ${state}`;
-      return { label: fallback, short: fallback, icon: Judge, tone: "neutral" };
+      return { label: fallback, short: fallback, icon: Judge, tone: "open" };
     }
   }
 }

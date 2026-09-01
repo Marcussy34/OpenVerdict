@@ -1,9 +1,22 @@
 "use client";
 
-import { useState, useEffect, useMemo, useCallback } from "react";
+import {
+  useState,
+  useEffect,
+  useMemo,
+  useCallback,
+  useSyncExternalStore,
+} from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { StateBadge } from "@/components/claim/state-badge";
+import { ClaimCard } from "@/components/claim/claim-card";
+import {
+  OUTCOME_CHIP,
+  shortClaimId,
+  timeAgo,
+  truthScoreOf,
+} from "@/components/claim/claim-format";
 import { useNow } from "@/components/use-now";
 import { isStrandedDiscussion } from "@/lib/engine/claim-lifecycle";
 import { cn } from "@/lib/utils";
@@ -13,6 +26,8 @@ import {
   Warning2,
   Refresh,
   ArrowRight2,
+  Element3,
+  RowVertical,
 } from "@/components/icons";
 
 type FilterTab = "ALL" | "ACTIVE" | "PROPOSED" | "JURY" | "FINALIZED" | "UNRESOLVED";
@@ -25,6 +40,54 @@ const TABS: { key: FilterTab; label: string }[] = [
   { key: "FINALIZED", label: "Finalized" },
   { key: "UNRESOLVED", label: "Unresolved" },
 ];
+
+/** How the directory draws itself: today's compact rows, or ClaimCard tiles. */
+type ViewMode = "inline" | "grid";
+
+const VIEWS: { key: ViewMode; label: string; Icon: typeof Element3 }[] = [
+  { key: "inline", label: "Inline", Icon: RowVertical },
+  { key: "grid", label: "Grid", Icon: Element3 },
+];
+
+/** Where the chosen view is remembered between visits. */
+const VIEW_STORAGE_KEY = "ov:claims-view";
+
+// The preference lives in localStorage, which render is not allowed to touch:
+// a value read on the client would not match the server's first pass. So it
+// goes through a tiny external store, the same shape components/use-now.ts
+// uses — server snapshot is the default (SSR and hydration agree), client
+// snapshot is whatever storage holds.
+const viewListeners = new Set<() => void>();
+
+function subscribeToView(listener: () => void): () => void {
+  viewListeners.add(listener);
+  // Another tab switching view keeps this one in step.
+  window.addEventListener("storage", listener);
+  return () => {
+    viewListeners.delete(listener);
+    window.removeEventListener("storage", listener);
+  };
+}
+
+/** Returns a primitive, so repeated reads compare equal and never loop. */
+function readView(): ViewMode {
+  try {
+    const stored = window.localStorage.getItem(VIEW_STORAGE_KEY);
+    return stored === "grid" || stored === "inline" ? stored : "inline";
+  } catch {
+    // Blocked or unavailable storage (private windows): the default is fine.
+    return "inline";
+  }
+}
+
+function writeView(next: ViewMode): void {
+  try {
+    window.localStorage.setItem(VIEW_STORAGE_KEY, next);
+  } catch {
+    // Persistence is a convenience; the view still switches without it.
+  }
+  viewListeners.forEach((notify) => notify());
+}
 
 function matchesTab(state: number, tab: FilterTab): boolean {
   switch (tab) {
@@ -43,37 +106,8 @@ function matchesTab(state: number, tab: FilterTab): boolean {
   }
 }
 
-// Explorer-row helpers, mirrored from the verify page so both lists match.
-const OUTCOME_CHIP: Record<string, string> = {
-  YES: "bg-yes/10 text-yes",
-  NO: "bg-no/10 text-no",
-  UNSURE: "bg-unsure/10 text-unsure",
-  UNRESOLVED: "bg-muted text-muted-foreground",
-};
-
-function shortClaimId(claimId: string): string {
-  return claimId.length <= 14
-    ? claimId
-    : `${claimId.slice(0, 8)}…${claimId.slice(-4)}`;
-}
-
-function truthScoreOf(claim: ClaimInspection): string | null {
-  const bps = claim.result?.truthScoreBps;
-  if (bps === null || bps === undefined) return null;
-  const score = bps / 100;
-  return Number.isInteger(score) ? score.toFixed(0) : score.toFixed(2);
-}
-
-function timeAgo(now: number | null, atMs: number | undefined): string {
-  if (now === null || atMs === undefined) return "";
-  const delta = Math.max(0, now - atMs);
-  const minutes = Math.round(delta / 60_000);
-  if (minutes < 1) return "just now";
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.round(minutes / 60);
-  if (hours < 48) return `${hours}h ago`;
-  return `${Math.round(hours / 24)}d ago`;
-}
+/** Four across at the widest, stepping down with the viewport. */
+const GRID_CLASSES = "grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4";
 
 export default function ClaimsPage() {
   const [claims, setClaims] = useState<ClaimInspection[]>([]);
@@ -81,7 +115,11 @@ export default function ClaimsPage() {
   const [engineOffline, setEngineOffline] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [activeFilter, setActiveFilter] = useState<FilterTab>("ALL");
+  // "inline" through SSR and hydration, then whatever the visitor last chose.
+  const view = useSyncExternalStore(subscribeToView, readView, () => "inline");
   const now = useNow();
+  // Tiles need the full page; the row list keeps its reading measure.
+  const widthClass = view === "grid" ? "max-w-7xl" : "max-w-3xl";
 
   const loadClaims = useCallback(async () => {
     try {
@@ -156,7 +194,7 @@ export default function ClaimsPage() {
   );
 
   return (
-    <div className="mx-auto max-w-5xl space-y-10 px-5 py-16 md:px-7 md:py-24">
+    <div className="mx-auto max-w-7xl space-y-10 px-5 py-16 md:px-7 md:py-24">
       {/* Hero: one word, explorer style. */}
       <h1 className="ov-display text-center text-4xl text-ocean md:text-5xl">Claims</h1>
 
@@ -200,16 +238,59 @@ export default function ClaimsPage() {
             );
           })}
         </div>
+
       </div>
 
-      {/* The directory itself: one row per claim, details behind the click. */}
-      <section className="mx-auto w-full max-w-3xl">
-        {loading ? (
-          <div className="space-y-2">
-            {[0, 1, 2, 3].map((index) => (
-              <div key={index} className="h-14 animate-pulse rounded-xl bg-surface-2" />
-            ))}
+      {/* The directory itself: rows or tiles, details behind the click. The
+          switch rides the results' own width so their right edges line up. */}
+      <section className={cn("mx-auto w-full space-y-4", widthClass)}>
+        {/* View switch: changes the directory's shape, never its contents. */}
+        <div className="flex justify-end">
+          <div
+            className="ov-edge inline-flex items-center gap-0.5 rounded-full border border-border bg-card p-0.5"
+            role="tablist"
+            aria-label="Claims view"
+          >
+            {VIEWS.map(({ key, label, Icon }) => {
+              const active = view === key;
+              return (
+                <button
+                  key={key}
+                  role="tab"
+                  aria-selected={active}
+                  onClick={() => writeView(key)}
+                  className={cn(
+                    "flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-colors",
+                    active
+                      ? "bg-sea/10 text-primary"
+                      : "text-muted-foreground hover:text-ocean",
+                  )}
+                >
+                  <Icon size="14" variant={active ? "Bold" : "Linear"} />
+                  {label}
+                </button>
+              );
+            })}
           </div>
+        </div>
+
+        {loading ? (
+          view === "grid" ? (
+            <div className={GRID_CLASSES}>
+              {[0, 1, 2, 3].map((index) => (
+                <div
+                  key={index}
+                  className="aspect-square animate-pulse rounded-2xl bg-surface-2"
+                />
+              ))}
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {[0, 1, 2, 3].map((index) => (
+                <div key={index} className="h-14 animate-pulse rounded-xl bg-surface-2" />
+              ))}
+            </div>
+          )
         ) : engineOffline ? (
           <div className="flex flex-col items-center gap-3 rounded-2xl border border-dashed border-border bg-card px-6 py-14 text-center">
             <span className="grid size-11 place-items-center rounded-xl bg-unsure/10 text-unsure">
@@ -225,6 +306,12 @@ export default function ClaimsPage() {
           <p className="rounded-xl border border-dashed border-border bg-surface p-4 text-center text-xs text-muted-foreground">
             {searchQuery ? "Nothing matches that search." : "No claims in this state yet."}
           </p>
+        ) : view === "grid" ? (
+          <div className={GRID_CLASSES}>
+            {filteredClaims.map((claim) => (
+              <ClaimCard key={claim.claimId} claim={claim} />
+            ))}
+          </div>
         ) : (
           <ul className="ov-edge divide-y divide-border overflow-hidden rounded-2xl border border-border bg-card">
             {filteredClaims.map((claim) => {
