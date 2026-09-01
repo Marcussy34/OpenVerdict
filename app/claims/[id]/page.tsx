@@ -32,7 +32,7 @@ import {
   Warning2,
 } from "@/components/icons";
 import { Button } from "@/components/ui/button";
-import { useClaimEvents } from "@/components/use-claim-events";
+import { useClaimEvents, type EventStreamStatus } from "@/components/use-claim-events";
 import { useNow } from "@/components/use-now";
 import { CanvasHighlightProvider } from "@/components/viz/canvas-highlight";
 import { DeliberationCanvas } from "@/components/viz/deliberation-canvas";
@@ -280,11 +280,13 @@ function StageBanner({
   graph,
   replay,
   now,
+  streamStatus,
 }: {
   claim: ClaimInspection;
   graph: DeliberationGraph;
   replay: ReplayControls;
   now: number | null;
+  streamStatus: EventStreamStatus;
 }) {
   const stranded = now !== null && isStrandedDiscussion(claim, now);
   const replaying = replay.active && replay.t < replay.endMs;
@@ -292,6 +294,9 @@ function StageBanner({
     ? replayStage(claim, graph, replay.t)
     : liveStage(claim, stranded);
   const settled = !replaying && claim.state >= 9;
+  // Broadcast-style marker: the claim is still running AND this tab follows
+  // the live event stream (amber SYNCING while the stream catches up).
+  const live = !replaying && !stranded && claim.state < 9;
   return (
     <div className="pointer-events-none absolute inset-x-0 top-16 z-30 flex justify-center xl:top-4">
       <motion.div
@@ -315,6 +320,24 @@ function StageBanner({
         <span className="text-[11px] font-bold tracking-[0.16em] whitespace-nowrap uppercase">
           {replaying ? `Replay · ${stage.label}` : stage.label}
         </span>
+        {live ? (
+          <span
+            className={cn(
+              "flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[9px] font-extrabold tracking-[0.22em]",
+              streamStatus === "connected"
+                ? "bg-[#ff4545]/15 text-[#ff7a70]"
+                : "bg-[#ffc65c]/15 text-[#ffd98c]",
+            )}
+          >
+            <span aria-hidden className="relative flex size-1.5">
+              {streamStatus === "connected" ? (
+                <span className="absolute inline-flex size-full animate-ping rounded-full bg-current opacity-70 motion-reduce:hidden" />
+              ) : null}
+              <span className="relative inline-flex size-1.5 rounded-full bg-current" />
+            </span>
+            {streamStatus === "connected" ? "LIVE" : "SYNCING"}
+          </span>
+        ) : null}
       </motion.div>
     </div>
   );
@@ -1065,7 +1088,7 @@ function MobileSheet({
 export default function ClaimCanvasPage({ params }: ClaimCanvasPageProps) {
   const { id } = use(params);
   const now = useNow();
-  const { events } = useClaimEvents(id);
+  const { events, status: streamStatus } = useClaimEvents(id);
   const hasClaimRef = useRef(false);
   const requestedProofsRef = useRef(new Set<string>());
 
@@ -1303,7 +1326,7 @@ export default function ClaimCanvasPage({ params }: ClaimCanvasPageProps) {
             Audit
           </Link>
         </nav>
-        <StageBanner claim={claim} graph={graph} replay={replay} now={now} />
+        <StageBanner claim={claim} graph={graph} replay={replay} now={now} streamStatus={streamStatus} />
         <DeliberationCanvas
           graph={replay.visible}
           selectedId={selectedId}

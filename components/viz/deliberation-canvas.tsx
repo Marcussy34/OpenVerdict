@@ -145,12 +145,17 @@ function nodeClassName(node: GraphNode, selected: boolean): string {
         node.state === "sealed" && "opacity-80",
       );
     }
-    case "sealedAction":
+    case "sealedAction": {
+      // Content stays redacted until reveal, but the KIND is public metadata:
+      // tint plus dashed border say "sealed search" vs "sealed page" at a glance.
+      const kind = typeof node.detail?.kind === "string" ? node.detail.kind : undefined;
       return cn(
-        "size-[22px] rounded-md bg-white/10 text-white/85 opacity-80",
+        "size-[22px] rounded-md border border-dashed border-white/30 text-white/90 opacity-90",
+        kind === "search" ? "bg-[#0e76ff]/25" : kind === "open" ? "bg-[#173a68]/70" : "bg-white/10",
         "after:absolute after:-inset-2.5 after:content-['']",
         selectedRing,
       );
+    }
     case "search":
       return cn(
         "size-[26px] rounded-full text-[#bcd9ff]",
@@ -248,6 +253,13 @@ function JurorContent({
           className="size-full rounded-full object-cover"
         />
       )}
+      {(node.seatIndex ?? 0) >= 5 ? (
+        // Round-2 seats joined at escalation; the tag separates them from
+        // the round-1 panel at a glance.
+        <span className="absolute -top-1 -left-1 rounded-full bg-[#231d55] px-1 py-px text-[8px] font-extrabold tracking-wide text-[#cdc5ff] ring-1 ring-[#b3a7ff]/50">
+          R2
+        </span>
+      ) : null}
       {node.state === "sealed" ? (
         <span className="absolute -top-1 -right-1 grid size-5 place-items-center rounded-full bg-[#04122b] text-white">
           <Lock size="11" variant="Bold" />
@@ -316,8 +328,14 @@ function nodeContent(
           reduceMotion={options.reduceMotion}
         />
       );
-    case "sealedAction":
+    case "sealedAction": {
+      // Kind glyph instead of an anonymous padlock; the inspector still
+      // explains why the content itself stays sealed until reveal.
+      const kind = typeof node.detail?.kind === "string" ? node.detail.kind : undefined;
+      if (kind === "search") return <SearchNormal1 size="12" variant="Bold" />;
+      if (kind === "open") return <DocumentText size="12" variant="Bold" />;
       return <Lock size="12" variant="Bold" />;
+    }
     case "search":
       return (
         <>
