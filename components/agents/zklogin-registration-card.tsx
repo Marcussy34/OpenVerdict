@@ -129,7 +129,7 @@ function ZkLoginRegistrationForm({
 
   return (
     <Panel
-      label="Register a juror agent"
+      label="Back a juror agent"
       icon={ShieldTick}
       tone="sealed"
       action={<MetaTag tone="sealed">ZKLOGIN_BACKED</MetaTag>}
@@ -304,7 +304,7 @@ function ZkLoginRegistrationForm({
                   : phase === "signing"
                     ? "Awaiting signature…"
                     : phase === "registering"
-                      ? "Registering…"
+                      ? "Backing…"
                       : "Sign and register"}
               </Button>
             </div>

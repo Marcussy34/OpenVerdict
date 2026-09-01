@@ -723,15 +723,15 @@ export function DeliberationCanvas({
       onPointerCancel={cancelPointer}
       onWheel={handleWheel}
     >
-      {/* Vibrancy ground: brand-blue aurora, a whisper of verdict green and
-          a faint dot lattice, all far behind the graph. */}
+      {/* Ground texture: the faint dot lattice only; the owner asked for the
+          colour washes to go, so the stage stays a flat navy. */}
       <div
         aria-hidden
         className="pointer-events-none absolute inset-0"
         style={{
           backgroundImage:
-            "radial-gradient(900px 560px at 20% 12%, rgba(14,118,255,0.17), transparent 62%), radial-gradient(760px 480px at 82% 80%, rgba(67,229,160,0.09), transparent 62%), radial-gradient(rgba(158,203,255,0.11) 1px, transparent 1px)",
-          backgroundSize: "auto, auto, 26px 26px",
+            "radial-gradient(rgba(158,203,255,0.11) 1px, transparent 1px)",
+          backgroundSize: "26px 26px",
         }}
       />
       <div

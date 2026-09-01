@@ -10,6 +10,10 @@ export function suiObjectUrl(id: string): string {
   return `https://suiscan.xyz/${SUI_NETWORK}/object/${encodeURIComponent(id)}`;
 }
 
+export function suiAccountUrl(address: string): string {
+  return `https://suiscan.xyz/${SUI_NETWORK}/account/${encodeURIComponent(address)}`;
+}
+
 export function suiTransactionUrl(digest: string): string {
   return `https://suiscan.xyz/${SUI_NETWORK}/tx/${encodeURIComponent(digest)}`;
 }
