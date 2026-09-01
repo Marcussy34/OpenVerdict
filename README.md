@@ -1,8 +1,4 @@
-<p align="left">
-  <img src="app/icon.svg" alt="OpenVerdict logo" width="64" height="64" />
-</p>
-
-# OpenVerdict
+# <img src="app/icon.svg" alt="OpenVerdict logo" width="36" height="36" valign="middle" /> OpenVerdict
 
 <!-- markdownlint-disable MD013 -->
 
