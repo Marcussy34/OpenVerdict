@@ -1298,6 +1298,17 @@ addendum cites them). Deck artifact 6d743d22 unwatched per owner ("close
 the claude artifact"); actual deletion is owner-side in the gallery; the
 in-repo copy docs/demo/pitch-deck.html is now canonical.
 
+## 3w. ROOT SLIM 2026-09-02 ~00:30
+
+PATH CHANGES (update your reflexes): the spec of record is now
+docs/PRD.md (was ./PRD.md) and the TS<->Move parity gate is
+lib/protocol/parity.test.ts (was tests/integration/parity.test.ts; the
+tests/ directory no longer exists and vitest no longer globs it). All
+other root files are tool-pinned and must stay (Next proxy.ts, pnpm
+trio, shadcn components.json, Railway Dockerfile/railway.json, etc.),
+explained to owner and accepted. Gate identical after the move: 512
+tests / 51 files.
+
 ## 4. Planned next (owner-approved direction)
 
 - Attestation (docs/superpowers/specs/2026-08-30-attested-inference-design.md):
