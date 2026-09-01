@@ -1,3 +1,7 @@
+<p align="left">
+  <img src="app/icon.svg" alt="OpenVerdict logo" width="64" height="64" />
+</p>
+
 # OpenVerdict
 
 <!-- markdownlint-disable MD013 -->
@@ -391,8 +395,3 @@ The long-form defence and full protocol semantics live in [PRD.md](./PRD.md)
 ## License
 
 [MIT](./LICENSE) © 2026 Marcussy34 and OpenVerdict contributors.
-
-## 🔥 Closing line
-
-> OpenVerdict turns AI judgment from a black-box answer into an inspectable,
-> challengeable, and on-chain resolution process.
