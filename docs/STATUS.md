@@ -344,16 +344,10 @@ Postgres. Tests: 512 vitest, 70 Move.
 
 ## Diagrams
 
-`docs/diagrams/` — architecture, claim lifecycle, jury round, onboarding tiers.
-All black-and-white with paired light/dark exports; sources are `.excalidraw`.
-
-Colour series added 2026-08-29 (verified against the code, one topic each):
-`01-architecture-overview`, `02-user-flow`, `03-runtime-swimlane` (one claim
-through browser, workers, GonkaRouter, Sui, Walrus, Postgres with the deadline
-floors), `04-engine-and-workers`, `05-data-placement`, `06-protocol-artifacts`
-(commitment, output contract, Truth Score, wire codes, clock),
-`07-production-topology`, plus `00-end-to-end-poster` (everything on one
-canvas). Each has a `.png` next to its `.excalidraw` source.
+`docs/diagrams/` — architecture, claim lifecycle and jury round, each as a
+light and dark `.png` with its editable `.excalidraw` source; all three are
+embedded in the README. (The 2026-08-29 colour series and the onboarding-tiers
+pair were pruned 2026-09-02; recover any of them from git history.)
 
 ## Plan of record
 
