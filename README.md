@@ -15,7 +15,8 @@ certificates anyone can recompute.**
 ## 💡 Why
 
 - A single AI model can be wrong or manipulated
-- Token voting favors whales; private admins never show their work
+- Token voting lets whales decide truth
+- Private resolution desks never show their work
 - Chatbot "juries" live in editable logs nobody can recheck
 
 **Juries no single vendor can steer; verdicts anyone can recompute.**
