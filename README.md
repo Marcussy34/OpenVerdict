@@ -61,7 +61,7 @@ SUI is the working currency. (Full write-up: [appendix](#appendix-the-idea-in-fu
 
 Every claim runs round one; only a deadlock runs round two.
 
-#### Round one (every claim)
+## Round One
 
 **Step 1: Independent research**
 
