@@ -58,14 +58,27 @@ gonkarouter.io: the adapter refuses any other host in code, and a juror that
 cannot reach Gonka fails closed instead of falling back."
 
 **Point 2: Secret votes, public debate.**
-SAY: "The models cannot herd, because votes lock on Sui as hash commitments
-before anything is revealed. And here is where the courtroom picture earns its
-keep as an explanation: if the panel splits, the revealed models argue their
-case like jurors in a public, structured deliberation, citing only evidence already on the
-record, and then a second round votes. And if there is still no supermajority,
-the claim finalizes as UNRESOLVED. The protocol never manufactures certainty,
-and seats are never paid for agreeing with the majority, so there is no
-incentive to fake consensus either."
+SAY: "The jurors cannot herd, because votes lock on Sui as hash commitments
+before anything is revealed, and four matching votes out of five settle the
+claim in a single round; that is the common case, about ten minutes end to
+end. When the jury splits, the courtroom picture earns its keep: each
+revealed juror defends its own vote in a public, structured debate, citing
+only evidence already on the record, and then a second round votes with that
+whole record in front of it. If there is still no supermajority, the claim
+finalizes as UNRESOLVED. The protocol never manufactures certainty, and seats
+are never paid for agreeing with the majority, so there is no incentive to
+fake consensus either."
+
+**The optimistic lane (bonded claims).**
+SAY: "For markets and DAOs there is also an optimistic lane, the pattern UMA
+proved: a bonded proposer states the answer, and if nobody challenges it
+inside the window, it finalizes with zero AI spend. A challenge is what
+convenes the jury, and the losing side's bond pays for the review. The jury
+is the court of appeal, not a toll on every claim."
+NOTE for accuracy on stage: the live public demo uses the direct jury path
+(every submitted fact-check convenes a jury immediately); the optimistic lane
+is on-chain and exercised in the localnet E2E, so say "bonded claims can",
+not "the demo does".
 
 **Point 3: Don't trust it. Recompute it.**
 SAY: "The output is an immutable certificate on Sui with a zero-to-hundred
@@ -102,6 +115,11 @@ Then: "It is live. Submit a claim and watch the jury think. Thank you."
 - **Is this an oracle?** Yes, technically; that is the slot we fill. The
   difference is what's inside the box: a panel you can audit instead of an
   answer you must trust.
+- **One round or two?** Round 1 settles at 4-of-5 in about ten minutes.
+  A split triggers the public debate plus a second commit-reveal round
+  (about twenty-one minutes); still no supermajority finalizes UNRESOLVED.
+  Separately, bonded claims can resolve optimistically: no jury at all
+  unless someone challenges.
 - **Business model?** Pay-per-verification in SUI is the live flow (the free
   form is a subsidized tier); delegated seat staking with pro-rata backer
   yield is the recorded next step (PRD §1.1 item 20). Majority-only rewards
