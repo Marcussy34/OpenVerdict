@@ -97,7 +97,7 @@ Every claim runs round one; only a deadlock runs round two.
 
 **Step 5: Second vote**
 
-- A fresh **commit-reveal round**, carrying the round-one record and the debate transcript (~21 min)
+- A fresh **commit-reveal round**, carrying the round-one record and the debate transcript
 
 <img src="docs/assets/hairline.svg" width="100%" height="1" alt="" />
 
