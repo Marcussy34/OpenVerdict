@@ -974,6 +974,23 @@ Copy nit queued: "1 seats" pluralization on agent rows.
 - Chrome devtools MCP disconnected this session: verification is
   API-level; owner eyeballs the UI directly.
 
+### 3n addendum 2: FIRST FULL v3 LIFECYCLE COMPLETE (afternoon)
+
+Claim 0xec68ad8144cde2ffd0b022b5b0a56eda8be5bb5f92635e14a070dcb51673e8dc
+("Sui uses the Move programming language") ran the ENTIRE two-round
+lifecycle on package v3 and finalized UNRESOLVED (state 11, truthScore
+9950 recorded honestly, certificate 0x3ab2ceab..., finalize tx
+C1PuXthov5ChAkqLjJCKHLbbjCrEp56WY4RcARxJZgsd). Gonka took 3/5 seats in
+BOTH rounds (provider errors), so both phases advanced on the deadline
+fallback; the discussion escalation ran the round-1 public record into
+the phase-2 jurors (first production round 2 ever). VERIFIED ON-CHAIN:
+treasury ticket reason 8 = 500_000 MIST to the operator (exactly
+500 bps of the 10_000_000 committee budget) and two reason-2 jury
+rewards of 4_750_000 MIST each ((budget - fee)/2, perfect split).
+Warm-at-finalize verified: revealed runs' proofs served in 207-302ms.
+The claim is terminal: the deploy path is clear again. The 5/5
+early-advance showcase still waits on the weather sentry (b2ykoev7x).
+
 ## 4. Planned next (owner-approved direction)
 
 - Attestation (docs/superpowers/specs/2026-08-30-attested-inference-design.md):
