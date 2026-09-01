@@ -948,6 +948,32 @@ video footage); everything else unblocked. Morning report artifact
 published (link in the session transcript).
 Copy nit queued: "1 seats" pluralization on agent rows.
 
+### 3n addendum, afternoon 2026-09-01
+
+- CREATION OUTAGE root-caused and fixed: claim creation 500'd with
+  "MoveAbort ... balance::destroy_zero in 5th command" after working
+  three times overnight. Cause: the Walrus blob-registration PTB (runs
+  BEFORE create_claim) with stale Walrus client state carried across a
+  testnet epoch roll in the long-lived container; a container restart
+  (any deploy) cures it instantly (retry returned 201 immediately after
+  deploy 3a702623). HARDENING QUEUED: refresh Walrus system state or
+  rebuild the client when a write aborts with a MoveAbort, not only on
+  version conflicts (lib/walrus/real.ts retry classifier).
+- UI batch 5ca6e70 live: flat canvas ground (dot lattice only), zkLogin
+  card says Back a juror agent / Backing, agent detail links (profile
+  object, owner + operational owner accounts via new suiAccountUrl,
+  manifest blob via aggregator; pure hashes stay chips), pinned
+  distinct avatars for the 7 jurors (PINNED_AVATARS map in avatar.tsx;
+  re-pin after any re-registration; hash fallback for unknowns).
+- E2E #3 (0xec68ad81, "Sui uses Move"): creation clean, but Gonka
+  flaked mid-run again: 2/5 seats (3 PROVIDER_ERROR); the two healthy
+  seats committed AND revealed correctly; round advanced on the
+  deadline fallback and will strand. Seat success rate ~40% right now,
+  so a clean 5/5 is ~1% per attempt: retries paused behind a weather
+  sentry (heavy probe every 20 min; fire the claim when it passes).
+- Chrome devtools MCP disconnected this session: verification is
+  API-level; owner eyeballs the UI directly.
+
 ## 4. Planned next (owner-approved direction)
 
 - Attestation (docs/superpowers/specs/2026-08-30-attested-inference-design.md):
