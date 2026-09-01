@@ -1416,6 +1416,47 @@ continuous calorie restriction for long-term weight loss", "Moderate red
 wine consumption benefits heart health" (fire one at a time, monitor each
 lifecycle). Stretch decision revisits tomorrow with the owner.
 
+## 3z. LIVELOCK FIX + OVERNIGHT SENTRY 2026-09-02 ~03:10
+
+EV VALIDATION CLAIM 0xb3841e1b (fired 02:29): committee draw raced the
+juror-roster restore and crashed on a then-missing manifest, exposing a
+REAL ENGINE BUG: selectCommittee's already-selected shortcut treated a
+torn state (committee row saved, seat rows + COMMIT_1 transition never
+written) as complete, silently no-opping every 2s tick forever, across
+restarts, with zero log lines (workers were querying the claim
+constantly; pg_stat_activity proved ticks ran while nothing changed).
+
+FIX aaf02c2 (deploy cffd7ebe SUCCESS): the shortcut now completes the
+interrupted writes first: rebuilds missing seat rows from the committee
+record + stored agent manifests (throws EngineStateError if a manifest
+is missing), advances REVIEW_REQUESTED -> COMMIT_1, emits the swallowed
+committee_selected event, then acceptOfferedSeats as before. Regression
+test crashes the 5th seat write and asserts the retry completes seating
+and state (gate 513/513, lint 0 errors, build green). Owner's timing
+hold untouched. On boot the fixed engine walked the EV claim through its
+lapsed deadlines: seats=5, state 6 DISCUSSION, round-two gate long past
+= expected stranded-discussion resting state (workers skip it; the
+owner-gated pre-demo wipe clears it). accept_jury_seat MoveAbort code 7
+in the logs = expected late-accept noise, nonfatal.
+
+PRODUCTION note: the OWNER deployed mid-session from a parallel session
+(f899bb47, use-railway skill, commit 898aa3f teal hero + dial gating);
+Railway is NOT auto-deploying from GitHub. Current production =
+aaf02c2 (my deploy cffd7ebe) = main tip.
+
+OWNER WENT TO SLEEP ~03:05 ("check on you in the morning"). Overnight
+contract given: autonomously fire fasting then red wine claims one at a
+time on clear weather, watch lifecycles, log everything; NO stretch, NO
+wipes, no deploys except a pipeline-blocking bugfix. Weather at 03:05:
+DeepSeek 200/41s ok, MiniMax 200/122s over the bar, Kimi 524 = 1/3.
+NIGHT SENTRY armed (task bkltoka30, scratchpad/night-sentry.sh): 10-min
+cycles, fresh-nonce probes (cache-busting; the 02:29 fire was partly
+cache-flattered), healthy = 200 under 120s, fires the fasting claim
+("Intermittent fasting produces greater long-term weight loss than
+continuous daily calorie restriction.") only on 3/3 + app healthy + no
+NON-STRANDED live claim (stranded state-6 EV claim excluded by deadline
+check). Red wine claim queues after a clean fasting lifecycle.
+
 ## 4. Planned next (owner-approved direction)
 
 - Attestation (docs/superpowers/specs/2026-08-30-attested-inference-design.md):
