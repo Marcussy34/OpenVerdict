@@ -319,6 +319,14 @@ export type PromptSpecV2 = {
 };
 export type PromptSpecV3 = Omit<PromptSpecV2, "version"> & { version: "3" };
 export type PromptSpecV4 = Omit<PromptSpecV3, "version"> & { version: "4" };
+export type DeliberationPromptSpecV1 = {
+  version: "1";
+  providerId: "gonkarouter";
+  systemPrompt: string;
+  temperature: 0;
+  maxOutputTokens: 700;
+  responseFormat: "json_object";
+};
 export type PromptSpec =
   | PromptSpecV1
   | PromptSpecV2

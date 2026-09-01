@@ -203,6 +203,13 @@ export const runProofs = pgTable("run_proofs", {
   ...auditColumns(),
 });
 
+export const deliberationTurns = pgTable("deliberation_turns", {
+  turnId: text("turn_id").primaryKey(),
+  claimId: text("claim_id").notNull(),
+  ordinal: integer("ordinal").notNull(),
+  ...auditColumns(),
+});
+
 export const toolCalls = pgTable(
   "tool_calls",
   {
@@ -355,6 +362,7 @@ export const storageSchema = {
   evidenceManifests,
   inferenceRuns,
   runProofs,
+  deliberationTurns,
   toolCalls,
   runApprovals,
   votePackages,

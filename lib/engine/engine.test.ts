@@ -5,6 +5,7 @@ import { PGlite } from "@electric-sql/pglite";
 import { Ed25519Keypair } from "@mysten/sui/keypairs/ed25519";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  DELIBERATION_PROMPT_SPEC_V1,
   DEFAULT_PROMPT_SPEC_V2,
   DEFAULT_PROMPT_SPEC_V3,
   DEFAULT_PROMPT_SPEC_V4,
@@ -20,6 +21,7 @@ import {
 } from "../gonka";
 import {
   CLAIM_MODE,
+  CLAIM_STATE,
   blake2b256,
   fromHex,
   toHex,
@@ -36,6 +38,7 @@ import {
   createRepository,
   migrate,
   type EvidenceArtifactRecord,
+  type DeliberationTurnRecord,
 } from "../storage";
 import {
   FakeSuiGateway,
@@ -1376,6 +1379,228 @@ describe("headless engine", () => {
   });
 });
 
+describe("public deliberation", () => {
+  it("streams two exchanges and freezes the transcript as phase-two evidence", async () => {
+    const setup = await discussionSetup(2, {
+      0: [
+        deliberationResponse("Seat 0 opening"),
+        deliberationResponse("Seat 0 response"),
+      ],
+      1: [
+        deliberationResponse("Seat 1 opening"),
+        deliberationResponse("Seat 1 response"),
+      ],
+    });
+    const callsBefore = setup.gonkaComplete.mock.calls.length;
+
+    await setup.engine.runDeliberation(setup.claimId);
+
+    const repository = createRepository(setup.db);
+    const stored = await repository.listDeliberationTurns(setup.claimId);
+    const turns = stored.map(publicDeliberationTurn);
+    expect(turns).toHaveLength(4);
+    expect(turns.map((turn) => [turn.ordinal, turn.exchange, turn.status])).toEqual([
+      [0, 1, "SPOKEN"],
+      [1, 1, "SPOKEN"],
+      [2, 2, "SPOKEN"],
+      [3, 2, "SPOKEN"],
+    ]);
+    expect(stored.every((turn) => turn.gonkaRequestId !== undefined)).toBe(true);
+    expect(stored.every(
+      (turn) => turn.promptSpecHash === promptSpecHash(DELIBERATION_PROMPT_SPEC_V1),
+    )).toBe(true);
+
+    const events = (await repository.listResolutionEvents(setup.claimId)).filter(
+      (event) => event.kind === "DELIBERATION_TURN",
+    );
+    expect(events).toHaveLength(4);
+    expect(events.every((event) => event.visibility === "PUBLIC_NOW")).toBe(true);
+    expect(events.every((event) => event.phase === "DISCUSSION")).toBe(true);
+    expect(events.map((event) => event.payload)).toEqual(turns);
+
+    const artifact = await repository.getEvidenceArtifact(
+      `deliberation-transcript:${setup.claimId}`,
+    );
+    expect(artifact).toMatchObject({
+      claimId: setup.claimId,
+      phase: 2,
+      sourceUrl: "urn:openverdict:deliberation-transcript",
+    });
+    if (!artifact) throw new Error("expected a deliberation transcript artifact");
+    const transcript = JSON.parse(
+      new TextDecoder().decode(
+        await setup.walrus.get(artifact.canonicalWalrusBlobId),
+      ),
+    ) as Record<string, unknown>;
+    expect(transcript).toEqual({
+      version: 1,
+      kind: "deliberation-transcript",
+      turns,
+    });
+    expect((await setup.engine.inspect(setup.claimId)).deliberation).toEqual(turns);
+
+    const requests = setup.gonkaComplete.mock.calls.slice(callsBefore);
+    expect(requests).toHaveLength(4);
+    expect(requests.every(([request]) => request.messages.length === 2)).toBe(true);
+    const firstInput = JSON.parse(
+      requests[0]?.[0].messages[1]?.content ?? "null",
+    ) as Record<string, unknown>;
+    expect(firstInput).toMatchObject({
+      statement: expect.any(String),
+      resolutionCriteria: expect.any(String),
+      roundOneRecord: { phase: 1 },
+      debateSoFar: [],
+      self: { seatIndex: 0 },
+      allowedCitations: expect.any(Array),
+    });
+    const phaseOneManifest = await repository.getEvidenceManifest(setup.claimId, 1);
+    const allowedCitations = firstInput.allowedCitations as string[];
+    expect(allowedCitations).toEqual(
+      expect.arrayContaining(phaseOneManifest?.sortedLeaves ?? []),
+    );
+    expect(
+      allowedCitations.some((citation) =>
+        citation.startsWith("https://fake.evidence.test/")),
+    ).toBe(true);
+  });
+
+  it("skips malformed output and continues later turns", async () => {
+    const setup = await discussionSetup(2, {
+      0: ["not-json", deliberationResponse("Seat 0 response")],
+      1: [
+        deliberationResponse("Seat 1 opening"),
+        deliberationResponse("Seat 1 response"),
+      ],
+    });
+
+    await setup.engine.runDeliberation(setup.claimId);
+
+    const turns = await createRepository(setup.db).listDeliberationTurns(
+      setup.claimId,
+    );
+    expect(turns.map((turn) => [turn.status, turn.failureStatus])).toEqual([
+      ["SKIPPED", "INVALID_OUTPUT"],
+      ["SPOKEN", undefined],
+      ["SPOKEN", undefined],
+      ["SPOKEN", undefined],
+    ]);
+  });
+
+  it("skips citations outside the allowed set", async () => {
+    const setup = await discussionSetup(2, {
+      0: [
+        deliberationResponse("Seat 0 opening", ["not-allowed"]),
+        deliberationResponse("Seat 0 response"),
+      ],
+      1: [
+        deliberationResponse("Seat 1 opening"),
+        deliberationResponse("Seat 1 response"),
+      ],
+    });
+
+    await setup.engine.runDeliberation(setup.claimId);
+
+    const [first] = await createRepository(setup.db).listDeliberationTurns(
+      setup.claimId,
+    );
+    expect(first).toMatchObject({
+      ordinal: 0,
+      status: "SKIPPED",
+      failureStatus: "INVALID_CITATIONS",
+      argument: "",
+      citations: [],
+    });
+  });
+
+  it("force-settles remaining turns when the freeze window is exhausted", async () => {
+    const setup = await discussionSetup(2);
+    const repository = createRepository(setup.db);
+    const claim = await repository.getClaim(setup.claimId);
+    if (!claim) throw new Error("expected a discussion claim");
+    const now = Date.parse("2026-08-27T00:00:00.000Z");
+    await repository.saveClaim({
+      ...claim,
+      deadlines: {
+        ...claim.deadlines,
+        discussionDeadlineMs: now + 1_000,
+      },
+      updatedAt: new Date(now).toISOString(),
+    });
+    const callsBefore = setup.gonkaComplete.mock.calls.length;
+
+    await setup.engine.runDeliberation(setup.claimId);
+
+    const turns = await repository.listDeliberationTurns(setup.claimId);
+    expect(turns).toHaveLength(4);
+    expect(turns.every(
+      (turn) =>
+        turn.status === "SKIPPED" &&
+        turn.failureStatus === "WINDOW_EXHAUSTED",
+    )).toBe(true);
+    expect(setup.gonkaComplete).toHaveBeenCalledTimes(callsBefore);
+    await expect(
+      setup.engine.evidenceFreeze(setup.claimId, 2),
+    ).resolves.toMatchObject({
+      objectIds: { evidenceBundle: expect.any(String) },
+    });
+  });
+
+  it("freezes an empty transcript when no juror revealed", async () => {
+    const setup = await discussionSetup(0);
+
+    await setup.engine.runDeliberation(setup.claimId);
+
+    const repository = createRepository(setup.db);
+    await expect(repository.listDeliberationTurns(setup.claimId)).resolves.toEqual([]);
+    const artifact = await repository.getEvidenceArtifact(
+      `deliberation-transcript:${setup.claimId}`,
+    );
+    if (!artifact) throw new Error("expected an empty deliberation transcript");
+    expect(
+      JSON.parse(
+        new TextDecoder().decode(
+          await setup.walrus.get(artifact.canonicalWalrusBlobId),
+        ),
+      ),
+    ).toEqual({ version: 1, kind: "deliberation-transcript", turns: [] });
+    await expect(
+      setup.engine.evidenceFreeze(setup.claimId, 2),
+    ).resolves.toMatchObject({
+      objectIds: { evidenceBundle: expect.any(String) },
+    });
+  });
+
+  it("deduplicates overlapping and repeated deliberation ticks", async () => {
+    const setup = await discussionSetup(2);
+
+    await Promise.all([
+      setup.engine.runDeliberation(setup.claimId),
+      setup.engine.runDeliberation(setup.claimId),
+    ]);
+    await setup.engine.runDeliberation(setup.claimId);
+
+    const repository = createRepository(setup.db);
+    await expect(repository.listDeliberationTurns(setup.claimId)).resolves.toHaveLength(4);
+    const events = (await repository.listResolutionEvents(setup.claimId)).filter(
+      (event) => event.kind === "DELIBERATION_TURN",
+    );
+    expect(events).toHaveLength(4);
+  });
+
+  it("settles deliberation before a phase-two freeze", async () => {
+    const setup = await discussionSetup(2);
+
+    await setup.engine.evidenceFreeze(setup.claimId, 2);
+
+    const repository = createRepository(setup.db);
+    await expect(repository.listDeliberationTurns(setup.claimId)).resolves.toHaveLength(4);
+    const manifest = await repository.getEvidenceManifest(setup.claimId, 2);
+    expect(manifest?.sortedLeaves).toContain(
+      `deliberation-transcript:${setup.claimId}`,
+    );
+  });
+});
+
 describe("agent backing status", () => {
   it("maps only explicitly known verification providers", () => {
     expect(agentBackingStatus("zklogin:enoki")).toEqual({
@@ -1675,6 +1900,7 @@ async function engineSetup(
     failures?: Partial<Record<number, FakeFailure>>;
     actions?: FakeAction[];
     decisiveEvidence?: string[];
+    deliberationResponses?: Partial<Record<number, string[]>>;
     /** Replaces the local store (for example a store with a retention clock). */
     walrus?: WalrusStore;
     seal?: NonNullable<ReleaseManifest["seal"]>;
@@ -1704,13 +1930,16 @@ async function engineSetup(
           ...(options.decisiveEvidence === undefined
             ? {}
             : { decisiveEvidence: options.decisiveEvidence }),
+          ...(options.deliberationResponses?.[index] === undefined
+            ? {}
+            : { deliberationResponses: options.deliberationResponses[index] }),
           ...(options.failures?.[index] === undefined
             ? {}
             : { failure: options.failures[index] }),
           ...(index < runPlan ? {} : { failure: "provider_5xx" as const }),
         }))
       : gateway.agents.flatMap((agent, index) =>
-          runPlan.map((round) => ({
+          runPlan.map((round, roundIndex) => ({
             agentProfileId: agent.agentProfileId as `0x${string}`,
             outcome: round[index] ?? "UNSURE",
             confidenceBps: 8_000,
@@ -1718,6 +1947,9 @@ async function engineSetup(
             ...(options.decisiveEvidence === undefined
               ? {}
               : { decisiveEvidence: options.decisiveEvidence }),
+            ...(roundIndex !== 0 || options.deliberationResponses?.[index] === undefined
+              ? {}
+              : { deliberationResponses: options.deliberationResponses[index] }),
           })),
         );
   const gonka = createFakeGonkaAdapter(fixtures);
@@ -1738,6 +1970,51 @@ async function engineSetup(
     eventPollIntervalMs: 5,
   });
   return { engine, db, gonkaComplete, walrus };
+}
+
+async function discussionSetup(
+  revealedDebaters: number,
+  deliberationResponses: Partial<Record<number, string[]>> = {},
+) {
+  const setup = await engineSetup(new FakeSuiGateway(), revealedDebaters, {
+    deliberationResponses,
+  });
+  const { claimId } = await setup.engine.factCheckStart({
+    claim: "A split result should enter a public deliberation.",
+    text: "Local evidence supports more than one interpretation.",
+    urls: [],
+  });
+  await setup.engine.selectCommittee(claimId);
+  await setup.engine.evidenceFreeze(claimId, 1);
+  await setup.engine.juryRun(claimId, 1);
+  await setup.engine.votesCommit(claimId, 1);
+  await setup.engine.advance(claimId);
+  await setup.engine.votesReveal(claimId, 1);
+  await setup.engine.advance(claimId);
+  expect((await setup.engine.inspect(claimId)).state).toBe(CLAIM_STATE.DISCUSSION);
+  return { ...setup, claimId };
+}
+
+function deliberationResponse(argument: string, citations: string[] = []): string {
+  return JSON.stringify({ argument, citations });
+}
+
+function publicDeliberationTurn(record: DeliberationTurnRecord) {
+  return {
+    claimId: record.claimId,
+    jurySeatId: record.jurySeatId,
+    agentProfileId: record.agentProfileId,
+    ...(record.modelId === undefined ? {} : { modelId: record.modelId }),
+    ordinal: record.ordinal,
+    exchange: record.exchange,
+    argument: record.argument,
+    citations: record.citations,
+    status: record.status,
+    ...(record.failureStatus === undefined
+      ? {}
+      : { failureStatus: record.failureStatus }),
+    atMs: record.atMs,
+  };
 }
 
 async function collectEvents(

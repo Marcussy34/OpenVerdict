@@ -35,10 +35,8 @@ export async function evidenceWorkerTick(): Promise<boolean> {
       ) {
         await engine.evidenceFreeze(claim.claimId, 1);
       }
-      // Phase two freezes as soon as discussion opens: the freeze needs a
-      // Walrus manifest write (about 15 s) before its transaction, and the
-      // fast ladder's discussion window is only a minute, so a freeze
-      // scheduled near the deadline lands after it and the claim dies.
+      // The engine settles deliberation first, then preserves enough lead
+      // time for the phase-two Walrus write and freeze transaction.
       if (
         claim.state === CLAIM_STATE.DISCUSSION &&
         now < claim.deadlines.discussionDeadlineMs &&

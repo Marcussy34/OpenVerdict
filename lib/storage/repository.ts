@@ -7,6 +7,7 @@ import type {
   AgentManifestRecord,
   ClaimRecord,
   CommitteeRecord,
+  DeliberationTurnRecord,
   EvidenceArtifactRecord,
   EvidenceManifestRecord,
   EvidenceSubmissionRecord,
@@ -435,6 +436,33 @@ export class Repository {
       [claimId],
     );
     return rows.map((row) => row.run_id);
+  }
+
+  /** Store the first result for an ordinal so retries cannot rewrite debate history. */
+  async saveDeliberationTurn(record: DeliberationTurnRecord): Promise<void> {
+    await execute(
+      this.db,
+      `INSERT INTO deliberation_turns (
+        turn_id, claim_id, ordinal, created_at, updated_at, record_json
+      ) VALUES ($1, $2, $3, $4, $5, $6)
+      ON CONFLICT (turn_id) DO NOTHING`,
+      [
+        record.turnId,
+        record.claimId,
+        record.ordinal,
+        record.createdAt,
+        record.updatedAt,
+        json(record),
+      ],
+    );
+  }
+
+  async listDeliberationTurns(claimId: string): Promise<DeliberationTurnRecord[]> {
+    return listRecords<DeliberationTurnRecord>(
+      this.db,
+      "SELECT record_json FROM deliberation_turns WHERE claim_id = $1 ORDER BY ordinal",
+      [claimId],
+    );
   }
 
   async saveRunApproval(record: RunApprovalRecord): Promise<void> {

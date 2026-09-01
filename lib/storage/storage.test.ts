@@ -5,6 +5,7 @@ import {
   createRepository,
   migrate,
   type ClaimRecord,
+  type DeliberationTurnRecord,
   type InferenceRunRecord,
   type RunProofRecord,
 } from "./index";
@@ -90,6 +91,48 @@ describe("storage", () => {
     };
     await repository.replaceRunProof(replacement);
     await expect(repository.getRunProof(record.runId)).resolves.toEqual(replacement);
+  });
+
+  it("round trips immutable deliberation turns in ordinal order", async () => {
+    const repository = await testRepository();
+    const first: DeliberationTurnRecord = {
+      turnId: "claim-deliberation:0",
+      claimId: "claim-deliberation",
+      jurySeatId: "seat-1",
+      agentProfileId: "agent-1",
+      modelId: "model-1",
+      ordinal: 0,
+      exchange: 1,
+      argument: "The first juror defends the cited evidence.",
+      citations: ["evidence-1"],
+      status: "SPOKEN",
+      atMs: 1_000,
+      gonkaRequestId: "request-1",
+      promptSpecHash: `0x${"11".repeat(32)}`,
+      createdAt: "2026-08-27T00:00:00.000Z",
+      updatedAt: "2026-08-27T00:00:00.000Z",
+    };
+    const second: DeliberationTurnRecord = {
+      ...first,
+      turnId: "claim-deliberation:1",
+      jurySeatId: "seat-2",
+      agentProfileId: "agent-2",
+      ordinal: 1,
+      argument: "The second juror challenges the first seat.",
+      citations: [],
+      gonkaRequestId: "request-2",
+    };
+
+    await repository.saveDeliberationTurn(second);
+    await repository.saveDeliberationTurn(first);
+    await repository.saveDeliberationTurn({
+      ...first,
+      argument: "A conflicting retry must not replace the first turn.",
+    });
+
+    await expect(
+      repository.listDeliberationTurns(first.claimId),
+    ).resolves.toEqual([first, second]);
   });
 
   it("lists claims newest first, with and without a state filter", async () => {

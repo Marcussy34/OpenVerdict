@@ -13,6 +13,10 @@ export async function inferenceWorkerTick(): Promise<boolean> {
   const engine = await getServerEngine();
   const claims = await listLiveClaims(engine, LIVE_CLAIM_STATES);
   await forEachClaim("inference-worker", claims, async (claim) => {
+    if (claim.state === CLAIM_STATE.DISCUSSION) {
+      await engine.runDeliberation(claim.claimId);
+      return;
+    }
     const phase =
       claim.state === CLAIM_STATE.COMMIT_1
         ? 1

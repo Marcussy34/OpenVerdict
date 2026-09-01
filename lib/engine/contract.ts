@@ -214,6 +214,9 @@ export type ClaimInspection = {
   commitments: CommitmentStatus[];
   /** Local records used only to avoid submitting a known-early chain call. */
   rounds?: RoundReadinessStatus[];
+  /** Public deliberation turns: revealed round-1 jurors arguing the split
+   * between reveal 1 and round 2, in ordinal order. */
+  deliberation?: DeliberationTurnPublic[];
   result?: FinalizeReport;
   /** Populated when inspect() is called with { verify: true }. */
   verification?: {
@@ -222,6 +225,29 @@ export type ClaimInspection = {
     evidenceRootsRecomputed: boolean;
     issues: string[];
   };
+};
+
+/** One public deliberation turn: a revealed round-1 juror arguing its case
+ * between reveal 1 and round 2. Emitted live as a PUBLIC_NOW event and
+ * frozen into the phase-2 evidence as a hashed transcript artifact. */
+export type DeliberationTurnPublic = {
+  claimId: string;
+  jurySeatId: string;
+  agentProfileId: string;
+  modelId?: string;
+  /** 0-based order across the whole debate. */
+  ordinal: number;
+  /** 1 = opening rebuttal, 2 = response exchange. */
+  exchange: 1 | 2;
+  /** Bounded plain-text argument (no markdown), at most 1200 chars. */
+  argument: string;
+  /** Evidence ids from the phase-1 manifest or URLs from this juror's own
+   * revealed transcript; engine-validated, fail-closed per turn. */
+  citations: string[];
+  status: "SPOKEN" | "SKIPPED";
+  /** Failure label when status is SKIPPED (argument is empty then). */
+  failureStatus?: string;
+  atMs: number;
 };
 
 export type AgentCard = {
@@ -356,6 +382,7 @@ export interface Engine {
   challenge(claimId: string, reason: ChallengeReason): Promise<TxResult>;
   selectCommittee(claimId: string): Promise<TxResult>;
   evidenceFreeze(claimId: string, phase: 1 | 2): Promise<TxResult>;
+  runDeliberation(claimId: string): Promise<void>;
   juryRun(claimId: string, phase: 1 | 2): Promise<JuryRunReport>;
   votesCommit(claimId: string, phase: 1 | 2): Promise<TxResult[]>;
   votesReveal(claimId: string, phase: 1 | 2): Promise<TxResult[]>;

@@ -1,5 +1,6 @@
 import type {
   ClaimCreateRequest,
+  DeliberationTurnPublic,
   ResolutionEvent,
 } from "../engine/contract";
 import type {
@@ -213,6 +214,14 @@ export interface RunProofRecord {
   createdAt: string;
   updatedAt: string;
 }
+
+export type DeliberationTurnRecord = DeliberationTurnPublic & {
+  turnId: string;
+  gonkaRequestId?: string;
+  promptSpecHash: `0x${string}`;
+  createdAt: string;
+  updatedAt: string;
+};
 
 export interface RunApprovalRecord {
   runApprovalId: string;

@@ -11,6 +11,7 @@ import {
   type RetrievedArtifact,
 } from "../evidence";
 import {
+  DELIBERATION_PROMPT_SPEC_V1,
   EMPTY_TOOL_TRANSCRIPT_HASH,
   GonkaRunError,
   canonicalJsonBytes,
@@ -71,6 +72,7 @@ import {
   type AgentManifestRecord,
   type ClaimRecord,
   type CommitteeRecord,
+  type DeliberationTurnRecord,
   type EvidenceArtifactRecord,
   type EvidenceManifestRecord,
   type EvidenceSubmissionRecord,
@@ -106,6 +108,7 @@ import type {
   ClaimCreateRequest,
   ClaimInspection,
   CommitmentStatus,
+  DeliberationTurnPublic,
   Engine,
   EngineStatus,
   FactCheckReport,
@@ -158,6 +161,15 @@ const JURY_REWARD_REASON = 2;
 const CLAIM_STATEMENT_SOURCE_URL = "urn:openverdict:claim-statement";
 const ROUND_ONE_PUBLIC_RECORD_SOURCE_URL =
   "urn:openverdict:round-1-public-record";
+const DELIBERATION_TRANSCRIPT_SOURCE_URL =
+  "urn:openverdict:deliberation-transcript";
+const PER_TURN_BUDGET_MS = 60_000;
+const DEFAULT_EVIDENCE_FREEZE_LEAD_MS = 120_000;
+const MAX_DELIBERATION_CITATIONS = 8;
+const MAX_DELIBERATION_ALLOWED_CITATIONS = 60;
+const DELIBERATION_PROMPT_SPEC_HASH = promptSpecHash(
+  DELIBERATION_PROMPT_SPEC_V1,
+);
 
 export function agentBackingStatus(
   humanVerificationProvider: string,
@@ -192,6 +204,32 @@ function trackRecordFor(
 }
 
 type PriorRoundPublicRecord = NonNullable<OracleInferenceInput["priorRound"]>;
+
+type DeliberationFailureStatus =
+  | "PROVIDER_ERROR"
+  | "TIMEOUT"
+  | "INVALID_OUTPUT"
+  | "INVALID_CITATIONS"
+  | "WINDOW_EXHAUSTED";
+
+type DeliberationDebater = {
+  jurySeatId: string;
+  agentProfileId: string;
+  modelId: string;
+  seatIndex: number;
+  outcome: OracleInferenceOutput["outcome"];
+  confidenceBps: number;
+  run: InferenceRunRecord;
+  manifest?: AgentManifestRecord;
+  input?: OracleInferenceInput;
+  openedUrls: string[];
+};
+
+type DeliberationPlanTurn = {
+  debater: DeliberationDebater;
+  ordinal: number;
+  exchange: 1 | 2;
+};
 
 type SeatResearchConfig =
   | {
@@ -299,6 +337,8 @@ class OpenVerdictEngine implements Engine {
   readonly #now: () => number;
   /** Per-claim chain of votesCommit calls so seats commit as they finish, never concurrently. */
   readonly #commitQueues = new Map<string, Promise<void>>();
+  /** One debate runner per claim prevents overlapping worker ticks from duplicating turns. */
+  readonly #pendingDeliberations = new Map<string, Promise<void>>();
   readonly #retrieve: NonNullable<EngineConfig["retrieve"]>;
   readonly #retrievalPolicy: RetrievalPolicy;
   readonly #eventPollIntervalMs: number;
@@ -606,7 +646,13 @@ class OpenVerdictEngine implements Engine {
       };
     }
 
+    if (phase === 2) {
+      // The transcript must be final before its hash enters the phase-two root.
+      await this.runDeliberation(claimId);
+    }
+
     let publicRecordArtifact: EvidenceArtifactRecord | undefined;
+    let deliberationArtifact: EvidenceArtifactRecord | undefined;
     let artifacts = await this.#repository.listEvidenceArtifacts(claimId, phase);
     if (phase === 2) {
       const priorRound = await this.roundOnePublicRecord(claimId);
@@ -614,14 +660,18 @@ class OpenVerdictEngine implements Engine {
         claim,
         priorRound,
       );
+      deliberationArtifact = await this.ensureDeliberationTranscriptArtifact(claim);
       artifacts = artifacts.filter(
-        (artifact) => artifact.evidenceId !== publicRecordArtifact?.evidenceId,
+        (artifact) =>
+          artifact.evidenceId !== publicRecordArtifact?.evidenceId &&
+          artifact.evidenceId !== deliberationArtifact?.evidenceId,
       );
       if (artifacts.length === 0) {
         artifacts = await this.#repository.listEvidenceArtifacts(claimId, 1);
       }
     }
     artifacts = uniqueEvidenceArtifacts(statementArtifactFirst(artifacts));
+    if (deliberationArtifact) artifacts.push(deliberationArtifact);
     if (publicRecordArtifact) artifacts.push(publicRecordArtifact);
     if (artifacts.length === 0) {
       throw new EngineNoEvidenceError();
@@ -690,6 +740,18 @@ class OpenVerdictEngine implements Engine {
       },
     });
     return result;
+  }
+
+  async runDeliberation(claimId: string): Promise<void> {
+    const pending = this.#pendingDeliberations.get(claimId);
+    if (pending) return pending;
+    const run = this.executeDeliberation(claimId);
+    this.#pendingDeliberations.set(claimId, run);
+    try {
+      await run;
+    } finally {
+      this.#pendingDeliberations.delete(claimId);
+    }
   }
 
   async juryRun(claimId: string, phase: 1 | 2): Promise<JuryRunReport> {
@@ -1397,6 +1459,9 @@ class OpenVerdictEngine implements Engine {
       revealedJurySeatIds: tally.revealedJurySeatIds,
     }));
     const result = await this.#repository.getResolutionCertificate(claimId);
+    const deliberation = (
+      await this.#repository.listDeliberationTurns(claimId)
+    ).map(toPublicDeliberationTurn);
     const inspection: ClaimInspection = {
       claimId,
       mode: claim.mode,
@@ -1415,6 +1480,7 @@ class OpenVerdictEngine implements Engine {
       })),
       commitments,
       rounds,
+      ...(deliberation.length === 0 ? {} : { deliberation }),
       ...(result === undefined ? {} : { result: certificateToFinalizeReport(result) }),
     };
     if (opts.verify) inspection.verification = await this.verifyClaim(claim, manifests, packages, result);
@@ -3325,6 +3391,292 @@ class OpenVerdictEngine implements Engine {
     return updated;
   }
 
+  private async executeDeliberation(claimId: string): Promise<void> {
+    const claim = await this.claim(claimId);
+    if (claim.state !== CLAIM_STATE.DISCUSSION) return;
+
+    const { priorRound, debaters } = await this.deliberationDebaters(claimId);
+    const plan = ([1, 2] as const).flatMap((exchange) =>
+      debaters.map((debater) => ({ debater, exchange })),
+    ).map<DeliberationPlanTurn>((turn, ordinal) => ({ ...turn, ordinal }));
+    const persisted = await this.#repository.listDeliberationTurns(claimId);
+    const completedOrdinals = new Set(persisted.map((turn) => turn.ordinal));
+    const records = [...persisted];
+    const freezeLeadMs = nonNegativeNumberEnv(
+      "OPENVERDICT_EVIDENCE_FREEZE_LEAD_MS",
+      DEFAULT_EVIDENCE_FREEZE_LEAD_MS,
+    );
+    const phaseOneManifest = plan.length === 0
+      ? undefined
+      : await this.requiredEvidenceManifest(claimId, 1);
+    const seatIndexById = new Map(
+      debaters.map((debater) => [debater.jurySeatId, debater.seatIndex]),
+    );
+
+    for (const [planIndex, turn] of plan.entries()) {
+      if (completedOrdinals.has(turn.ordinal)) continue;
+      if (
+        this.#now() + PER_TURN_BUDGET_MS >
+        claim.deadlines.discussionDeadlineMs - freezeLeadMs
+      ) {
+        for (const remaining of plan.slice(planIndex)) {
+          if (completedOrdinals.has(remaining.ordinal)) continue;
+          const skipped = this.deliberationTurnRecord(
+            remaining,
+            "SKIPPED",
+            "",
+            [],
+            "WINDOW_EXHAUSTED",
+          );
+          await this.persistDeliberationTurn(skipped);
+          records.push(skipped);
+          completedOrdinals.add(remaining.ordinal);
+        }
+        break;
+      }
+
+      const allowedCitations = this.deliberationAllowedCitations(
+        turn.debater,
+        phaseOneManifest,
+        priorRound,
+      );
+      const record = await this.completeDeliberationTurn(
+        claim,
+        turn,
+        priorRound,
+        records,
+        seatIndexById,
+        allowedCitations,
+      );
+      await this.persistDeliberationTurn(record);
+      records.push(record);
+      completedOrdinals.add(turn.ordinal);
+    }
+
+    await this.ensureDeliberationTranscriptArtifact(claim);
+  }
+
+  private async deliberationDebaters(
+    claimId: string,
+  ): Promise<{
+    priorRound: PriorRoundPublicRecord;
+    debaters: DeliberationDebater[];
+  }> {
+    const [priorRound, tally, reveals, runs] = await Promise.all([
+      this.roundOnePublicRecord(claimId),
+      this.requiredTally(claimId, 1),
+      this.#repository.listReveals(claimId, 1),
+      this.#repository.listInferenceRuns(claimId, 1),
+    ]);
+    const revealedSeatIds = new Set(tally.revealedJurySeatIds);
+    const revealBySeat = new Map(
+      reveals.map((reveal) => [reveal.jurySeatId, reveal]),
+    );
+    const runById = new Map(runs.map((run) => [run.runId, run]));
+    const debaters = await Promise.all(
+      tally.expectedJurySeatIds.flatMap((jurySeatId, seatIndex) => {
+        if (!revealedSeatIds.has(jurySeatId)) return [];
+        const reveal = revealBySeat.get(jurySeatId);
+        const run = reveal === undefined ? undefined : runById.get(reveal.runId);
+        if (reveal === undefined || run?.output === undefined) {
+          throw new EngineStateError(
+            `round one deliberation is missing seat ${jurySeatId}`,
+          );
+        }
+        return [{ reveal, run, seatIndex }];
+      }).map(async ({ reveal, run, seatIndex }): Promise<DeliberationDebater> => {
+        const core = revealedRunBundleCore(run);
+        return {
+          jurySeatId: reveal.jurySeatId,
+          agentProfileId: reveal.agentProfileId,
+          modelId: run.modelId,
+          seatIndex,
+          outcome: outcomeLabel(reveal.outcome),
+          confidenceBps: reveal.confidenceBps,
+          run,
+          manifest: await this.#repository.getAgentManifest(reveal.agentProfileId),
+          input: core?.input,
+          openedUrls:
+            core !== undefined && "transcript" in core
+              ? core.transcript.opened.flatMap((page) => [page.url, page.finalUrl])
+              : [],
+        };
+      }),
+    );
+    return { priorRound, debaters };
+  }
+
+  private deliberationAllowedCitations(
+    debater: DeliberationDebater,
+    manifest: EvidenceManifestRecord | undefined,
+    priorRound: PriorRoundPublicRecord,
+  ): string[] {
+    const ownEvidenceIds = debater.run.output?.publicReasoningTrace.flatMap(
+      (entry) => entry.evidenceIds,
+    ) ?? [];
+    const recordEvidenceIds = priorRound.seats.flatMap((seat) =>
+      seat.publicReasoningTrace.flatMap((entry) => entry.evidenceIds),
+    );
+    return uniqueStrings([
+      ...ownEvidenceIds,
+      ...debater.openedUrls,
+      ...(manifest?.sortedLeaves ?? []),
+      ...recordEvidenceIds,
+    ]).slice(0, MAX_DELIBERATION_ALLOWED_CITATIONS);
+  }
+
+  private async completeDeliberationTurn(
+    claim: ClaimRecord,
+    turn: DeliberationPlanTurn,
+    priorRound: PriorRoundPublicRecord,
+    priorTurns: DeliberationTurnRecord[],
+    seatIndexById: ReadonlyMap<string, number>,
+    allowedCitations: string[],
+  ): Promise<DeliberationTurnRecord> {
+    const { debater } = turn;
+    if (debater.manifest === undefined || debater.input === undefined) {
+      return this.deliberationTurnRecord(
+        turn,
+        "SKIPPED",
+        "",
+        [],
+        "PROVIDER_ERROR",
+      );
+    }
+    const debateSoFar = priorTurns
+      .filter(
+        (prior) => prior.ordinal < turn.ordinal && prior.status === "SPOKEN",
+      )
+      .sort((left, right) => left.ordinal - right.ordinal)
+      .map((prior) => ({
+        seat: seatIndexById.get(prior.jurySeatId),
+        exchange: prior.exchange,
+        argument: prior.argument,
+        citations: prior.citations,
+      }));
+    const messages = [
+      {
+        role: "system" as const,
+        content: DELIBERATION_PROMPT_SPEC_V1.systemPrompt,
+      },
+      {
+        role: "user" as const,
+        content: canonicalJsonString({
+          statement: claim.statement,
+          resolutionCriteria: claim.resolutionCriteria,
+          roundOneRecord: priorRound,
+          debateSoFar,
+          self: {
+            jurySeatId: debater.jurySeatId,
+            seatIndex: debater.seatIndex,
+            outcome: debater.outcome,
+            confidenceBps: debater.confidenceBps,
+          },
+          allowedCitations,
+        }),
+      },
+    ];
+    try {
+      const completion = await this.#gonka.complete({
+        manifest: debater.manifest.manifest,
+        messages,
+        kind: "PRIMARY",
+        jsonMode: true,
+        input: debater.input,
+        attempts: [],
+        timeoutMs: PER_TURN_BUDGET_MS,
+        maxOutputTokens: DELIBERATION_PROMPT_SPEC_V1.maxOutputTokens,
+      });
+      if (!completion.ok) {
+        return this.deliberationTurnRecord(
+          turn,
+          "SKIPPED",
+          "",
+          [],
+          completion.status,
+        );
+      }
+      const validated = validateDeliberationOutput(
+        completion.content,
+        new Set(allowedCitations),
+      );
+      if (!validated.ok) {
+        return this.deliberationTurnRecord(
+          turn,
+          "SKIPPED",
+          "",
+          [],
+          validated.failureStatus,
+          completion.gonkaRequestId,
+        );
+      }
+      return this.deliberationTurnRecord(
+        turn,
+        "SPOKEN",
+        validated.argument,
+        validated.citations,
+        undefined,
+        completion.gonkaRequestId,
+      );
+    } catch (error) {
+      return this.deliberationTurnRecord(
+        turn,
+        "SKIPPED",
+        "",
+        [],
+        deliberationProviderFailure(error),
+      );
+    }
+  }
+
+  private deliberationTurnRecord(
+    turn: DeliberationPlanTurn,
+    status: DeliberationTurnPublic["status"],
+    argument: string,
+    citations: string[],
+    failureStatus?: DeliberationFailureStatus,
+    gonkaRequestId?: string,
+  ): DeliberationTurnRecord {
+    const atMs = this.#now();
+    const timestamp = new Date(atMs).toISOString();
+    return {
+      turnId: `${turn.debater.run.claimId}:${turn.ordinal}`,
+      claimId: turn.debater.run.claimId,
+      jurySeatId: turn.debater.jurySeatId,
+      agentProfileId: turn.debater.agentProfileId,
+      modelId: turn.debater.modelId,
+      ordinal: turn.ordinal,
+      exchange: turn.exchange,
+      argument,
+      citations,
+      status,
+      ...(failureStatus === undefined ? {} : { failureStatus }),
+      atMs,
+      ...(gonkaRequestId === undefined ? {} : { gonkaRequestId }),
+      promptSpecHash: DELIBERATION_PROMPT_SPEC_HASH,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    };
+  }
+
+  private async persistDeliberationTurn(
+    record: DeliberationTurnRecord,
+  ): Promise<void> {
+    await this.#repository.saveDeliberationTurn(record);
+    const turn = toPublicDeliberationTurn(record);
+    // Public streaming is best effort. The stored transcript remains authoritative.
+    await this.emit({
+      claimId: turn.claimId,
+      phase: "DISCUSSION",
+      kind: "DELIBERATION_TURN",
+      source: "ENGINE",
+      visibility: "PUBLIC_NOW",
+      actorId: turn.agentProfileId,
+      occurredAt: new Date(turn.atMs).toISOString(),
+      payload: { ...turn },
+    }).catch(() => undefined);
+  }
+
   /** Assemble only vote data already made public by the round one reveal. */
   private async roundOnePublicRecord(
     claimId: string,
@@ -3334,10 +3686,7 @@ class OpenVerdictEngine implements Engine {
       this.#repository.listReveals(claimId, 1),
       this.#repository.listInferenceRuns(claimId, 1),
     ]);
-    if (
-      tally.revealedJurySeatIds.length === 0 ||
-      reveals.length !== tally.revealedJurySeatIds.length
-    ) {
+    if (reveals.length !== tally.revealedJurySeatIds.length) {
       throw new EngineStateError("round one revealed public record is incomplete");
     }
     const seatIndexById = new Map(
@@ -3403,6 +3752,42 @@ class OpenVerdictEngine implements Engine {
     return artifact;
   }
 
+  private async ensureDeliberationTranscriptArtifact(
+    claim: ClaimRecord,
+  ): Promise<EvidenceArtifactRecord> {
+    const evidenceId = deliberationTranscriptEvidenceId(claim.claimId);
+    const records = await this.#repository.listDeliberationTurns(claim.claimId);
+    const content = canonicalJsonString({
+      version: 1,
+      kind: "deliberation-transcript",
+      turns: records
+        .map(toPublicDeliberationTurn)
+        .sort((left, right) => left.ordinal - right.ordinal),
+    });
+    const contentHash = toHex(blake2b256(new TextEncoder().encode(content)));
+    const existing = await this.#repository.getEvidenceArtifact(evidenceId);
+    if (existing !== undefined) {
+      if (
+        existing.claimId !== claim.claimId ||
+        existing.phase !== 2 ||
+        existing.sourceUrl !== DELIBERATION_TRANSCRIPT_SOURCE_URL ||
+        existing.contentHash !== contentHash
+      ) {
+        throw new EngineStateError("deliberation transcript evidence is inconsistent");
+      }
+      return existing;
+    }
+    await this.ingestText(claim, content, 2, {
+      evidenceId,
+      sourceUrl: DELIBERATION_TRANSCRIPT_SOURCE_URL,
+    });
+    const artifact = await this.#repository.getEvidenceArtifact(evidenceId);
+    if (artifact === undefined) {
+      throw new EngineStateError("deliberation transcript evidence is missing");
+    }
+    return artifact;
+  }
+
   private async artifactsForPhase(
     claimId: string,
     phase: 1 | 2,
@@ -3410,20 +3795,31 @@ class OpenVerdictEngine implements Engine {
     const artifacts = await this.#repository.listEvidenceArtifacts(claimId, phase);
     if (phase === 1) return statementArtifactFirst(artifacts);
     const publicRecordEvidenceId = roundOnePublicRecordEvidenceId(claimId);
+    const transcriptEvidenceId = deliberationTranscriptEvidenceId(claimId);
     const publicRecordArtifact = artifacts.find(
       (artifact) => artifact.evidenceId === publicRecordEvidenceId,
     );
     if (publicRecordArtifact === undefined) {
       throw new EngineStateError("round one public record evidence is missing");
     }
+    // Optional on purpose: claims frozen before the deliberation phase
+    // existed have no transcript, and their roots must keep recomputing.
+    // New claims always carry one, because the phase-two freeze ensures the
+    // artifact before it builds the manifest.
+    const transcriptArtifact = artifacts.find(
+      (artifact) => artifact.evidenceId === transcriptEvidenceId,
+    );
     let secondRoundArtifacts = artifacts.filter(
-      (artifact) => artifact.evidenceId !== publicRecordEvidenceId,
+      (artifact) =>
+        artifact.evidenceId !== publicRecordEvidenceId &&
+        artifact.evidenceId !== transcriptEvidenceId,
     );
     if (secondRoundArtifacts.length === 0) {
       secondRoundArtifacts = await this.#repository.listEvidenceArtifacts(claimId, 1);
     }
     return [
       ...statementArtifactFirst(secondRoundArtifacts),
+      ...(transcriptArtifact === undefined ? [] : [transcriptArtifact]),
       publicRecordArtifact,
     ];
   }
@@ -3797,6 +4193,119 @@ function statementArtifactFirst(
 
 function roundOnePublicRecordEvidenceId(claimId: string): string {
   return `round-1-public-record:${claimId}`;
+}
+
+function deliberationTranscriptEvidenceId(claimId: string): string {
+  return `deliberation-transcript:${claimId}`;
+}
+
+function toPublicDeliberationTurn(
+  record: DeliberationTurnRecord,
+): DeliberationTurnPublic {
+  return {
+    claimId: record.claimId,
+    jurySeatId: record.jurySeatId,
+    agentProfileId: record.agentProfileId,
+    ...(record.modelId === undefined ? {} : { modelId: record.modelId }),
+    ordinal: record.ordinal,
+    exchange: record.exchange,
+    argument: record.argument,
+    citations: record.citations,
+    status: record.status,
+    ...(record.failureStatus === undefined
+      ? {}
+      : { failureStatus: record.failureStatus }),
+    atMs: record.atMs,
+  };
+}
+
+function revealedRunBundleCore(
+  run: InferenceRunRecord,
+): PublicRunBundleCore | undefined {
+  if (run.revealedBlobId === undefined || run.audit.bundleCore === undefined) {
+    return undefined;
+  }
+  try {
+    const parsed = JSON.parse(run.audit.bundleCore) as unknown;
+    if (
+      typeof parsed !== "object" ||
+      parsed === null ||
+      !("kind" in parsed) ||
+      parsed.kind !== "run-bundle" ||
+      !("input" in parsed)
+    ) {
+      return undefined;
+    }
+    return parsed as PublicRunBundleCore;
+  } catch {
+    return undefined;
+  }
+}
+
+type DeliberationOutputValidation =
+  | { ok: true; argument: string; citations: string[] }
+  | {
+      ok: false;
+      failureStatus: "INVALID_OUTPUT" | "INVALID_CITATIONS";
+    };
+
+function validateDeliberationOutput(
+  content: string,
+  allowedCitations: ReadonlySet<string>,
+): DeliberationOutputValidation {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(content) as unknown;
+  } catch {
+    return { ok: false, failureStatus: "INVALID_OUTPUT" };
+  }
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+    return { ok: false, failureStatus: "INVALID_OUTPUT" };
+  }
+  const record = parsed as Record<string, unknown>;
+  const keys = Object.keys(record).sort();
+  if (
+    keys.length !== 2 ||
+    keys[0] !== "argument" ||
+    keys[1] !== "citations" ||
+    typeof record.argument !== "string" ||
+    !Array.isArray(record.citations) ||
+    record.citations.length > MAX_DELIBERATION_CITATIONS ||
+    record.citations.some((citation) => typeof citation !== "string")
+  ) {
+    return { ok: false, failureStatus: "INVALID_OUTPUT" };
+  }
+  const citations = [...new Set(record.citations as string[])];
+  if (citations.some((citation) => !allowedCitations.has(citation))) {
+    return { ok: false, failureStatus: "INVALID_CITATIONS" };
+  }
+  const argument = record.argument
+    .replace(/\u2014/g, ", ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 1_200)
+    .trim();
+  if (argument.length === 0) {
+    return { ok: false, failureStatus: "INVALID_OUTPUT" };
+  }
+  return { ok: true, argument, citations };
+}
+
+function deliberationProviderFailure(error: unknown): "PROVIDER_ERROR" | "TIMEOUT" {
+  const name = error instanceof Error ? error.name.toLowerCase() : "";
+  const message = error instanceof Error ? error.message.toLowerCase() : String(error);
+  return name.includes("timeout") || message.includes("timeout")
+    ? "TIMEOUT"
+    : "PROVIDER_ERROR";
+}
+
+function uniqueStrings(values: readonly string[]): string[] {
+  return [...new Set(values)];
+}
+
+function nonNegativeNumberEnv(name: string, fallback: number): number {
+  const value = Number(process.env[name] ?? fallback);
+  return Number.isFinite(value) && value >= 0 ? value : fallback;
 }
 
 function canonicalArtifact(artifact: RetrievedArtifact): {

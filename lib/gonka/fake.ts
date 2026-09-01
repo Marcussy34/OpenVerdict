@@ -6,6 +6,7 @@ import type {
   OracleInferenceOutput,
 } from "../protocol/types";
 import { createGonkaAdapterWithDependencies } from "./adapter";
+import { DELIBERATION_PROMPT_SPEC_V1 } from "./promptSpec";
 import type {
   GonkaAttemptRecord,
   GonkaCompletionRequest,
@@ -47,6 +48,8 @@ export type FakeFixture = {
   failure?: FakeFailure;
   actions?: FakeAction[];
   citations?: Citation[];
+  /** Raw single-shot responses used only by public deliberation tests. */
+  deliberationResponses?: string[];
 };
 
 type ActiveFixture = {
@@ -319,6 +322,7 @@ export function createFakeGonkaAdapter(fixtures: FakeFixture[]): GonkaRouterAdap
   }
 
   const cursors = new Map<string, number>();
+  const deliberationCursors = new Map<string, number>();
   const activeByAttempts = new WeakMap<GonkaAttemptRecord[], ActiveFixture>();
   const utilityAdapter = createGonkaAdapterWithDependencies(
     {
@@ -358,6 +362,49 @@ export function createFakeGonkaAdapter(fixtures: FakeFixture[]): GonkaRouterAdap
     };
   };
 
+  const nextDeliberation = (
+    input: OracleInferenceInput,
+    manifest: AgentManifest,
+  ): { active: ActiveFixture; content: string } => {
+    const queue = fixturesByAgent.get(manifest.agentProfileId);
+    if (!queue || queue.length === 0) {
+      throw new Error(`no fake Gonka fixture for agent ${manifest.agentProfileId}`);
+    }
+    // Deliberation belongs to the most recently consumed jury fixture and
+    // must not consume the next fixture reserved for round two.
+    const inferenceCursor = cursors.get(manifest.agentProfileId) ?? 1;
+    const fixtureIndex = Math.min(
+      Math.max(0, inferenceCursor - 1),
+      queue.length - 1,
+    );
+    const source = queue[fixtureIndex];
+    if (!source) throw new Error("fake fixture queue is unexpectedly empty");
+    const responseIndex = deliberationCursors.get(manifest.agentProfileId) ?? 0;
+    deliberationCursors.set(manifest.agentProfileId, responseIndex + 1);
+    const responses = source.deliberationResponses ?? [];
+    const content = responses.length === 0
+      ? JSON.stringify({
+          argument: "This juror maintains the position in its revealed record.",
+          citations: [],
+        })
+      : responses[Math.min(responseIndex, responses.length - 1)]!;
+    return {
+      active: {
+        fixture: {
+          ...source,
+          gonkaRequestId:
+            `msg_fake_deliberation_${manifest.agentProfileId.slice(2, 10)}_${responseIndex + 1}`,
+        },
+        fixtureIndex,
+        requestCall: 0,
+        input,
+        manifest,
+        clock: responseIndex * 100,
+      },
+      content,
+    };
+  };
+
   async function run(
     input: OracleInferenceInput,
     manifest: AgentManifest,
@@ -369,6 +416,13 @@ export function createFakeGonkaAdapter(fixtures: FakeFixture[]): GonkaRouterAdap
   async function complete(
     request: GonkaCompletionRequest,
   ): Promise<GonkaCompletionResult> {
+    if (request.messages[0]?.content === DELIBERATION_PROMPT_SPEC_V1.systemPrompt) {
+      const deliberation = nextDeliberation(request.input, request.manifest);
+      return createFixtureAdapter(
+        deliberation.active,
+        deliberation.content,
+      ).complete(request);
+    }
     let active = activeByAttempts.get(request.attempts);
     if (!active) {
       active = nextActive(request.input, request.manifest);

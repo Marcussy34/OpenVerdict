@@ -36,9 +36,10 @@ import { useClaimEvents, type EventStreamStatus } from "@/components/use-claim-e
 import { useNow } from "@/components/use-now";
 import { CanvasHighlightProvider } from "@/components/viz/canvas-highlight";
 import { DeliberationCanvas } from "@/components/viz/deliberation-canvas";
+import { DeliberationChat } from "@/components/viz/deliberation-chat";
 import { HashChip } from "@/components/viz/hash-chip";
 import { outcomeLabel } from "@/components/viz/seat-seal";
-import type { ClaimInspection, ResolutionEvent } from "@/lib/engine/contract";
+import type { ClaimInspection, DeliberationTurnPublic, ResolutionEvent } from "@/lib/engine/contract";
 import { isStrandedDiscussion } from "@/lib/engine/claim-lifecycle";
 import { CLAIM_MODE, CLAIM_STATE } from "@/lib/protocol/constants";
 import { suiObjectUrl, suiTransactionUrl } from "@/lib/web/explorer";
@@ -232,7 +233,7 @@ function liveStage(claim: ClaimInspection, stranded: boolean): StageInfo {
     case CLAIM_STATE.REVEAL_1:
       return { key: "reveal1", label: "Round 1 · votes revealing", tone: "reveal" };
     case CLAIM_STATE.DISCUSSION:
-      return { key: "discussion", label: "Discussion round", tone: "discuss" };
+      return { key: "discussion", label: "Deliberation · jurors argue their case", tone: "discuss" };
     case CLAIM_STATE.COMMIT_2:
       return { key: "commit2", label: "Round 2 · research & sealed votes", tone: "research" };
     case CLAIM_STATE.REVEAL_2:
@@ -360,6 +361,13 @@ function LeftRail({
   return (
     <div className="flex min-h-full flex-col gap-6 p-5 text-white">
       <div className="space-y-3">
+        <Link
+          href="/claims"
+          className="-ml-1 inline-flex w-fit items-center gap-1.5 rounded-full px-1 py-0.5 text-[11px] font-semibold text-white/60 transition-colors hover:text-white"
+        >
+          <ArrowLeft2 size="13" />
+          All claims
+        </Link>
         <p className="text-[10px] font-semibold tracking-[0.16em] text-white/45 uppercase">
           Claim assertion
         </p>
@@ -1240,6 +1248,22 @@ export default function ClaimCanvasPage({ params }: ClaimCanvasPageProps) {
       nowMs: now ?? Date.now(),
     });
   }, [claim, events, now, proofs]);
+
+  // Live debate turns: inspection snapshot + PUBLIC_NOW stream events merged
+  // by ordinal, so a reload and a live tab render the same conversation.
+  const deliberationTurns = useMemo(() => {
+    const byOrdinal = new Map<number, DeliberationTurnPublic>();
+    for (const turn of claim?.deliberation ?? []) byOrdinal.set(turn.ordinal, turn);
+    for (const event of events) {
+      if (event.kind !== "DELIBERATION_TURN") continue;
+      const payload = event.payload as Partial<DeliberationTurnPublic>;
+      if (typeof payload.ordinal !== "number" || typeof payload.jurySeatId !== "string") continue;
+      if (!byOrdinal.has(payload.ordinal)) {
+        byOrdinal.set(payload.ordinal, payload as DeliberationTurnPublic);
+      }
+    }
+    return [...byOrdinal.values()].sort((left, right) => left.ordinal - right.ordinal);
+  }, [claim, events]);
   const replay = useReplay(graph, claim !== null && claim.state >= 9);
   const selectedNode = useMemo(
     () => replay.visible.nodes.find((node) => node.id === selectedId) ?? null,
@@ -1306,26 +1330,6 @@ export default function ClaimCanvasPage({ params }: ClaimCanvasPageProps) {
       </CollapsibleRail>
 
       <main className="relative h-dvh flex-1 overflow-hidden">
-        {/* The global chrome stays off the stage (owner request); this pill
-            is the quick way around. */}
-        <nav className="absolute top-4 left-4 z-30 flex items-center gap-1 rounded-full border border-white/15 bg-[#07162f]/90 px-2 py-1.5 shadow-xl backdrop-blur">
-          <Link
-            href="/"
-            aria-label="OpenVerdict home"
-            className="grid size-7 shrink-0 place-items-center rounded-full bg-[#0e76ff] text-[10px] font-bold text-white"
-          >
-            OV
-          </Link>
-          <Link href="/claims" className="rounded-full px-2.5 py-1 text-xs font-semibold text-white/80 hover:bg-white/10 hover:text-white">
-            Claims
-          </Link>
-          <Link href="/fact-check" className="rounded-full px-2.5 py-1 text-xs font-semibold text-white/80 hover:bg-white/10 hover:text-white">
-            Verify
-          </Link>
-          <Link href="/verify" className="rounded-full px-2.5 py-1 text-xs font-semibold text-white/80 hover:bg-white/10 hover:text-white">
-            Audit
-          </Link>
-        </nav>
         <StageBanner claim={claim} graph={graph} replay={replay} now={now} streamStatus={streamStatus} />
         <DeliberationCanvas
           graph={replay.visible}
@@ -1333,6 +1337,16 @@ export default function ClaimCanvasPage({ params }: ClaimCanvasPageProps) {
           onSelect={handleSelect}
           avatars={JUROR_AVATARS}
           externalHighlightId={trailHighlightId}
+        />
+
+        <DeliberationChat
+          turns={
+            replay.active && replay.t < replay.endMs
+              ? deliberationTurns.filter((turn) => turn.atMs <= replay.t)
+              : deliberationTurns
+          }
+          commitments={claim.commitments}
+          live={claim.state === CLAIM_STATE.DISCUSSION}
         />
 
         <button
@@ -1476,7 +1490,7 @@ function CollapsibleRail({ children }: { children: ReactNode }) {
           type="button"
           onClick={() => setOpen(false)}
           aria-label="Hide the claim panel"
-          className="absolute top-3 right-2 z-10 grid size-7 place-items-center rounded-full border border-white/15 bg-[#07162f]/90 text-white/70 transition-colors hover:bg-white/10 hover:text-white"
+          className="absolute top-1/2 right-0 z-10 -translate-y-1/2 rounded-l-lg border border-r-0 border-white/15 bg-[#07162f]/90 py-3 pr-0.5 pl-1 text-white/70 shadow-xl transition-colors hover:bg-white/10 hover:text-white"
         >
           <ArrowLeft2 size="14" />
         </button>
