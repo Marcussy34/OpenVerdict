@@ -46,7 +46,7 @@ export const PIPELINE_STAGES: Stage[] = [
     index: "04",
     kicker: "Transparency",
     title: "Cryptographic reveal",
-    body: "Votes and reasoning open on Sui, verified byte-for-byte against the seal.",
+    body: "Votes and reasoning open on Sui, verified byte-for-byte against the seal; a split jury debates in public, then votes once more.",
     icon: Unlock,
     tone: "chain",
   },

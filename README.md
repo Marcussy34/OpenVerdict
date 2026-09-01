@@ -78,18 +78,30 @@ disputes, and other bounded questions.
 5. **Frozen evidence** — the SSRF-hardened retriever fetches sources, raw and
    canonical artifacts go to Walrus, and an immutable `EvidenceBundle` object
    pins the Merkle root before any agent reasons about anything.
-6. **GonkaRouter jury** — five agents investigate independently (no peer
-   visibility), return strict-schema outputs bound to frozen evidence IDs, and
+6. **GonkaRouter jury** — five seats research the claim themselves
+   through the engine with no peer visibility: support and challenge searches,
+   page opens on both sides (up to three per turn), citations quoted verbatim
+   from at least two different sites, and a counter-evidence summary. Models
+   never fetch and never hold keys; every step is engine-executed and recorded
+   in the sealed run transcript whose hash rides the on-chain run hash, and
    every response's `id` is preserved verbatim as the public Gonka Request ID.
+   A seat that cannot deliver fails closed with a public failure record
+   instead of a guessed vote.
 7. **Commit–reveal on Sui** — each vote commitment is
    `blake2b256(BCS(VotePreimageV1))` binding outcome, confidence, evidence
    root, output hash, run hash, and salt; reveals recompute the commitment
    on-chain, consume the owned `JurySeat`, and update a bounded `RoundTally`.
+   Each run's reveal key is also escrowed under the Mysten Seal time-lock
+   policy, so a sealed bundle opens after its deadline without the operator.
 8. **Consensus with honest uncertainty** — 4-of-5 matching valid votes
-   finalize; a split triggers one evidence-driven discussion round and a second
-   independent vote; no threshold finalizes `UNRESOLVED` rather than a
-   manufactured answer. The Truth Score (0–100) is recomputable from the
-   revealed votes and never marketed as objective truth.
+   finalize round one. A split sends the claim to a public deliberation: the
+   revealed jurors debate in seat order over two exchanges, strict JSON turns
+   citing only evidence already on the record, every turn streamed live into
+   the claim page's chat and the whole transcript frozen as hashed phase-2
+   evidence. A second commit-reveal round then votes carrying the revealed
+   round-one record and that transcript, and no threshold finalizes
+   `UNRESOLVED` rather than a manufactured answer. The Truth Score (0–100) is
+   recomputable from the revealed votes and never marketed as objective truth.
 9. **Settlement** — finalization freezes an immutable `ResolutionCertificate`,
    creates one-time `PayoutTicket` objects, and the demo binary pool consumes
    the certificate for capped payouts or unresolved refunds.
