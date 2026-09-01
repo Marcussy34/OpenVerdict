@@ -6,6 +6,7 @@ import {
   useMemo,
   useCallback,
   useSyncExternalStore,
+  type CSSProperties,
 } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -195,8 +196,26 @@ export default function ClaimsPage() {
 
   return (
     <div className="mx-auto max-w-7xl space-y-10 px-5 py-16 md:px-7 md:py-24">
-      {/* Hero: one word, explorer style. */}
-      <h1 className="ov-display text-center text-4xl text-ocean md:text-5xl">Claims</h1>
+      {/* Hero: the verify page's wave, in teal, so the two entry points read as
+          siblings. aria-label carries the word; the per-letter spans are hidden
+          from assistive tech so it is not spelled out one character at a time. */}
+      <div className="mx-auto max-w-3xl space-y-4 text-center">
+        <h1 className="ov-display text-5xl text-ocean md:text-6xl">
+          Find any{" "}
+          <span aria-label="claims" className="ov-wave-word">
+            {"claims".split("").map((letter, index) => (
+              <span
+                key={index}
+                aria-hidden="true"
+                className="ov-wave-letter ov-wave-letter--teal"
+                style={{ "--i": index } as CSSProperties}
+              >
+                {letter}
+              </span>
+            ))}
+          </span>
+        </h1>
+      </div>
 
       {/* One flat bar: search on the left, the primary action on the right. */}
       <div className="mx-auto w-full max-w-3xl space-y-4">

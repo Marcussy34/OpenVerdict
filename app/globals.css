@@ -1043,6 +1043,13 @@
         infinite;
 }
 
+/* The claims hero wears the same wave in teal. The verify hero owns the blue,
+   and the badge palette already spends green, red and amber on lifecycle state,
+   so a hue with no state meaning keeps the heading from implying a verdict. */
+.ov-wave-letter--teal {
+    background-image: linear-gradient(90deg, #0e7490, #22b8cf 50%, #0e7490);
+}
+
 @keyframes ov-wave-letter {
     0%,
     100% {

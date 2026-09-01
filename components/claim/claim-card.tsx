@@ -1,13 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { StateBadge } from "./state-badge";
+import { StateBadge, getStateConfig } from "./state-badge";
 import { OUTCOME_CHIP, shortClaimId, timeAgo } from "./claim-format";
 import { VerdictGauge } from "@/components/viz/verdict-gauge";
 import { useNow } from "@/components/use-now";
 import { isStrandedDiscussion } from "@/lib/engine/claim-lifecycle";
 import { cn } from "@/lib/utils";
 import type { ClaimInspection } from "@/lib/engine/contract";
+import { CLAIM_STATE } from "@/lib/protocol/constants";
 
 interface ClaimCardProps {
   claim: ClaimInspection;
@@ -28,8 +29,24 @@ export function ClaimCard({ claim }: ClaimCardProps) {
   const ago = timeAgo(now, claim.deadlines?.evidenceCutoffMs);
   // Only a claim that went through a jury round has a score; the protocol
   // never invents one, so the dial appears exactly when there is one to show.
+  // The dial only speaks for claims that actually settled. A score exists for
+  // any jury round, but engine.finalize() computes it over the valid reveals
+  // while the verdict comes from the tally clearing a threshold, so the two can
+  // diverge: an UNRESOLVED claim can score 100 when the jurors who did reveal
+  // agreed but the round never reached consensus. Since the dial colours by
+  // score tier ("high confidence, TRUE" at 65 and above), showing it there
+  // would assert a verdict the protocol declined to make. The score keeps its
+  // full context, formula included, on the claim's own page.
   const scoreBps = claim.result?.truthScoreBps ?? null;
-  const scored = scoreBps !== null;
+  const settled =
+    claim.state === CLAIM_STATE.FINALIZED_UNCHALLENGED ||
+    claim.state === CLAIM_STATE.FINALIZED_REVIEWED;
+  const scored = settled && scoreBps !== null;
+  // An unresolved claim's outcome IS "UNRESOLVED", which the badge on the left
+  // already says. Drop the chip whenever it would only repeat the badge.
+  const chipEchoesBadge =
+    claim.result?.result?.toUpperCase() ===
+    getStateConfig(claim.state, stranded).short.toUpperCase();
 
   return (
     <Link
@@ -39,7 +56,7 @@ export function ClaimCard({ claim }: ClaimCardProps) {
       {/* Where it stands on the left, what it settled on to the right. */}
       <div className="flex items-start justify-between gap-2">
         <StateBadge state={claim.state} stranded={stranded} size="sm" />
-        {claim.result && !scored && (
+        {claim.result && !scored && !chipEchoesBadge && (
           <span
             className={cn(
               "shrink-0 rounded-full px-2 py-0.5 font-mono text-[10px] font-bold tabular-nums",
