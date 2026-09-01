@@ -18,7 +18,7 @@ certificates anyone can recompute.**
 - Token voting favors whales; private admins never show their work
 - Chatbot "juries" live in editable logs nobody can recheck
 
-👉 Juries no single vendor can steer; verdicts anyone can recompute.
+**Juries no single vendor can steer; verdicts anyone can recompute.**
 
 **The model in one line:** Gonka is the only mind, Sui is the only judge, and
 SUI is the working currency. (Full write-up: [appendix](#appendix-the-idea-in-full).)
@@ -33,7 +33,7 @@ SUI is the working currency. (Full write-up: [appendix](#appendix-the-idea-in-fu
 - A `Claim` object is created on **Sui**; budgets escrow, **deadlines start**
 - Demo tier is **free today** (in future: **paid in SUI**; staked seats share earnings)
 
-👉 The clock and the money live on-chain from the first second.
+**The clock and the money live on-chain from the first second.** 
 
 ---
 
@@ -77,11 +77,9 @@ Every claim runs round one; only a deadlock runs the split path.
 **Step 3: Consensus check**
 
 - **4-of-5 agreement** → ✅ **finalized** (~10 min). **Most claims end here.**
-- **No supermajority** → the split path below
+- **No supermajority** → the split path below 👇
 
----
-
-#### ⚔️ Split path (only when round one deadlocks)
+## ⚔️ Split path (only when round one deadlocks) ⚔️
 
 **Step 4: Public debate**
 
