@@ -49,7 +49,7 @@ as the flood started."
 
 ## Slide 3 · Solution
 
-**Point 1: A randomized panel of rival models, all reasoning on Gonka.**
+**Point 1: A jury of rival AI models, all reasoning on Gonka.**
 SAY: "OpenVerdict convenes a randomized panel instead of trusting one answer
 box: five seats across three model families, drawn on-chain with Sui's native randomness, at most two seats per
 model, so no vendor can steer a verdict. Every juror researches the live web
@@ -72,7 +72,9 @@ SAY: "The output is an immutable certificate on Sui with a zero-to-hundred
 Truth Score. Every search, every page opened, every prompt and vote is hashed
 onto Walrus, reveal keys are time-locked in Seal so sealed bundles open even
 without us, and the verifier page reruns fifteen checks per juror in your own
-browser. You do not have to trust OpenVerdict; that is the whole point."
+browser. Sui is the judge here, not us: deadlines, thresholds and settlement
+are enforced in Move. You do not have to trust OpenVerdict; that is the whole
+point."
 
 **Money line (the foot of the slide).**
 SAY: "Economically it runs in SUI: requesters escrow a claim budget, seats
@@ -95,7 +97,8 @@ Then: "It is live. Submit a claim and watch the jury think. Thank you."
 - **Naming rule for the stage:** top-level identity is "decentralized
   verification protocol" (say "oracle" with integrators: "we fill the oracle
   slot for markets and DAOs"). Jury and court are explanation-layer metaphors
-  only: "the models debate as if in a courtroom." Never lead with them.
+  only, and the SOLUTION slide is that layer: its bullets say jury, debate and
+  judge on purpose while the headline stays protocol. Never lead with them.
 - **Is this an oracle?** Yes, technically; that is the slot we fill. The
   difference is what's inside the box: a panel you can audit instead of an
   answer you must trust.
