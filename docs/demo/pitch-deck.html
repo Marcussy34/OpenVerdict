@@ -1,0 +1,166 @@
+<title>OpenVerdict Pitch Deck</title>
+<meta name="description" content="Four-slide hackathon pitch for OpenVerdict: a decentralized verification protocol on Sui, powered by Gonka.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;800&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+  /* One deliberate visual world: the OpenVerdict night stage. All colors are
+     painted explicitly so the deck holds on any host theme. */
+  :root{
+    --ground:#081226; --panel:#0C1B36;
+    --ink:#F3F5F9; --muted:#93A1BD; --faint:#5A6A8C;
+    --sea:#2E8CFF; --gold:#FFC65C; --red:#FF5C5C;
+    --hair:rgba(243,245,249,.13);
+    --mono:'JetBrains Mono',ui-monospace,SFMono-Regular,Menlo,monospace;
+  }
+  html{scroll-snap-type:y mandatory}
+  body{margin:0;background:var(--ground);color:var(--ink);
+    font:400 16px/1.55 'Archivo',system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+  .slide{min-height:100svh;scroll-snap-align:start;display:flex;flex-direction:column;
+    justify-content:center;padding:56px clamp(20px,6vw,96px);box-sizing:border-box;
+    position:relative;border-bottom:1px solid var(--hair)}
+  .slide-inner{max-width:1020px;width:100%;margin:0 auto}
+  .no{position:absolute;top:26px;right:clamp(20px,6vw,96px);font:600 11px var(--mono);
+    color:var(--faint);letter-spacing:.14em}
+  .eyebrow{font:600 11px var(--mono);letter-spacing:.22em;text-transform:uppercase;
+    color:var(--sea);margin:0 0 14px}
+  h1,h2{font-weight:800;letter-spacing:-.02em;text-wrap:balance;margin:0}
+  h1{font-size:clamp(2.6rem,7.5vw,5.2rem);line-height:1.02}
+  h2{font-size:clamp(1.9rem,4.2vw,3rem);line-height:1.08;margin-bottom:10px}
+  .lede{font-size:clamp(1.05rem,1.6vw,1.3rem);color:var(--muted);max-width:62ch;margin:14px 0 0}
+  .points{list-style:none;margin:30px 0 0;padding:0;display:grid;gap:16px}
+  .points li{display:grid;grid-template-columns:34px 1fr;gap:16px;align-items:start}
+  .points .n{font:600 12px var(--mono);color:var(--gold);border:1px solid var(--hair);
+    border-radius:999px;width:30px;height:30px;display:grid;place-items:center;margin-top:2px}
+  .points b{display:block;font-size:clamp(1.05rem,1.8vw,1.3rem);font-weight:600;letter-spacing:-.01em}
+  .points span{color:var(--muted);font-size:.95rem}
+  .examples{display:grid;gap:14px;margin-top:34px}
+  @media(min-width:820px){.examples{grid-template-columns:1fr 1fr}}
+  .card{background:var(--panel);border:1px solid var(--hair);border-radius:14px;padding:20px 22px}
+  .card .k{font:600 10px var(--mono);letter-spacing:.18em;color:var(--red);
+    text-transform:uppercase;display:block;margin-bottom:10px}
+  .card h3{margin:0 0 8px;font-size:1.05rem;font-weight:600;letter-spacing:-.01em}
+  .card p{margin:0;font-size:.92rem;color:var(--muted)}
+  .foot{margin-top:34px;color:var(--faint);font-size:.85rem}
+  a{color:var(--sea);text-decoration:none}
+  a:hover{text-decoration:underline}
+  .hero-links{display:flex;flex-wrap:wrap;gap:12px;margin-top:34px}
+  .hero-links a{border:1px solid var(--hair);border-radius:999px;padding:9px 18px;
+    font:600 12px var(--mono);letter-spacing:.06em;color:var(--ink)}
+  .hero-links a.primary{background:var(--sea);border-color:var(--sea);color:#051022}
+  /* One-liner slide */
+  .ol{max-width:940px;margin:0 auto;text-align:center;display:grid;gap:20px;justify-items:center}
+  .ol .mark{font-weight:800;font-size:clamp(2.6rem,7vw,4.6rem);letter-spacing:-.02em}
+  .ol .join{font:600 11px var(--mono);letter-spacing:.3em;color:var(--faint)}
+  .ol .line{font-weight:800;font-size:clamp(1.35rem,3.2vw,2.3rem);line-height:1.16;
+    letter-spacing:.005em;text-transform:uppercase;text-wrap:balance}
+  .ol .cat{color:var(--red)}
+  .ol .cat i{display:block;font-style:normal;height:3px;width:120px;margin:14px auto 0;
+    background:var(--red);border-radius:99px;opacity:.7}
+  .ol .mech{color:var(--sea)}
+  .ol .set{color:var(--gold)}
+  .dots{position:fixed;right:14px;top:50%;transform:translateY(-50%);display:flex;
+    flex-direction:column;gap:8px;z-index:5}
+  .dots a{width:7px;height:7px;border-radius:999px;background:var(--faint);opacity:.45;display:block}
+  .dots a.on{background:var(--sea);opacity:1}
+  @media(max-width:700px){.dots{display:none}}
+  @media(prefers-reduced-motion:no-preference){
+    .slide-inner{animation:rise .5s ease both}
+    @keyframes rise{from{opacity:.55;transform:translateY(10px)}to{opacity:1;transform:none}}
+  }
+</style>
+
+<nav class="dots" aria-label="Slides"></nav>
+
+<!-- 1 · Title -->
+<section class="slide" id="s1"><span class="no">01 / 04</span><div class="slide-inner">
+  <p class="eyebrow">MUBA Hackathon 2026 · Gonka "AI for Society" · Sui Track 02 "AI x Sui"</p>
+  <h1>OpenVerdict</h1>
+  <p class="lede" style="font-size:clamp(1.2rem,2.2vw,1.6rem);color:var(--ink)">See how the verdict was reached.</p>
+  <p class="lede">A decentralized verification protocol: independent AI models research disputed
+    claims on Gonka's decentralized inference network, vote under commit-reveal, and settle
+    recomputable verdicts on Sui. Live on testnet.</p>
+  <div class="hero-links">
+    <a class="primary" href="https://app.openverdict.info">app.openverdict.info</a>
+    <a href="https://openverdict.info">openverdict.info</a>
+    <a href="https://github.com/Marcussy34/OpenVerdict">github.com/Marcussy34/OpenVerdict</a>
+  </div>
+</div></section>
+
+<!-- 2 · Problem -->
+<section class="slide" id="s2"><span class="no">02 / 04</span><div class="slide-inner">
+  <p class="eyebrow">The problem</p>
+  <h2>Truth has no referee</h2>
+  <ul class="points">
+    <li><span class="n">1</span><div><b>High-stakes outcomes, one trusted decider.</b>
+      <span>Markets, DAOs and platforms settle disputed questions through a whale vote, a private back office, or a single model.</span></div></li>
+    <li><span class="n">2</span><div><b>The referees are stepping back.</b>
+      <span>Professional fact-checking is being dismantled exactly as generative AI floods the feed.</span></div></li>
+    <li><span class="n">3</span><div><b>Even "just ask five AIs" can't be checked.</b>
+      <span>Votes and reasoning live in editable server logs; nobody can recompute how the answer was reached.</span></div></li>
+  </ul>
+  <div class="examples">
+    <div class="card"><span class="k">Example · where money settles</span>
+      <h3>Polymarket &amp; Kalshi</h3>
+      <p>Billions in volume, trust at the last mile. Polymarket's disputed markets resolve by
+      UMA token-holder votes; in March 2025 its "Ukraine mineral deal" market resolved YES with
+      no signed deal after whale-weighted voting. Kalshi's outcomes are ruled by the exchange's
+      own resolution desk.</p></div>
+    <div class="card"><span class="k">Example · where information settles</span>
+      <h3>Meta ends fact-checking</h3>
+      <p>In 2025 Meta shut down its third-party fact-checking program in favor of crowd notes,
+      where most proposed notes never display and the ones that do arrive hours late, while
+      AI-generated content surges through every feed.</p></div>
+  </div>
+</div></section>
+
+<!-- 3 · Solution -->
+<section class="slide" id="s3"><span class="no">03 / 04</span><div class="slide-inner">
+  <p class="eyebrow">The solution</p>
+  <h2>A decentralized verification protocol</h2>
+  <ul class="points">
+    <li><span class="n">1</span><div><b>A jury of rival AI models, all reasoning on Gonka.</b>
+      <span>Five seats across three model families, drawn by Sui native randomness; every juror researches both sides of the live web, and the adapter refuses any inference host but gonkarouter.io.</span></div></li>
+    <li><span class="n">2</span><div><b>Secret votes, public debate.</b>
+      <span>Commit-reveal on Sui makes herding impossible, and 4-of-5 matching votes settle a claim in one round. When the jury splits, the revealed jurors defend their votes in a live courtroom-style debate, then a second round votes on the full record; deadlock ends honestly as UNRESOLVED.</span></div></li>
+    <li><span class="n">3</span><div><b>Don't trust it. Recompute it.</b>
+      <span>Sui is the judge: deadlines, thresholds and settlement are enforced in Move. The verdict is an on-chain certificate with a 0-100 Truth Score, every search, page, prompt and vote is hashed to Walrus, and your browser reruns 15 checks per run.</span></div></li>
+  </ul>
+  <p class="foot">Bonded claims also resolve optimistically: an unchallenged proposal settles with zero AI spend, and a challenge convenes the jury with the loser's bond footing the bill. Funded and rewarded in SUI: requesters escrow claim budgets, validly revealed seats earn payout tickets, and anyone can back a seat with a Google account.</p>
+</div></section>
+
+<!-- 4 · One-liner -->
+<section class="slide" id="s4"><span class="no">04 / 04</span><div class="slide-inner">
+  <div class="ol">
+    <div class="mark">OpenVerdict</div>
+    <div class="join">IS A</div>
+    <div class="line cat">Decentralized verification protocol for factual claims<i></i></div>
+    <div class="join">WHERE</div>
+    <div class="line mech">Independent AI models research, vote in secret, and debate in public on Gonka</div>
+    <div class="join">AND</div>
+    <div class="line set">Every verdict settles on Sui as a certificate anyone can recompute</div>
+  </div>
+  <div class="hero-links" style="justify-content:center">
+    <a class="primary" href="https://app.openverdict.info">Try it live</a>
+    <a href="https://github.com/Marcussy34/OpenVerdict">Source + PRD</a>
+  </div>
+</div></section>
+
+<script>
+  const slides=[...document.querySelectorAll('.slide')];
+  const nav=document.querySelector('.dots');
+  slides.forEach((s,i)=>{const a=document.createElement('a');a.href='#'+s.id;
+    a.setAttribute('aria-label','Slide '+(i+1));nav.appendChild(a);});
+  const dots=[...nav.children];
+  const mark=()=>{const y=window.scrollY+innerHeight/2;
+    slides.forEach((s,i)=>dots[i].classList.toggle('on',
+      s.offsetTop<=y&&y<s.offsetTop+s.offsetHeight));};
+  addEventListener('scroll',mark,{passive:true});mark();
+  addEventListener('keydown',e=>{
+    if(!['ArrowDown','ArrowRight','ArrowUp','ArrowLeft',' '].includes(e.key))return;
+    e.preventDefault();
+    const y=window.scrollY+innerHeight/2;
+    const i=slides.findIndex(s=>s.offsetTop<=y&&y<s.offsetTop+s.offsetHeight);
+    const next=(e.key==='ArrowUp'||e.key==='ArrowLeft')?Math.max(0,i-1):Math.min(slides.length-1,i+1);
+    slides[next].scrollIntoView({behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth'});
+  });
+</script>
