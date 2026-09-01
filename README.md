@@ -79,7 +79,9 @@ Every claim runs round one; only a deadlock runs the split path.
 - **4-of-5 agreement** → ✅ **finalized** (~10 min). **Most claims end here.**
 - **No supermajority** → the split path below
 
-#### Split path (only when round one deadlocks)
+---
+
+#### ⚔️ Split path (only when round one deadlocks)
 
 **Step 4: Public debate**
 
