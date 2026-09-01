@@ -6,7 +6,7 @@
 
 ## What the product is right now
 
-A live, demo-able verification engine on Sui testnet: https://openverdict.info
+A live, demo-able verification protocol on Sui testnet: https://openverdict.info
 (landing) and https://app.openverdict.info (dashboard). A submitted claim gets
 a five-seat jury drawn on chain with native randomness from seven registered
 jurors spanning GonkaRouter's three model families; every juror searches the

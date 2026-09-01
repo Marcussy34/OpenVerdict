@@ -2,7 +2,7 @@
   "name": "openverdict",
   "version": "0.1.0",
   "private": true,
-  "description": "Decentralized intelligence verification engine — GonkaRouter AI juries coordinated and settled on Sui, evidence preserved on Walrus.",
+  "description": "Decentralized verification protocol: GonkaRouter AI juries coordinated and settled on Sui, evidence preserved on Walrus.",
   "license": "MIT",
   "type": "module",
   "engines": {

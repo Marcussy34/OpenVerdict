@@ -1,4 +1,4 @@
-# OpenVerdict: A Decentralized Intelligence Verification Engine
+# OpenVerdict: A Decentralized Verification Protocol
 
 <!-- markdownlint-disable MD013 -->
 
@@ -17,7 +17,7 @@
 | Development network | Sui Testnet |
 | Production/demo network | Sui Mainnet after a capped canary |
 | First application | Public multi-model fact checking; prediction-market settlement as the first economic consumer |
-| General product | Decentralized intelligence verification through an optimistic, human-backed AI swarm |
+| General product | Decentralized verification through an optimistic, human-backed AI swarm |
 | GonkaRouter's role | Execute every oracle-agent reasoning pass; it does not determine truth |
 | Project lineage | Renamed, clean reimplementation of the team's earlier DIVE concept |
 | Repository visibility | Public |
@@ -118,7 +118,7 @@ Corrections and additions discovered during implementation, per the rule above:
 
 ## 2. Executive summary
 
-OpenVerdict is a decentralized intelligence verification engine for claims that require evidence and judgment rather than a deterministic data feed. A claim receives a proposed outcome and becomes final if nobody challenges it during a defined window. A successful challenge selects a diversity-constrained committee of AI oracle agents (equal selection weights in v1; reputation-weighted selection is roadmap), each controlled by a distinct approved owner and associated with a distinct human-backing record. Every agent reviews the same frozen evidence bundle, reasons through GonkaRouter, commits a hidden vote on Sui, and later reveals its answer and argument. If the first round lacks sufficient agreement, agents inspect one another's published evidence and reasoning, add new admissible evidence, and vote again. The protocol can finalize, expand the committee, or remain unresolved instead of manufacturing certainty.
+OpenVerdict is a decentralized verification protocol for claims that require evidence and judgment rather than a deterministic data feed. A claim receives a proposed outcome and becomes final if nobody challenges it during a defined window. A successful challenge selects a diversity-constrained committee of AI oracle agents (equal selection weights in v1; reputation-weighted selection is roadmap), each controlled by a distinct approved owner and associated with a distinct human-backing record. Every agent reviews the same frozen evidence bundle, reasons through GonkaRouter, commits a hidden vote on Sui, and later reveals its answer and argument. If the first round lacks sufficient agreement, agents inspect one another's published evidence and reasoning, add new admissible evidence, and vote again. The protocol can finalize, expand the committee, or remain unresolved instead of manufacturing certainty.
 
 The hackathon entry point is a public fact checker because it directly exposes the verification engine: a user submits text, a public URL, or both and receives a multi-model verdict, a recomputable Truth Score from `0` to `100`, evidence-linked public reasoning traces, and every Gonka Request ID. A low-value binary prediction market is the first economic consumer of the resulting `ResolutionCertificate`, making the Sui settlement path concrete without narrowing the product to betting. The underlying protocol remains generic enough to later resolve DAO milestones, bounties, agent-service disputes, marketplace delivery claims, insurance evidence, and content-authenticity challenges.
 
@@ -3353,4 +3353,4 @@ Ask organizers in writing whether pre-kickoff product research and a PRD-only pr
 
 ---
 
-OpenVerdict succeeds when a person can submit text or a public URL and receive an auditable multi-model fact check with Gonka Request IDs, public reasoning traces, a recomputable Truth Score, and an immutable Sui certificate; the same decentralized intelligence verification engine must also resolve economic disputes headlessly through the CLI while the optional observer makes the process understandable without becoming protocol authority.
+OpenVerdict succeeds when a person can submit text or a public URL and receive an auditable multi-model fact check with Gonka Request IDs, public reasoning traces, a recomputable Truth Score, and an immutable Sui certificate; the same decentralized verification protocol must also resolve economic disputes headlessly through the CLI while the optional observer makes the process understandable without becoming protocol authority.

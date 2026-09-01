@@ -1,6 +1,6 @@
 # OpenVerdict — agent guide
 
-Decentralized intelligence verification engine: GonkaRouter AI juries,
+Decentralized verification protocol: GonkaRouter AI juries,
 coordinated and settled on Sui, evidence on Walrus. Spec of record: `PRD.md`
 (§1.1 lists where code corrected spec). Current state: `docs/STATUS.md`.
 Plan: `docs/superpowers/plans/2026-08-26-openverdict-build.md`.

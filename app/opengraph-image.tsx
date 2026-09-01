@@ -1,7 +1,7 @@
 import { ImageResponse } from "next/og";
 
 // Image metadata for Open Graph cards.
-export const alt = "OpenVerdict, decentralized intelligence verification engine";
+export const alt = "OpenVerdict, decentralized verification protocol";
 export const size = {
   width: 1200,
   height: 630,
@@ -58,7 +58,7 @@ export default function Image() {
               lineHeight: 1.2,
             }}
           >
-            Decentralized intelligence verification engine
+            Decentralized verification protocol
           </div>
         </div>
         <div
