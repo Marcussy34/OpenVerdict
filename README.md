@@ -84,6 +84,8 @@ Every claim runs round one; only a deadlock runs round two.
 - **4-of-5 agreement** → ✅ **finalized** (~10 min). **Most claims end here.**
 - **No supermajority** → round two below 👇
 
+<img src="docs/assets/hairline.svg" width="100%" height="1" alt="" />
+
 ### ⚔️ Round Two (only when round one deadlocks) ⚔️
 
 **Step 4: Public debate**
