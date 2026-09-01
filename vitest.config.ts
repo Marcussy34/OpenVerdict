@@ -13,7 +13,6 @@ export default defineConfig({
       "lib/**/*.test.ts",
       "cli/**/*.test.ts",
       "workers/**/*.test.ts",
-      "tests/**/*.test.ts",
     ],
     testTimeout: 30_000,
     hookTimeout: 30_000,

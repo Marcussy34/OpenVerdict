@@ -371,12 +371,12 @@ on testnet at https://app.openverdict.info.
   validates that inference work happened; OpenVerdict's evidence, voting, and
   economic rules produce a protocol result, not universal truth.
 
-The long-form defence and full protocol semantics live in [PRD.md](./PRD.md)
+The long-form defence and full protocol semantics live in [PRD.md](./docs/PRD.md)
 (§6 proof boundaries, §32 threat model, §36.9).
 
 ## 📚 Documentation
 
-- [Complete product requirements and implementation specification](./PRD.md) (§1.1 records every place the code corrected the spec)
+- [Complete product requirements and implementation specification](./docs/PRD.md) (§1.1 records every place the code corrected the spec)
 - [Current product state](./docs/STATUS.md) and the [resume map for agents](./docs/CHECKPOINT-2026-08-30.md)
 - [Demo runbook + preserved live testnet claim ids](./docs/demo/runbook.md)
 - Design records: [juror research v1](./docs/superpowers/specs/2026-08-29-juror-research-design.md), [juror research v2 and batched opens](./docs/superpowers/specs/2026-08-30-juror-research-v2-design.md), [Seal escrow of reveal keys](./docs/superpowers/specs/2026-08-30-seal-escrow-design.md), [attested inference](./docs/superpowers/specs/2026-08-30-attested-inference-design.md), [Sui stack map](./docs/superpowers/specs/2026-08-30-sui-stack-map.md)

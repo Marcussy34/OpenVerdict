@@ -1,14 +1,14 @@
 # OpenVerdict — agent guide
 
 Decentralized verification protocol: GonkaRouter AI juries,
-coordinated and settled on Sui, evidence on Walrus. Spec of record: `PRD.md`
+coordinated and settled on Sui, evidence on Walrus. Spec of record: `docs/PRD.md`
 (§1.1 lists where code corrected spec). Current state: `docs/STATUS.md`.
 Plan: `docs/superpowers/plans/2026-08-26-openverdict-build.md`.
 
 ## Commands
 
 ```bash
-pnpm test          # vitest (lib/**, cli/**, workers/**, tests/**)
+pnpm test          # vitest (lib/**, cli/**, workers/**)
 pnpm test:move     # sui move test (cd move/openverdict)
 pnpm typecheck && pnpm lint && pnpm build
 pnpm dev           # observer on :3000
@@ -21,7 +21,7 @@ pnpm e2e:localnet  # full localnet lifecycle (spawns `sui start`)
 - The u8 state/outcome codes in `lib/protocol/constants.ts` and the Move
   modules are a SHARED WIRE CONTRACT — never renumber either side alone.
 - `computeVoteCommitment` (TS) and `jury::compute_commitment` (Move) must stay
-  byte-identical; the parity vectors in `tests/integration/parity.test.ts` +
+  byte-identical; the parity vectors in `lib/protocol/parity.test.ts` +
   `move/openverdict/tests/parity_tests.move` enforce it — extend both together.
 - `lib/engine/contract.ts` is the seam between engine and consumers (API/CLI/
   UI). Change it deliberately and update all three sides.
