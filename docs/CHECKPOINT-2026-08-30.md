@@ -991,6 +991,58 @@ Warm-at-finalize verified: revealed runs' proofs served in 207-302ms.
 The claim is terminal: the deploy path is clear again. The 5/5
 early-advance showcase still waits on the weather sentry (b2ykoev7x).
 
+## 3o. CLOSING STATE 2026-09-01 16:05 (pre-compaction #12): read 3n through 3o and continue as if nothing happened
+
+Main = e07471d, pushed, tree CLEAN. Deploy 13bbcc8a IN FLIGHT at write
+time (commit e07471d: round-2 replay timing fix, failed-seat trail
+expansion, sealed-node explainer panel); watcher was running; if the
+next session finds it unverified, check deployment status then confirm
+on the live canvas of claim 0xec68ad8144cde2ffd0b022b5b0a56eda8be5bb
+5f92635e14a070dcb51673e8dc (should replay 5 jurors first, 10 at
+escalation; failed seats show real trails instead of locks; remaining
+locks explain themselves). 501/501 TS + 73/73 protocol Move. All
+claims terminal (deploys safe). Chrome-devtools MCP DISCONNECTED this
+session: verify via API/curl or the owner's own eyes.
+
+TODAY'S FULL LEDGER (all reviewed, committed, pushed): overnight
+9ad6f1b economics docs, 201470a+7c628dc+86d0ead+62bf6a3+a6bf7b5+080f888
+checkpoint records, 98f5bfc reveal-early protocol, 39c1b84 treasury fee,
+af2498e 32-field repack, 42e0aef proof persistence, 5e06bbc SDK publish
+script, be54d48 config v3, 5b8d086 backing read path, 298eb1a agents
+directory UI, e32cf32 allowlist label map; afternoon 5ca6e70 (flat
+canvas + Back-a-juror card + agent detail explorer links + PINNED_AVATARS)
+and e07471d (replay/trails/sealed panel). Package v3
+0xa9f3c2dbdfad3ff900b9d2f4df605621d619a9e7575034f508eb5d39263c5bc7,
+registry 0x4020f3cb..., 7 jurors re-registered, manifests v5, DB seeded.
+
+PROVEN LIVE ON v3: full two-round lifecycle claim 0xec68ad81...
+(UNRESOLVED honest verdict, certificate 0x3ab2ceab..., tx C1PuXthov5...),
+FIRST treasury fee mint (reason 8, 500000 MIST = exact 500bps), jury
+rewards 4750000 MIST x2, warm-at-finalize proofs in 207-302ms.
+
+STILL OPEN / OFFERED (do not relitigate silently):
+1. 5/5 early-reveal live demo: weather-gated; Gonka drops juror-sized
+   requests intermittently (seat success ~40 percent). Weather sentry
+   was KILLED by the user's interrupt; offer to restart stands. Owner
+   can also just submit from /fact-check.
+2. Offered, undecided: R2 badge + decagon offset for round-2 seats;
+   restart sentry; "1 seats" pluralization nit; retired jurors visible
+   in raw API (directory filters active).
+3. Queued hardening: lib/walrus/real.ts must refresh system state /
+   rebuild client when a write aborts with MoveAbort (epoch-roll
+   lesson: stale Walrus pricing kills claim creation until restart).
+4. Owner actions: back 1-2 jurors via Google zkLogin on /agents
+   (card now says "Back a juror agent"); run the demo claim when Gonka
+   is healthy; record the 2-minute video.
+
+ARTIFACT: morning report at
+https://claude.ai/code/artifact/50cf84a3-45bb-4ed3-8705-c5962a03da80
+(update by republishing scratchpad/morning-report.html same path).
+Deploy ritual: gate -> targeted add -> commit/push -> railway-tree
+checkout -> railway up -> watcher -> verify -> docs/memory. NO warm
+step. cwd RESETS between Bash calls: always cd first. MCP memory
+entity "OpenVerdict production topology" mirrors everything.
+
 ## 4. Planned next (owner-approved direction)
 
 - Attestation (docs/superpowers/specs/2026-08-30-attested-inference-design.md):
