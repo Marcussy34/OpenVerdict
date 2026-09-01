@@ -59,7 +59,7 @@ SUI is the working currency. (Full write-up: [appendix](#appendix-the-idea-in-fu
 
 ### 🧠 4. Jury resolution
 
-Every claim runs round one; only a deadlock runs the split path.
+Every claim runs round one; only a deadlock runs round two.
 
 #### Round one (every claim)
 
@@ -81,9 +81,9 @@ Every claim runs round one; only a deadlock runs the split path.
 **Step 3: Consensus check**
 
 - **4-of-5 agreement** → ✅ **finalized** (~10 min). **Most claims end here.**
-- **No supermajority** → the split path below 👇
+- **No supermajority** → round two below 👇
 
-## ⚔️ Split path (only when round one deadlocks) ⚔️
+## ⚔️ Round two (only when round one deadlocks) ⚔️
 
 **Step 4: Public debate**
 
