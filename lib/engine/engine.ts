@@ -534,6 +534,70 @@ class OpenVerdictEngine implements Engine {
     let claim = await this.claim(claimId);
     const existing = await this.#repository.getCommitteeForClaim(claimId);
     if (existing !== undefined) {
+      // Crash recovery: a failure inside the seat loop below (seen live: a
+      // missing agent manifest) leaves the committee row saved but the seat
+      // rows and the COMMIT_1 transition unwritten. Treating that torn state
+      // as already-selected livelocked the claim, so finish the interrupted
+      // writes from the committee record before taking the shortcut.
+      const savedSeats = await this.#repository.listJurySeats(claimId, 1);
+      if (savedSeats.length < existing.jurySeatIds.length) {
+        const timestamp = this.isoNow();
+        const present = new Set(savedSeats.map((seat) => seat.jurySeatId));
+        for (const [index, agentProfileId] of existing.agentProfileIds.entries()) {
+          const jurySeatId = existing.jurySeatIds[index];
+          if (jurySeatId === undefined || present.has(jurySeatId)) continue;
+          const record = await this.#repository.getAgentManifest(agentProfileId);
+          if (!record) {
+            throw new EngineStateError(
+              `committee recovery requires the registered manifest for agent ${agentProfileId}`,
+            );
+          }
+          await this.#repository.saveJurySeat({
+            jurySeatId,
+            claimId,
+            committeeId: existing.committeeId,
+            agentProfileId,
+            agentOwner: record.manifest.owner,
+            ...(record.agentCapId === undefined ? {} : { agentCapId: record.agentCapId }),
+            phase: 1,
+            status: "OFFERED",
+            createdAt: timestamp,
+            updatedAt: timestamp,
+          });
+        }
+      }
+      if (claim.state === CLAIM_STATE.REVIEW_REQUESTED) {
+        const digest = existing.randomnessTransactionDigest ?? "already-selected";
+        const transaction: TxResult = {
+          digest,
+          objectIds: {
+            committee: existing.committeeId,
+            roundTally: existing.roundTallyId,
+          },
+        };
+        await this.saveClaim({
+          ...claim,
+          state: CLAIM_STATE.COMMIT_1,
+          committeeId: existing.committeeId,
+          transactionDigest: digest,
+        });
+        await this.emit({
+          claimId,
+          phase: "COMMIT_1",
+          kind: "committee_selected",
+          source: "SUI",
+          visibility: "PUBLIC_NOW",
+          transaction,
+          payload: {
+            claim_id: claimId,
+            committee_id: existing.committeeId,
+            first_round_tally_id: existing.roundTallyId,
+            agent_profile_ids: existing.agentProfileIds,
+            jury_seat_ids: existing.jurySeatIds,
+            transaction_digest: digest,
+          },
+        });
+      }
       await this.acceptOfferedSeats(claimId, 1);
       return {
         digest: existing.randomnessTransactionDigest ?? "already-selected",

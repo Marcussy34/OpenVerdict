@@ -34,6 +34,7 @@ import { transcriptHash } from "../research";
 import type { SealEscrowService } from "../seal/escrow";
 import { parseSealIdentity, sealIdentityHex } from "../seal/identity";
 import {
+  Repository,
   createDb,
   createRepository,
   migrate,
@@ -235,6 +236,47 @@ describe("headless engine", () => {
       });
       expect(BigInt(agent.earnedMist)).toBeGreaterThan(0n);
     }
+  });
+
+  it("resumes a committee selection that crashed mid seat write", async () => {
+    const setup = await engineSetup(new FakeSuiGateway(), 5);
+    const { claimId } = await setup.engine.factCheckStart({
+      claim: "Committee recovery statement for the torn selection test.",
+      urls: [],
+    });
+    const repository = createRepository(setup.db);
+
+    // Crash the first selection on its last seat write: committee and tally
+    // rows persist, one seat row is missing, the claim never reaches COMMIT_1.
+    const originalSaveJurySeat = Repository.prototype.saveJurySeat;
+    let seatWrites = 0;
+    const seatSpy = vi
+      .spyOn(Repository.prototype, "saveJurySeat")
+      .mockImplementation(async function (
+        this: Repository,
+        record: Parameters<Repository["saveJurySeat"]>[0],
+      ) {
+        seatWrites += 1;
+        if (seatWrites === 5) {
+          throw new Error("simulated crash before the last seat write");
+        }
+        return originalSaveJurySeat.call(this, record);
+      });
+    try {
+      await expect(setup.engine.selectCommittee(claimId)).rejects.toThrow(
+        "simulated crash before the last seat write",
+      );
+    } finally {
+      seatSpy.mockRestore();
+    }
+    expect(await repository.listJurySeats(claimId, 1)).toHaveLength(4);
+    expect((await setup.engine.inspect(claimId)).state).not.toBe(CLAIM_STATE.COMMIT_1);
+
+    // The retry must finish the interrupted writes instead of no-opping on
+    // the existing committee row.
+    await setup.engine.selectCommittee(claimId);
+    expect(await repository.listJurySeats(claimId, 1)).toHaveLength(5);
+    expect((await setup.engine.inspect(claimId)).state).toBe(CLAIM_STATE.COMMIT_1);
   });
 
   it("warms revealed run proofs sequentially without failing finalization", async () => {
