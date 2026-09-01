@@ -1043,6 +1043,42 @@ checkout -> railway up -> watcher -> verify -> docs/memory. NO warm
 step. cwd RESETS between Bash calls: always cd first. MCP memory
 entity "OpenVerdict production topology" mirrors everything.
 
+## 3p. EVENING 2026-09-01: LIVE DELIBERATION SHIPPED
+
+Two deploys, both SUCCESS, all gates green (tests grew 501 -> 511):
+- 3ad25805 (commit 708c729): canvas five-pack. LIVE/SYNCING chip on the
+  stage pill (SSE-driven), kind-labeled sealed ticks (search vs page, dashed
+  border), trails ray OUTWARD per juror (BFS ownership homes in
+  force-layout), two-round decagon (round-2 seats interleave odd spokes,
+  round-1 keeps its angles), R2 badges.
+- 7b62353c (commit 13fdd32): PUBLIC DELIBERATION. Revealed round-1 jurors
+  debate the split during DISCUSSION: two exchanges in seat order, each turn
+  one single-shot Gonka run (DELIBERATION_PROMPT_SPEC_V1, no tools), strict
+  two-key validation + citation allowlist, fail-closed SKIPPED turns
+  (PROVIDER_ERROR/TIMEOUT/INVALID_OUTPUT/INVALID_CITATIONS/
+  WINDOW_EXHAUSTED), immutable deliberation_turns table, PUBLIC_NOW
+  DELIBERATION_TURN events stream live, transcript becomes hashed phase-2
+  evidence artifact (urn:openverdict:deliberation-transcript) and the
+  phase-2 freeze WAITS for the debate to settle. inference-worker drives
+  DISCUSSION claims. UI: DeliberationChat dock bottom-centre (avatars,
+  exchange badges, citation chips, replay support, hide/show). Chrome:
+  nav pill removed from canvas, All-claims back link in rail, collapse tab
+  at rail edge.
+Protocol notes: transcript is OPTIONAL in artifactsForPhase so
+pre-feature claims keep verifying (my review caught the worker's hard
+throw; verified live on 0xec68ad... verify=true: all recomputations green,
+0 issues); zero-reveal claims no longer strand in DISCUSSION (empty record
+proceeds; the two 8/31 stranded claims stay stranded, freeze window long
+past). Codex worker deliberation-engine ran 16:45-17:09 gpt-5.6-sol max
+(verified via rollout turn_context); zombie registry job task-mtho9ep9
+(dead pid, 13h stale) cancelled.
+Claims today: 0xc2cf5469... (Bitcoin genesis) UNRESOLVED, storm-crippled
+(R1 1/5 revealed, R2 4/5 failed): second full two-round lifecycle on v3.
+DEMO PENDING: first live debate needs a CONTESTED claim (splits round 1)
+plus 2+ surviving reveals. 23:5x weather: total storm for juror-sized
+requests (all three families HTTP 000 at 100s) while tiny probes pass
+(200 in 1s). Sentry restart offer stands.
+
 ## 4. Planned next (owner-approved direction)
 
 - Attestation (docs/superpowers/specs/2026-08-30-attested-inference-design.md):
