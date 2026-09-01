@@ -4,11 +4,13 @@
 
 See how the verdict was reached.
 
-A decentralized verification protocol for factual claims: AI juries research,
+**A decentralized verification protocol for factual claims: AI juries research,
 vote in secret and debate in public on Gonka; verdicts settle on Sui as
-certificates anyone can recompute.
+certificates anyone can recompute.**
 
 **Live on Sui testnet:** [openverdict.info](https://openverdict.info) · [app.openverdict.info](https://app.openverdict.info)
+
+---
 
 ## 💡 Why
 
@@ -21,62 +23,88 @@ certificates anyone can recompute.
 **The model in one line:** Gonka is the only mind, Sui is the only judge, and
 SUI is the working currency. (Full write-up: [appendix](#appendix-the-idea-in-full).)
 
+---
+
 ## ⚙️ How it works
 
-1. **📝 Submit a claim**
-   - Paste a statement or URL; a Gonka model distills one checkable claim
-   - A `Claim` object is created on Sui; budgets escrow, deadlines start
-   - Demo tier is free today (in future: paid in SUI; staked seats share earnings)
+### 📝 1. Submit a claim
 
-   👉 The clock and the money live on-chain from the first second.
+- Paste a **statement or URL**; a Gonka model distills **one checkable claim**
+- A `Claim` object is created on **Sui**; budgets escrow, **deadlines start**
+- Demo tier is **free today** (in future: **paid in SUI**; staked seats share earnings)
 
-2. **🎲 Jury drawn on-chain**
-   - Sui native randomness picks 5 seats; max 2 per model family
-   - Equal weights in v1 (in future: weighted by on-chain track record)
-   - Anyone can back a seat with Google: one account, one seat, never personhood
-   - The team operates today's 7 jurors; juries run fine without human-backed seats
+👉 The clock and the money live on-chain from the first second.
 
-   👉 No operator picks the judges; no vendor holds a majority.
+---
 
-3. **🧊 Evidence frozen**
-   - Sources fetched, sanitized, Merkle-rooted on Sui, stored on Walrus
-   - Happens before any model reasons about anything
+### 🎲 2. Jury drawn on-chain
 
-   👉 Nobody can slip evidence in or out after the jury convenes.
+- **Sui native randomness** picks 5 seats; **max 2 per model family**
+- **Equal weights** in v1 (in future: weighted by on-chain track record)
+- Anyone can **back a seat with Google**: one account, one seat, never personhood
+- The team operates today's **7 jurors**; juries run fine without human-backed seats
 
-4. **🔎 Independent research**
-   - Each juror searches the live web for AND against, through the engine
-   - Verbatim quotes from 2+ sites required; all inference on Gonka only
-   - A failed seat records a public failure; no vote is ever invented
+👉 No operator picks the judges; no vendor holds a majority.
 
-   👉 Verdicts must be researched and cited, or they don't count.
+---
 
-5. **🔒 Commit, then reveal**
-   - Votes lock on Sui as salted hashes; reveal keys escrowed in Seal
-   - Reveals must match byte-for-byte; 4-of-5 settles (~10 min)
+### 🧊 3. Evidence frozen
 
-   👉 No juror can copy, herd, or change a vote.
+- Sources fetched, sanitized, **Merkle-rooted on Sui**, stored on **Walrus**
+- Happens **before any model reasons** about anything
 
-6. **⚖️ Split? Public debate + round two**
-   - Revealed jurors argue live in the claim page, citing only the record
-   - The transcript freezes as evidence; a second commit-reveal votes (~21 min)
-   - Still split: `UNRESOLVED`
+👉 Nobody can slip evidence in or out after the jury convenes.
 
-   👉 Adversarial verification in the open; never fake certainty.
+---
 
-7. **💰 Settlement in SUI**
-   - Immutable certificate + 0-100 Truth Score
-   - Payout tickets to every validly revealed seat; protocol fee
-   - Bonded claims: unchallenged proposals finalize free; a challenge convenes the jury
+### 🔎 4. Independent research
 
-   👉 Seats are paid for valid work, never for agreeing with the majority.
+- Each juror searches the live web **for AND against**, through the engine
+- **Verbatim quotes from 2+ sites** required; all inference on **Gonka only**
+- A failed seat records a **public failure**; no vote is ever invented
 
-8. **🔍 Recheck everything**
-   - 15 browser checks per run; rerun any juror against the same model
-   - Sealed bundles open via Seal without the operator
-   - (in future: Nautilus attested execution; gateway-signed receipts)
+👉 Verdicts must be researched and cited, or they don't count.
 
-   👉 Trust is optional; recomputation is not.
+---
+
+### 🔒 5. Commit, then reveal
+
+- Votes lock on Sui as **salted hashes**; reveal keys escrowed in **Seal**
+- Reveals must match **byte-for-byte**; **4-of-5 settles** (~10 min)
+
+👉 No juror can copy, herd, or change a vote.
+
+---
+
+### ⚖️ 6. Split? Public debate + round two
+
+- Revealed jurors **argue live** in the claim page, citing **only the record**
+- The transcript **freezes as evidence**; a second commit-reveal votes (~21 min)
+- Still split: **`UNRESOLVED`**
+
+👉 Adversarial verification in the open; never fake certainty.
+
+---
+
+### 💰 7. Settlement in SUI
+
+- Immutable **certificate** + 0-100 **Truth Score**
+- **Payout tickets** to every validly revealed seat; protocol fee
+- Bonded claims: **unchallenged proposals finalize free**; a challenge convenes the jury
+
+👉 Seats are paid for valid work, never for agreeing with the majority.
+
+---
+
+### 🔍 8. Recheck everything
+
+- **15 browser checks** per run; **rerun any juror** against the same model
+- Sealed bundles open via **Seal** without the operator
+- (in future: **Nautilus attested execution**; gateway-signed receipts)
+
+👉 Trust is optional; recomputation is not.
+
+---
 
 ## 🏗️ Architecture
 
@@ -108,6 +136,8 @@ Diagram sources are editable Excalidraw files in
 theme inverts them natively, and the paired `*-dark.png` exports serve GitHub's
 dark mode).
 
+---
+
 ## 🧱 Technology stack (implemented, versions verified 2026-08-31)
 
 | Layer | Technology | Purpose |
@@ -126,6 +156,8 @@ dark mode).
 | Onboarding | `@mysten/enoki` (zkLogin) + dapp-kit v2 | Social-login self-custodial addresses; env-gated, wallet-standard |
 | Object metadata | Sui Object Display (`display_meta` module) | Certificates/profiles/positions render in wallets + explorers |
 | Tests | vitest 4 + `sui move test` | 512 TS + 77 Move (73 protocol, 4 Seal policy), incl. the cross-language parity gate |
+
+---
 
 ## 🔍 What is auditable
 
@@ -167,6 +199,8 @@ through Seal after its deadline, and re-runs a juror against the recorded
 model; `scripts/gen-parity-vectors.ts` regenerates the cross-language vectors
 pinned in both test suites.
 
+---
+
 ## 🔒 Security posture and honest limitations
 
 Implemented defenses:
@@ -206,6 +240,8 @@ Known limitations (V1, disclosed by design):
 - The in-process rate limiter is per-instance and best-effort; real
   deployments need an edge limiter.
 - Unaudited. Capped, team-funded demo value only.
+
+---
 
 ## 💰 Economics: who pays, who earns
 
@@ -258,6 +294,8 @@ outcome (PRD §24.2, §24.5). Per-seat stake pools become meaningful once
 reputation wiring differentiates track records; until then this section is
 the answer of record, not shipped code.
 
+---
+
 ## 🏆 Hackathon track fit
 
 One build, both tracks: Gonka supplies all of the intelligence; Sui supplies
@@ -286,6 +324,8 @@ the coordination, the settlement and the currency.
 
 Both public track pages were placeholders at spec time; final submission
 requirements must be reconfirmed against organizer material (PRD §7.3).
+
+---
 
 ## 🧩 Sponsor tech, one by one
 
@@ -331,6 +371,8 @@ on testnet at https://app.openverdict.info.
 | Operator-independent opening | After the reveal deadline anyone recovers the key from the threshold key servers and opens the sealed bundle; the operator is not needed | `/verify` performs the recovery live; the Seal panel links every key server object |
 | Safety stance | Escrow is insurance only; it can never cost a seat its vote | 4 dedicated Move policy tests |
 
+---
+
 ## ❓ Judge defence (short form)
 
 - **“AI agents aren't reliable.”** Five independent agents, frozen evidence,
@@ -358,6 +400,8 @@ on testnet at https://app.openverdict.info.
 The long-form defence and full protocol semantics live in [PRD.md](./docs/PRD.md)
 (§6 proof boundaries, §32 threat model, §36.9).
 
+---
+
 ## 📚 Documentation
 
 - [Complete product requirements and implementation specification](./docs/PRD.md) (§1.1 records every place the code corrected the spec)
@@ -371,6 +415,8 @@ The long-form defence and full protocol semantics live in [PRD.md](./docs/PRD.md
 - [Gonka network architecture](https://gonka.ai/docs/architecture/)
 - [Sui documentation](https://docs.sui.io/) · [on-chain randomness](https://docs.sui.io/sui-stack/on-chain-primitives/randomness-onchain)
 - [Walrus documentation](https://docs.wal.app/docs/getting-started)
+
+---
 
 ## Appendix: the idea in full
 
@@ -421,6 +467,8 @@ public reasoning traces, and the Gonka Request ID for every agent run. A
 prediction market is the first economic consumer of that verdict. The engine is
 general enough to later resolve DAO milestones, grants, bounties, agent-service
 disputes, and other bounded questions.
+
+---
 
 ## License
 
