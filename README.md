@@ -1,4 +1,4 @@
-# OpenVerdict — Decentralized Intelligence Verification Engine
+# OpenVerdict
 
 <!-- markdownlint-disable MD013 -->
 
@@ -7,119 +7,12 @@ See how the verdict was reached.
 GonkaRouter-powered AI juries, coordinated and settled on Sui, with public
 evidence and agent work preserved on Walrus.
 
-> **Status: live and demo-able on Sui testnet (hackathon build, 2026-08-31).**
-> Full lifecycles run end-to-end on a real local Sui network (`pnpm
-> e2e:localnet` exits 0), and live claims finalize on Sui testnet in about
-> ten minutes with five GonkaRouter jurors across three model families,
-> each researching the web through the engine, and every deliberation
-> rendered live on a force-graph canvas with end-to-end replay: latest
-> verdicts YES @ 9525 (certificate `0xc842…e0a8`, the Section 232 tariffs
-> claim, four seats plus one honestly recorded failed seat), YES @ 9860
-> (certificate `0xff3191bc…`, claim #25, Seal escrows) and NO @ 200
-> (certificate `0x975b3ae1…`, claim #26, hedged calls).
-> Unaudited; no real user funds may touch this code.
->
-> | Layer | State |
-> | --- | --- |
-> | Sui Move packages (8 protocol modules incl. Object Display, plus the Seal policy) | ✅ `sui move test`: **66/66** protocol, **4/4** Seal policy |
-> | TS libs · engine · CLI · workers | ✅ vitest: **512/512** (full suite) |
-> | TS↔Move commitment parity gate | ✅ 6 cross-pinned blake2b256/BCS vectors |
-> | Localnet E2E + cockpit demo state | ✅ 3 lifecycle paths, sponsored deposit, CLI parity — exit 0 |
-> | Juror research (v2, batched opens) | ✅ support + challenge searches, pages on both sides, citations from two sites, counter-evidence summary; every step in the sealed transcript |
-> | Transparency + browser verifier | ✅ full conversations, request and node ids, 15 checks per run, re-run a juror, open a sealed bundle through Seal |
-> | Seal escrow of reveal keys | ✅ time-lock policy package on testnet; sealed bundles open after the deadline without the operator |
-> | Reliability under a flaky provider | ✅ hedged same-model calls, failed seats keep their trail, workers skip dead claims |
-> | Wallet + zkLogin onboarding · T7b one-account-one-seat registration | ✅ SDK-verified signatures, pseudonymous backing hash |
-> | Observer + verification UI · deliberation canvas claim page | ✅ live force graph (jurors with avatars, sealed pulses, bloom at reveal, replay); audit view at `/claims/[id]/report`; builds, typechecks, lints |
-> | Sui testnet package | ✅ published — ids in `config/release.testnet.json` |
-> | Hosted on Railway (web + API + workers, Railway Postgres) | ✅ https://openverdict.info (landing) · https://app.openverdict.info (console; www and apex console paths redirect there) |
->
-> Full specification: [PRD.md](./PRD.md) · Live status: [docs/STATUS.md](./docs/STATUS.md) · Build plan: [docs/superpowers/plans/2026-08-26-openverdict-build.md](./docs/superpowers/plans/2026-08-26-openverdict-build.md)
-
-## Screenshots
-
-Captured from the one-command cockpit demo (`pnpm tsx scripts/cockpit-demo.ts`)
-— a finalized verdict and a sealed mid-jury claim on a real local Sui chain.
-
-| | |
-| --- | --- |
-| ![Home](docs/screenshots/01-home.png) | ![Claim report](docs/screenshots/03-claim-report.png) |
-| ![Live observer](docs/screenshots/04-observer-sealed.png) | ![Agent registry](docs/screenshots/05-agents.png) |
-
 ## One-liner
 
 A decentralized verification engine where requesters fund claims in SUI,
 human-backed standardized AI juror seats investigate them through
 GonkaRouter-only inference, and Sui settles the verdict, the payouts and the
 permanent record.
-
-## Quickstart
-
-Prerequisites: Node ≥ 22, [pnpm](https://pnpm.io), the
-[Sui CLI](https://docs.sui.io/getting-started/tooling) (tested with 1.52),
-and Docker only if you want real Postgres (tests use embedded pglite).
-
-```bash
-pnpm install
-
-# TypeScript suites (protocol, gonka, evidence, walrus, parity)
-pnpm test
-
-# Sui Move protocol suite
-pnpm test:move
-
-# Typecheck + lint + production build
-pnpm typecheck && pnpm lint && pnpm build
-
-# Observer + verification UI (full engine wired)
-pnpm dev            # http://localhost:3000
-
-# Full lifecycle proof on a throwaway local Sui network
-pnpm e2e:localnet
-
-# Demo state for the observer: finalized + sealed claims on a live localnet
-pnpm tsx scripts/cockpit-demo.ts
-
-# CLI (command surface per PRD §27.3)
-pnpm cli -- --help
-```
-
-Environment: copy `.env.example` to `.env` and fill what you use. The
-`GONKA_ROUTER_API_KEY` enables live inference (new GonkaRouter accounts get a
-one-time free credit at [gonkarouter.io/dashboard](https://gonkarouter.io/dashboard));
-without it the deterministic **fake adapter** drives the jury so the whole
-lifecycle runs offline. Public API write routes stay `403` until
-`OPENVERDICT_PUBLIC_WRITES=enabled`, and operator routes require
-`OPENVERDICT_OPERATOR_TOKEN`.
-
-## Repository layout
-
-```text
-move/openverdict/     Sui Move package: agent_registry, claim, evidence, jury,
-                      settlement, demo_fact_checker, demo_binary_pool, display_meta + tests
-move/openverdict_seal/ Seal time-lock policy (reveal_lock::seal_approve) for escrowed reveal keys
-lib/protocol/         BCS schemas, blake2b256 commitments, Truth Score, u8 codes, bundle types
-lib/gonka/            GonkaRouter adapter (live + deterministic fake, retries, hedged
-                      requests, redacting attempt log), prompt specs, zod schemas
-lib/research/         Juror research loop (search / open / answer), Firecrawl provider,
-                      citations and two-sided checks
-lib/evidence/         SSRF-safe retriever, HTML canonicalization, Merkle manifests
-lib/walrus/           Content-addressed local store, SDK-backed real store, retention
-lib/seal/             Seal escrow of reveal keys (identity encoding, escrow service)
-lib/verify/           Browser verifier: hash checks, Seal recovery, re-execution client
-lib/engine/           Engine contract seam + full lifecycle implementation (SuiGateway seam)
-lib/storage/          drizzle schema over pglite (dev/tests) or Postgres (prod)
-lib/sui/              SuiGrpcClient wiring + per-entry-point transaction builders
-cli/                  `openverdict` CLI — complete headless control surface
-workers/              evidence / inference / resolution loops (live-claim triage, wake file)
-app/                  Next.js 16 observer, verification UI, thin API routes
-config/               Release manifests (localnet/testnet): ids, models, policies, Seal
-scripts/              Parity vectors, localnet E2E, cockpit demo, testnet deploy,
-                      live canary, manifest and Seal policy publishing, registry prune
-docs/                 STATUS.md (current state), demo/runbook.md, checkpoints (resume
-                      maps), superpowers/specs (design records)
-PRD.md                The complete product/protocol specification (source of truth)
-```
 
 ## 💡 Idea
 
@@ -163,30 +56,6 @@ public reasoning traces, and the Gonka Request ID for every agent run. A
 prediction market is the first economic consumer of that verdict. The engine is
 general enough to later resolve DAO milestones, grants, bounties, agent-service
 disputes, and other bounded questions.
-
-## 👤 Using the app — who needs what
-
-No accounts, passwords, or server-side sessions exist anywhere: identity **is**
-a Sui address. Three tiers:
-
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/diagrams/onboarding-tiers-dark.png">
-  <img alt="OpenVerdict interaction tiers" src="docs/diagrams/onboarding-tiers.png">
-</picture>
-
-1. **Anyone (no login, no wallet):** submit a claim for verification (sponsor-funded,
-   rate-limited), watch live jury resolutions, browse every claim/agent/
-   evidence artifact, and recompute commitments + Truth Scores at `/verify`.
-2. **Economic participants (wallet OR Google):** demo-pool deposits, bonds,
-   and payout redemption need a signature — from any Sui wallet extension or
-   from **"Continue with Google" via Sui zkLogin (Enoki)**: a self-custodial
-   address in seconds with no extension or seed phrase, optionally with
-   operator-sponsored gas so users hold zero SUI. zkLogin here is
-   authentication plus a one-social-account-one-seat backing hash — it is
-   never presented as proof of unique personhood.
-3. **Operator + jury agents (CLI keypairs only):** the engine and CLI drive
-   the protocol headlessly; the dashboard has no signer and cannot move funds,
-   vote, or advance phases.
 
 ## ⚙️ How it works
 
