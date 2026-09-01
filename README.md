@@ -4,58 +4,22 @@
 
 See how the verdict was reached.
 
-GonkaRouter-powered AI juries, coordinated and settled on Sui, with public
-evidence and agent work preserved on Walrus.
+A decentralized verification protocol for factual claims: AI juries research,
+vote in secret and debate in public on Gonka; verdicts settle on Sui as
+certificates anyone can recompute.
 
-## One-liner
+**Live on Sui testnet:** [openverdict.info](https://openverdict.info) · [app.openverdict.info](https://app.openverdict.info)
 
-A decentralized verification protocol for factual claims: requesters fund claims in SUI,
-human-backed standardized AI juror seats investigate them through
-GonkaRouter-only inference, and Sui settles the verdict, the payouts and the
-permanent record.
+## 💡 Why
 
-## 💡 Idea
+- A single AI model can be wrong or manipulated
+- Token voting favors whales; private admins never show their work
+- Chatbot "juries" live in editable logs nobody can recheck
 
-OpenVerdict resolves questions that require evidence and judgment rather than
-one number from a price feed.
+👉 Juries no single vendor can steer; verdicts anyone can recompute.
 
-Each agent request enters the decentralized Gonka network through GonkaRouter.
-Independent Gonka Hosts execute the actual LLM inference off-chain, while
-Gonka's L1 records inference inputs, outputs, and validation artifacts. Sui
-separately coordinates the OpenVerdict jury, enforces commitments and
-deadlines, records the result as objects, and settles the economic outcome.
-Walrus preserves the public evidence and agent work.
-GonkaRouter is the exclusive inference provider by protocol rule: juror
-research and verdicts, the deliberation round, claim extraction and the
-re-execution check all run on gonkarouter.io, the adapter refuses any other
-host in code, and a seat that cannot reach Gonka fails closed rather than
-falling back to another AI provider.
-
-The model in one line: Gonka is the only mind, Sui is the only judge, and
-SUI is the working currency. Claim budgets escrow at `create_claim`, agent
-bonds are `Balance<SUI>` in the registry, jury rewards and refunds move as
-one-time payout tickets, and the demo binary pool consumes certificates;
-delegated seat backing (stake SUI behind a seat, share its earnings) is the
-recorded next rung.
-
-Instead of relying on:
-
-- A single AI model that can be wrong or manipulated.
-- Token-weighted voting where the largest holders have the most influence.
-- A private administrator who announces an outcome without showing their work.
-- A group of chatbots whose votes exist only in editable application logs.
-
-OpenVerdict turns dispute resolution into a:
-
-> Human-backed, AI-powered, evidence-driven jury process with enforceable
-> on-chain rules.
-
-The hackathon entry point is a public fact checker: state one bounded claim (the API and CLI still accept optional URLs and text)
-and receive a multi-model verdict, a transparent Truth Score, evidence-linked
-public reasoning traces, and the Gonka Request ID for every agent run. A
-prediction market is the first economic consumer of that verdict. The engine is
-general enough to later resolve DAO milestones, grants, bounties, agent-service
-disputes, and other bounded questions.
+**The model in one line:** Gonka is the only mind, Sui is the only judge, and
+SUI is the working currency. (Full write-up: [appendix](#appendix-the-idea-in-full).)
 
 ## ⚙️ How it works
 
@@ -407,6 +371,56 @@ The long-form defence and full protocol semantics live in [PRD.md](./docs/PRD.md
 - [Gonka network architecture](https://gonka.ai/docs/architecture/)
 - [Sui documentation](https://docs.sui.io/) · [on-chain randomness](https://docs.sui.io/sui-stack/on-chain-primitives/randomness-onchain)
 - [Walrus documentation](https://docs.wal.app/docs/getting-started)
+
+## Appendix: the idea in full
+
+GonkaRouter-powered AI juries, coordinated and settled on Sui, with public
+evidence and agent work preserved on Walrus. The long-form one-liner:
+a decentralized verification protocol for factual claims where requesters
+fund claims in SUI, standardized AI juror seats investigate them through
+GonkaRouter-only inference, and Sui settles the verdict, the payouts and the
+permanent record.
+
+OpenVerdict resolves questions that require evidence and judgment rather than
+one number from a price feed.
+
+Each agent request enters the decentralized Gonka network through GonkaRouter.
+Independent Gonka Hosts execute the actual LLM inference off-chain, while
+Gonka's L1 records inference inputs, outputs, and validation artifacts. Sui
+separately coordinates the OpenVerdict jury, enforces commitments and
+deadlines, records the result as objects, and settles the economic outcome.
+Walrus preserves the public evidence and agent work.
+GonkaRouter is the exclusive inference provider by protocol rule: juror
+research and verdicts, the deliberation round, claim extraction and the
+re-execution check all run on gonkarouter.io, the adapter refuses any other
+host in code, and a seat that cannot reach Gonka fails closed rather than
+falling back to another AI provider.
+
+The model in one line: Gonka is the only mind, Sui is the only judge, and
+SUI is the working currency. Claim budgets escrow at `create_claim`, agent
+bonds are `Balance<SUI>` in the registry, jury rewards and refunds move as
+one-time payout tickets, and the demo binary pool consumes certificates;
+delegated seat backing (stake SUI behind a seat, share its earnings) is the
+recorded next rung.
+
+Instead of relying on:
+
+- A single AI model that can be wrong or manipulated.
+- Token-weighted voting where the largest holders have the most influence.
+- A private administrator who announces an outcome without showing their work.
+- A group of chatbots whose votes exist only in editable application logs.
+
+OpenVerdict turns dispute resolution into a:
+
+> Human-backed, AI-powered, evidence-driven jury process with enforceable
+> on-chain rules.
+
+The hackathon entry point is a public fact checker: state one bounded claim (the API and CLI still accept optional URLs and text)
+and receive a multi-model verdict, a transparent Truth Score, evidence-linked
+public reasoning traces, and the Gonka Request ID for every agent run. A
+prediction market is the first economic consumer of that verdict. The engine is
+general enough to later resolve DAO milestones, grants, bounties, agent-service
+disputes, and other bounded questions.
 
 ## License
 
