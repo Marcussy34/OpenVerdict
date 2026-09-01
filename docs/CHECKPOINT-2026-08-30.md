@@ -1128,6 +1128,57 @@ RESETS between Bash calls: ALWAYS cd first). Morning-report artifact
 50cf84a3-45bb-4ed3-8705-c5962a03da80 republishes from
 scratchpad/morning-report.html.
 
+## 3r. TRUTH REFRAME SHIPPED 2026-09-01 ~20:35
+
+Production = 98f6ffd (deploy 8e829c49 SUCCESS; verified live: /api/status
+healthy + gonkaMode live, /learn serves "GonkaRouter only, by protocol rule"
+and "One account, one seat", landing FAQ serves "Who actually runs the
+jurors?", /agents serves "Back a jury seat", /claims 200). Gate 512/512
+vitest (one NEW test: non-Gonka host refused) + typecheck/lint/build.
+Deploy-safety check first: all 7 state-6 claims confirmed stranded
+(secondCommit deadlines 15-64 h past).
+
+WHAT SHIPPED (16 files): (1) Gonka-exclusivity invariant enforced in code:
+lib/gonka/adapter.ts refuses any base URL host outside gonkarouter.io,
+lib/verify/reexecute.ts same guard, lib/gonka/fake.ts now omits baseUrl
+(injected fetch never leaves process, so the default URL is inert and the
+invariant has NO escape hatch). (2) Seats-not-personas: zklogin card
+reframed to "Back a jury seat" + role picker REMOVED (fixed
+BACKED_SEAT_ROLE="INVESTIGATOR" still sent, API unchanged); role label
+dropped from agents list row, seat-seal cards (prop kept in type),
+jury-marquee, report summary; agent detail "Persona & role" -> "Registered
+label" + honest helper; agent-card h3 -> "{family.name} juror". (3)
+Reputation honesty: detail panel + agent-card relabelled static-in-v1
+(counters registered at baseline, never updated, equal selection weight).
+(4) Learn: KEY_FACTS Gonka-only row, "One account, one seat". Landing FAQ:
+new item "Who actually runs the jurors?" (engine executes, verifiability
+not decentralized execution, Nautilus roadmap). (5) README: item 2
+"Reputation-weighted" -> "Diversity-constrained" + equal-weights truth,
+Gonka-exclusivity paragraph in Idea, host-pin noted in track-fit + sponsor
+tables, economics ROADMAP paragraph (requester-pays SUI + delegated seat
+backing, majority-only pay REJECTED), counts 512. (6) PRD §1.1 items 19
+(reframe + invariant, supersedes reputation-weighted phrasing) and 20
+(economic direction of record, NOT implemented, judges-Q&A answer). (7)
+STATUS: 3 new bullets (economics recorded, truth reframe, deliberation
+shipped), Last updated 2026-09-01, counts 512.
+
+CONTEXT: owner supplied the Gonka track mandate verbatim (all AI reasoning
+MUST run on gonkarouter.io; multi-model consensus encouraged; claim
+extraction URL/tweet/text; Truth Score 0-100 + reasoning trace;
+transparency UI with per-step Gonka Request IDs) - VERIFIED all satisfied.
+DIVE (github.com/derek2403/cannes2026) analyzed in full (clone in
+scratchpad/cannes2026): same team's earlier prototype (PRD 7.1); its debate
+is parallel stateless prompts w/ 400-500-char cross-visibility, simulated
+commit-reveal, decisions in local JSON, replay-theater UI; OpenVerdict
+anchors decisions on-chain instead. Gap list vs DIVE vision: reputation
+never updates (BIGGEST, weight frozen 10_000), market loop invisible
+(demo_binary_pool + /risk exist), PoP positioning, optional debate roles.
+Economic staking model: owner decided ROADMAP ONLY.
+
+UNCHANGED: first live debate never exercised; demo-claim decision still
+paused (do NOT fire unbidden); owner actions (zkLogin backing, demo, video,
+submission); weather sentry off.
+
 ## 4. Planned next (owner-approved direction)
 
 - Attestation (docs/superpowers/specs/2026-08-30-attested-inference-design.md):
