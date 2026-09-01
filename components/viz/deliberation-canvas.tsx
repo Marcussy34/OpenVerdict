@@ -123,6 +123,7 @@ function outgoingSubtree(
 type EdgeStyle = { stroke: string; lo: number; hi: number; width: number };
 const DEFAULT_EDGE_STYLE: EdgeStyle = { stroke: "#ffffff", lo: 0.12, hi: 0.3, width: 1 };
 const EDGE_STYLE: Record<string, EdgeStyle> = {
+  round: { stroke: "#b3a7ff", lo: 0.3, hi: 0.62, width: 1.4 },
   citation: { stroke: "#43e5a0", lo: 0.38, hi: 0.75, width: 1.4 },
   action: { stroke: "#7db4ff", lo: 0.2, hi: 0.5, width: 1 },
   result: { stroke: "#9ecbff", lo: 0.16, hi: 0.45, width: 1 },
@@ -140,7 +141,10 @@ function nodeClassName(node: GraphNode, selected: boolean): string {
     case "juror": {
       const family = node.family ?? "unknown";
       return cn(
-        "size-14 rounded-full ring-2",
+        // A satellite is the SAME agent serving round 2: a smaller disc, so
+        // the agent's identity stays with its round-1 node on the ring.
+        node.satellite === true ? "size-10" : "size-14",
+        "rounded-full ring-2",
         selected ? "ring-white/70" : FAMILY_STYLE[family].ring,
         node.state === "sealed" && "opacity-80",
       );

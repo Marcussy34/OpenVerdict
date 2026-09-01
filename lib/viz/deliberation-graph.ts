@@ -12,6 +12,9 @@ export type GraphNode = {
   seatId?: string;
   /** The seat's stable committee position (0-4), for even juror placement. */
   seatIndex?: number;
+  /** True for a round-2 seat held by an agent already on the round-1 ring:
+   * it branches from that agent's disc instead of taking a ring slot. */
+  satellite?: boolean;
   runId?: string;
   family?: JurorFamily;
   state?: "researching" | "sealed" | "revealed" | "failed";
@@ -23,7 +26,7 @@ export type GraphNode = {
   detail?: Record<string, unknown>;
 };
 export type GraphEdge = { id: string; from: string; to: string;
-  kind: "seat" | "action" | "result" | "citation" | "verdict" | "settle" };
+  kind: "seat" | "round" | "action" | "result" | "citation" | "verdict" | "settle" };
 export type DeliberationGraph = { nodes: GraphNode[]; edges: GraphEdge[] };
 
 type UnknownRecord = Record<string, unknown>;
@@ -345,6 +348,17 @@ export function buildDeliberationGraph(input: {
         : []),
   );
 
+  // One disc per AGENT: when a round-2 seat belongs to an agent already on
+  // the round-1 ring, it becomes a satellite branching from that disc
+  // instead of a second look-alike juror node.
+  const ringSeatByAgent = new Map<string, string>();
+  for (const commitment of commitments) {
+    if (phaseTwoSeats.has(commitment.jurySeatId)) continue;
+    if (!ringSeatByAgent.has(commitment.agentProfileId)) {
+      ringSeatByAgent.set(commitment.agentProfileId, `seat:${commitment.jurySeatId}`);
+    }
+  }
+
   for (const [index, commitment] of commitments.entries()) {
     const proofRevealed = revealedProofs.some(
       (proof) => proof.jurySeatId === commitment.jurySeatId,
@@ -363,6 +377,9 @@ export function buildDeliberationGraph(input: {
           (event) => eventSeatId(event) === commitment.jurySeatId,
         ) ?? committeeAtMs)
       : committeeAtMs;
+    const parentSeatNodeId = phaseTwoSeats.has(commitment.jurySeatId)
+      ? ringSeatByAgent.get(commitment.agentProfileId)
+      : undefined;
     addNode({
       id: seatNodeId,
       kind: "juror",
@@ -381,8 +398,13 @@ export function buildDeliberationGraph(input: {
       ),
       state,
       detail: { ...commitment },
+      ...(parentSeatNodeId === undefined ? {} : { satellite: true }),
     });
-    addEdge("seat", "claim", seatNodeId);
+    if (parentSeatNodeId === undefined) {
+      addEdge("seat", "claim", seatNodeId);
+    } else {
+      addEdge("round", parentSeatNodeId, seatNodeId);
+    }
   }
 
   const knownSeats = new Set(commitments.map((commitment) => commitment.jurySeatId));

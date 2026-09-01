@@ -19,6 +19,8 @@ type LayoutNode = SimulationNodeDatum & {
   id: string;
   kind: GraphNode["kind"];
   seatIndex?: number;
+  /** Round-2 seat riding its agent's round-1 disc; takes no ring slot. */
+  satellite?: boolean;
   /** Pentagon slot a juror is softly anchored to (angle AND radius). */
   homeX?: number;
   homeY?: number;
@@ -31,7 +33,7 @@ function coordinate(value: number | undefined, fallback: number): number {
 }
 
 function collisionRadius(node: LayoutNode): number {
-  if (node.kind === "juror") return 26;
+  if (node.kind === "juror") return node.satellite === true ? 22 : 26;
   // The genesis circle plus the statement label under it need breathing room.
   if (node.kind === "claim") return 62;
   return 14;
@@ -46,7 +48,9 @@ export function createSimulation(
 } {
   const centre = { x: size.width / 2, y: size.height / 2 };
   const radialRadius = Math.min(size.width, size.height) / 3.2;
-  const jurorCount = graph.nodes.filter((node) => node.kind === "juror").length;
+  const jurorCount = graph.nodes.filter(
+    (node) => node.kind === "juror" && node.satellite !== true,
+  ).length;
   let jurorIndex = 0;
   // Ring slots first: a seat's committee index fixes its angle, so jurors
   // spawn evenly spaced even when they appear one by one. One round makes a
@@ -54,11 +58,15 @@ export function createSimulation(
   // even spokes of a decagon and round-2 interleaves on the odd spokes, so
   // escalation never piles two seats onto the same slot.
   const twoRounds = graph.nodes.some(
-    (node) => node.kind === "juror" && (node.seatIndex ?? 0) >= 5,
+    (node) =>
+      node.kind === "juror" &&
+      node.satellite !== true &&
+      (node.seatIndex ?? 0) >= 5,
   );
   const jurorHomes = new Map<string, { x: number; y: number; angle: number }>();
   for (const node of graph.nodes) {
-    if (node.kind !== "juror" || jurorCount === 0) continue;
+    // Satellites ride their agent's ray; only ring jurors take slots.
+    if (node.kind !== "juror" || node.satellite === true || jurorCount === 0) continue;
     const slot = node.seatIndex ?? jurorIndex;
     jurorIndex += 1;
     let angle: number;
@@ -94,33 +102,55 @@ export function createSimulation(
     addAdjacent(edge.from, edge.to);
     addAdjacent(edge.to, edge.from);
   }
+  const satelliteIds = new Set(
+    graph.nodes
+      .filter((node) => node.kind === "juror" && node.satellite === true)
+      .map((node) => node.id),
+  );
   const trailHomes = new Map<string, { x: number; y: number }>();
   const trailDepth = new Map<string, number>();
   const maxExtra = Math.max(90, Math.min(size.width, size.height) / 2 - radialRadius - 48);
   for (const [jurorId, home] of jurorHomes) {
-    const queue: Array<{ id: string; depth: number }> = [{ id: jurorId, depth: 0 }];
-    const seen = new Set<string>([jurorId]);
+    // Each first-hop branch off the juror gets its own fanned angle, so the
+    // round-1 trail, the verdict, and a round-2 satellite chain spread out
+    // instead of stacking on one ray.
+    const branches = (adjacency.get(jurorId) ?? []).filter(
+      (id) => kindById.get(id) !== "claim",
+    );
+    const fan = (branchIndex: number): number =>
+      branches.length <= 1
+        ? home.angle
+        : home.angle +
+          (branchIndex - (branches.length - 1) / 2) *
+            Math.min(0.5, 1.2 / (branches.length - 1));
+    const queue: Array<{ id: string; depth: number; angle: number }> =
+      branches.map((id, branchIndex) => ({
+        id,
+        depth: 1,
+        angle: fan(branchIndex),
+      }));
+    const seen = new Set<string>([jurorId, ...branches]);
     for (let head = 0; head < queue.length; head += 1) {
       const item = queue[head];
       if (item === undefined) continue;
-      const { id, depth } = item;
-      for (const next of adjacency.get(id) ?? []) {
+      const kind = kindById.get(item.id);
+      // Shared anchors never become trail nodes; ring jurors stay put, but a
+      // satellite is traversed so its own research hangs beyond it.
+      if (kind === "claim" || kind === "certificate") continue;
+      if (kind === "juror" && !satelliteIds.has(item.id)) continue;
+      const known = trailDepth.get(item.id);
+      if (known === undefined || item.depth < known) {
+        trailDepth.set(item.id, item.depth);
+        const distance = Math.min(item.depth * 58, maxExtra);
+        trailHomes.set(item.id, {
+          x: home.x + Math.cos(item.angle) * distance,
+          y: home.y + Math.sin(item.angle) * distance,
+        });
+      }
+      for (const next of adjacency.get(item.id) ?? []) {
         if (seen.has(next)) continue;
         seen.add(next);
-        const kind = kindById.get(next);
-        // The claim and certificate are shared anchors, never trail nodes.
-        if (kind === "claim" || kind === "certificate" || kind === "juror") continue;
-        const depthNext = depth + 1;
-        const known = trailDepth.get(next);
-        if (known === undefined || depthNext < known) {
-          trailDepth.set(next, depthNext);
-          const distance = Math.min(depthNext * 58, maxExtra);
-          trailHomes.set(next, {
-            x: home.x + Math.cos(home.angle) * distance,
-            y: home.y + Math.sin(home.angle) * distance,
-          });
-        }
-        queue.push({ id: next, depth: depthNext });
+        queue.push({ id: next, depth: item.depth + 1, angle: item.angle });
       }
     }
   }
@@ -148,6 +178,8 @@ export function createSimulation(
       return {
         id: node.id,
         kind: node.kind,
+        seatIndex: node.seatIndex,
+        satellite: node.satellite,
         x: trailHome.x,
         y: trailHome.y,
         homeX: trailHome.x,
@@ -175,6 +207,7 @@ export function createSimulation(
   const linkDistance = (link: LinkWithKind): number => {
     switch (link.kind) {
       case "seat": return radialRadius;
+      case "round": return 96;
       case "verdict": return 84;
       case "settle": return 110;
       case "action": return 64;
@@ -188,7 +221,7 @@ export function createSimulation(
       forceLink<LayoutNode, LinkWithKind>(links)
         .id((node) => node.id)
         .distance(linkDistance)
-        .strength((link) => link.kind === "seat" ? 0.9 : 0.5),
+        .strength((link) => (link.kind === "seat" ? 0.9 : link.kind === "round" ? 0.8 : 0.5)),
     )
     // A juror is pulled firmly toward its OWN pentagon slot (keeping the even
     // 72-degree spacing); every trail node is tugged toward its outward ray
