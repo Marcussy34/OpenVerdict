@@ -16,10 +16,12 @@ import { HashChip } from "@/components/viz/hash-chip";
 import { MetaTag } from "@/components/viz/page-header";
 import { Input } from "@/components/ui/input";
 import type { ZkBackedRegistrationResult } from "@/lib/engine/contract";
-import {
-  buildZkLoginBackingMessage,
-  ZKLOGIN_AGENT_ROLES,
-} from "@/lib/engine/zklogin";
+import { buildZkLoginBackingMessage } from "@/lib/engine/zklogin";
+
+/** Recorded manifest label, required by the API. It has no behavioral effect:
+ * every juror runs the same protocol prompts and tools, so the card offers no
+ * role choice and registration reads as backing a standardized seat. */
+const BACKED_SEAT_ROLE = "INVESTIGATOR";
 
 type RegistrationPhase = "idle" | "checking" | "signing" | "registering";
 type OpenVerdictNetwork = "localnet" | "testnet" | "mainnet";
@@ -48,9 +50,6 @@ function ZkLoginRegistrationForm({
 }) {
   const dAppKit = useDAppKit();
   const [modelId, setModelId] = useState("");
-  const [role, setRole] = useState<(typeof ZKLOGIN_AGENT_ROLES)[number]>(
-    "SKEPTIC",
-  );
   const [phase, setPhase] = useState<RegistrationPhase>("idle");
   const [error, setError] = useState<string | null>(null);
   const [engineOffline, setEngineOffline] = useState(false);
@@ -98,7 +97,7 @@ function ZkLoginRegistrationForm({
           zkLoginAddress: account.address,
           signature: signed.signature,
           modelId: selectedModel,
-          role,
+          role: BACKED_SEAT_ROLE,
         }),
       });
       const responseBody = await readJsonObject(response);
@@ -129,17 +128,19 @@ function ZkLoginRegistrationForm({
 
   return (
     <Panel
-      label="Back a juror agent"
+      label="Back a jury seat"
       icon={ShieldTick}
       tone="sealed"
       action={<MetaTag tone="sealed">ZKLOGIN_BACKED</MetaTag>}
     >
       <div className="mb-4 space-y-1">
         <h2 className="text-base font-semibold text-ocean">
-          Back an agent with your Google account
+          Back a jury seat with your Google account
         </h2>
         <p className="text-xs leading-relaxed text-muted-foreground">
           One Google account, one seat — authentication, not proof of personhood.
+          Seats are standardized: the protocol pins every juror’s model, prompts
+          and tools, so backing records who stands behind a seat, never a persona.
         </p>
       </div>
       <div>
@@ -171,7 +172,7 @@ function ZkLoginRegistrationForm({
           >
             <div className="flex items-center gap-2 text-yes">
               <TickCircle size="19" variant="Bold" aria-hidden="true" />
-              <p className="font-semibold">Agent registered</p>
+              <p className="font-semibold">Seat backed</p>
               <MetaTag tone="yes">{result.backingKind}</MetaTag>
             </div>
             <dl className="grid gap-3 text-xs sm:grid-cols-2">
@@ -201,12 +202,12 @@ function ZkLoginRegistrationForm({
               className="min-h-[44px]"
               onClick={() => setResult(null)}
             >
-              Register another account
+              Back another seat
             </Button>
           </div>
         ) : (
           <form className="space-y-5" onSubmit={submitRegistration} noValidate>
-            <div className="grid gap-4 sm:grid-cols-2">
+            <div className="grid gap-4">
               <div className="space-y-1.5">
                 <label htmlFor="zk-agent-model" className="text-sm font-medium text-ocean">
                   Model ID
@@ -226,28 +227,6 @@ function ZkLoginRegistrationForm({
                 />
                 <p id="zk-agent-model-help" className="text-xs text-muted-foreground">
                   Use an exact model ID from this deployment&apos;s catalog.
-                </p>
-              </div>
-              <div className="space-y-1.5">
-                <label htmlFor="zk-agent-role" className="text-sm font-medium text-ocean">
-                  Jury role
-                </label>
-                <select
-                  id="zk-agent-role"
-                  value={role}
-                  onChange={(event) => {
-                    if (isAgentRole(event.target.value)) setRole(event.target.value);
-                  }}
-                  className="h-11 w-full rounded-lg border border-input bg-card px-3 text-sm text-ocean outline-none transition-colors focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
-                >
-                  {ZKLOGIN_AGENT_ROLES.map((option) => (
-                    <option key={option} value={option}>
-                      {option.replaceAll("_", " ")}
-                    </option>
-                  ))}
-                </select>
-                <p className="text-xs text-muted-foreground">
-                  The role is committed in the on-chain registration hash.
                 </p>
               </div>
             </div>
@@ -305,7 +284,7 @@ function ZkLoginRegistrationForm({
                     ? "Awaiting signature…"
                     : phase === "registering"
                       ? "Backing…"
-                      : "Sign and register"}
+                      : "Sign and back a seat"}
               </Button>
             </div>
           </form>
@@ -330,12 +309,6 @@ function isOpenVerdictNetwork(value: unknown): value is OpenVerdictNetwork {
   return value === "localnet" || value === "testnet" || value === "mainnet";
 }
 
-function isAgentRole(
-  value: string,
-): value is (typeof ZKLOGIN_AGENT_ROLES)[number] {
-  return ZKLOGIN_AGENT_ROLES.some((role) => role === value);
-}
-
 function isRegistrationResult(
   value: Record<string, unknown>,
 ): value is Record<string, unknown> & ZkBackedRegistrationResult {
@@ -351,13 +324,13 @@ function registrationErrorMessage(status: number): string {
   if (status === 403) return "Public agent registration is disabled.";
   if (status === 429) return "Too many registration attempts. Wait a minute and try again.";
   if (status === 503) return "The registration service is temporarily unavailable.";
-  return "The agent could not be registered. Check the model and Google account, then retry.";
+  return "The seat could not be backed. Check the model ID and Google account, then retry.";
 }
 
 function friendlyRegistrationError(error: unknown): string {
   const message = error instanceof Error ? error.message : "";
   if (/reject|cancel|denied/i.test(message)) {
-    return "Signature request canceled. No agent was registered.";
+    return "Signature request canceled. No seat was backed.";
   }
-  return message || "The agent could not be registered. Try again.";
+  return message || "The seat could not be backed. Try again.";
 }

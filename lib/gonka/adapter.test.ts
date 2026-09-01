@@ -284,6 +284,15 @@ describe("createGonkaAdapter", () => {
     expect(network.timeoutHeaders()).toEqual(["240"]);
   });
 
+  it("refuses a non-Gonka inference host", () => {
+    expect(() =>
+      createConfiguredGonkaAdapter({
+        apiKey: "test-key",
+        baseUrl: "https://api.openai.com/v1",
+      }),
+    ).toThrowError(/gonkarouter\.io/);
+  });
+
   it("rejects a non-positive research timeout", () => {
     expect(() =>
       createConfiguredGonkaAdapter({

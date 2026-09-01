@@ -253,7 +253,6 @@ export function SeatSeal({
   agentProfileId,
   jurySeatId,
   modelId,
-  role,
   reasoning,
   gonkaRequestId,
   failureStatus,
@@ -321,14 +320,6 @@ export function SeatSeal({
               {STATE_LABEL[state]}
             </span>
           </div>
-          {role && (
-            <p
-              className="mt-0.5 truncate text-[12px] font-semibold text-ocean"
-              title={role}
-            >
-              {role.replace(/_/g, " ")}
-            </p>
-          )}
           {modelId && (
             <div className="mt-1 flex items-center gap-1.5">
               <ModelDot modelId={modelId} />

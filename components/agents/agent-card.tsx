@@ -35,7 +35,6 @@ const REPUTATION_DIMENSIONS = [
 export function AgentCard({ agent, reportCard, showVoteDetails = false }: AgentCardComponentProps) {
   const profileId = reportCard?.agentProfileId ?? agent?.agentProfileId ?? "unknown";
   const modelId = reportCard?.modelId ?? agent?.modelId ?? "unknown";
-  const role = reportCard?.role ?? agent?.role ?? "Juror agent";
   const owner = reportCard?.owner ?? agent?.owner;
   const manifestHash = agent?.manifestHash;
   const isActive = agent?.active ?? true;
@@ -59,7 +58,7 @@ export function AgentCard({ agent, reportCard, showVoteDetails = false }: AgentC
       <div className="flex items-start justify-between gap-2 border-b border-border px-4 py-3.5">
         <div className="min-w-0 space-y-1.5">
           <ModelBadge modelId={modelId} />
-          <h3 className="truncate text-sm font-semibold text-ocean">{role.replace(/_/g, " ")}</h3>
+          <h3 className="truncate text-sm font-semibold text-ocean">{family.name} juror</h3>
         </div>
         <MetaTag tone={isActive ? "yes" : "default"}>
           {isActive ? (
@@ -117,8 +116,9 @@ export function AgentCard({ agent, reportCard, showVoteDetails = false }: AgentC
         {agent && Object.keys(agent.reputation ?? {}).length === 0 && !showVoteDetails && (
           <div className="rounded-xl border border-dashed border-border bg-surface px-3 py-2.5">
             <p className="text-[11px] leading-snug text-muted-foreground">
-              No scored jury runs yet — reputation dimensions appear once this agent completes
-              a reveal on this deployment.
+              Reputation counters are registered on-chain but static in this
+              release; the live track record on the agents page is what
+              differentiates jurors today.
             </p>
           </div>
         )}
@@ -126,7 +126,7 @@ export function AgentCard({ agent, reportCard, showVoteDetails = false }: AgentC
         {agent?.reputation && Object.keys(agent.reputation).length > 0 && (
           <div className="space-y-2">
             <span className="ov-micro ov-micro-sm text-muted-foreground">
-              Reputation (bps)
+              On-chain counters (static in v1, bps)
             </span>
             <div className="space-y-1.5">
               {REPUTATION_DIMENSIONS.map((dim) => {

@@ -653,9 +653,6 @@ export default function ClaimDetailPage({ params }: ClaimDetailPageProps) {
                       />
                       <Cpu size="13" variant="Bold" className="shrink-0 text-primary" />
                       <ModelBadge modelId={agent.modelId} />
-                      <span className="font-semibold text-ocean">
-                        {agent.role.replace(/_/g, " ")}
-                      </span>
                       <span
                         className={cn(
                           "ml-auto rounded px-1.5 py-0.5 font-mono text-[10px] font-bold",

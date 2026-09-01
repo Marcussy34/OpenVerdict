@@ -198,6 +198,13 @@ function environmentCompletion(): ReexecuteCompletion {
   if (!apiKey) {
     throw new Error("GONKA_ROUTER_API_KEY is not configured");
   }
+  // Same invariant as the adapter: re-execution must also stay on Gonka.
+  const host = new URL(baseURL).hostname;
+  if (host !== "gonkarouter.io" && !host.endsWith(".gonkarouter.io")) {
+    throw new Error(
+      `re-execution refuses non-Gonka base URL host "${host}": all AI inference must run on gonkarouter.io`,
+    );
+  }
 
   const client = new OpenAI({
     apiKey,

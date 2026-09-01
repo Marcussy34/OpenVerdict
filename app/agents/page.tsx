@@ -186,7 +186,7 @@ export default function AgentsPage() {
                         <span className="truncate">{fam.name}</span>
                       </p>
                       <p className="mt-0.5 truncate font-mono text-[11px] text-muted-foreground">
-                        {shortId(agent.agentProfileId)} · {agent.role}
+                        {shortId(agent.agentProfileId)}
                       </p>
                       {agent.trackRecord && (
                         <p className="mt-0.5 truncate text-[11px] text-muted-foreground">

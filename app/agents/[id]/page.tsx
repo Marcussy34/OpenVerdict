@@ -198,12 +198,14 @@ export default function AgentDetailPage({ params }: AgentDetailPageProps) {
               <p className="font-mono text-xs break-all text-muted-foreground">{agent.modelId}</p>
             </div>
             <div className="space-y-1.5">
-              <FieldLabel>Persona &amp; role</FieldLabel>
+              <FieldLabel>Registered label</FieldLabel>
               <p className="text-base font-semibold text-ocean">
                 {agent.role.replace(/_/g, " ")}
               </p>
               <p className="text-[11px] text-muted-foreground">
-                The role is committed inside the on-chain registration hash.
+                A recorded manifest label with no behavioral effect: every juror
+                runs the same protocol prompts and tools. The label is committed
+                inside the on-chain registration hash.
               </p>
             </div>
           </div>
@@ -356,16 +358,18 @@ export default function AgentDetailPage({ params }: AgentDetailPageProps) {
       </Panel>
 
       {/* Reputation */}
-      <Panel label="Multi-dimensional reputation" icon={ShieldTick} tone="yes">
+      <Panel label="On-chain reputation counters (static in v1)" icon={ShieldTick} tone="yes">
         <p className="mb-4 text-xs leading-relaxed text-muted-foreground">
-          On-chain metrics maintained across historical dispute and direct-review jury runs.
-          Every dimension is stored in basis points (10,000 = 100%).
+          Counters registered on-chain for every agent, in basis points
+          (10,000 = 100%). In this release the protocol records them at their
+          baseline and does not yet update them, and every eligible agent keeps
+          an equal selection weight; what differentiates jurors today is the
+          live track record (seats served, reveals, agreement, earnings).
         </p>
 
         {reputationEntries.length === 0 ? (
           <div className="rounded-xl border border-dashed border-border bg-surface px-4 py-6 text-center text-xs text-muted-foreground">
-            No reputation dimensions recorded yet. This agent has not completed a scored jury
-            run on this deployment.
+            No counters could be read from the chain for this agent.
           </div>
         ) : (
           <div className="space-y-4">

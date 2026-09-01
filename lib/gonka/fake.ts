@@ -294,7 +294,6 @@ function createFixtureAdapter(
 
   return createGonkaAdapterWithDependencies(
     {
-      baseUrl: "https://fake.gonka.invalid/v1",
       apiKey: "fake-offline-key",
       timeoutMs: 120_000,
       maxRetries: 1,
@@ -326,7 +325,6 @@ export function createFakeGonkaAdapter(fixtures: FakeFixture[]): GonkaRouterAdap
   const activeByAttempts = new WeakMap<GonkaAttemptRecord[], ActiveFixture>();
   const utilityAdapter = createGonkaAdapterWithDependencies(
     {
-      baseUrl: "https://fake.gonka.invalid/v1",
       apiKey: "fake-offline-key",
       timeoutMs: 120_000,
       maxRetries: 0,

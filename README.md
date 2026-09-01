@@ -22,7 +22,7 @@ evidence and agent work preserved on Walrus.
 > | Layer | State |
 > | --- | --- |
 > | Sui Move packages (8 protocol modules incl. Object Display, plus the Seal policy) | ✅ `sui move test`: **66/66** protocol, **4/4** Seal policy |
-> | TS libs · engine · CLI · workers | ✅ vitest: **485/485** (full suite) |
+> | TS libs · engine · CLI · workers | ✅ vitest: **512/512** (full suite) |
 > | TS↔Move commitment parity gate | ✅ 6 cross-pinned blake2b256/BCS vectors |
 > | Localnet E2E + cockpit demo state | ✅ 3 lifecycle paths, sponsored deposit, CLI parity — exit 0 |
 > | Juror research (v2, batched opens) | ✅ support + challenge searches, pages on both sides, citations from two sites, counter-evidence summary; every step in the sealed transcript |
@@ -131,6 +131,11 @@ Gonka's L1 records inference inputs, outputs, and validation artifacts. Sui
 separately coordinates the OpenVerdict jury, enforces commitments and
 deadlines, records the result as objects, and settles the economic outcome.
 Walrus preserves the public evidence and agent work.
+GonkaRouter is the exclusive inference provider by protocol rule: juror
+research and verdicts, the deliberation round, claim extraction and the
+re-execution check all run on gonkarouter.io, the adapter refuses any other
+host in code, and a seat that cannot reach Gonka fails closed rather than
+falling back to another AI provider.
 
 Instead of relying on:
 
@@ -183,10 +188,12 @@ a Sui address. Three tiers:
    `ZKLOGIN_BACKED` — a Google zkLogin address signs a canonical message, only
    its blake2b backing hash persists, one social account backs one seat.
    Authentication and Sybil-cost raise — never proof of personhood.
-2. **Reputation-weighted random selection** — Sui's native `Random` (0x8)
+2. **Diversity-constrained random selection**: Sui's native `Random` (0x8)
    drives committee selection inside a single private `entry` function; no
    owner holds two seats, no model holds more than two of five, at least three
-   distinct GonkaRouter model IDs per committee.
+   distinct GonkaRouter model IDs per committee. Every eligible agent carries
+   an equal selection weight in v1: reputation counters are registered
+   on-chain but do not yet move the draw.
 3. **Optimistic resolution** — a bonded proposer answers `YES`/`NO`/`UNSURE`;
    unchallenged proposals finalize cheaply with no AI spend.
 4. **Bonded dispute** — a matching challenge bond escalates to a full jury
@@ -257,7 +264,7 @@ dark mode).
 | Hashing | `@noble/hashes` blake2b-256 == `sui::hash::blake2b256` | One commitment format across TS and Move |
 | Onboarding | `@mysten/enoki` (zkLogin) + dapp-kit v2 | Social-login self-custodial addresses; env-gated, wallet-standard |
 | Object metadata | Sui Object Display (`display_meta` module) | Certificates/profiles/positions render in wallets + explorers |
-| Tests | vitest 4 + `sui move test` | 500 TS + 77 Move (73 protocol, 4 Seal policy), incl. the cross-language parity gate |
+| Tests | vitest 4 + `sui move test` | 512 TS + 77 Move (73 protocol, 4 Seal policy), incl. the cross-language parity gate |
 
 ## 🔍 What is auditable
 
@@ -375,13 +382,26 @@ compute); finally, self-hosted juror workers bring their own GonkaRouter
 keys and pay their own inference, verified by the engine exactly as our own
 runs are (run hashes, receipts, re-execution).
 
+Recorded direction (roadmap, not yet on-chain): requester-paid SUI per
+verification funds the round's jury pool (the `create_claim` budget vaults
+already exist), and each seat's jury rewards flow through to the humans
+staking behind that seat, pro rata after protocol and run fees, delegated
+staking on standardized seats, the way PoS delegators share a validator's
+yield. Reward distribution stays participation-based with at most an
+accuracy bonus for certificate-aligned seats; majority-only ("winners take
+all") pay is rejected by design because paying for agreement manufactures
+herding, punishes honest UNSURE votes, and corrupts UNRESOLVED as an
+outcome (PRD §24.2, §24.5). Per-seat stake pools become meaningful once
+reputation wiring differentiates track records; until then this section is
+the answer of record, not shipped code.
+
 ## 🏆 Hackathon track fit
 
 **MUBA Gonka Track — AI for Society** (fact checker):
 
 | Requirement | OpenVerdict |
 | --- | --- |
-| All AI reasoning/verification through GonkaRouter | Single adapter; no other provider; fail-closed on outage |
+| All AI reasoning/verification through GonkaRouter | Single adapter, host-pinned to gonkarouter.io in code; no other provider; fail-closed on outage |
 | URL or text input | `/fact-check` and CLI accept claim, URLs, or both |
 | Multi-model cross-verification | 5 agents spanning all three GonkaRouter model families, no model majority, each juror researching both sides of the claim |
 | Truth Score 0–100 + reasoning trace | Deterministic, recomputable; evidence-linked public traces with the full research trail, never chain-of-thought |
@@ -410,7 +430,7 @@ on testnet at https://app.openverdict.info.
 
 | Used for | How | Check it |
 | --- | --- | --- |
-| Every juror reasoning pass | One adapter, `/v1/chat/completions`, no other provider, fail closed on outage | `lib/gonka/adapter.ts`; any revealed run shows the raw request/response and their hashes |
+| Every juror reasoning pass | One adapter, `/v1/chat/completions`, host-pinned to gonkarouter.io, no other provider, fail closed on outage | `lib/gonka/adapter.ts`; any revealed run shows the raw request/response and their hashes |
 | Multi-model consensus | 5 seats drawn across all three GonkaRouter families (DeepSeek, Kimi, MiniMax), at most 2 seats per model, equal weight | Committee rules in `move/openverdict/sources/jury.move`; jury card on any claim page |
 | Claim extraction from a URL | Paste a link on `/fact-check`; a Gonka model distills one bounded claim, with a JSON repair round when needed | `POST /api/extract-claim`; the provenance card names the model and request id |
 | Inference provenance | Response `id`, `x-request-id`, devshard id and fingerprint stored for every attempt (retries, repairs, hedges) and cross-checked against Gonka's public receipts lookup | "Run provenance" on any revealed run |

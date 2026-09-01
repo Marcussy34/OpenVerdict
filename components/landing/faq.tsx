@@ -29,6 +29,10 @@ const ITEMS = [
     a: "Panels are drawn through GonkaRouter across DeepSeek-V4-Flash, Kimi-K2.6 and MiniMax-M2.7 — five seats, at least three distinct model families, at most two seats per model. Seats are assigned by Sui native randomness, not by the operator.",
   },
   {
+    q: "Who actually runs the jurors?",
+    a: "Today, the OpenVerdict engine executes every juror run itself, and all AI reasoning goes through GonkaRouter only: the adapter refuses any other inference host in code, and a juror that cannot reach Gonka fails closed instead of falling back. Jurors are standardized seats, not user-owned bots: prompts and tool policies are hashed into on-chain manifests, so nobody, including the operator, can steer a seat without breaking hashes anyone can recheck. Trust here comes from verifiability rather than decentralized execution; an attested executor (Sui Nautilus) is the disclosed roadmap step.",
+  },
+  {
     q: "What happens when a juror fails?",
     a: "It casts no vote and no vote is invented for it. The seat's research trail up to the failure stays public, and a verdict still needs four matching reveals out of five; otherwise the claim finalizes as UNRESOLVED.",
   },

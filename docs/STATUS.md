@@ -1,6 +1,6 @@
 # OpenVerdict — Product Status Snapshot
 
-> Last updated: 2026-08-31 23:10. Source of truth for claims below: the code
+> Last updated: 2026-09-01 20:00. Source of truth for claims below: the code
 > and its test suites (`pnpm test`, `pnpm test:move`), not this file. The
 > dated bullets under "What is NOT true yet" are the change log, newest first.
 
@@ -20,7 +20,7 @@ so a sealed bundle opens after its deadline without the operator; a browser
 verifier recomputes 15 checks per run, re-runs a juror against the recorded
 model, and opens bundles through Seal; failed seats keep their research trail.
 Hosted on one Railway container (web, API, three workers) with Railway
-Postgres. Tests: 485 vitest, 70 Move.
+Postgres. Tests: 512 vitest, 70 Move.
 
 ## Layer inventory
 
@@ -30,7 +30,7 @@ Postgres. Tests: 485 vitest, 70 Move.
 | Cross-language contract | `lib/protocol` + `tests/integration/parity.test.ts` + `tests/parity_tests.move` | ✅ | 6 blake2b256/BCS vectors asserted byte-identical in BOTH suites |
 | Inference adapter | `lib/gonka`, `lib/research` | ✅ | Live-verified GonkaRouter API (4096-token cap, `devshard-…` ids, visible retries, hedged same-model calls after 25 s, redacting attempt log; X-Gonka-No-Fallback pinned on every call since 2026-08-31 so the gateway returns a real 429 instead of substituting a model, and any X-Gonka-Fallback notice is audited; the gateway's public receipts lookup (GET api.gonkarouter.io/v1/receipts/<x-request-id>, live 2026-08-31) is cross-checked from the run view: model, devshard, timing and outcome compared against the sealed record, relayed server-side until the gateway sends CORS); POST /api/extract-claim (public, rate-limited) turns a pasted URL into one checkable claim: SSRF-guarded engine fetch, first configured Gonka model at temperature 0 with a 1500-token cap, strict-JSON fail-closed validation, Gonka + gateway request ids returned for transparency; prompt specs v1 to v4 and tool policies v2 to v4 (`promptSpec.ts`) hashed over canonical JSON and bound into every juror manifest (v5 documents live); juror research loop (search with intent, batched page opens, citations, two-sided checks) through Firecrawl; gateway ids (`x-request-id`, `x-devshard-id`, `system_fingerprint`) kept as audit pointers; deterministic fake for offline juries |
 | Evidence pipeline | `lib/evidence`, `lib/walrus` | ✅ | SSRF suite (DNS-first, per-hop revalidation, streaming caps); Merkle manifests; local + SDK Walrus stores + retention; SDK store writes raw blobs (`writeBlob`/`readBlob`, no quilts) so every blob id on chain is a content address a verifier can fetch |
-| Engine | `lib/engine` (contract.ts seam), `lib/sui` (builders per entry point, SuiGateway + fake), `lib/seal` (reveal-key escrow), `lib/storage` (drizzle/pglite/pg), `lib/events` (phase-gated serializer) | ✅ | Full lifecycle: direct review + optimistic; `juryRun` fails closed unless every seat's manifest hashes equal its published document; each run's bundle (exact conversation, input, every attempt, validated output, transcript, audit) is sealed with AES-256-GCM before `approve_run` and the commit, the key is escrowed under the Seal time-lock policy, and the plaintext bundle plus key is published as the reveal argument blob; failed seats keep a failure record; `runProof` / `agentManifestDocument` seams; each commitment now carries the seat's manifest `modelId` so juror identity resolves even for seats that failed before inference; a split first round now injects the revealed round-1 public record (per seat: model, outcome, confidence, public reasoning trace) into every round-2 juror input AND freezes it canonically into the phase-2 evidence manifest (round-1-public-record:<claimId>), fail-closed when a reveal is missing, phase-1 inputs byte-identical; 485/485 vitest incl. lifecycle, seal-then-reveal, escrow, hedge, no-fallback and zkLogin registration tests over FakeSuiGateway |
+| Engine | `lib/engine` (contract.ts seam), `lib/sui` (builders per entry point, SuiGateway + fake), `lib/seal` (reveal-key escrow), `lib/storage` (drizzle/pglite/pg), `lib/events` (phase-gated serializer) | ✅ | Full lifecycle: direct review + optimistic; `juryRun` fails closed unless every seat's manifest hashes equal its published document; each run's bundle (exact conversation, input, every attempt, validated output, transcript, audit) is sealed with AES-256-GCM before `approve_run` and the commit, the key is escrowed under the Seal time-lock policy, and the plaintext bundle plus key is published as the reveal argument blob; failed seats keep a failure record; `runProof` / `agentManifestDocument` seams; each commitment now carries the seat's manifest `modelId` so juror identity resolves even for seats that failed before inference; a split first round now injects the revealed round-1 public record (per seat: model, outcome, confidence, public reasoning trace) into every round-2 juror input AND freezes it canonically into the phase-2 evidence manifest (round-1-public-record:<claimId>), fail-closed when a reveal is missing, phase-1 inputs byte-identical; 512/512 vitest incl. lifecycle, seal-then-reveal, escrow, hedge, no-fallback and zkLogin registration tests over FakeSuiGateway |
 | CLI | `cli/` (`openverdict`, PRD §27.3 surface) | ✅ | `--json` NDJSON, preflight prints, stable exit codes |
 | Workers | `workers/` | ✅ | evidence / inference / resolution loops, graceful shutdown; live-claim triage (2 s poll while a claim is in flight, 15 s idle, wake file on submission), stranded and dead claims skipped, exponential backoff per failing claim |
 | Observer + verification UI | `app/`, `components/` | ✅ | Builds/typechecks/lints; SSE with resume; strict pre-reveal redaction; run view with provenance strip, research trail (batched opens, both sides, refusals), per-turn conversation with the answering node, "Re-run this juror", "Open through Seal", "Seat failed before commit"; client-side `/verify` recomputes 15 checks per run and decrypts the sealed blob with WebCrypto; `GET /api/claims/[id]/runs/[runId]/proof`, `POST …/reexecute`, `GET /api/agents/[id]/manifest`; manifest panel on `/agents/[id]`; since 2026-08-31 the claim page is the deliberation canvas (live force graph: jurors with family avatars, sealed-phase pulses from content-free `RESEARCH_TICK` events, node inspector reusing the run-proof components, replay at 1x/10x/30x on terminal claims; full-viewport stage without the global chrome, quick-nav pill, auto-fit view; always-visible stage pill top-centre showing the live on-chain round (or the stage at the scrubbed replay moment); the node inspector overlays the stage so opening it never shifts node positions, resizes by dragging its left edge, and renders the shared proof components under a scoped dark token remap (`.ov-inspector-dark`) with container-query grids that fit any panel width; every juror node shows its short seat id, families come from the commitment's manifest `modelId` (failed seats keep their mascot), and new nodes grow out of the node they attach to; revealed run proofs served from an immutable in-memory cache with browser caching, first build per claim still pays two Walrus reads), the audit view moved to `/claims/[id]/report`, `/observe` redirects |
@@ -40,6 +40,29 @@ Postgres. Tests: 485 vitest, 70 Move.
 
 ## What is NOT true yet
 
+- Economic direction RECORDED 2026-09-01 (roadmap, NOT implemented):
+  requester-paid SUI per verification funds the round's jury pool; backers
+  delegate SUI stake behind seats and share those seats' jury rewards pro
+  rata after fees. Reward split stays participation-based with at most an
+  accuracy bonus; majority-only pay is rejected (herding, anti-UNSURE).
+  PRD §1.1 item 20 is the answer of record for judges; nothing on-chain
+  changed for this.
+- Truth reframe SHIPPED 2026-09-01: the Gonka track mandate is a code-enforced
+  invariant (the adapter refuses any inference host outside gonkarouter.io;
+  every AI path already routes through the one adapter), README/PRD/app copy
+  now state that selection weight is equal in v1 (on-chain reputation counters
+  register at baseline and are never updated yet), agent roles are recorded
+  labels with no behavioral effect (the registration card no longer offers a
+  role picker and reads "Back a jury seat"), and reputation panels are
+  labelled static-in-v1. PRD §1.1 item 19 records the amendment.
+- Public deliberation SHIPPED 2026-09-01: a split first round now runs a
+  public structured debate before round two (revealed jurors argue in seat
+  order over two exchanges through Gonka, strict two-key JSON with a citation
+  allowlist, fail-closed SKIPPED turns), every turn streams live as a
+  DELIBERATION_TURN event into the claim page's chat dock, and the transcript
+  freezes as phase-2 evidence (urn:openverdict:deliberation-transcript).
+  Round-2 seats render as R2 satellites on their agent's disc. Deployed;
+  the first live contested-claim debate has not yet been exercised.
 - Track amendments SHIPPED 2026-08-31: URL claim extraction live on GonkaRouter (verified live: the full en.wikipedia Bitcoin article yields the Satoshi whitepaper claim, `devshard-67842-201`), round-two jurors receive the revealed round-one public record (also frozen as phase-2 evidence `round-1-public-record:<claimId>`), the deliberation canvas + explorer landing + open-verification language shipped across the product, and `docs/GONKA-INTEGRATION.md` documents the integration for judges.
 - Live testnet canary COMPLETE (2026-08-27): full lifecycle with live GonkaRouter juries — 5/5 SCHEMA_VALID across 3 model families, YES @ 9700 bps recomputed == on-chain, certificate `0x8efdabe0…1a8634` (see docs/demo/runbook.md table).
 - Live GonkaRouter inference VERIFIED 2026-08-27: account catalog = deepseek-ai/DeepSeek-V4-Flash-0731, MiniMaxAI/MiniMax-M2.7, moonshotai/Kimi-K2.6 (3 families); real completion returned id `devshard-…` (the OpenAI-compatible endpoint id shape — preserved verbatim as the Gonka Request ID). Full live jury round runs at the testnet canary.

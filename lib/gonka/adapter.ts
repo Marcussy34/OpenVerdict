@@ -414,6 +414,16 @@ export function createGonkaAdapterWithDependencies(
   dependencies: GonkaAdapterDependencies = {},
 ): GonkaRouterAdapter {
   if (cfg.apiKey.trim().length === 0) throw new Error("GonkaRouter apiKey is required");
+  // Track mandate + protocol invariant: all AI reasoning runs on the Gonka
+  // network. The adapter refuses any other inference host so configuration
+  // alone can never reroute juror reasoning to another provider.
+  const baseUrl = cfg.baseUrl ?? DEFAULT_BASE_URL;
+  const baseHost = new URL(baseUrl).hostname;
+  if (baseHost !== "gonkarouter.io" && !baseHost.endsWith(".gonkarouter.io")) {
+    throw new Error(
+      `GonkaRouter adapter refuses non-Gonka base URL host "${baseHost}": all AI inference must run on gonkarouter.io`,
+    );
+  }
   const timeoutMs = cfg.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
     throw new RangeError("timeoutMs must be positive");
@@ -436,7 +446,7 @@ export function createGonkaAdapterWithDependencies(
 
   const client = new OpenAI({
     apiKey: cfg.apiKey,
-    baseURL: cfg.baseUrl ?? DEFAULT_BASE_URL,
+    baseURL: baseUrl,
     // GonkaRouter substitutes a fallback model when the requested upstream is
     // saturated (confirmed by their team, 2026-08-31). We enforce the exact
     // requested model: a saturated upstream then returns a real 429, which the

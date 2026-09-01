@@ -34,10 +34,6 @@ function MemberChip({ member }: { member: JuryMember }) {
       <span className="font-mono text-[11px] font-medium text-ocean">
         {shortModel(member.model)}
       </span>
-      <span className="h-3 w-px bg-border" aria-hidden />
-      <span className="ov-micro ov-micro-sm text-muted-foreground">
-        {member.role.replace(/_/g, " ")}
-      </span>
     </span>
   );
 }

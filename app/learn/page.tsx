@@ -36,7 +36,7 @@ const CONTENTS = [
 const KEY_FACTS: Array<[string, string]> = [
   ["Chain", "Sui testnet: verdicts and certificates live on-chain"],
   ["Evidence storage", "Walrus: every source and juror work file, public"],
-  ["AI inference", "GonkaRouter: three model families (DeepSeek, Kimi, MiniMax)"],
+  ["AI inference", "GonkaRouter only, by protocol rule: DeepSeek, Kimi and MiniMax families; a juror that cannot reach Gonka fails closed, never falls back"],
   ["Jury", "5 jurors; 4 of 5 must agree to decide"],
   ["Outcomes", "YES, NO or UNRESOLVED, each with a 0-100 Truth Score"],
   ["Cost to read or verify", "Free: no account, no wallet, no gas"],
@@ -164,8 +164,8 @@ export default function LearnPage() {
               body: "Every jury mixes models from DeepSeek, Kimi and MiniMax, drawn randomly on-chain. No single company decides.",
             },
             {
-              title: "One person, one seat",
-              body: "Nobody may run two jurors in the same jury.",
+              title: "One account, one seat",
+              body: "One Google account backs at most one juror in a jury. That proves account control, not unique personhood.",
             },
             {
               title: "Same run, same answer",
