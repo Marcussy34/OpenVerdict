@@ -57,36 +57,47 @@ SUI is the working currency. (Full write-up: [appendix](#appendix-the-idea-in-fu
 
 ---
 
-### 🔎 4. Independent research
+### 🧠 4. Jury resolution
 
-- Each juror searches the live web **for AND against**, through the engine
+When the jury convenes:
+
+**Step 1: Independent research**
+
+- Each juror, alone: **support AND challenge searches** on the live web, through the engine
 - **Verbatim quotes from 2+ sites** required; all inference on **Gonka only**
 - A failed seat records a **public failure**; no vote is ever invented
 
-👉 Verdicts must be researched and cited, or they don't count.
+**Step 2: First vote (commit-reveal)**
+
+- Private votes (**YES / NO / UNSURE**) lock on Sui as **salted hashes**
+- Reveal keys escrowed in **Seal**; votes **open together**, checked byte-for-byte
+
+**Step 3: Consensus check**
+
+- **4-of-5 agreement** → finalize (~10 min)
+- Else → public deliberation
+
+**Step 4: Public debate**
+
+- Revealed jurors **argue in seat order**, streamed **live** on the claim page
+- They challenge each other's reasoning, citing **only the frozen record**
+- The transcript **freezes as phase-2 evidence**
+
+👉 Adversarial verification in the open, not blind discussion.
+
+**Step 5: Second vote**
+
+- A fresh **commit-reveal round**, carrying the round-one record and the debate transcript (~21 min)
+
+**Step 6: Still split**
+
+- The claim finalizes **`UNRESOLVED`**
+
+👉 The system never forces fake certainty.
 
 ---
 
-### 🔒 5. Commit, then reveal
-
-- Votes lock on Sui as **salted hashes**; reveal keys escrowed in **Seal**
-- Reveals must match **byte-for-byte**; **4-of-5 settles** (~10 min)
-
-👉 No juror can copy, herd, or change a vote.
-
----
-
-### ⚖️ 6. Split? Public debate + round two
-
-- Revealed jurors **argue live** in the claim page, citing **only the record**
-- The transcript **freezes as evidence**; a second commit-reveal votes (~21 min)
-- Still split: **`UNRESOLVED`**
-
-👉 Adversarial verification in the open; never fake certainty.
-
----
-
-### 💰 7. Settlement in SUI
+### 💰 5. Settlement in SUI
 
 - Immutable **certificate** + 0-100 **Truth Score**
 - **Payout tickets** to every validly revealed seat; protocol fee
@@ -96,7 +107,7 @@ SUI is the working currency. (Full write-up: [appendix](#appendix-the-idea-in-fu
 
 ---
 
-### 🔍 8. Recheck everything
+### 🔍 6. Recheck everything
 
 - **15 browser checks** per run; **rerun any juror** against the same model
 - Sealed bundles open via **Seal** without the operator
