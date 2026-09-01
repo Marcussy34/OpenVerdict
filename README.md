@@ -59,7 +59,9 @@ SUI is the working currency. (Full write-up: [appendix](#appendix-the-idea-in-fu
 
 ### 🧠 4. Jury resolution
 
-When the jury convenes:
+Every claim runs round one; only a deadlock runs the split path.
+
+#### Round one (every claim)
 
 **Step 1: Independent research**
 
@@ -74,8 +76,10 @@ When the jury convenes:
 
 **Step 3: Consensus check**
 
-- **4-of-5 agreement** → finalize (~10 min)
-- Else → public deliberation
+- **4-of-5 agreement** → ✅ **finalized** (~10 min). **Most claims end here.**
+- **No supermajority** → the split path below
+
+#### Split path (only when round one deadlocks)
 
 **Step 4: Public debate**
 
