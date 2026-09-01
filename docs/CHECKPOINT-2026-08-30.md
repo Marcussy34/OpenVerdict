@@ -1179,6 +1179,40 @@ UNCHANGED: first live debate never exercised; demo-claim decision still
 paused (do NOT fire unbidden); owner actions (zkLogin backing, demo, video,
 submission); weather sentry off.
 
+## 3s. SUI x GONKA POSITIONING SHIPPED 2026-09-01 ~20:55
+
+Production = d2143dc (deploy 001cb5c7 SUCCESS; verified live: landing FAQ
+"Who pays, and who earns?", /learn "SUI: requesters fund claim budgets",
+/api/status healthy gonka live). Gate 512/512. Earlier the same evening:
+d70cf1c amended PRD SECTION 2 in place ("diversity-constrained committee,
+equal selection weights in v1"), the one straggler a repo-wide sweep found.
+
+WHAT SHIPPED (positioning only, on-chain surface unchanged): README
+one-liner rewritten (requesters fund claims in SUI, standardized seats,
+GonkaRouter-only inference, Sui settles verdict/payouts/record); "model in
+one line" paragraph (Gonka the only mind, Sui the only judge, SUI the
+working currency); economics roadmap paragraph promoted to subsection
+"Next rung: delegated seat backing (recorded direction, not yet on-chain)";
+track-fit framing line ("one build, both tracks"); Sui track table gains
+"Economic loop in SUI" row (all-true: create_claim vaults, PayoutTickets,
+fee reason codes, demo pool, /risk). Landing FAQ gains "Who pays, and who
+earns?" (requester-pays real, seat rewards real, delegated backing labelled
+documented direction, majority-only pay rejected). /learn KEY_FACTS gains
+Currency row. PRD item 20 records the adoption; STATUS bullet added.
+coinType verified 0x2::sui::SUI in release.testnet.json.
+
+LESSONS (recurred tonight): (1) NEVER pipe a deploy-safety check through
+head: the first stranded check showed only 7 of 12 state-6 claims (head -8
+truncation) and the 98f6ffd deploy went out with 5 unverified (all later
+verified stranded, no harm). (2) zsh does NOT word-split unquoted $vars:
+`for id in $ids` looped once over the whole blob; use a single python
+script for multi-fetch checks. All 12 state-6 claims verified stranded
+before THIS deploy (secondCommit 16-65 h past).
+
+UNCHANGED: first live debate never exercised; demo-claim decision paused
+(do NOT fire unbidden); owner actions (zkLogin backing, demo, video,
+submission); staking/pay-per-verification = docs only, owner deferred.
+
 ## 4. Planned next (owner-approved direction)
 
 - Attestation (docs/superpowers/specs/2026-08-30-attested-inference-design.md):
