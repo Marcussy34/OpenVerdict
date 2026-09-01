@@ -69,17 +69,19 @@ Every claim runs round one; only a deadlock runs the split path.
 - **Verbatim quotes from 2+ sites** required; all inference on **Gonka only**
 - A failed seat records a **public failure**; no vote is ever invented
 
+---
+
 **Step 2: First vote (commit-reveal)**
 
 - Private votes (**YES / NO / UNSURE**) lock on Sui as **salted hashes**
 - Reveal keys escrowed in **Seal**; votes **open together**, checked byte-for-byte
 
+---
+
 **Step 3: Consensus check**
 
 - **4-of-5 agreement** → ✅ **finalized** (~10 min). **Most claims end here.**
 - **No supermajority** → the split path below 👇
-
-<div align="center">· · ✦ · ·</div>
 
 ## ⚔️ Split path (only when round one deadlocks) ⚔️
 
@@ -91,9 +93,13 @@ Every claim runs round one; only a deadlock runs the split path.
 
 **Adversarial verification in the open, not blind discussion.**
 
+---
+
 **Step 5: Second vote**
 
 - A fresh **commit-reveal round**, carrying the round-one record and the debate transcript (~21 min)
+
+---
 
 **Step 6: Still split**
 
