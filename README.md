@@ -44,7 +44,6 @@ SUI is the working currency. (Full write-up: [appendix](#appendix-the-idea-in-fu
 - **Max 2 seats per AI family**: DeepSeek, Kimi and MiniMax, all served through GonkaRouter
 - **Equal weights** in v1 (in future: weighted by on-chain track record)
 - Anyone can **back a seat with a Google sign-in** through Sui zkLogin: one account, one seat, never personhood
-- The team runs today's **7 jurors**; juries work fine without human-backed seats
 
 **No operator picks the judges; no vendor holds a majority.**
 
