@@ -7,7 +7,8 @@ check (the Polymarket incident is from March 2025, Meta's change from 2025).
 
 ## Slide 1 · Title (10-15 s)
 
-SAY: "OpenVerdict is a decentralized court for factual claims. AI juries
+SAY: "OpenVerdict is a decentralized verification protocol for factual
+claims. Independent AI models
 research a claim on Gonka's decentralized inference network, vote under
 commit-reveal, and Sui settles a verdict anyone can recompute. It is live on
 Sui testnet right now, and everything I show you is real chain state."
@@ -49,17 +50,18 @@ as the flood started."
 ## Slide 3 · Solution
 
 **Point 1: Multi-model AI juries, all reasoning on Gonka.**
-SAY: "OpenVerdict seats a jury, not an oracle: five seats across three model
-families, drawn on-chain with Sui's native randomness, at most two seats per
+SAY: "OpenVerdict convenes a randomized panel instead of trusting one answer
+box: five seats across three model families, drawn on-chain with Sui's native randomness, at most two seats per
 model, so no vendor can steer a verdict. Every juror researches the live web
 on both sides of the claim, and every single inference runs on Gonka through
 gonkarouter.io: the adapter refuses any other host in code, and a juror that
 cannot reach Gonka fails closed instead of falling back."
 
 **Point 2: Secret votes, public debate.**
-SAY: "Jurors cannot herd, because votes lock on Sui as hash commitments before
-anything is revealed. If the jury splits, the revealed jurors argue their case
-in a public, structured deliberation, citing only evidence already on the
+SAY: "The models cannot herd, because votes lock on Sui as hash commitments
+before anything is revealed. And here is where the courtroom picture earns its
+keep as an explanation: if the panel splits, the revealed models argue their
+case like jurors in a public, structured deliberation, citing only evidence already on the
 record, and then a second round votes. And if there is still no supermajority,
 the claim finalizes as UNRESOLVED. The protocol never manufactures certainty,
 and seats are never paid for agreeing with the majority, so there is no
@@ -81,14 +83,22 @@ seats, like backing a validator."
 ## Slide 4 · One-liner (close)
 
 Read it slowly, one line per breath:
-"OpenVerdict is a decentralized court for factual claims, where multi-model AI
-juries research, vote in secret, and debate in public on Gonka, and every
-verdict settles on Sui as a certificate anyone can recompute."
+"OpenVerdict is a decentralized verification protocol for factual claims,
+where independent AI models research, vote in secret, and debate in public on
+Gonka, and every verdict settles on Sui as a certificate anyone can
+recompute."
 
 Then: "It is live. Submit a claim and watch the jury think. Thank you."
 
 ## Judge Q&A crib
 
+- **Naming rule for the stage:** top-level identity is "decentralized
+  verification protocol" (say "oracle" with integrators: "we fill the oracle
+  slot for markets and DAOs"). Jury and court are explanation-layer metaphors
+  only: "the models debate as if in a courtroom." Never lead with them.
+- **Is this an oracle?** Yes, technically; that is the slot we fill. The
+  difference is what's inside the box: a panel you can audit instead of an
+  answer you must trust.
 - **Business model?** Pay-per-verification in SUI is the live flow (the free
   form is a subsidized tier); delegated seat staking with pro-rata backer
   yield is the recorded next step (PRD §1.1 item 20). Majority-only rewards
