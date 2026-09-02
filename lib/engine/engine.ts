@@ -205,8 +205,14 @@ export const WEATHER_PROBE_INTERVAL_MS = 120_000;
 export const WEATHER_STALE_MS = 300_000;
 /** A queued submission waits no longer than the relaunch policy. */
 export const QUEUE_TTL_MS = 6 * 60 * 60 * 1000;
-/** Cleared weather launches at most one queued claim each minute. */
-export const QUEUE_LAUNCH_SPACING_MS = 60_000;
+/**
+ * Cleared weather launches at most one queued or relaunched claim per window.
+ * Round-one research runs from +70 s to +450 s, so seven minutes keeps two
+ * engine-launched juries from researching at the same time: three juries
+ * side by side drew a 429 storm from the shared gateway (2026-09-03 01:48).
+ * A direct submission on clear weather still launches at once.
+ */
+export const QUEUE_LAUNCH_SPACING_MS = 7 * 60_000;
 const DELIBERATION_PROMPT_SPEC_HASH = promptSpecHash(
   DELIBERATION_PROMPT_SPEC_V3,
 );
@@ -849,7 +855,15 @@ class OpenVerdictEngine implements Engine {
         if (!this.#weatherProbeCache.results.every((result) => result.ok)) {
           continue;
         }
+        // Relaunches share the queue's spacing; the rest wait for a later tick.
+        if (
+          this.#lastQueueLaunchAtMs !== null &&
+          nowMs - this.#lastQueueLaunchAtMs < QUEUE_LAUNCH_SPACING_MS
+        ) {
+          continue;
+        }
         const nextAttempt: 2 | 3 = attempt.attempt === 1 ? 2 : 3;
+        this.#lastQueueLaunchAtMs = nowMs;
         const relaunched = await this.factCheckStart(
           {
             claim: claim.statement,

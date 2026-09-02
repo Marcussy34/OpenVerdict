@@ -379,7 +379,7 @@ describe("weather-aware submissions", () => {
     ).resolves.toMatchObject({ kind: "claim" });
   });
 
-  it("launches the oldest queued claim at one-minute spacing", async () => {
+  it("launches the oldest queued claim at the launch spacing", async () => {
     const setup = await engineSetup(new FakeSuiGateway(), 5);
     setup.gonka.setWeather([{ modelId: "model-b", ok: false }]);
     await setup.engine.weatherTick();
@@ -414,6 +414,8 @@ describe("weather-aware submissions", () => {
     });
 
     setup.setNow(setup.now() + QUEUE_LAUNCH_SPACING_MS);
+    // The worker refreshes the weather every tick; the spacing outlasts the stale window.
+    await setup.engine.weatherTick();
     await setup.engine.queueTick();
     await expect(setup.engine.getQueuedFactCheck(second.queueId)).resolves.toMatchObject({
       status: "LAUNCHED",
