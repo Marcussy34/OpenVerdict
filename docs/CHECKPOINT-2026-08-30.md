@@ -1605,6 +1605,66 @@ without four matching open the V3 debate, then five table votes (bundle
 v6), then a certificate or UNRESOLVED. Owner-gated pre-demo wipe still
 pending; the pool stays 3 DeepSeek + 2 MiniMax + 2 Kimi.
 
+## 3ad. CANARY RESULTS + RESUME MAP 2026-09-02 ~21:15 (read this first after a compaction)
+
+PRODUCTION: deploy ccf141d4 (SUCCESS 20:57:25) at commit 6258adb =
+ac2ef54 (round two at the table, all-or-nothing attempts, relaunch)
++ dfd1917 (idempotent relaunch: link the parent the moment the relaunched
+claim exists, adopt an existing next attempt; inference worker skips
+stranded discussions) + 6258adb (research loop retries shed or timed-out
+provider calls up to 4x with 5/10/20/30 s backoff inside the seat window,
+attempts recorded as RETRY; engine injects sleep so tests do not wait).
+NOT YET DEPLOYED: 3676120 (Walrus writes retry transient 5xx / dropped
+connections, same bounded backoff). Manifests v6 live for all seven
+jurors (table vote hash 0x0fde6e8c...). Main = origin/main = 3676120.
+
+CANARY 1 (verification 0xd43dcc3e, "Raising the minimum wage reduces
+overall employment.", fired 20:27 on 3/3): attempt 1 voided 20:31
+(MiniMax INVALID_SCHEMA: prose in unsupportedClaims), relaunch created
+attempt 2 twice because the first launch failed on a Walrus 500 after the
+claim existed (duplicate 0x7772fc0f, voided by hand in the DB as
+DUPLICATE_RELAUNCH; keeper 0x2a249957), attempt 2 voided 20:39 (DeepSeek
+gateway), attempt 3 (0x13515700) voided 20:43 (DeepSeek gateway), then
+GAVE_UP ATTEMPTS_EXHAUSTED. Mechanics all worked; the policy gap (one
+shed call ended a seat) is fixed in 6258adb.
+
+CANARY 2 (verification 0x4d9a50e9, same claim, fired 21:00:33 on 3/3
+under 6258adb): attempt 1 voided 21:03 (DeepSeek seat: Walrus "500
+internal client error" on a page upload, fixed in 3676120; MiniMax again
+prose in unsupportedClaims). Relaunch pending on the weather probe (no
+attempt 2 as of 21:15). Sentry b2qd13tay exited after firing (its live
+check now ignores voided / gave-up attempts: scratchpad/day-sentry-
+minwage2.sh). Claim monitor b7iz50ncl (persistent) still reports NEW
+claims and states; log watcher b692qegeg follows 0x4d9a50e9.
+
+BOARD (21:15): 0x4d9a50e9 attempt 1 VOIDED (relaunch pending); the five
+0xd43dcc3e chain claims voided / gave up; red wine 0x0a9bdd1f and fasting
+0x1d53f02c finalized UNRESOLVED; EV 0xb3841e1b stranded state 6. No live
+attempt. The stranded and voided claims lapse on-chain by design.
+
+OPEN ITEMS FOR THE OWNER: (1) MiniMax voided three attempts with the same
+fault (a sentence where an evidence id belongs in unsupportedClaims;
+research prompt V4 is explicit, the model ignores it). Proposed:
+engine-side tolerance for that one auxiliary field (drop non-id strings,
+record the repair in the transcript; vote, confidence and evidence ids
+stay the model's) in the next deploy with 3676120; the alternative is a
+research prompt V5 plus a manifest republish. (2) Deploy window rule:
+never deploy while an ACTIVE attempt is live; a voided attempt with a
+pending relaunch can launch attempt 2 at any probe pass, so deploy right
+after a GAVE_UP or a settled claim. (3) The pre-demo wipe of claim tables
+(manifests kept) stays owner-gated. (4) Roster unchanged (3 DeepSeek,
+2 MiniMax, 2 Kimi); the judge said Kimi is unstable, MiniMax 99%.
+(5) Gonka devrel message draft in scratchpad/gonkarouter-devrel-
+message.md (owner posts it).
+
+RULES THAT STILL APPLY: every reply starts "Mr. Marcus,"; no em dashes
+anywhere; commit trailer "Claude-Session: https://claude.ai/code/
+session_01R2J39mTnN6iJRQ98n4eDho", never Co-Authored-By; never print
+secrets (stage the Gonka key in a header file, DATABASE_URL only in the
+container); cwd resets between Bash calls; railway commands from
+scratchpad/railway-tree; Codex bridges: watch `codex-companion.mjs status
+<job>` not processes, cancel by job id, always run the gate yourself.
+
 ## 4. Planned next (owner-approved direction)
 
 - Attestation (docs/superpowers/specs/2026-08-30-attested-inference-design.md):
