@@ -1876,6 +1876,30 @@ cannot be removed, but its weight can be lowered on-chain so committees
 draw one Kimi seat instead of two (roster change, owner-gated); (3) the
 demo recording depends on one good-weather run; daytime worked before.
 
+### 3af progress, 05:15: ROOT CAUSE FOUND, OWNER ACTION NEEDED
+
+FIRST FULL RUN under the new ladder: "Humans use only ten percent of
+their brains" 0xefeb39f9 launched 04:53 on a clear probe, 5 of 5
+committed, 5 of 5 revealed, finalized UNRESOLVED in round one with a
+certificate (0x62a6287d...). But every juror voted UNSURE (three at 0
+confidence) because EVERY SEARCH FAILED: the transcript shows
+SEARCH_FAILED on all four searches per seat. Probed from inside the
+container: Firecrawl answers 402 "Insufficient credits" on /v2/search.
+The Railway FIRECRAWL_API_KEY is the same key as the repo .env
+(fingerprint edf48c29...); the key in the shell env (3cdcdc21...) is a
+different account with 1,222 credits and a 2-job concurrency plan.
+THE OWNER MUST ADD CREDITS TO THE APP'S FIRECRAWL ACCOUNT (or choose a
+key); until then every jury answers UNSURE and every claim is
+UNRESOLVED with no evidence. Seeder paused (scratchpad/seeder.pause).
+
+FIX SHIPPED (a69e6da, deploying as 0ebf4811 at 05:12): the weather now
+probes the research provider (GET /v2/team/credit-usage, free; ok when
+remaining >= FIRECRAWL_MIN_CREDITS 50) beside the three families, as a
+fourth row RESEARCH_WEATHER_ID "research:firecrawl"; submissions queue
+and relaunches wait while it is down; the strip shows "Web search".
+Once credits are added the weather clears by itself and the queue and
+seeder resume.
+
 ## 4. Planned next (owner-approved direction)
 
 - Attestation (docs/superpowers/specs/2026-08-30-attested-inference-design.md):
