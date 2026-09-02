@@ -92,7 +92,8 @@ Every claim runs round one; only a deadlock runs round two.
 
 **Step 4: Public debate**
 
-- Revealed jurors **argue in seat order**, streamed **live**; every turn is its own GonkaRouter run
+- Revealed jurors bring their round-one evidence and vote **to the table** and **argue in seat order**, streamed **live**; every turn is its own GonkaRouter run
+- Each turn states a **current stance and confidence**; up to **three exchanges**, and the debate **stops early when nobody moves**
 - They challenge each other's reasoning, citing **only the frozen record**
 - The transcript is **frozen into the evidence on Walrus**
 
@@ -100,9 +101,10 @@ Every claim runs round one; only a deadlock runs round two.
 
 <img src="docs/assets/hairline.svg" width="100%" height="1" alt="" />
 
-**Step 5: Second vote**
+**Step 5: Second vote (the table vote)**
 
-- A fresh **commit-reveal round**, carrying the round-one record and the debate transcript
+- A fresh **commit-reveal round** with **no new research**: each juror re-votes on the frozen record plus the debate transcript
+- The vote prompt is **pinned in the juror manifest** (hash on-chain), so the second vote is as recomputable as the first
 
 <img src="docs/assets/hairline.svg" width="100%" height="1" alt="" />
 
@@ -111,6 +113,10 @@ Every claim runs round one; only a deadlock runs round two.
 - The claim finalizes **`UNRESOLVED`**
 
 **The system never forces fake certainty.**
+
+<img src="docs/assets/hairline.svg" width="100%" height="1" alt="" />
+
+**All or nothing:** a verification is one attempt. Any juror error at a binding step (a failed run, a missing commit, a missing reveal) **voids the whole attempt**; nothing partial is ever finalized. The engine **relaunches automatically** once all three model families answer a health probe, up to **three attempts**, and gives up after six hours. Every attempt, voided or not, stays public on the claim page.
 
 ---
 
