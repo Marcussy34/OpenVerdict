@@ -1501,6 +1501,55 @@ fasting lifecycle. Pre-demo wipe (claim tables only, manifests kept)
 remains owner-gated. First SPOKEN debate still never exercised: it
 now needs only a split round one in healthy weather.
 
+## 3ab. FIRST FULL LIFECYCLE ON THE FRESH INSTANCE + FIRST SPOKEN DEBATE 2026-09-02 ~12:30
+
+FASTING CLAIM 0x1d53f02c823ba5ee1c1aa3a22ff862306d2ab22c67247f39746db65f6ea76ff4
+("Intermittent fasting produces greater long-term weight loss than
+continuous daily calorie restriction."): sentry fired 11:38:34 on a 3/3
+window (Kimi 78 s); settled 12:09:13 (30.6 min, the +1860 s ladder) as
+UNRESOLVED, truth score 2125 bps, certificate 0xcd94ea5b9180b5d39c632fbc
+874c5b231f8e9f0a149fb42ff29d2ad6c1c25ed2, tx GhN9h1mt1Hw2TZTX5yr3x4gvtr
+VBGiwyUYP4xETQroqv. Round one 3/5: Kimi NO 9000, DeepSeek NO 8500 x2;
+Kimi seat 2 PROVIDER_ERROR (125 s gateway timeout on call 8), MiniMax
+seat INVALID_SCHEMA (answered NO with a citation whose quote did not
+match the opened page, was bounced, then its repair came back as a
+think-only block with no JSON; it had also burned turns re-opening one
+PMC page past the open budget). DEBATE: 6/6 turns SPOKEN, 3 citations
+each, ~3 min (opened 11:47:50, round-two evidence frozen 11:50:50), the
+first spoken debate ever; the stretch works. Round two 4/5: MiniMax NO
+8500, DeepSeek NO 9000 x2, Kimi UNSURE 4500 (found the 2024 Annals 4:3
+RCT against NEJM + a 2025 meta-analysis: a genuine split in the
+literature); the other Kimi seat TIMEOUT after 12 attempts. 3 NO + 1
+UNSURE is not four matching, hence UNRESOLVED.
+
+OBSERVATIONS: (1) at equal weights the on-chain draw gives two Kimi
+seats in ~50% of committees (simulated exactly from jury.move; today's
+committee was that case); with 7 profiles a Kimi weight cut to half
+lowers it to 27% at 0.8% draw aborts, and re-modelling one Kimi profile
+to MiniMax via update_agent_manifest (pool stays 7, committees 2+2+1)
+takes it to 0%. OWNER DECISION: leave the roster as is for now (Gonka
+may patch Kimi soon; the judge said Kimi is unstable, MiniMax 99%,
+DeepSeek fine). Sentry rule stays 3/3. (2) The debate read as three
+copies of one brief: unanimous NO jury, temperature 0, near-identical
+inputs, and a V1 prompt that only says "defend or challenge". OWNER
+DECISION: build Deliberation spec V2 now (engine-only: the deliberation
+prompt is not hashed into juror manifests, only the research prompt and
+tool policy are) with engine-generated per-turn instructions: answer
+the most recent speaker, add a point nobody made, dispute a specific
+citation when there is dissent, steelman the opposite outcome when
+unanimous, use the SKEPTIC / SOURCE_AUTHENTICITY roles. V1 stays
+byte-identical (hash 0x1a62061fc3848089121346a027435d3c9e9e8b4f9f687f2
+471933cb96294fadb pinned by test). Two-family demo rejected: the
+3-family minimum and the 2-per-model cap live in jury.move, so it means
+a package republish plus re-registration, and it gives away the pitch.
+
+GONKA DEVREL MESSAGE drafted (scratchpad/gonkarouter-devrel-message.md)
+with the overnight probe timeline, cf-rays, and the 429 body "too many
+concurrent requests (152/152)" (network-wide cap). Scrapling checked at
+the owner's request: no web search, Python-only, stealth-fetch optics;
+not a Firecrawl replacement (self-hosted Firecrawl is the zero-code
+alternative via FIRECRAWL_API_URL).
+
 ## 4. Planned next (owner-approved direction)
 
 - Attestation (docs/superpowers/specs/2026-08-30-attested-inference-design.md):
