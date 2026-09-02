@@ -281,7 +281,7 @@ describe("createGonkaAdapter", () => {
       attempts: [],
     });
 
-    expect(network.timeoutHeaders()).toEqual(["240"]);
+    expect(network.timeoutHeaders()).toEqual(["90"]);
   });
 
   it("refuses a non-Gonka inference host", () => {
