@@ -15,6 +15,10 @@ import {
   useClaimSubmission,
   MAX_CLAIM,
 } from "@/components/claim/use-claim-submission";
+import {
+  ClaimPicker,
+  type ExtractedClaimCandidate,
+} from "@/components/claim/claim-picker";
 import { useNow } from "@/components/use-now";
 import { cn } from "@/lib/utils";
 import type { ClaimInspection } from "@/lib/engine/contract";
@@ -52,7 +56,7 @@ const OUTCOME_CHIP: Record<string, string> = {
 /** Friendly copy for the extraction endpoint's error codes. */
 const EXTRACT_ERRORS: Record<string, string> = {
   INVALID_URL: "That does not look like a reachable page URL.",
-  NO_CLAIM_FOUND: "No checkable factual claim found on that page; state it as text instead.",
+  NO_CLAIM_FOUND: "No checkable claim found; state it as text instead.",
   FETCH_FAILED: "Could not read that page safely; paste the claim as text instead.",
   ENGINE_NOT_WIRED: "The engine is offline; extraction is unavailable right now.",
 };
@@ -226,38 +230,56 @@ function HowItRuns() {
   );
 }
 
+/** Extraction reads up to this much pasted text; a claim itself stays at MAX_CLAIM. */
+const MAX_PASTE = 20_000;
+
 function FactCheckContent() {
   const searchParams = useSearchParams();
 
   // Initialize state directly from URL query parameters (home hand-off).
   const [claim, setClaim] = useState(() => searchParams.get("claim") || "");
 
+  // Candidate claims returned from extraction, plus selection and language state.
+  const [candidates, setCandidates] = useState<ExtractedClaimCandidate[]>([]);
+  const [selectedIndex, setSelectedIndex] = useState(0);
+  const [language, setLanguage] = useState("");
+
   // Validation, the POST and the redirect all live in the shared hook, so this
   // page and the landing footer's one-line form behave identically.
   const { submit, submitting, errorMessage, isEngineOffline } = useClaimSubmission();
 
-  // URL-shaped input flips the bar into extraction mode: the engine reads
-  // the page on Gonka and proposes the checkable claim (track requirement:
-  // "input a URL, tweet, or text snippet").
+  // Extraction state and provenance for URL or long text inputs.
   const [extracting, setExtracting] = useState(false);
   const [extractError, setExtractError] = useState<string | null>(null);
   const [extraction, setExtraction] = useState<{
-    sourceUrl: string;
+    sourceUrl?: string;
     modelId: string;
     requestId?: string;
   } | null>(null);
-  const isUrlInput = /^https?:\/\/\S+$/i.test(claim.trim());
+
+  // Input classification:
+  // 1. URL input: standard HTTP/HTTPS link.
+  // 2. Long text input: trimmed text longer than 240 chars or with 2+ sentence ends.
+  const trimmedClaim = claim.trim();
+  const isUrlInput = /^https?:\/\/\S+$/i.test(trimmedClaim);
+  const sentenceEndMatches = (trimmedClaim.match(/[.!?](\s|$)/g) || []).length;
+  const isLongText = !isUrlInput && (trimmedClaim.length > 240 || sentenceEndMatches >= 2);
 
   const extract = async () => {
     setExtracting(true);
     setExtractError(null);
     try {
+      const payload = isUrlInput
+        ? { url: trimmedClaim }
+        : { text: trimmedClaim };
       const response = await fetch("/api/extract-claim", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: claim.trim() }),
+        body: JSON.stringify(payload),
       });
       const data = (await response.json().catch(() => ({}))) as {
+        claims?: ExtractedClaimCandidate[];
+        language?: string;
         claim?: string;
         sourceUrl?: string;
         modelId?: string;
@@ -265,10 +287,12 @@ function FactCheckContent() {
         gatewayRequestId?: string;
         error?: string;
       };
-      if (response.ok && data.claim) {
-        setClaim(data.claim);
+      if (response.ok && data.claims && data.claims.length > 0) {
+        setCandidates(data.claims);
+        setSelectedIndex(0);
+        setLanguage(data.language ?? "");
         setExtraction({
-          sourceUrl: data.sourceUrl ?? claim.trim(),
+          sourceUrl: data.sourceUrl,
           modelId: data.modelId ?? "GonkaRouter",
           requestId: data.gonkaRequestId ?? data.gatewayRequestId,
         });
@@ -278,7 +302,9 @@ function FactCheckContent() {
         EXTRACT_ERRORS[data.error ?? ""]
           ?? (response.status === 429
             ? "Too many extractions right now; try again in a moment."
-            : "Could not extract a claim from that page; state it as text instead."),
+            : response.status === 404
+              ? "No checkable claim found; state it as text instead."
+              : "Could not extract a claim; state it as text instead."),
       );
     } catch {
       setExtractError("Could not reach the extraction service; state the claim as text instead.");
@@ -289,14 +315,39 @@ function FactCheckContent() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (isUrlInput) {
+    if (isUrlInput || isLongText) {
       await extract();
       return;
     }
     await submit({ claim });
   };
 
-  const claimTooLong = claim.length > MAX_CLAIM * 0.9;
+  const handleVerifySelected = async () => {
+    const selected = candidates[selectedIndex];
+    if (selected) {
+      await submit({ claim: selected.claim });
+    }
+  };
+
+  const handleEdit = () => {
+    const selected = candidates[selectedIndex];
+    if (selected) {
+      setClaim(selected.claim);
+    }
+    // Clear candidate list so the form reappears for editing, while preserving provenance.
+    setCandidates([]);
+  };
+
+  const handleStartOver = () => {
+    setClaim("");
+    setCandidates([]);
+    setExtraction(null);
+    setExtractError(null);
+    setLanguage("");
+  };
+
+  // The counter warns near the limit that applies to the current mode.
+  const claimTooLong = claim.length > (isLongText ? MAX_PASTE : MAX_CLAIM) * 0.9;
 
   return (
     <div className="mx-auto max-w-5xl space-y-12 px-5 py-16 md:px-7 md:py-24">
@@ -352,65 +403,114 @@ function FactCheckContent() {
           </Alert>
         )}
 
-        {/* The bar: one input, the button inside it, nothing else. */}
-        {/* One flat row: icon, input and button are siblings under
-            items-center, and the input's padding makes it exactly the
-            button's 48px, so all three sit on one line at every width. */}
-        <form
-          onSubmit={handleSubmit}
-          className="ov-edge flex items-center gap-2 rounded-2xl border border-border bg-card p-2 pl-4 shadow-xs focus-within:ring-2 focus-within:ring-ring"
-        >
-          <SearchNormal1 size="18" className="shrink-0 text-muted-foreground" />
-          <Textarea
-            id="claim-text"
-            required
-            rows={1}
-            placeholder="e.g. The first Bitcoin halving took place in November 2012"
-            className="field-sizing-content max-h-40 min-h-12 min-w-0 flex-1 resize-none border-0 bg-transparent p-0 py-3 text-base leading-6 shadow-none placeholder:text-muted-foreground/45 focus-visible:ring-0 dark:bg-transparent"
-            value={claim}
-            onChange={(e) => {
-              setClaim(e.target.value);
-              setExtractError(null);
-            }}
-            onKeyDown={(e) => {
-              // Enter submits like a search bar; Shift+Enter makes a newline.
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                e.currentTarget.form?.requestSubmit();
-              }
-            }}
-            maxLength={MAX_CLAIM}
-            aria-label="Claim statement to verify"
+        {/* Candidate list when extracted, or single input bar otherwise */}
+        {candidates.length > 0 ? (
+          <ClaimPicker
+            candidates={candidates}
+            selectedIndex={selectedIndex}
+            onSelectIndex={setSelectedIndex}
+            language={language}
+            onVerify={() => void handleVerifySelected()}
+            onEdit={handleEdit}
+            onStartOver={handleStartOver}
+            submitting={submitting}
           />
-          <Button
-            type="submit"
-            disabled={submitting || extracting || !claim.trim()}
-            aria-busy={submitting || extracting}
-            className="min-h-12 shrink-0 px-6 font-semibold shadow-xs"
-          >
-            {submitting ? (
-              <>
-                <Refresh size="16" variant="Linear" className="motion-safe:animate-spin" />
-                Freezing to Walrus (about 20 s)…
-              </>
-            ) : extracting ? (
-              <>
-                <Refresh size="16" variant="Linear" className="motion-safe:animate-spin" />
-                Reading the page on Gonka…
-              </>
-            ) : isUrlInput ? (
-              <>
-                Extract claim
-                <ArrowRight size="16" variant="Bold" />
-              </>
-            ) : (
-              <>
-                Verify claim
-                <ArrowRight size="16" variant="Bold" />
-              </>
+        ) : (
+          <>
+            {/* The bar: one input, the button inside it, nothing else. */}
+            <form
+              onSubmit={handleSubmit}
+              className="ov-edge flex items-center gap-2 rounded-2xl border border-border bg-card p-2 pl-4 shadow-xs focus-within:ring-2 focus-within:ring-ring"
+            >
+              <SearchNormal1 size="18" className="shrink-0 text-muted-foreground" />
+              <Textarea
+                id="claim-text"
+                required
+                rows={1}
+                placeholder="e.g. The first Bitcoin halving took place in November 2012"
+                className="field-sizing-content max-h-40 min-h-12 min-w-0 flex-1 resize-none border-0 bg-transparent p-0 py-3 text-base leading-6 shadow-none placeholder:text-muted-foreground/45 focus-visible:ring-0 dark:bg-transparent"
+                value={claim}
+                onChange={(e) => {
+                  setClaim(e.target.value);
+                  setExtractError(null);
+                }}
+                onKeyDown={(e) => {
+                  // Enter submits like a search bar; Shift+Enter makes a newline.
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    e.currentTarget.form?.requestSubmit();
+                  }
+                }}
+                // A long paste may run to the extraction limit; a single claim stays bounded.
+                maxLength={isLongText ? MAX_PASTE : MAX_CLAIM}
+                aria-label="Claim statement to verify"
+              />
+              <Button
+                type="submit"
+                disabled={submitting || extracting || !claim.trim()}
+                aria-busy={submitting || extracting}
+                className="min-h-12 shrink-0 px-6 font-semibold shadow-xs"
+              >
+                {submitting ? (
+                  <>
+                    <Refresh size="16" variant="Linear" className="motion-safe:animate-spin" />
+                    Freezing to Walrus (about 20 s)…
+                  </>
+                ) : extracting ? (
+                  <>
+                    <Refresh size="16" variant="Linear" className="motion-safe:animate-spin" />
+                    {isUrlInput ? "Reading the page on Gonka…" : "Finding claims on Gonka…"}
+                  </>
+                ) : isUrlInput || isLongText ? (
+                  <>
+                    Find claims
+                    <ArrowRight size="16" variant="Bold" />
+                  </>
+                ) : (
+                  <>
+                    Verify
+                    <ArrowRight size="16" variant="Bold" />
+                  </>
+                )}
+              </Button>
+            </form>
+
+            {/* Helper details only surface once the user starts typing. */}
+            {claim.length > 0 && (
+              <div className="flex items-start justify-between gap-3 px-1">
+                <p className="text-[11px] text-muted-foreground">
+                  {isUrlInput
+                    ? "A page URL: the engine reads it on Gonka and proposes the checkable claim."
+                    : isLongText
+                      ? "A longer passage: extract distinct checkable claims or verify the text as written."
+                      : "One falsifiable sentence with the who, what and when. Avoid opinions, predictions and compound claims. Or paste a page URL."}
+                </p>
+                <div className="flex shrink-0 items-center gap-2.5">
+                  {isLongText && (
+                    <button
+                      type="button"
+                      // Verification takes one bounded statement; longer pastes must be extracted.
+                      disabled={submitting || extracting || claim.length > MAX_CLAIM}
+                      title={claim.length > MAX_CLAIM ? `Longer than ${MAX_CLAIM} characters: find claims instead` : undefined}
+                      onClick={() => void submit({ claim })}
+                      className="text-[11px] font-medium text-primary underline underline-offset-2 hover:text-primary/80 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:opacity-50"
+                    >
+                      Verify as written
+                    </button>
+                  )}
+                  <span
+                    className={cn(
+                      "text-[11px] tabular-nums",
+                      claimTooLong ? "text-unsure" : "text-muted-foreground",
+                    )}
+                  >
+                    {claim.length}/{isLongText ? MAX_PASTE : MAX_CLAIM}
+                  </span>
+                </div>
+              </div>
             )}
-          </Button>
-        </form>
+          </>
+        )}
 
         {extractError && (
           <p className="rounded-xl border border-unsure/30 bg-unsure/8 px-3 py-2 text-xs font-medium text-unsure">
@@ -422,31 +522,16 @@ function FactCheckContent() {
             <Global size="12" variant="Bold" className="shrink-0 text-primary" />
             <span className="min-w-0">
               Claim extracted from{" "}
-              <span className="font-medium text-ocean">{hostOf(extraction.sourceUrl)}</span>
-              {" "}by {extraction.modelId} on Gonka
+              {extraction.sourceUrl ? (
+                <span className="font-medium text-ocean">{hostOf(extraction.sourceUrl)}</span>
+              ) : (
+                <span className="font-medium text-ocean">Pasted text</span>
+              )}{" "}
+              by {extraction.modelId} on Gonka
               {extraction.requestId ? (
                 <span className="font-mono"> · {extraction.requestId}</span>
               ) : null}
               . Edit freely, then Verify.
-            </span>
-          </div>
-        )}
-
-        {/* Helper details only surface once the user starts typing. */}
-        {claim.length > 0 && (
-          <div className="flex items-start justify-between gap-3 px-1">
-            <p className="text-[11px] text-muted-foreground">
-              {isUrlInput
-                ? "A page URL: the engine reads it on Gonka and proposes the checkable claim."
-                : "One falsifiable sentence with the who, what and when. Avoid opinions, predictions and compound claims. Or paste a page URL."}
-            </p>
-            <span
-              className={cn(
-                "shrink-0 text-[11px] tabular-nums",
-                claimTooLong ? "text-unsure" : "text-muted-foreground",
-              )}
-            >
-              {claim.length}/{MAX_CLAIM}
             </span>
           </div>
         )}
