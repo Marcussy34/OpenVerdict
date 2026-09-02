@@ -33,7 +33,7 @@ function outputHash(output: unknown): `0x${string}` {
   return toHex(blake2b256(canonicalJsonBytes(output)));
 }
 
-function bundle(version: 2 | 3 | 4 | 5 = 5): PublicRunBundle {
+function bundle(version: 2 | 3 | 4 | 5 | 6 = 5): PublicRunBundle {
   return {
     version,
     request: {
@@ -137,6 +137,24 @@ describe("reexecuteRun", () => {
     expect(result.matches.outcome).toBe(false);
     expect(result.matches.outputHash).toBe(false);
     expect(result.matches.servedModel).toBe(true);
+  });
+
+  it("parses a bare vote object for a v6 table vote bundle", async () => {
+    const recordedBundle = bundle(6);
+    const completion = fakeCompletion({
+      content: JSON.stringify(RECORDED_OUTPUT),
+    });
+
+    const result = await reexecuteRun(recordedBundle, { completion });
+
+    expect(completion).toHaveBeenCalledWith(
+      expect.objectContaining({
+        messages: recordedBundle.request.messages,
+      }),
+      expect.objectContaining({ timeoutMs: 120_000 }),
+    );
+    expect(result.outcome).toBe(RECORDED_OUTPUT.outcome);
+    expect(result.confidenceBps).toBe(RECORDED_OUTPUT.confidenceBps);
   });
 
   it("reports a served-model mismatch independently", async () => {

@@ -135,7 +135,8 @@ function extractJsonObject(content: string): unknown {
 }
 
 function parsedOutput(bundle: PublicRunBundle, parsed: unknown): JsonRecord {
-  if (bundle.version !== 2) {
+  // A table vote has no tool loop, so its model returns the vote directly.
+  if (bundle.version !== 2 && bundle.version !== 6) {
     if (!isRecord(parsed) || parsed.action !== "answer" || !isRecord(parsed.output)) {
       // A research juror may ask for another search or page instead of
       // answering; that is a difference to look into, not a provider fault.

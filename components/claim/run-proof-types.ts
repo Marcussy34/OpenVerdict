@@ -302,7 +302,8 @@ export function isTransparentBundle(value: unknown): value is TransparentBundle 
     (value.version === 2 ||
       value.version === 3 ||
       value.version === 4 ||
-      value.version === 5) &&
+      value.version === 5 ||
+      value.version === 6) && // v6 = table vote, no transcript
     value.kind === "run-bundle" &&
     typeof value.runId === "string"
   );

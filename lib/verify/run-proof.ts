@@ -1,4 +1,5 @@
 import { canonicalJsonBytes, canonicalJsonString } from "../gonka/canonical";
+import { EMPTY_TOOL_TRANSCRIPT_HASH } from "../gonka/audit";
 import { composeSystemPrompt } from "../gonka/promptSpec";
 import { citationSites } from "../research/citations";
 import { RunRecordV1Bcs } from "../protocol/bcs";
@@ -15,6 +16,7 @@ import type {
   PublicRunBundleV3,
   PublicRunBundleV4,
   PublicRunBundleV5,
+  PublicRunBundleV6,
   SealedRunBundleV2,
 } from "../protocol/types";
 
@@ -283,6 +285,12 @@ export function isV5Bundle(
   return bundle.version === 5;
 }
 
+export function isV6Bundle(
+  bundle: PublicRunBundle,
+): bundle is PublicRunBundleV6 {
+  return bundle.version === 6;
+}
+
 function isResearchBundle(
   bundle: PublicRunBundle,
 ): bundle is PublicRunBundleV3 | PublicRunBundleV4 | PublicRunBundleV5 {
@@ -403,6 +411,22 @@ export async function recomputeRunProof(
           : {}),
       },
     );
+  } else if (isV6Bundle(bundle)) {
+    const expectedSystemPrompt = bundle.promptSpec.systemPrompt;
+    const actualSystemPrompt = bundle.request.messages[0]?.content;
+    checks.push({
+      key: "systemPrompt",
+      label: "System prompt",
+      expected: stringHash(expectedSystemPrompt),
+      actual:
+        actualSystemPrompt === undefined
+          ? null
+          : stringHash(actualSystemPrompt),
+      ok: actualSystemPrompt === expectedSystemPrompt,
+      ...(actualSystemPrompt === undefined
+        ? { detail: "The request has no system message" }
+        : {}),
+    });
   }
 
   checks.push(
@@ -599,6 +623,81 @@ export async function recomputeRunProof(
         });
       }
     }
+  } else if (isV6Bundle(bundle)) {
+    const toolTranscriptOk =
+      sameHex(bundle.audit.toolTranscriptHash, EMPTY_TOOL_TRANSCRIPT_HASH) &&
+      bundle.audit.toolCallCount === 0;
+    checks.push({
+      key: "toolTranscriptHash",
+      label: "Tool transcript hash",
+      expected: EMPTY_TOOL_TRANSCRIPT_HASH,
+      actual: bundle.audit.toolTranscriptHash,
+      ok: toolTranscriptOk,
+      ...(toolTranscriptOk
+        ? {}
+        : { detail: "A table vote records no tool calls" }),
+    });
+
+    const manifestIds = new Set(
+      bundle.input.evidenceManifest.items.map((item) => item.evidenceId),
+    );
+    // Table votes cite only evidence ids frozen in the phase-two manifest.
+    const referencedIds = [
+      ...bundle.validatedOutput.evidenceFor,
+      ...bundle.validatedOutput.evidenceAgainst,
+      ...bundle.validatedOutput.unsupportedClaims,
+      ...bundle.validatedOutput.decisiveEvidence,
+      ...bundle.validatedOutput.publicReasoningTrace.flatMap(
+        (entry) => entry.evidenceIds,
+      ),
+      ...(bundle.validatedOutput.citations ?? []).map(
+        (citation) => citation.evidenceId,
+      ),
+    ];
+    const frozenCount = referencedIds.filter((id) =>
+      manifestIds.has(id),
+    ).length;
+    checks.push({
+      key: "citations",
+      label: "Citations",
+      expected: "all evidence ids frozen in the phase-two manifest",
+      actual: `${frozenCount} of ${referencedIds.length} ids frozen`,
+      ok: frozenCount === referencedIds.length,
+    });
+
+    const notApplicable = {
+      expected: "not applicable",
+      actual: "table vote",
+      ok: true as const,
+      detail: "Table vote: no research in round two",
+    };
+    checks.push(
+      {
+        key: "challengeSearch",
+        label: "Challenge search present",
+        ...notApplicable,
+      },
+      {
+        key: "bothSidesOpened",
+        label: "Both sides opened",
+        ...notApplicable,
+      },
+      {
+        key: "citationSites",
+        label: "Citations span sites",
+        ...notApplicable,
+      },
+      {
+        key: "counterEvidenceSummary",
+        label: "Counter-evidence summary present",
+        ...notApplicable,
+      },
+      {
+        key: "opensPerTurn",
+        label: "Opens per turn within policy",
+        ...notApplicable,
+      },
+    );
   }
 
   checks.push({

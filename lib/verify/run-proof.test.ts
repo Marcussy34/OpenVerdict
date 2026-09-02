@@ -3,6 +3,7 @@ import { toBase64 } from "@mysten/sui/utils";
 import { describe, expect, it } from "vitest";
 
 import { canonicalJsonBytes } from "../gonka/canonical";
+import { EMPTY_TOOL_TRANSCRIPT_HASH } from "../gonka/audit";
 import { makeInput, makeOutput } from "../gonka/fixtures.test-utils";
 import {
   composeSystemPrompt,
@@ -13,12 +14,14 @@ import {
   DEFAULT_TOOL_POLICY_V2,
   DEFAULT_TOOL_POLICY_V3,
   DEFAULT_TOOL_POLICY_V4,
+  TABLE_VOTE_PROMPT_SPEC_V1,
   promptSpecHash,
   toolPolicyHash,
 } from "../gonka/promptSpec";
-import { sealRunBundle } from "../engine/runBundle";
+import { buildTableVoteBundleCore, sealRunBundle } from "../engine/runBundle";
 import { computeRunHash } from "../protocol/commitment";
 import { blake2b256, fromHex, toHex } from "../protocol/hash";
+import { sampleTableVoteInput } from "../protocol/table-vote.fixture";
 import { sealIdentityHex, sealInnerId } from "../seal/identity";
 import type {
   InferenceRunAudit,
@@ -26,10 +29,12 @@ import type {
   PublicRunBundleCoreV3,
   PublicRunBundleCoreV4,
   PublicRunBundleCoreV5,
+  PublicRunBundleCoreV6,
   PublicRunBundleV2,
   PublicRunBundleV3,
   PublicRunBundleV4,
   PublicRunBundleV5,
+  PublicRunBundleV6,
   ResearchTranscriptV1,
   SealEscrowV1,
 } from "../protocol/types";
@@ -37,6 +42,7 @@ import {
   isV3Bundle,
   isV4Bundle,
   isV5Bundle,
+  isV6Bundle,
   proofFromBundle,
   recomputeRunProof,
 } from "./run-proof";
@@ -608,6 +614,70 @@ function makeProofV5() {
   return { proof: proofFromBundle(bundle, sealed), sealed };
 }
 
+function makeProofV6() {
+  const base = makeCore();
+  const input = sampleTableVoteInput();
+  const validatedOutput = makeOutput({
+    evidenceFor: ["evidence-table-1"],
+    evidenceAgainst: [],
+    decisiveEvidence: ["evidence-table-1"],
+    publicReasoningTrace: [
+      {
+        check: "Compare the statement with the table evidence.",
+        evidenceIds: ["evidence-table-1"],
+        assessment: "SUPPORTS",
+        finding: "The frozen source supports the statement.",
+      },
+    ],
+  });
+  const promptHash = promptSpecHash(TABLE_VOTE_PROMPT_SPEC_V1);
+  const inputHash = toHex(blake2b256(canonicalJsonBytes(input)));
+  const outputHash = toHex(blake2b256(canonicalJsonBytes(validatedOutput)));
+  const audit: InferenceRunAudit = {
+    ...base.audit,
+    phase: 2,
+    promptHash,
+    inputHash,
+    outputHash,
+    toolTranscriptHash: EMPTY_TOOL_TRANSCRIPT_HASH,
+    toolCallCount: 0,
+    evidenceRoot: toHex(fromHex(input.evidenceManifest.root)),
+  };
+  const core: PublicRunBundleCoreV6 = buildTableVoteBundleCore({
+    input,
+    runResult: {
+      type: "gonka-run-result",
+      attempts: [],
+      response: base.rawResponse,
+      request: {
+        ...base.request,
+        maxTokens: TABLE_VOTE_PROMPT_SPEC_V1.maxOutputTokens,
+        messages: [
+          {
+            role: "system",
+            content: TABLE_VOTE_PROMPT_SPEC_V1.systemPrompt,
+          },
+          {
+            role: "user",
+            content: new TextDecoder().decode(canonicalJsonBytes(input)),
+          },
+        ],
+      },
+      gateway: base.gateway,
+    },
+    validatedOutput,
+    audit,
+    runHash: runHashFromAudit(audit),
+    promptSpec: TABLE_VOTE_PROMPT_SPEC_V1,
+  });
+  const { sealed, seal } = sealRunBundle(core, { runId: core.runId });
+  const bundle: PublicRunBundleV6 = {
+    ...core,
+    seal: { ...seal, sealedBlobId: "sealed-blob" },
+  };
+  return { proof: proofFromBundle(bundle, sealed), sealed };
+}
+
 describe("browser run proof", () => {
   it("keeps verifying v2 bundles with five checks", async () => {
     const { proof } = makeProof();
@@ -722,6 +792,74 @@ describe("browser run proof", () => {
       "sealedCore",
     ]);
     expect(checks.every((check) => check.ok)).toBe(true);
+  });
+
+  describe("v6 table vote bundles", () => {
+    it("passes the applicable checks and marks research checks not applicable", async () => {
+      const { proof } = makeProofV6();
+      const checks = await recomputeRunProof(proof);
+      const byKey = new Map(checks.map((check) => [check.key, check]));
+
+      for (const key of [
+        "promptHash",
+        "systemPrompt",
+        "inputHash",
+        "outputHash",
+        "toolTranscriptHash",
+        "citations",
+        "runHash",
+        "sealedCore",
+      ] as const) {
+        expect(byKey.get(key)?.ok).toBe(true);
+      }
+      expect(byKey.has("toolPolicyHash")).toBe(false);
+      for (const key of [
+        "challengeSearch",
+        "bothSidesOpened",
+        "citationSites",
+        "counterEvidenceSummary",
+        "opensPerTurn",
+      ] as const) {
+        expect(byKey.get(key)).toMatchObject({
+          ok: true,
+          detail: "Table vote: no research in round two",
+        });
+      }
+    });
+
+    it("fails outputHash when the validated output is tampered", async () => {
+      const { proof, sealed } = makeProofV6();
+      if (!proof.bundle || !isV6Bundle(proof.bundle)) {
+        throw new Error("Expected a v6 bundle");
+      }
+      const bundle: PublicRunBundleV6 = {
+        ...proof.bundle,
+        validatedOutput: {
+          ...proof.bundle.validatedOutput,
+          outcome: "NO",
+        },
+      };
+
+      const checks = await recomputeRunProof(proofFromBundle(bundle, sealed));
+      expect(checks.find((check) => check.key === "outputHash")?.ok).toBe(false);
+    });
+
+    it("fails citations when an evidence id is not in the manifest", async () => {
+      const { proof, sealed } = makeProofV6();
+      if (!proof.bundle || !isV6Bundle(proof.bundle)) {
+        throw new Error("Expected a v6 bundle");
+      }
+      const bundle: PublicRunBundleV6 = {
+        ...proof.bundle,
+        validatedOutput: {
+          ...proof.bundle.validatedOutput,
+          evidenceFor: ["urn:openverdict:not-frozen"],
+        },
+      };
+
+      const checks = await recomputeRunProof(proofFromBundle(bundle, sealed));
+      expect(checks.find((check) => check.key === "citations")?.ok).toBe(false);
+    });
   });
 
   it("flags a v5 turn with more open steps than policy allows", async () => {
