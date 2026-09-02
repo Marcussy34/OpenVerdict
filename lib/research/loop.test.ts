@@ -688,14 +688,11 @@ describe("research loop", () => {
     ]);
   });
 
-  it("retries a persistent provider failure four times, then fails closed with every attempt recorded", async () => {
-    const script = scriptedCompletion([
-      { status: "PROVIDER_ERROR" },
-      { status: "PROVIDER_ERROR" },
-      { status: "PROVIDER_ERROR" },
-      { status: "PROVIDER_ERROR" },
-      { status: "PROVIDER_ERROR" },
-    ]);
+  it("retries a persistent provider failure up to the budget, then fails closed with every attempt recorded", async () => {
+    // One primary call plus the full retry budget, every one shed.
+    const script = scriptedCompletion(
+      Array.from({ length: 13 }, () => ({ status: "PROVIDER_ERROR" as const })),
+    );
 
     const result = await runResearchLoop(
       loopDependencies({ complete: script.complete }),
@@ -704,7 +701,7 @@ describe("research loop", () => {
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.status).toBe("PROVIDER_ERROR");
-    expect(result.attempts).toHaveLength(5);
+    expect(result.attempts).toHaveLength(13);
     expect(result.attempts.slice(1).every((attempt) => attempt.kind === "RETRY")).toBe(true);
     expect(result.transcript.steps).toHaveLength(0);
   });

@@ -167,8 +167,13 @@ const SEARCH_INTENT_REQUIRED_MESSAGE =
 
 /** Premature YES/NO answers refused before the usual validation and repair take over. */
 const MAX_RESEARCH_NUDGES = 2;
-/** Provider retries per model call: 429 shedding and 524 timeouts come in bursts. */
-const MAX_PROVIDER_RETRIES = 4;
+/**
+ * Provider retries per model call: 429 shedding and 524 timeouts come in
+ * bursts that can outlast a minute (a storm at 01:48 on 2026-09-03 cost three
+ * last attempts after four retries). The seat deadline is the real bound:
+ * the loop below stops as soon as a retry could not finish in time.
+ */
+const MAX_PROVIDER_RETRIES = 12;
 const PROVIDER_RETRY_BACKOFF_MS = [5_000, 10_000, 20_000, 30_000];
 /** Do not start a retry that cannot get a real answer before the seat deadline. */
 const MIN_RETRY_CALL_MS = 20_000;
