@@ -1716,6 +1716,44 @@ the owner-facing items unchanged from 3ad (wipe, roster, devrel message).
 Workers: Codex job task-mtk8s21g-bs6577 built the tolerance (12 min, one
 hardening patch by me for raw JSON); Gemini built the report page.
 
+## 3af. NIGHT COMMAND 2026-09-03 ~00:40 (owner asleep, full delegation): read 3ae then this
+
+OWNER (00:25): "ill go sleep first, once i wake up please catch me up, and
+lets get this product to the most ready state for hackathon demo". Earlier
+the same hour: "you are my trusty team lead", after my priority list
+(1 weather-aware front door, 2 finished examples + wipe, 3 breadth light,
+4 QA pass, 5 breadth full only after 1 to 4, 6 docs numbers + video line).
+Competitor read: github.com/lapsapthong-16/muba2026 (CrossCheck) is a
+design document on a bare scaffold (their own table: not built, not
+deployed, not filmed); analysis given to the owner in chat; the README
+gained the three-pillars table (608cc6b) and the failure-mode table
+(d50c455), plus the round-two/attempts rewrite (6df054c).
+
+IN FLIGHT: weather-aware front door (spec docs/superpowers/specs/
+2026-09-03-weather-front-door-design.md, plan docs/superpowers/plans/
+2026-09-03-weather-front-door.md, both committed 0c7e325). Contract types
+added to lib/engine/contract.ts UNCOMMITTED (WeatherReport etc. plus six
+Engine methods); tsc is red until Codex lands Task 1. Codex job
+task-mtkaye1p-x2ivmp (engine/storage/worker/API/CLI), Gemini background
+bmxxec2cq (UI: weather strip, queue page, submission hook, claim page
+voided panel), Codex watcher bqbw5u3g4. Prompts in scratchpad/
+codex-weather-prompt.md and gemini-weather-prompt.md.
+
+QUEUED NEXT (in order): review + gate + commit + deploy the front door at a
+clean window (no ACTIVE attempt); then claim picker (spec docs/superpowers/
+specs/2026-09-03-claim-picker-design.md, committed 317d3de; handler +
+route via Codex, page via Gemini, after the weather UI lands to avoid
+app/fact-check/page.tsx conflicts); then enqueue seed claims through the
+new queue (clear YES/NO examples: first Bitcoin halving November 2012,
+Great Wall visible from the Moon, humans use 10 percent of their brains,
+Sui mainnet launched May 2023, Bitcoin supply capped at 21 million) so the
+board fills on the first clear weather; then a QA pass (lighthouse
+mobile/desktop against production, fix findings); README test counts;
+checkpoint + memory; the wake-up catch-up message.
+
+SENTRY byqsvuhog still armed (3/3 rule, fires the minimum-wage canary).
+Weather at 23:36 was 1/3 (DeepSeek 429, Kimi 429).
+
 ## 4. Planned next (owner-approved direction)
 
 - Attestation (docs/superpowers/specs/2026-08-30-attested-inference-design.md):
