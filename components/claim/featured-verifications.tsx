@@ -131,8 +131,9 @@ export function FeaturedVerifications({ claims }: FeaturedVerificationsProps) {
                       <span className="ov-micro ov-micro-sm rounded border border-border/70 bg-surface px-2 py-0.5 text-muted-foreground">
                         debate
                       </span>
+                      {/* "second vote" holds for claims settled before the table vote existed. */}
                       <span className="ov-micro ov-micro-sm rounded border border-border/70 bg-surface px-2 py-0.5 text-muted-foreground">
-                        table vote
+                        second vote
                       </span>
                     </>
                   )}
