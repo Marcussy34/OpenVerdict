@@ -4107,6 +4107,16 @@ function defaultDeadlines(
   // as long as the first (450 s after the discussion deadline) and the
   // second reveal window stays 120 s: a two-round claim ends about 21 min
   // after the POST, a one-round verdict still at about 10 min.
+  // 2026-09-02 10:30: the debate never spoke. The discussion opens only at
+  // the first reveal deadline (the resolution worker holds a split round
+  // at its fixed boundary) and a turn starts only when it can finish
+  // PER_TURN_BUDGET_MS before the evidence freeze lead ahead of the
+  // discussion deadline, so a 60 s discussion window (+570 s to +630 s)
+  // left every turn WINDOW_EXHAUSTED in any weather. The window is now
+  // 720 s: ten turns (five debaters, two exchanges) at the 60 s budget
+  // plus the 120 s freeze lead. Round two keeps its 450 s commit and
+  // 120 s reveal windows and shifts with it, so a two-round claim ends
+  // about 31 min after the POST; one-round verdicts stay at about 10 min.
   const second = 1_000;
   return {
     evidenceCutoffMs: now + 60 * second,
@@ -4114,9 +4124,9 @@ function defaultDeadlines(
     challengeDeadlineMs: now + 70 * second,
     firstCommitDeadlineMs: now + 450 * second,
     firstRevealDeadlineMs: now + 570 * second,
-    discussionDeadlineMs: now + 630 * second,
-    secondCommitDeadlineMs: now + 1080 * second,
-    secondRevealDeadlineMs: now + 1200 * second,
+    discussionDeadlineMs: now + 1290 * second,
+    secondCommitDeadlineMs: now + 1740 * second,
+    secondRevealDeadlineMs: now + 1860 * second,
   };
 }
 

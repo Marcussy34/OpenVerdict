@@ -193,7 +193,13 @@ against the recorded model, or opened through Seal after the deadline.
    second commit deadline at +1080 s and a second reveal at +1200 s, is
    live since the Seal release of 23:13 (two-round claims take about
    21 min, one-round verdicts stay at about 10 min; no live claim has
-   needed a second round since). Do not redeploy while a claim is live: a container
+   needed a second round since). 2026-09-02: the discussion window itself
+   was 60 s (+570 s to +630 s) and the debate never spoke, because the
+   discussion opens only at the reveal deadline and a turn needs its 60 s
+   budget plus the 120 s evidence-freeze lead before the discussion
+   deadline; the window is now 720 s (discussion +1290 s, second commit
+   +1740 s, second reveal +1860 s), so a two-round claim takes about
+   31 min and one-round verdicts still about 10 min. Do not redeploy while a claim is live: a container
    restart drops every in-flight research run (those seats fail closed).
 5. Model health: Kimi-K2.6 on GonkaRouter was slow or failing most of the
    night (calls longer than the seat budget), then answered in 40 to 72 s on

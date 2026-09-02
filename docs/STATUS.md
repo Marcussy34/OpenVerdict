@@ -118,8 +118,11 @@ Postgres. Tests: 512 vitest, 70 Move.
   see docs/demo/runbook.md for the latest claim ids and results.
 - FAST MODE 2026-08-30 (measured through eleven hosted claims overnight):
   the hosted ladder is measured from the `create_claim` transaction
-  (evidence cutoff +60 s, commit +450 s, reveal +570 s, discussion +630 s,
-  second round +1080 / +1200 s since the Seal release, +810 / +930 s from
+  (evidence cutoff +60 s, commit +450 s, reveal +570 s, discussion +1290 s,
+  second round +1740 / +1860 s since 2026-09-02 (the discussion window was
+  60 s, +630 s, and never had room for a debate turn; it is now 720 s and
+  round two shifts with it, so two-round claims take about 31 min),
+  +1080 / +1200 s since the Seal release, +810 / +930 s from
   22:26 until then, commit `bb79bec`: the owner keeps
   every juror at equal selection weight and accepts a verdict about 10 min
   after the POST so that Kimi's slower calls finish; first claim under it,
