@@ -5,7 +5,7 @@ import { PGlite } from "@electric-sql/pglite";
 import { Ed25519Keypair } from "@mysten/sui/keypairs/ed25519";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
-  DELIBERATION_PROMPT_SPEC_V2,
+  DELIBERATION_PROMPT_SPEC_V3,
   DEFAULT_PROMPT_SPEC_V2,
   DEFAULT_PROMPT_SPEC_V3,
   DEFAULT_PROMPT_SPEC_V4,
@@ -29,6 +29,7 @@ import {
   type PublicRunBundleCoreV3,
   type PublicRunBundleCoreV5,
   type SealedRunBundleV2,
+  type TableVoteStance,
 } from "../protocol";
 import { transcriptHash } from "../research";
 import type { SealEscrowService } from "../seal/escrow";
@@ -63,6 +64,7 @@ import {
   agentBackingStatus,
   buildZkLoginBackingMessage,
   createEngine,
+  debateConvergedAfterExchange,
   deliberationTurnInstructions,
   EngineNoEvidenceError,
   EngineStateError,
@@ -1422,6 +1424,55 @@ describe("headless engine", () => {
   });
 });
 
+describe("debateConvergedAfterExchange", () => {
+  const roundOneStances = new Map<string, TableVoteStance>([
+    ["seat-0", "YES"],
+    ["seat-1", "NO"],
+  ]);
+
+  it("returns exchange one when every stance holds", () => {
+    expect(debateConvergedAfterExchange([
+      { jurySeatId: "seat-0", exchange: 1, status: "SPOKEN", stance: "YES" },
+      { jurySeatId: "seat-1", exchange: 1, status: "SPOKEN", stance: "NO" },
+    ], roundOneStances)).toBe(1);
+  });
+
+  it("returns exchange two when a seat moves once and then holds", () => {
+    expect(debateConvergedAfterExchange([
+      { jurySeatId: "seat-0", exchange: 1, status: "SPOKEN", stance: "NO" },
+      { jurySeatId: "seat-1", exchange: 1, status: "SPOKEN", stance: "NO" },
+      { jurySeatId: "seat-0", exchange: 2, status: "SPOKEN", stance: "NO" },
+      { jurySeatId: "seat-1", exchange: 2, status: "SPOKEN", stance: "NO" },
+    ], roundOneStances)).toBe(2);
+  });
+
+  it("returns null when a seat moves in every exchange", () => {
+    expect(debateConvergedAfterExchange([
+      { jurySeatId: "seat-0", exchange: 1, status: "SPOKEN", stance: "NO" },
+      { jurySeatId: "seat-1", exchange: 1, status: "SPOKEN", stance: "NO" },
+      { jurySeatId: "seat-0", exchange: 2, status: "SPOKEN", stance: "YES" },
+      { jurySeatId: "seat-1", exchange: 2, status: "SPOKEN", stance: "NO" },
+      { jurySeatId: "seat-0", exchange: 3, status: "SPOKEN", stance: "NO" },
+      { jurySeatId: "seat-1", exchange: 3, status: "SPOKEN", stance: "NO" },
+    ], roundOneStances)).toBeNull();
+  });
+
+  it("ignores an incomplete exchange", () => {
+    expect(debateConvergedAfterExchange([
+      { jurySeatId: "seat-0", exchange: 1, status: "SPOKEN", stance: "NO" },
+      { jurySeatId: "seat-1", exchange: 1, status: "SPOKEN", stance: "NO" },
+      { jurySeatId: "seat-0", exchange: 2, status: "SPOKEN", stance: "NO" },
+    ], roundOneStances)).toBeNull();
+  });
+
+  it("keeps the previous stance for a skipped turn", () => {
+    expect(debateConvergedAfterExchange([
+      { jurySeatId: "seat-0", exchange: 1, status: "SKIPPED" },
+      { jurySeatId: "seat-1", exchange: 1, status: "SPOKEN", stance: "NO" },
+    ], roundOneStances)).toBe(1);
+  });
+});
+
 describe("deliberationTurnInstructions", () => {
   it("steelmans YES for a unanimous NO jury in exchange two", () => {
     const instructions = deliberationTurnInstructions({
@@ -1434,6 +1485,7 @@ describe("deliberationTurnInstructions", () => {
         { seatIndex: 1, outcome: "NO" },
       ],
       mostRecentSpeaker: 1,
+      movedSoFar: false,
     });
 
     expect(instructions).toContain("best case for YES");
@@ -1450,6 +1502,7 @@ describe("deliberationTurnInstructions", () => {
         { seatIndex: 3, outcome: "NO" },
       ],
       mostRecentSpeaker: 3,
+      movedSoFar: false,
     });
 
     expect(instructions).toContain("Seat 3 voted NO");
@@ -1467,6 +1520,7 @@ describe("deliberationTurnInstructions", () => {
         { seatIndex: 1, outcome: "UNSURE" },
       ],
       mostRecentSpeaker: 1,
+      movedSoFar: false,
     });
 
     expect(instructions).toContain("a definite YES or NO");
@@ -1480,6 +1534,7 @@ describe("deliberationTurnInstructions", () => {
       seatIndex: 0,
       roundOneSeats: [{ seatIndex: 0, outcome: "YES" }],
       mostRecentSpeaker: null,
+      movedSoFar: false,
     });
 
     expect(instructions).toContain("SKEPTIC role");
@@ -1493,23 +1548,41 @@ describe("deliberationTurnInstructions", () => {
       seatIndex: 0,
       roundOneSeats: [{ seatIndex: 0, outcome: "YES" }],
       mostRecentSpeaker: null,
+      movedSoFar: false,
     });
 
     expect(instructions).toContain("Argue only from the evidence");
   });
+
+  it("adds movement and final duties to exchange three", () => {
+    const instructions = deliberationTurnInstructions({
+      exchange: 3,
+      role: "SKEPTIC",
+      outcome: "YES",
+      seatIndex: 0,
+      roundOneSeats: [
+        { seatIndex: 0, outcome: "YES" },
+        { seatIndex: 1, outcome: "NO" },
+      ],
+      mostRecentSpeaker: 1,
+      movedSoFar: true,
+    });
+
+    expect(instructions).toMatch(
+      /^Exchange three\. At least one seat changed its stance in the previous exchange;/,
+    );
+    expect(instructions).toContain("This is the last exchange:");
+    expect(instructions).toContain(
+      "State your current stance and confidence in the stance and confidenceBps fields. You hold the SKEPTIC role",
+    );
+  });
 });
 
 describe("public deliberation", () => {
-  it("streams two exchanges and freezes the transcript as phase-two evidence", async () => {
+  it("stops after one converged exchange and freezes the public stances", async () => {
     const setup = await discussionSetup(2, {
-      0: [
-        deliberationResponse("Seat 0 opening"),
-        deliberationResponse("Seat 0 response"),
-      ],
-      1: [
-        deliberationResponse("Seat 1 opening"),
-        deliberationResponse("Seat 1 response"),
-      ],
+      0: [deliberationResponse("Seat 0 opening", [], "YES", 8_200)],
+      1: [deliberationResponse("Seat 1 opening", [], "YES", 7_900)],
     });
     const callsBefore = setup.gonkaComplete.mock.calls.length;
 
@@ -1518,25 +1591,50 @@ describe("public deliberation", () => {
     const repository = createRepository(setup.db);
     const stored = await repository.listDeliberationTurns(setup.claimId);
     const turns = stored.map(publicDeliberationTurn);
-    expect(turns).toHaveLength(4);
-    expect(turns.map((turn) => [turn.ordinal, turn.exchange, turn.status])).toEqual([
-      [0, 1, "SPOKEN"],
-      [1, 1, "SPOKEN"],
-      [2, 2, "SPOKEN"],
-      [3, 2, "SPOKEN"],
+    expect(turns).toHaveLength(2);
+    expect(turns.map((turn) => ({
+      ordinal: turn.ordinal,
+      exchange: turn.exchange,
+      status: turn.status,
+      stance: turn.stance,
+      confidenceBps: turn.confidenceBps,
+    }))).toEqual([
+      {
+        ordinal: 0,
+        exchange: 1,
+        status: "SPOKEN",
+        stance: "YES",
+        confidenceBps: 8_200,
+      },
+      {
+        ordinal: 1,
+        exchange: 1,
+        status: "SPOKEN",
+        stance: "YES",
+        confidenceBps: 7_900,
+      },
     ]);
     expect(stored.every((turn) => turn.gonkaRequestId !== undefined)).toBe(true);
     expect(stored.every(
-      (turn) => turn.promptSpecHash === promptSpecHash(DELIBERATION_PROMPT_SPEC_V2),
+      (turn) => turn.promptSpecHash === promptSpecHash(DELIBERATION_PROMPT_SPEC_V3),
     )).toBe(true);
 
     const events = (await repository.listResolutionEvents(setup.claimId)).filter(
       (event) => event.kind === "DELIBERATION_TURN",
     );
-    expect(events).toHaveLength(4);
+    expect(events).toHaveLength(2);
     expect(events.every((event) => event.visibility === "PUBLIC_NOW")).toBe(true);
     expect(events.every((event) => event.phase === "DISCUSSION")).toBe(true);
     expect(events.map((event) => event.payload)).toEqual(turns);
+    const [convergedEvent] = (
+      await repository.listResolutionEvents(setup.claimId)
+    ).filter((event) => event.kind === "debate_converged");
+    expect(convergedEvent).toMatchObject({
+      phase: "DISCUSSION",
+      source: "ENGINE",
+      visibility: "PUBLIC_NOW",
+      payload: { claim_id: setup.claimId, exchange: 1 },
+    });
 
     const artifact = await repository.getEvidenceArtifact(
       `deliberation-transcript:${setup.claimId}`,
@@ -1555,15 +1653,19 @@ describe("public deliberation", () => {
     expect(transcript).toEqual({
       version: 1,
       kind: "deliberation-transcript",
+      convergedAfterExchange: 1,
       turns,
     });
-    expect((await setup.engine.inspect(setup.claimId)).deliberation).toEqual(turns);
+    expect(await setup.engine.inspect(setup.claimId)).toMatchObject({
+      deliberation: turns,
+      debateConvergedAfterExchange: 1,
+    });
 
     const requests = setup.gonkaComplete.mock.calls.slice(callsBefore);
-    expect(requests).toHaveLength(4);
+    expect(requests).toHaveLength(2);
     expect(requests.every(([request]) => request.messages.length === 2)).toBe(true);
     expect(requests[0]?.[0].messages[0]?.content).toBe(
-      DELIBERATION_PROMPT_SPEC_V2.systemPrompt,
+      DELIBERATION_PROMPT_SPEC_V3.systemPrompt,
     );
     const firstInput = JSON.parse(
       requests[0]?.[0].messages[1]?.content ?? "null",
@@ -1587,14 +1689,6 @@ describe("public deliberation", () => {
       mostRecentSpeaker: 0,
       turnInstructions: expect.stringContaining("Begin by answering Seat 0"),
     });
-    const secondExchangeInput = JSON.parse(
-      requests[2]?.[0].messages[1]?.content ?? "null",
-    ) as Record<string, unknown>;
-    expect(secondExchangeInput).toMatchObject({
-      exchange: 2,
-      mostRecentSpeaker: expect.any(Number),
-      turnInstructions: expect.stringContaining("Exchange two"),
-    });
     const phaseOneManifest = await repository.getEvidenceManifest(setup.claimId, 1);
     const allowedCitations = firstInput.allowedCitations as string[];
     expect(allowedCitations).toEqual(
@@ -1604,6 +1698,59 @@ describe("public deliberation", () => {
       allowedCitations.some((citation) =>
         citation.startsWith("https://fake.evidence.test/")),
     ).toBe(true);
+  });
+
+  it("runs two exchanges when one stance moves once and then holds", async () => {
+    const setup = await discussionSetup(2, {
+      0: [
+        deliberationResponse("Seat 0 moves", [], "NO"),
+        deliberationResponse("Seat 0 holds", [], "NO"),
+      ],
+      1: [
+        deliberationResponse("Seat 1 holds", [], "YES"),
+        deliberationResponse("Seat 1 still holds", [], "YES"),
+      ],
+    });
+    const callsBefore = setup.gonkaComplete.mock.calls.length;
+
+    await setup.engine.runDeliberation(setup.claimId);
+
+    expect(setup.gonkaComplete.mock.calls.slice(callsBefore)).toHaveLength(4);
+    expect(await setup.engine.inspect(setup.claimId)).toMatchObject({
+      debateConvergedAfterExchange: 2,
+    });
+  });
+
+  it("runs all three exchanges when a stance changes every time", async () => {
+    const setup = await discussionSetup(2, {
+      0: [
+        deliberationResponse("Seat 0 moves", [], "NO"),
+        deliberationResponse("Seat 0 moves back", [], "YES"),
+        deliberationResponse("Seat 0 moves again", [], "NO"),
+      ],
+      1: [
+        deliberationResponse("Seat 1 holds", [], "YES"),
+        deliberationResponse("Seat 1 still holds", [], "YES"),
+        deliberationResponse("Seat 1 finally holds", [], "YES"),
+      ],
+    });
+    const callsBefore = setup.gonkaComplete.mock.calls.length;
+
+    await setup.engine.runDeliberation(setup.claimId);
+
+    expect(setup.gonkaComplete.mock.calls.slice(callsBefore)).toHaveLength(6);
+    const inspection = await setup.engine.inspect(setup.claimId);
+    expect(inspection.debateConvergedAfterExchange ?? null).toBeNull();
+    const artifact = await createRepository(setup.db).getEvidenceArtifact(
+      `deliberation-transcript:${setup.claimId}`,
+    );
+    if (!artifact) throw new Error("expected a deliberation transcript artifact");
+    const transcript = JSON.parse(
+      new TextDecoder().decode(
+        await setup.walrus.get(artifact.canonicalWalrusBlobId),
+      ),
+    ) as Record<string, unknown>;
+    expect(transcript.convergedAfterExchange).toBeNull();
   });
 
   it("skips malformed output and continues later turns", async () => {
@@ -1622,8 +1769,6 @@ describe("public deliberation", () => {
     );
     expect(turns.map((turn) => [turn.status, turn.failureStatus])).toEqual([
       ["SKIPPED", "INVALID_OUTPUT"],
-      ["SPOKEN", undefined],
-      ["SPOKEN", undefined],
       ["SPOKEN", undefined],
     ]);
   });
@@ -1673,7 +1818,7 @@ describe("public deliberation", () => {
     await setup.engine.runDeliberation(setup.claimId);
 
     const turns = await repository.listDeliberationTurns(setup.claimId);
-    expect(turns).toHaveLength(4);
+    expect(turns).toHaveLength(2);
     expect(turns.every(
       (turn) =>
         turn.status === "SKIPPED" &&
@@ -1704,7 +1849,12 @@ describe("public deliberation", () => {
           await setup.walrus.get(artifact.canonicalWalrusBlobId),
         ),
       ),
-    ).toEqual({ version: 1, kind: "deliberation-transcript", turns: [] });
+    ).toEqual({
+      version: 1,
+      kind: "deliberation-transcript",
+      convergedAfterExchange: null,
+      turns: [],
+    });
     await expect(
       setup.engine.evidenceFreeze(setup.claimId, 2),
     ).resolves.toMatchObject({
@@ -1714,6 +1864,7 @@ describe("public deliberation", () => {
 
   it("deduplicates overlapping and repeated deliberation ticks", async () => {
     const setup = await discussionSetup(2);
+    const callsBefore = setup.gonkaComplete.mock.calls.length;
 
     await Promise.all([
       setup.engine.runDeliberation(setup.claimId),
@@ -1722,11 +1873,17 @@ describe("public deliberation", () => {
     await setup.engine.runDeliberation(setup.claimId);
 
     const repository = createRepository(setup.db);
-    await expect(repository.listDeliberationTurns(setup.claimId)).resolves.toHaveLength(4);
+    await expect(repository.listDeliberationTurns(setup.claimId)).resolves.toHaveLength(2);
     const events = (await repository.listResolutionEvents(setup.claimId)).filter(
       (event) => event.kind === "DELIBERATION_TURN",
     );
-    expect(events).toHaveLength(4);
+    expect(events).toHaveLength(2);
+    expect(setup.gonkaComplete.mock.calls.slice(callsBefore)).toHaveLength(2);
+    expect(
+      (await repository.listResolutionEvents(setup.claimId)).filter(
+        (event) => event.kind === "debate_converged",
+      ),
+    ).toHaveLength(1);
   });
 
   it("settles deliberation before a phase-two freeze", async () => {
@@ -1735,7 +1892,7 @@ describe("public deliberation", () => {
     await setup.engine.evidenceFreeze(setup.claimId, 2);
 
     const repository = createRepository(setup.db);
-    await expect(repository.listDeliberationTurns(setup.claimId)).resolves.toHaveLength(4);
+    await expect(repository.listDeliberationTurns(setup.claimId)).resolves.toHaveLength(2);
     const manifest = await repository.getEvidenceManifest(setup.claimId, 2);
     expect(manifest?.sortedLeaves).toContain(
       `deliberation-transcript:${setup.claimId}`,
@@ -2137,8 +2294,13 @@ async function discussionSetup(
   return { ...setup, claimId };
 }
 
-function deliberationResponse(argument: string, citations: string[] = []): string {
-  return JSON.stringify({ argument, citations });
+function deliberationResponse(
+  argument: string,
+  citations: string[] = [],
+  stance: TableVoteStance = "YES",
+  confidenceBps = 8_000,
+): string {
+  return JSON.stringify({ argument, citations, stance, confidenceBps });
 }
 
 function publicDeliberationTurn(record: DeliberationTurnRecord) {
@@ -2151,6 +2313,10 @@ function publicDeliberationTurn(record: DeliberationTurnRecord) {
     exchange: record.exchange,
     argument: record.argument,
     citations: record.citations,
+    ...(record.stance === undefined ? {} : { stance: record.stance }),
+    ...(record.confidenceBps === undefined
+      ? {}
+      : { confidenceBps: record.confidenceBps }),
     status: record.status,
     ...(record.failureStatus === undefined
       ? {}

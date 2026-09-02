@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   DELIBERATION_PROMPT_SPEC_V1,
   DELIBERATION_PROMPT_SPEC_V2,
+  DELIBERATION_PROMPT_SPEC_V3,
   DEFAULT_PROMPT_SPEC_V1,
   DEFAULT_PROMPT_SPEC_V2,
   DEFAULT_PROMPT_SPEC_V3,
@@ -101,6 +102,12 @@ describe("deliberation prompt spec v1", () => {
 });
 
 describe("deliberation prompt spec v2", () => {
+  it("pins the immutable deliberation v2 hash", () => {
+    expect(promptSpecHash(DELIBERATION_PROMPT_SPEC_V2)).toBe(
+      "0x1605a64e58c95cceab4d166850476dde76fc52ba525866a63ae993450198406f",
+    );
+  });
+
   it("binds turn instructions to the larger debate budget", () => {
     expect(DELIBERATION_PROMPT_SPEC_V2).toMatchObject({
       version: "2",
@@ -118,6 +125,31 @@ describe("deliberation prompt spec v2", () => {
     );
     expect(promptSpecHash(DELIBERATION_PROMPT_SPEC_V2)).not.toBe(
       promptSpecHash(DELIBERATION_PROMPT_SPEC_V1),
+    );
+  });
+});
+
+describe("deliberation prompt spec v3", () => {
+  it("pins the immutable deliberation v3 hash", () => {
+    expect(promptSpecHash(DELIBERATION_PROMPT_SPEC_V3)).toBe(
+      "0xccee9e24fa55176cd0463cb1833ff4836821c6cf299e294668cf3431908d3906",
+    );
+  });
+
+  it("binds public stances to the turn instruction contract", () => {
+    expect(DELIBERATION_PROMPT_SPEC_V3).toMatchObject({
+      version: "3",
+      providerId: "gonkarouter",
+      temperature: 0,
+      maxOutputTokens: 800,
+      responseFormat: "json_object",
+    });
+    expect(DELIBERATION_PROMPT_SPEC_V3.systemPrompt).toContain("stance");
+    expect(DELIBERATION_PROMPT_SPEC_V3.systemPrompt).toContain(
+      "turnInstructions",
+    );
+    expect(DELIBERATION_PROMPT_SPEC_V3.systemPrompt).toContain(
+      "confidenceBps",
     );
   });
 });

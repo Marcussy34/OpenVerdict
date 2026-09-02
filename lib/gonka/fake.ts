@@ -9,6 +9,7 @@ import { createGonkaAdapterWithDependencies } from "./adapter";
 import {
   DELIBERATION_PROMPT_SPEC_V1,
   DELIBERATION_PROMPT_SPEC_V2,
+  DELIBERATION_PROMPT_SPEC_V3,
 } from "./promptSpec";
 import type {
   GonkaAttemptRecord,
@@ -387,6 +388,8 @@ export function createFakeGonkaAdapter(fixtures: FakeFixture[]): GonkaRouterAdap
       ? JSON.stringify({
           argument: "This juror maintains the position in its revealed record.",
           citations: [],
+          stance: source.outcome ?? "UNSURE",
+          confidenceBps: source.confidenceBps ?? 0,
         })
       : responses[Math.min(responseIndex, responses.length - 1)]!;
     return {
@@ -419,7 +422,8 @@ export function createFakeGonkaAdapter(fixtures: FakeFixture[]): GonkaRouterAdap
   ): Promise<GonkaCompletionResult> {
     if (
       request.messages[0]?.content === DELIBERATION_PROMPT_SPEC_V1.systemPrompt ||
-      request.messages[0]?.content === DELIBERATION_PROMPT_SPEC_V2.systemPrompt
+      request.messages[0]?.content === DELIBERATION_PROMPT_SPEC_V2.systemPrompt ||
+      request.messages[0]?.content === DELIBERATION_PROMPT_SPEC_V3.systemPrompt
     ) {
       const deliberation = nextDeliberation(request.input, request.manifest);
       return createFixtureAdapter(

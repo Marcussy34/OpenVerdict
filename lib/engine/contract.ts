@@ -201,6 +201,33 @@ export type RoundReadinessStatus = {
   revealedJurySeatIds: string[];
 };
 
+/** Attempt states let later engine work expose one verification chain. */
+export type AttemptChainStatus = "ACTIVE" | "VOIDED" | "SETTLED" | "GAVE_UP";
+
+/** Public links and failures across at most three verification attempts. */
+export type AttemptChain = {
+  verificationId: string;
+  attempt: 1 | 2 | 3;
+  maxAttempts: 3;
+  status: AttemptChainStatus;
+  void?: {
+    seatId?: string;
+    modelId?: string;
+    phase?: 1 | 2;
+    reason: string;
+    message?: string;
+    atMs: number;
+  };
+  relaunchedAs?: string;
+  gaveUpReason?: string;
+  previousAttempts: Array<{
+    claimId: string;
+    attempt: 1 | 2 | 3;
+    status: AttemptChainStatus;
+    voidReason?: string;
+  }>;
+};
+
 export type ClaimInspection = {
   claimId: string;
   mode: ClaimMode;
@@ -217,6 +244,8 @@ export type ClaimInspection = {
   /** Public deliberation turns: revealed round-1 jurors arguing the split
    * between reveal 1 and round 2, in ordinal order. */
   deliberation?: DeliberationTurnPublic[];
+  attemptChain?: AttemptChain;
+  debateConvergedAfterExchange?: 1 | 2 | 3;
   result?: FinalizeReport;
   /** Populated when inspect() is called with { verify: true }. */
   verification?: {
@@ -237,8 +266,10 @@ export type DeliberationTurnPublic = {
   modelId?: string;
   /** 0-based order across the whole debate. */
   ordinal: number;
-  /** 1 = opening rebuttal, 2 = response exchange. */
-  exchange: 1 | 2;
+  /** Three exchanges allow the debate to stop after nobody moves. */
+  exchange: 1 | 2 | 3;
+  stance?: "YES" | "NO" | "UNSURE";
+  confidenceBps?: number;
   /** Bounded plain-text argument (no markdown), at most 1200 chars. */
   argument: string;
   /** Evidence ids from the phase-1 manifest or URLs from this juror's own

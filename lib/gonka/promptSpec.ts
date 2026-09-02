@@ -2,6 +2,7 @@ import { blake2b256, toHex } from "../protocol/hash";
 import type {
   DeliberationPromptSpecV1,
   DeliberationPromptSpecV2,
+  DeliberationPromptSpecV3,
   HexString,
   OracleInferenceInput,
   PromptSpec,
@@ -210,6 +211,21 @@ export const DELIBERATION_PROMPT_SPEC_V2: DeliberationPromptSpecV2 = {
   responseFormat: "json_object",
 };
 
+// V3 publishes each juror's current stance before the sealed table vote.
+export const DELIBERATION_PROMPT_SPEC_V3: DeliberationPromptSpecV3 = {
+  ...DELIBERATION_PROMPT_SPEC_V2,
+  version: "3",
+  systemPrompt: DELIBERATION_PROMPT_SPEC_V2.systemPrompt
+    .replace(
+      'Return exactly {"argument":string,"citations":string[]}.',
+      'Return exactly {"argument":string,"citations":string[],"stance":"YES"|"NO"|"UNSURE","confidenceBps":number}.',
+    )
+    .replace(
+      "The object must contain exactly those two keys and no others.",
+      "The object must contain exactly those four keys and no others. stance is your current position after hearing the debate so far and confidenceBps is an integer from 0 to 10000; both are public and non-binding, your sealed round-two vote is cast later.",
+    ),
+};
+
 // The table vote is one no-tools call over the evidence and public debate.
 export const TABLE_VOTE_PROMPT_SPEC_V1: TableVotePromptSpecV1 = {
   version: "1",
@@ -237,6 +253,7 @@ export function promptSpecHash(
     | PromptSpec
     | DeliberationPromptSpecV1
     | DeliberationPromptSpecV2
+    | DeliberationPromptSpecV3
     | TableVotePromptSpecV1,
 ): HexString {
   return toHex(blake2b256(canonicalJsonBytes(spec)));

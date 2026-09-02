@@ -379,6 +379,15 @@ export type DeliberationPromptSpecV2 = {
   maxOutputTokens: 800;
   responseFormat: "json_object";
 };
+/** V3 makes each public turn carry the juror's current position. */
+export type DeliberationPromptSpecV3 = {
+  version: "3";
+  providerId: "gonkarouter";
+  systemPrompt: string;
+  temperature: 0;
+  maxOutputTokens: 800;
+  responseFormat: "json_object";
+};
 export type PromptSpec =
   | PromptSpecV1
   | PromptSpecV2

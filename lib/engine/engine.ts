@@ -11,7 +11,7 @@ import {
   type RetrievedArtifact,
 } from "../evidence";
 import {
-  DELIBERATION_PROMPT_SPEC_V2,
+  DELIBERATION_PROMPT_SPEC_V3,
   EMPTY_TOOL_TRANSCRIPT_HASH,
   GonkaRunError,
   canonicalJsonBytes,
@@ -53,6 +53,7 @@ import {
   type ToolPolicyV2,
   type ToolPolicyV3,
   type ToolPolicyV4,
+  type TableVoteStance,
   type VoteOutcome,
 } from "../protocol";
 import {
@@ -167,8 +168,10 @@ const PER_TURN_BUDGET_MS = 60_000;
 const DEFAULT_EVIDENCE_FREEZE_LEAD_MS = 120_000;
 const MAX_DELIBERATION_CITATIONS = 8;
 const MAX_DELIBERATION_ALLOWED_CITATIONS = 60;
+/** Three exchanges bound the public debate before the table vote. */
+export const MAX_DELIBERATION_EXCHANGES = 3;
 const DELIBERATION_PROMPT_SPEC_HASH = promptSpecHash(
-  DELIBERATION_PROMPT_SPEC_V2,
+  DELIBERATION_PROMPT_SPEC_V3,
 );
 
 export function agentBackingStatus(
@@ -228,8 +231,106 @@ type DeliberationDebater = {
 type DeliberationPlanTurn = {
   debater: DeliberationDebater;
   ordinal: number;
-  exchange: 1 | 2;
+  exchange: 1 | 2 | 3;
 };
+
+type DeliberationConvergenceTurn = Pick<
+  DeliberationTurnPublic,
+  "jurySeatId" | "exchange" | "status" | "stance"
+>;
+
+type DeliberationExchangeAnalysis =
+  | { complete: false }
+  | {
+      complete: true;
+      comparable: boolean;
+      moved: boolean;
+      stances: Map<string, TableVoteStance | undefined>;
+    };
+
+/** Resolve one full exchange against each seat's prior effective stance. */
+function analyzeDeliberationExchange(
+  turns: ReadonlyArray<DeliberationConvergenceTurn>,
+  previousStances: ReadonlyMap<string, TableVoteStance | undefined>,
+  exchange: 1 | 2 | 3,
+): DeliberationExchangeAnalysis {
+  const turnBySeat = new Map(
+    turns
+      .filter((turn) => turn.exchange === exchange)
+      .map((turn) => [turn.jurySeatId, turn]),
+  );
+  if ([...previousStances.keys()].some((seatId) => !turnBySeat.has(seatId))) {
+    return { complete: false };
+  }
+
+  let comparable = true;
+  let moved = false;
+  const stances = new Map<string, TableVoteStance | undefined>();
+  for (const [seatId, previousStance] of previousStances) {
+    const turn = turnBySeat.get(seatId);
+    if (turn === undefined) return { complete: false };
+    const stance = turn.status === "SKIPPED" ? previousStance : turn.stance;
+    stances.set(seatId, stance);
+    if (stance === undefined || previousStance === undefined) {
+      comparable = false;
+    } else if (stance !== previousStance) {
+      moved = true;
+    }
+  }
+  return { complete: true, comparable, moved, stances };
+}
+
+/** Find the first complete exchange where every juror kept its stance. */
+export function debateConvergedAfterExchange(
+  turns: ReadonlyArray<
+    Pick<
+      DeliberationTurnPublic,
+      "jurySeatId" | "exchange" | "status" | "stance"
+    >
+  >,
+  // jurySeatId -> round-one outcome
+  roundOneStances: ReadonlyMap<string, "YES" | "NO" | "UNSURE">,
+): 1 | 2 | 3 | null {
+  if (roundOneStances.size === 0) return null;
+  let previousStances = new Map<string, TableVoteStance | undefined>(
+    roundOneStances,
+  );
+  for (const exchange of [1, 2, MAX_DELIBERATION_EXCHANGES] as const) {
+    const analysis = analyzeDeliberationExchange(
+      turns,
+      previousStances,
+      exchange,
+    );
+    if (!analysis.complete) return null;
+    if (analysis.comparable && !analysis.moved) return exchange;
+    previousStances = analysis.stances;
+  }
+  return null;
+}
+
+/** Tell later turns when the immediately preceding exchange changed a vote. */
+function debateMovedBeforeExchange(
+  turns: ReadonlyArray<DeliberationConvergenceTurn>,
+  roundOneStances: ReadonlyMap<string, TableVoteStance>,
+  exchange: 1 | 2 | 3,
+): boolean {
+  if (exchange === 1 || roundOneStances.size === 0) return false;
+  let previousStances = new Map<string, TableVoteStance | undefined>(
+    roundOneStances,
+  );
+  for (const priorExchange of [1, 2] as const) {
+    if (priorExchange >= exchange) return false;
+    const analysis = analyzeDeliberationExchange(
+      turns,
+      previousStances,
+      priorExchange,
+    );
+    if (!analysis.complete) return false;
+    if (priorExchange === exchange - 1) return analysis.moved;
+    previousStances = analysis.stances;
+  }
+  return false;
+}
 
 type SeatResearchConfig =
   | {
@@ -1526,6 +1627,16 @@ class OpenVerdictEngine implements Engine {
     const deliberation = (
       await this.#repository.listDeliberationTurns(claimId)
     ).map(toPublicDeliberationTurn);
+    const roundOneStances = new Map(
+      (await this.#repository.listReveals(claimId, 1)).map((reveal) => [
+        reveal.jurySeatId,
+        outcomeLabel(reveal.outcome),
+      ]),
+    );
+    const convergedAfterExchange = debateConvergedAfterExchange(
+      deliberation,
+      roundOneStances,
+    );
     const inspection: ClaimInspection = {
       claimId,
       mode: claim.mode,
@@ -1545,6 +1656,9 @@ class OpenVerdictEngine implements Engine {
       commitments,
       rounds,
       ...(deliberation.length === 0 ? {} : { deliberation }),
+      ...(convergedAfterExchange === null
+        ? {}
+        : { debateConvergedAfterExchange: convergedAfterExchange }),
       ...(result === undefined ? {} : { result: certificateToFinalizeReport(result) }),
     };
     if (opts.verify) inspection.verification = await this.verifyClaim(claim, manifests, packages, result);
@@ -3460,61 +3574,101 @@ class OpenVerdictEngine implements Engine {
     if (claim.state !== CLAIM_STATE.DISCUSSION) return;
 
     const { priorRound, debaters } = await this.deliberationDebaters(claimId);
-    const plan = ([1, 2] as const).flatMap((exchange) =>
-      debaters.map((debater) => ({ debater, exchange })),
-    ).map<DeliberationPlanTurn>((turn, ordinal) => ({ ...turn, ordinal }));
     const persisted = await this.#repository.listDeliberationTurns(claimId);
     const completedOrdinals = new Set(persisted.map((turn) => turn.ordinal));
     const records = [...persisted];
+    const roundOneStances = new Map(
+      debaters.map((debater) => [debater.jurySeatId, debater.outcome]),
+    );
     const freezeLeadMs = nonNegativeNumberEnv(
       "OPENVERDICT_EVIDENCE_FREEZE_LEAD_MS",
       DEFAULT_EVIDENCE_FREEZE_LEAD_MS,
     );
-    const phaseOneManifest = plan.length === 0
+    const phaseOneManifest = debaters.length === 0
       ? undefined
       : await this.requiredEvidenceManifest(claimId, 1);
     const seatIndexById = new Map(
       debaters.map((debater) => [debater.jurySeatId, debater.seatIndex]),
     );
 
-    for (const [planIndex, turn] of plan.entries()) {
-      if (completedOrdinals.has(turn.ordinal)) continue;
-      if (
-        this.#now() + PER_TURN_BUDGET_MS >
-        claim.deadlines.discussionDeadlineMs - freezeLeadMs
-      ) {
-        for (const remaining of plan.slice(planIndex)) {
-          if (completedOrdinals.has(remaining.ordinal)) continue;
-          const skipped = this.deliberationTurnRecord(
-            remaining,
-            "SKIPPED",
-            "",
-            [],
-            "WINDOW_EXHAUSTED",
-          );
-          await this.persistDeliberationTurn(skipped);
-          records.push(skipped);
-          completedOrdinals.add(remaining.ordinal);
+    for (const exchange of [1, 2, MAX_DELIBERATION_EXCHANGES] as const) {
+      const ordinalOffset = (exchange - 1) * debaters.length;
+      const plan = debaters.map<DeliberationPlanTurn>((debater, index) => ({
+        debater,
+        exchange,
+        ordinal: ordinalOffset + index,
+      }));
+      const movedSoFar = debateMovedBeforeExchange(
+        records,
+        roundOneStances,
+        exchange,
+      );
+
+      for (const [planIndex, turn] of plan.entries()) {
+        if (completedOrdinals.has(turn.ordinal)) continue;
+        if (
+          this.#now() + PER_TURN_BUDGET_MS >
+          claim.deadlines.discussionDeadlineMs - freezeLeadMs
+        ) {
+          for (const remaining of plan.slice(planIndex)) {
+            if (completedOrdinals.has(remaining.ordinal)) continue;
+            const skipped = this.deliberationTurnRecord(
+              remaining,
+              "SKIPPED",
+              "",
+              [],
+              "WINDOW_EXHAUSTED",
+            );
+            await this.persistDeliberationTurn(skipped);
+            records.push(skipped);
+            completedOrdinals.add(remaining.ordinal);
+          }
+          break;
+        }
+
+        const allowedCitations = this.deliberationAllowedCitations(
+          turn.debater,
+          phaseOneManifest,
+          priorRound,
+        );
+        const record = await this.completeDeliberationTurn(
+          claim,
+          turn,
+          priorRound,
+          records,
+          seatIndexById,
+          allowedCitations,
+          movedSoFar,
+        );
+        await this.persistDeliberationTurn(record);
+        records.push(record);
+        completedOrdinals.add(turn.ordinal);
+      }
+
+      const convergedAfterExchange = debateConvergedAfterExchange(
+        records,
+        roundOneStances,
+      );
+      if (convergedAfterExchange === exchange) {
+        const alreadyEmitted = (
+          await this.#repository.listResolutionEvents(claimId)
+        ).some(
+          (event) =>
+            event.kind === "debate_converged" &&
+            event.payload.exchange === exchange,
+        );
+        if (!alreadyEmitted) {
+          await this.emit({
+            claimId,
+            phase: "DISCUSSION",
+            kind: "debate_converged",
+            source: "ENGINE",
+            visibility: "PUBLIC_NOW",
+            payload: { claim_id: claimId, exchange },
+          });
         }
         break;
       }
-
-      const allowedCitations = this.deliberationAllowedCitations(
-        turn.debater,
-        phaseOneManifest,
-        priorRound,
-      );
-      const record = await this.completeDeliberationTurn(
-        claim,
-        turn,
-        priorRound,
-        records,
-        seatIndexById,
-        allowedCitations,
-      );
-      await this.persistDeliberationTurn(record);
-      records.push(record);
-      completedOrdinals.add(turn.ordinal);
     }
 
     await this.ensureDeliberationTranscriptArtifact(claim);
@@ -3599,6 +3753,7 @@ class OpenVerdictEngine implements Engine {
     priorTurns: DeliberationTurnRecord[],
     seatIndexById: ReadonlyMap<string, number>,
     allowedCitations: string[],
+    movedSoFar: boolean,
   ): Promise<DeliberationTurnRecord> {
     const { debater } = turn;
     if (debater.manifest === undefined || debater.input === undefined) {
@@ -3624,6 +3779,10 @@ class OpenVerdictEngine implements Engine {
       exchange: prior.exchange,
       argument: prior.argument,
       citations: prior.citations,
+      ...(prior.stance === undefined ? {} : { stance: prior.stance }),
+      ...(prior.confidenceBps === undefined
+        ? {}
+        : { confidenceBps: prior.confidenceBps }),
     }));
     const turnInstructions = deliberationTurnInstructions({
       exchange: turn.exchange,
@@ -3635,11 +3794,12 @@ class OpenVerdictEngine implements Engine {
         outcome,
       })),
       mostRecentSpeaker,
+      movedSoFar,
     });
     const messages = [
       {
         role: "system" as const,
-        content: DELIBERATION_PROMPT_SPEC_V2.systemPrompt,
+        content: DELIBERATION_PROMPT_SPEC_V3.systemPrompt,
       },
       {
         role: "user" as const,
@@ -3671,7 +3831,7 @@ class OpenVerdictEngine implements Engine {
         input: debater.input,
         attempts: [],
         timeoutMs: PER_TURN_BUDGET_MS,
-        maxOutputTokens: DELIBERATION_PROMPT_SPEC_V2.maxOutputTokens,
+        maxOutputTokens: DELIBERATION_PROMPT_SPEC_V3.maxOutputTokens,
       });
       if (!completion.ok) {
         return this.deliberationTurnRecord(
@@ -3703,6 +3863,8 @@ class OpenVerdictEngine implements Engine {
         validated.citations,
         undefined,
         completion.gonkaRequestId,
+        validated.stance,
+        validated.confidenceBps,
       );
     } catch (error) {
       return this.deliberationTurnRecord(
@@ -3722,6 +3884,8 @@ class OpenVerdictEngine implements Engine {
     citations: string[],
     failureStatus?: DeliberationFailureStatus,
     gonkaRequestId?: string,
+    stance?: TableVoteStance,
+    confidenceBps?: number,
   ): DeliberationTurnRecord {
     const atMs = this.#now();
     const timestamp = new Date(atMs).toISOString();
@@ -3735,6 +3899,8 @@ class OpenVerdictEngine implements Engine {
       exchange: turn.exchange,
       argument,
       citations,
+      ...(stance === undefined ? {} : { stance }),
+      ...(confidenceBps === undefined ? {} : { confidenceBps }),
       status,
       ...(failureStatus === undefined ? {} : { failureStatus }),
       atMs,
@@ -3842,10 +4008,23 @@ class OpenVerdictEngine implements Engine {
     claim: ClaimRecord,
   ): Promise<EvidenceArtifactRecord> {
     const evidenceId = deliberationTranscriptEvidenceId(claim.claimId);
-    const records = await this.#repository.listDeliberationTurns(claim.claimId);
+    const [records, roundOneReveals] = await Promise.all([
+      this.#repository.listDeliberationTurns(claim.claimId),
+      this.#repository.listReveals(claim.claimId, 1),
+    ]);
+    const roundOneStances = new Map(
+      roundOneReveals.map((reveal) => [
+        reveal.jurySeatId,
+        outcomeLabel(reveal.outcome),
+      ]),
+    );
     const content = canonicalJsonString({
       version: 1,
       kind: "deliberation-transcript",
+      convergedAfterExchange: debateConvergedAfterExchange(
+        records,
+        roundOneStances,
+      ),
       turns: records
         .map(toPublicDeliberationTurn)
         .sort((left, right) => left.ordinal - right.ordinal),
@@ -4072,9 +4251,9 @@ function acceptanceFloorMs(
   return startMs + Math.floor((commitDeadlineMs - startMs) / 2) + 2_000;
 }
 
-// V2 assigns turn duties because V1 produced identical monologues for unanimous juries.
+// V3 adds public stance updates while keeping V2's direct turn duties.
 export function deliberationTurnInstructions(input: {
-  exchange: 1 | 2;
+  exchange: 1 | 2 | 3;
   role: string;
   outcome: "YES" | "NO" | "UNSURE";
   seatIndex: number;
@@ -4083,6 +4262,7 @@ export function deliberationTurnInstructions(input: {
     outcome: "YES" | "NO" | "UNSURE";
   }>;
   mostRecentSpeaker: number | null;
+  movedSoFar: boolean;
 }): string {
   const others = input.roundOneSeats.filter(
     (seat) => seat.seatIndex !== input.seatIndex,
@@ -4120,20 +4300,37 @@ export function deliberationTurnInstructions(input: {
         `Every revealed seat voted ${input.outcome}, so state the strongest objection to that consensus and answer it.`,
       );
     }
-    sentences.push(roleSentence);
+    sentences.push(
+      "State your current stance and confidence in the stance and confidenceBps fields.",
+      roleSentence,
+    );
     return sentences.join(" ");
   }
 
-  return [
-    "Exchange two.",
+  const sentences = [
+    input.exchange === 2 ? "Exchange two." : "Exchange three.",
+    ...(input.movedSoFar
+      ? [
+          "At least one seat changed its stance in the previous exchange; address that change directly.",
+        ]
+      : []),
     "Answer the strongest objection raised against your position in exchange one, naming the seat that raised it.",
     unanimous
       ? `Every seat agrees with you, so present the best case for ${oppositeOutcome} using the allowed source that supports it most, and explain why it does not change your vote.`
       : "If a seat changed its reasoning or conceded a point, say whether that moves you.",
     "Do not restate points already made in this debate; add only new reasoning or direct answers.",
     "Close with your final position: whether you keep, raise, lower or change your confidence, and why.",
+  ];
+  if (input.exchange === 3) {
+    sentences.push(
+      "This is the last exchange: say plainly whether you now hold, raise, lower or change your vote, and what single piece of evidence decides it.",
+    );
+  }
+  sentences.push(
+    "State your current stance and confidence in the stance and confidenceBps fields.",
     roleSentence,
-  ].join(" ");
+  );
+  return sentences.join(" ");
 }
 
 function defaultDeadlines(
@@ -4371,6 +4568,10 @@ function toPublicDeliberationTurn(
     exchange: record.exchange,
     argument: record.argument,
     citations: record.citations,
+    ...(record.stance === undefined ? {} : { stance: record.stance }),
+    ...(record.confidenceBps === undefined
+      ? {}
+      : { confidenceBps: record.confidenceBps }),
     status: record.status,
     ...(record.failureStatus === undefined
       ? {}
@@ -4403,7 +4604,13 @@ function revealedRunBundleCore(
 }
 
 type DeliberationOutputValidation =
-  | { ok: true; argument: string; citations: string[] }
+  | {
+      ok: true;
+      argument: string;
+      citations: string[];
+      stance: TableVoteStance;
+      confidenceBps: number;
+    }
   | {
       ok: false;
       failureStatus: "INVALID_OUTPUT" | "INVALID_CITATIONS";
@@ -4425,13 +4632,22 @@ function validateDeliberationOutput(
   const record = parsed as Record<string, unknown>;
   const keys = Object.keys(record).sort();
   if (
-    keys.length !== 2 ||
+    keys.length !== 4 ||
     keys[0] !== "argument" ||
     keys[1] !== "citations" ||
+    keys[2] !== "confidenceBps" ||
+    keys[3] !== "stance" ||
     typeof record.argument !== "string" ||
     !Array.isArray(record.citations) ||
     record.citations.length > MAX_DELIBERATION_CITATIONS ||
-    record.citations.some((citation) => typeof citation !== "string")
+    record.citations.some((citation) => typeof citation !== "string") ||
+    (record.stance !== "YES" &&
+      record.stance !== "NO" &&
+      record.stance !== "UNSURE") ||
+    typeof record.confidenceBps !== "number" ||
+    !Number.isInteger(record.confidenceBps) ||
+    record.confidenceBps < 0 ||
+    record.confidenceBps > 10_000
   ) {
     return { ok: false, failureStatus: "INVALID_OUTPUT" };
   }
@@ -4448,7 +4664,13 @@ function validateDeliberationOutput(
   if (argument.length === 0) {
     return { ok: false, failureStatus: "INVALID_OUTPUT" };
   }
-  return { ok: true, argument, citations };
+  return {
+    ok: true,
+    argument,
+    citations,
+    stance: record.stance,
+    confidenceBps: record.confidenceBps,
+  };
 }
 
 function deliberationProviderFailure(error: unknown): "PROVIDER_ERROR" | "TIMEOUT" {
