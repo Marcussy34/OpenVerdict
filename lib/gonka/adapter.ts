@@ -1171,13 +1171,17 @@ export function createGonkaAdapterWithDependencies(
               // A fresh nonce per probe: the gateway caches identical
               // temperature-0 requests, and a cached answer says nothing
               // about whether the model answers right now.
+              // A research-shaped probe: a family that answers eight tokens
+              // in two seconds can still time out on a real turn (the night
+              // of 2026-09-03: probes clear, seats voided). Asking for a short
+              // structured paragraph makes "clear" mean "can do real work".
               messages: [
                 {
                   role: "user",
-                  content: `Reply with the single word OK. Probe ${startedAtMs}.`,
+                  content: `Probe ${startedAtMs}. In about 150 words, explain why the sky looks blue, then end with the JSON object {"ok":true} on its own line.`,
                 },
               ],
-              max_tokens: 8,
+              max_tokens: 400,
               temperature: 0,
             },
             { timeout: probeTimeoutMs },
