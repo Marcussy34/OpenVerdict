@@ -2002,10 +2002,14 @@ class OpenVerdictEngine implements Engine {
       label: certificate?.result ?? "PENDING",
       truthScore: truthScoreBps === null ? null : truthScoreBps / 100,
       truthScoreFormula:
-        "mean(YES confidence, NO (10000-confidence), UNSURE 5000), rounded half-up; displayed as basis-points / 100",
+        "confidence is read as the juror's probability that its own vote is correct; mean(YES confidence, NO (10000-confidence), UNSURE 5000) over valid reveals, rounded half-up; displayed as basis-points / 100",
+      // Every final-round reveal, with the flag the score uses: only valid
+      // reveals enter the mean, so the page can print the same terms.
       finalRoundVotes: reveals.map((reveal) => ({
+        jurySeatId: reveal.jurySeatId,
         outcome: outcomeLabel(reveal.outcome),
         confidenceBps: reveal.confidenceBps,
+        valid: reveal.valid,
       })),
       agents,
       evidence: artifacts.map((artifact) => ({

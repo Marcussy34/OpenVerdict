@@ -309,7 +309,13 @@ export type FactCheckReport = {
   label: "YES" | "NO" | "UNSURE" | "UNRESOLVED" | "PENDING";
   truthScore: number | null;
   truthScoreFormula: string;
-  finalRoundVotes: { outcome: "YES" | "NO" | "UNSURE"; confidenceBps: number }[];
+  finalRoundVotes: {
+    jurySeatId: string;
+    outcome: "YES" | "NO" | "UNSURE";
+    confidenceBps: number;
+    /** Only valid reveals (matching their commitment) enter the truth score. */
+    valid: boolean;
+  }[];
   agents: AgentCard[];
   evidence: {
     evidenceId: string;
