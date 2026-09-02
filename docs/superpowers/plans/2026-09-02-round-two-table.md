@@ -742,7 +742,7 @@ PRD 1.1 new item 15 (dated 2026-09-02): all-or-nothing attempts with weather-gat
 - [ ] **Step 3: Gate**
 
 Run: `pnpm typecheck && pnpm lint`
-Expected: PASS. No em dashes in the docs (`grep -c "—" docs/PRD.md docs/STATUS.md docs/demo/runbook.md docs/GONKA-INTEGRATION.md` must print 0 for the lines this task adds; pre-existing ones stay).
+Expected: PASS. No em dashes in the docs (grep the four files for the U+2014 character; it must not appear on any line this task adds; pre-existing ones stay).
 
 - [ ] **Step 4: Report.**
 
