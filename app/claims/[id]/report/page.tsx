@@ -21,6 +21,8 @@ import { Reveal } from "@/components/viz/reveal";
 import { RunProof } from "@/components/claim/run-proof";
 import { cn } from "@/lib/utils";
 import { deriveRunId } from "@/lib/verify/run-proof";
+import { computeTruthScoreBps, agentProbabilityBps } from "@/lib/protocol/truthScore";
+import { OUTCOME } from "@/lib/protocol/constants";
 import type { ClaimInspection, FactCheckReport } from "@/lib/engine/contract";
 import {
   DocumentText,
@@ -179,6 +181,77 @@ export default function ClaimDetailPage({ params }: ClaimDetailPageProps) {
       };
     });
   }, [claim, report]);
+
+  /** Compute outcome agreement and spread across valid final-round votes. */
+  const agreementSummary = useMemo(() => {
+    if (!report || !report.finalRoundVotes || report.finalRoundVotes.length === 0) {
+      return null;
+    }
+    const validVotes = report.finalRoundVotes.filter((v) => v.valid);
+    if (validVotes.length === 0) return null;
+
+    // Count outcomes among valid votes
+    const counts: Record<"YES" | "NO" | "UNSURE", number> = {
+      YES: 0,
+      NO: 0,
+      UNSURE: 0,
+    };
+    for (const v of validVotes) {
+      counts[v.outcome] = (counts[v.outcome] || 0) + 1;
+    }
+
+    const maxCount = Math.max(counts.YES, counts.NO, counts.UNSURE);
+    // Find outcomes with max count to detect ties
+    const topOutcomes = (Object.keys(counts) as Array<"YES" | "NO" | "UNSURE">).filter(
+      (k) => counts[k] === maxCount,
+    );
+
+    const total = validVotes.length;
+    const outcomeText =
+      topOutcomes.length === 1
+        ? `${maxCount} of ${total} ${topOutcomes[0]}`
+        : `${total} votes, split`;
+
+    // Min and max mapped probabilities on a 0 to 100 scale with two decimals
+    const mappedProbs = validVotes.map(
+      (v) => agentProbabilityBps(OUTCOME[v.outcome], v.confidenceBps) / 100,
+    );
+    const minProb = Math.min(...mappedProbs).toFixed(2);
+    const maxProb = Math.max(...mappedProbs).toFixed(2);
+
+    return `${outcomeText} · spread ${minProb} to ${maxProb}`;
+  }, [report]);
+
+  /** Compute valid vote sum and mean for the score derivation breakdown table. */
+  const scoreDerivation = useMemo(() => {
+    if (
+      !report ||
+      report.truthScore === null ||
+      !report.finalRoundVotes ||
+      report.finalRoundVotes.length === 0
+    ) {
+      return null;
+    }
+    const validVotes = report.finalRoundVotes.filter((v) => v.valid);
+    const sumBps = validVotes.reduce(
+      (total, v) => total + agentProbabilityBps(OUTCOME[v.outcome], v.confidenceBps),
+      0,
+    );
+    const meanBps = computeTruthScoreBps(
+      validVotes.map((v) => ({
+        outcome: OUTCOME[v.outcome],
+        confidenceBps: v.confidenceBps,
+      })),
+    );
+    const score = meanBps !== null ? meanBps / 100 : null;
+
+    return {
+      validVotes,
+      sumBps,
+      meanBps,
+      score,
+    };
+  }, [report]);
 
   const downloadAuditBundle = () => {
     if (!report?.auditBundle) return;
@@ -684,6 +757,11 @@ export default function ClaimDetailPage({ params }: ClaimDetailPageProps) {
                     {report.truthScore === null ? "N/A" : report.truthScore}
                     <span className="ml-1 text-xs text-muted-foreground">/100</span>
                   </p>
+                  {agreementSummary && (
+                    <p className="mt-1 text-xs text-muted-foreground tabular-nums">
+                      {agreementSummary}
+                    </p>
+                  )}
                 </div>
                 <div className="rounded-xl border border-border bg-surface p-3">
                   <FieldLabel className="mb-1">Final round votes</FieldLabel>
@@ -707,11 +785,115 @@ export default function ClaimDetailPage({ params }: ClaimDetailPageProps) {
                 </div>
               </div>
 
-              <Well>
-                <FieldLabel className="mb-1">Truth score formula</FieldLabel>
-                <p className="text-[13px] leading-relaxed text-foreground/85">
-                  {report.truthScoreFormula}
-                </p>
+              <Well className="space-y-4">
+                {scoreDerivation && (
+                  <div className="space-y-2">
+                    <FieldLabel>How the score is computed</FieldLabel>
+                    <div className="overflow-x-auto">
+                      <table className="w-full min-w-[480px] text-left text-xs">
+                        <thead className="border-b border-border text-[11px] font-medium text-muted-foreground">
+                          <tr>
+                            <th className="pb-2 pr-3 font-medium">Seat</th>
+                            <th className="pb-2 pr-3 font-medium">Vote</th>
+                            <th className="pb-2 pr-3 font-medium">Confidence</th>
+                            <th className="pb-2 font-medium text-right">Mapped probability</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-border/40">
+                          {report.finalRoundVotes.map((v, i) => {
+                            // Map revealed outcome and confidence into basis-point probability
+                            const mappedProbBps = agentProbabilityBps(
+                              OUTCOME[v.outcome],
+                              v.confidenceBps,
+                            );
+                            return (
+                              <tr
+                                key={v.jurySeatId || i}
+                                className={cn(!v.valid && "opacity-50")}
+                              >
+                                <td className="py-2.5 pr-3 align-top font-mono text-xs">
+                                  <span>{v.jurySeatId.slice(0, 10)}</span>
+                                  {!v.valid && (
+                                    <span className="mt-0.5 block font-sans text-[10px] italic text-muted-foreground">
+                                      excluded: reveal did not match its commitment
+                                    </span>
+                                  )}
+                                </td>
+                                <td className="py-2.5 pr-3 align-top">
+                                  <span
+                                    className={cn(
+                                      "inline-block rounded px-1.5 py-0.5 font-mono text-[10px] font-semibold",
+                                      v.outcome === "YES"
+                                        ? "bg-yes/10 text-yes"
+                                        : v.outcome === "NO"
+                                          ? "bg-no/10 text-no"
+                                          : "bg-unsure/10 text-unsure",
+                                    )}
+                                  >
+                                    {v.outcome}
+                                  </span>
+                                </td>
+                                <td className="py-2.5 pr-3 align-top tabular-nums">
+                                  <span className="font-semibold text-foreground">
+                                    {v.confidenceBps / 100}%
+                                  </span>
+                                  <span className="ml-1.5 font-mono text-[11px] text-muted-foreground">
+                                    {v.confidenceBps} bps
+                                  </span>
+                                </td>
+                                <td className="py-2.5 align-top text-right tabular-nums">
+                                  <div className="font-mono font-semibold text-foreground">
+                                    {(mappedProbBps / 100).toFixed(2)}
+                                  </div>
+                                  <div className="font-mono text-[10px] text-muted-foreground">
+                                    {v.outcome === "YES"
+                                      ? "= confidence"
+                                      : v.outcome === "NO"
+                                        ? `10000 - ${v.confidenceBps}`
+                                        : "fixed 5000"}
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                        <tfoot className="border-t border-border text-xs">
+                          <tr className="border-b border-border/40">
+                            <td colSpan={2} className="py-2 font-semibold text-muted-foreground">
+                              Sum
+                            </td>
+                            <td
+                              colSpan={2}
+                              className="py-2 text-right font-mono font-semibold tabular-nums text-foreground"
+                            >
+                              {scoreDerivation.sumBps} bps
+                            </td>
+                          </tr>
+                          <tr>
+                            <td colSpan={2} className="py-2 font-semibold text-muted-foreground">
+                              Mean
+                            </td>
+                            <td
+                              colSpan={2}
+                              className="py-2 text-right font-mono font-semibold tabular-nums text-foreground"
+                            >
+                              {scoreDerivation.sumBps} / {scoreDerivation.validVotes.length} ={" "}
+                              {scoreDerivation.meanBps} bps, score{" "}
+                              {scoreDerivation.score !== null ? scoreDerivation.score : "N/A"}
+                            </td>
+                          </tr>
+                        </tfoot>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
+                <div className={cn(scoreDerivation && "border-t border-border/60 pt-3")}>
+                  <FieldLabel className="mb-1">Truth score formula</FieldLabel>
+                  <p className="text-[13px] leading-relaxed text-foreground/85">
+                    {report.truthScoreFormula}
+                  </p>
+                </div>
               </Well>
 
               {/* Public reasoning traces: every check the jurors published. */}

@@ -323,6 +323,18 @@ outcome (PRD §24.2, §24.5). Per-seat stake pools become meaningful once
 reputation wiring differentiates track records; until then this section is
 the answer of record, not shipped code.
 
+### Next rung: seat weights from track record (roadmap, not implemented)
+
+Today every juror profile carries the same selection weight (10000) and every
+seat counts equally in the truth score, on purpose, because no juror has a
+track record yet. The principled next step is a weight derived from each
+juror's Brier score over resolved claims (the squared distance between its
+mapped probability and the settled outcome), recomputed after every settlement
+and published on the juror's agent page. A consistently well-calibrated juror
+then earns more weight in both committee selection and the mean, and a poorly
+calibrated one loses it, with no hand-set constants. Because the selection
+weight lives on-chain in the juror registry, this needs a registry update path.
+
 ---
 
 ## 🏆 Hackathon track fit
