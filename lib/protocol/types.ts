@@ -569,7 +569,12 @@ export type ResearchTranscriptStep = {
         canonicalWalrusBlobId: string;
       }
     | { tool: "error"; code: ResearchToolErrorCode; message: string }
-    | { tool: "answer"; valid: boolean; errors: string[] };
+    | {
+        tool: "answer";
+        valid: boolean;
+        errors: string[];
+        repairs?: string[];
+      };
 };
 
 export type ResearchTranscriptV1 = {

@@ -99,6 +99,24 @@ describe("validateTableVote", () => {
     expect(validateTableVote(JSON.stringify(output), ctx)).toEqual({
       ok: true,
       output,
+      repairs: [],
+    });
+  });
+
+  it("drops prose from unsupportedClaims and records the repair", () => {
+    const prose = "The claim is stated as an absolute but research is divided.";
+
+    expect(
+      validateTableVote(
+        JSON.stringify({ ...output, unsupportedClaims: [prose] }),
+        ctx,
+      ),
+    ).toEqual({
+      ok: true,
+      output: { ...output, unsupportedClaims: [] },
+      repairs: [
+        `unsupportedClaims: dropped entry that is not an evidence id: "${prose}"`,
+      ],
     });
   });
 
@@ -1594,8 +1612,9 @@ describe("headless engine", () => {
     expect((await setup.engine.inspect(claimId)).commitments).toHaveLength(5);
   });
 
-  it("runs phase two as five sealed table votes and finalizes the result", async () => {
-    const setup = await roundTwoSetup("6");
+  it("repairs prose and runs phase two as five sealed table votes", async () => {
+    const prose = "The claim is stated as an absolute but research is divided.";
+    const setup = await roundTwoSetup("6", { unsupportedClaims: [prose] });
     const repository = createRepository(setup.db);
     const firstRuns = await repository.listInferenceRuns(setup.claimId, 1);
     const spokenTurns = (await repository.listDeliberationTurns(setup.claimId)).filter(
@@ -1616,6 +1635,7 @@ describe("headless engine", () => {
     const phaseTwoRuns = await repository.listInferenceRuns(setup.claimId, 2);
     expect(phaseTwoRuns).toHaveLength(5);
     for (const run of phaseTwoRuns) {
+      expect(run.output?.unsupportedClaims).toEqual([]);
       expect(run.promptHash).toBe(tableVotePromptSpecHash());
       expect(run.audit.promptHash).toBe(tableVotePromptSpecHash());
       expect(run.audit.toolTranscriptHash).toBe(EMPTY_TOOL_TRANSCRIPT_HASH);
@@ -1631,6 +1651,34 @@ describe("headless engine", () => {
       );
       expect(core.input.self.roundOneOutput).toEqual(firstRun?.output);
       expect("transcript" in core).toBe(false);
+    }
+    const repairEvents = (await repository.listResolutionEvents(setup.claimId)).filter(
+      (event) => event.kind === "output_repaired",
+    );
+    expect(
+      repairEvents.filter((event) => event.payload.phase === 1),
+    ).toHaveLength(5);
+    const tableVoteRepairEvents = repairEvents.filter(
+      (event) => event.payload.phase === 2,
+    );
+    expect(tableVoteRepairEvents).toHaveLength(5);
+    for (const event of tableVoteRepairEvents) {
+      expect(event).toMatchObject({
+        phase: "COMMIT_2",
+        source: "ENGINE",
+        visibility: "PUBLIC_NOW",
+        payload: {
+          claim_id: setup.claimId,
+          jury_seat_id: expect.any(String),
+          agent_profile_id: expect.any(String),
+          run_id: expect.any(String),
+          phase: 2,
+          field: "unsupportedClaims",
+          dropped: [
+            `unsupportedClaims: dropped entry that is not an evidence id: "${prose}"`,
+          ],
+        },
+      });
     }
 
     await setup.engine.votesCommit(setup.claimId, 2);
@@ -2460,6 +2508,7 @@ async function engineSetup(
     failures?: Partial<Record<number, FakeFailure>>;
     actions?: FakeAction[];
     decisiveEvidence?: string[];
+    unsupportedClaims?: string[];
     deliberationResponses?: Partial<Record<number, string[]>>;
     /** Replaces the local store (for example a store with a retention clock). */
     walrus?: WalrusStore;
@@ -2492,6 +2541,9 @@ async function engineSetup(
           ...(options.decisiveEvidence === undefined
             ? {}
             : { decisiveEvidence: options.decisiveEvidence }),
+          ...(options.unsupportedClaims === undefined
+            ? {}
+            : { unsupportedClaims: options.unsupportedClaims }),
           ...(options.deliberationResponses?.[index] === undefined
             ? {}
             : { deliberationResponses: options.deliberationResponses[index] }),
@@ -2509,6 +2561,9 @@ async function engineSetup(
             ...(options.decisiveEvidence === undefined
               ? {}
               : { decisiveEvidence: options.decisiveEvidence }),
+            ...(options.unsupportedClaims === undefined
+              ? {}
+              : { unsupportedClaims: options.unsupportedClaims }),
             ...(roundIndex !== 0 || options.deliberationResponses?.[index] === undefined
               ? {}
               : { deliberationResponses: options.deliberationResponses[index] }),
@@ -2546,11 +2601,14 @@ async function engineSetup(
   };
 }
 
-async function roundTwoSetup(manifestVersion: "5" | "6") {
+async function roundTwoSetup(
+  manifestVersion: "5" | "6",
+  options: { unsupportedClaims?: string[] } = {},
+) {
   const setup = await engineSetup(new FakeSuiGateway(), [
     ["YES", "YES", "YES", "NO", "NO"],
     ["NO", "NO", "NO", "NO", "YES"],
-  ]);
+  ], options);
   const { claimId } = await setup.engine.factCheckStart({
     claim: "A split first round must end with a sealed table vote.",
     text: "Local evidence for the first round and the table.",

@@ -3,6 +3,8 @@ import { z } from "zod";
 import {
   citationSchema,
   oracleInferenceOutputSchema,
+  repairUnsupportedClaims,
+  unsupportedClaimsRepairNote,
   validateOutputAgainstManifest,
 } from "../gonka/schemas";
 import type {
@@ -134,6 +136,7 @@ export function validateResearchAnswer(
       ok: true;
       output: OracleInferenceOutput;
       citations: Array<Citation & { found: boolean }>;
+      repairs: string[];
     }
   | { ok: false; errors: string[] } {
   const schemaResult = researchAnswerSchema.safeParse(output);
@@ -153,6 +156,16 @@ export function validateResearchAnswer(
     ...ctx.frozenEvidenceIds,
     ...ctx.opened.map((page) => page.evidenceId),
   ]);
+  const { citations: lenientCitations, ...lenientOutput } = lenient;
+  // MiniMax can read this field name as a request for prose. Only this field
+  // is repaired, while the vote, confidence, and other evidence arrays fail closed.
+  const unsupportedClaimsRepair = repairUnsupportedClaims(
+    lenientOutput,
+    (value) => openedByRef.has(value) || knownEvidenceIds.has(value),
+  );
+  const repairs = unsupportedClaimsRepair.dropped.map(
+    unsupportedClaimsRepairNote,
+  );
   const openedByUrl = new Map<string, StoredPage>();
   for (const page of ctx.opened) {
     for (const url of [page.url, page.finalUrl]) {
@@ -174,7 +187,7 @@ export function validateResearchAnswer(
       return resolved === undefined ? [] : [resolved];
     });
 
-  const resolvedCitations = lenient.citations?.map((citation, index) => {
+  const resolvedCitations = lenientCitations?.map((citation, index) => {
     let evidenceId: string | undefined;
     if (citation.evidenceId !== undefined) {
       evidenceId = resolveEvidenceId(citation.evidenceId);
@@ -192,15 +205,22 @@ export function validateResearchAnswer(
     return { ...citation, evidenceId: evidenceId ?? "" };
   });
   const resolvedOutput = {
-    ...lenient,
-    evidenceFor: resolveEvidenceIds(lenient.evidenceFor),
-    evidenceAgainst: resolveEvidenceIds(lenient.evidenceAgainst),
-    unsupportedClaims: resolveEvidenceIds(lenient.unsupportedClaims),
-    decisiveEvidence: resolveEvidenceIds(lenient.decisiveEvidence),
-    publicReasoningTrace: lenient.publicReasoningTrace.map((entry) => ({
-      ...entry,
-      evidenceIds: resolveEvidenceIds(entry.evidenceIds),
-    })),
+    ...unsupportedClaimsRepair.output,
+    evidenceFor: resolveEvidenceIds(unsupportedClaimsRepair.output.evidenceFor),
+    evidenceAgainst: resolveEvidenceIds(
+      unsupportedClaimsRepair.output.evidenceAgainst,
+    ),
+    unsupportedClaims: resolveEvidenceIds(
+      unsupportedClaimsRepair.output.unsupportedClaims,
+    ),
+    decisiveEvidence: resolveEvidenceIds(
+      unsupportedClaimsRepair.output.decisiveEvidence,
+    ),
+    publicReasoningTrace:
+      unsupportedClaimsRepair.output.publicReasoningTrace.map((entry) => ({
+        ...entry,
+        evidenceIds: resolveEvidenceIds(entry.evidenceIds),
+      })),
     ...(resolvedCitations === undefined
       ? {}
       : { citations: resolvedCitations }),
@@ -298,5 +318,6 @@ export function validateResearchAnswer(
       ...citation,
       found: !unverifiedQuotes.has(index),
     })),
+    repairs,
   };
 }

@@ -611,6 +611,38 @@ describe("research loop", () => {
     expect(script.requests[1]?.attemptKind).toBe("REPAIR");
   });
 
+  it("records an accepted unsupportedClaims repair in the transcript", async () => {
+    const prose = "The claim is stated as an absolute but research is divided.";
+    const script = scriptedCompletion([
+      action({
+        action: "answer",
+        output: makeOutput({
+          outcome: "UNSURE",
+          unsupportedClaims: [prose],
+          decisiveEvidence: [],
+          citations: [],
+        }),
+      }),
+    ]);
+
+    const result = await runResearchLoop(
+      loopDependencies({ complete: script.complete }),
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const repair =
+      `unsupportedClaims: dropped entry that is not an evidence id: "${prose}"`;
+    expect(result.output.unsupportedClaims).toEqual([]);
+    expect(result.repairs).toEqual([repair]);
+    expect(result.transcript.steps[0]?.result).toEqual({
+      tool: "answer",
+      valid: true,
+      errors: [],
+      repairs: [repair],
+    });
+  });
+
   it("fails citation repair when YES cites only a submitted page", async () => {
     const url = "https://fake.evidence.test/submitted/1";
     const input = inputWithSubmittedUrl(url);
@@ -1091,12 +1123,15 @@ describe("research loop", () => {
     );
 
     expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.repairs).toEqual([]);
     expect(result.transcript.steps).toHaveLength(1);
     expect(result.transcript.steps[0]?.result).toEqual({
       tool: "answer",
       valid: true,
       errors: [],
     });
+    expect(result.transcript.steps[0]?.result).not.toHaveProperty("repairs");
   });
 
   it("opens three v4 pages in parallel and returns one ordered open_many result", async () => {

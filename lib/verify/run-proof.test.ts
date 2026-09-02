@@ -213,7 +213,7 @@ function makeEscrowProof() {
   return { proof, escrow };
 }
 
-function makeProofV3() {
+function makeProofV3(repairs?: string[]) {
   const base = makeCore();
   const url = "https://example.test/source";
   const evidenceId = "research-page-1";
@@ -223,6 +223,7 @@ function makeProofV3() {
     quote: "The source directly supports the test claim.",
   };
   const policyHash = toolPolicyHash(DEFAULT_TOOL_POLICY_V2);
+  const validatedOutput = makeOutput({ citations: [citation] });
   const transcript: ResearchTranscriptV1 = {
     version: 1,
     runId: base.runId,
@@ -269,6 +270,24 @@ function makeProofV3() {
           canonicalWalrusBlobId: "walrus-research-page-1",
         },
       },
+      ...(repairs === undefined
+        ? []
+        : [
+            {
+              index: 2,
+              turn: 3,
+              startedAtMs: 14,
+              completedAtMs: 15,
+              modelRequestId: "research-turn-3",
+              action: { action: "answer" as const, output: validatedOutput },
+              result: {
+                tool: "answer" as const,
+                valid: true,
+                errors: [],
+                repairs,
+              },
+            },
+          ]),
     ],
     opened: [
       {
@@ -286,10 +305,9 @@ function makeProofV3() {
       },
     ],
     citations: [{ ...citation, found: true }],
-    counts: { searches: 1, opens: 1, turns: 2 },
+    counts: { searches: 1, opens: 1, turns: repairs === undefined ? 2 : 3 },
   };
   const promptHash = promptSpecHash(DEFAULT_PROMPT_SPEC_V2);
-  const validatedOutput = makeOutput({ citations: [citation] });
   const outputHash = toHex(blake2b256(canonicalJsonBytes(validatedOutput)));
   const transcriptHash = toHex(blake2b256(canonicalJsonBytes(transcript)));
   const audit: InferenceRunAudit = {
@@ -746,6 +764,21 @@ describe("browser run proof", () => {
       "runHash",
       "sealedCore",
     ]);
+    expect(checks.every((check) => check.ok)).toBe(true);
+  });
+
+  it("verifies a research bundle whose accepted answer records repairs", async () => {
+    const repair =
+      'unsupportedClaims: dropped entry that is not an evidence id: "prose"';
+    const { proof } = makeProofV3([repair]);
+    const checks = await recomputeRunProof(proof);
+    const answerStep = proof.bundle && isV3Bundle(proof.bundle)
+      ? proof.bundle.transcript.steps.find(
+          (step) => step.result.tool === "answer",
+        )
+      : undefined;
+
+    expect(answerStep?.result).toMatchObject({ repairs: [repair] });
     expect(checks.every((check) => check.ok)).toBe(true);
   });
 

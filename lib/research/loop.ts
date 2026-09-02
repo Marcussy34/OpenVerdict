@@ -131,6 +131,7 @@ export type ResearchLoopResult =
       output: OracleInferenceOutput;
       transcript: ResearchTranscriptV1;
       opened: StoredPage[];
+      repairs: string[];
     }
   | {
       ok: false;
@@ -1092,11 +1093,21 @@ export async function runResearchLoop(
 
     if (validation.ok && ruleErrors.length === 0) {
       completion.attempt.audit.status = "SCHEMA_VALID";
-      recordStep(turn, stepStart, modelRequestId, researchAction, {
-        tool: "answer",
-        valid: true,
-        errors: [],
-      });
+      recordStep(
+        turn,
+        stepStart,
+        modelRequestId,
+        researchAction,
+        {
+          tool: "answer",
+          valid: true,
+          errors: [],
+          // Omit empty repairs so existing transcript hashes do not change.
+          ...(validation.repairs.length > 0
+            ? { repairs: validation.repairs }
+            : {}),
+        },
+      );
       return {
         ok: true,
         attempts,
@@ -1106,6 +1117,7 @@ export async function runResearchLoop(
         output: validation.output,
         transcript: transcript(validation.citations),
         opened,
+        repairs: validation.repairs,
       };
     }
 

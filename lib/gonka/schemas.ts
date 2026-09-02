@@ -196,6 +196,30 @@ export const oracleInferenceOutputSchema: z.ZodType<OracleInferenceOutput> = z
   })
   .strict();
 
+/** Drop only prose that a model mistakes for an unsupported claim description. */
+export function repairUnsupportedClaims(
+  output: OracleInferenceOutput,
+  isKnownId: (value: string) => boolean,
+): { output: OracleInferenceOutput; dropped: string[] } {
+  const dropped: string[] = [];
+  // The table vote passes raw JSON here, before zod: a missing or non-array
+  // field is left for the schema to reject with its own message.
+  if (!Array.isArray(output.unsupportedClaims)) return { output, dropped };
+  const unsupportedClaims = output.unsupportedClaims.filter((entry: unknown) => {
+    if (typeof entry === "string" && isKnownId(entry)) return true;
+    // Keep the audit record bounded without changing any accepted evidence id.
+    const text = typeof entry === "string" ? entry.trim() : JSON.stringify(entry);
+    dropped.push((text ?? String(entry)).slice(0, 200));
+    return false;
+  });
+  return { output: { ...output, unsupportedClaims }, dropped };
+}
+
+/** Use one stable audit message in research and table-vote paths. */
+export function unsupportedClaimsRepairNote(dropped: string): string {
+  return `unsupportedClaims: dropped entry that is not an evidence id: "${dropped}"`;
+}
+
 /** Reject citations outside the frozen manifest and opened-page allowance. */
 export function validateOutputAgainstManifest(
   output: OracleInferenceOutput,

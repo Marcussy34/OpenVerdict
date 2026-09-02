@@ -3,7 +3,9 @@ import {
   MAX_OUTPUT_ARRAY_ITEMS,
   oracleInferenceInputSchema,
   oracleInferenceOutputSchema,
+  repairUnsupportedClaims,
   researchActionSchema,
+  unsupportedClaimsRepairNote,
   validateOutputAgainstManifest,
 } from "./schemas";
 import { makeInput, makeOutput } from "./fixtures.test-utils";
@@ -119,6 +121,69 @@ describe("oracleInferenceOutputSchema", () => {
         oracleInferenceOutputSchema.parse({ ...makeOutput(), [field]: oversized }),
       ).toThrow();
     }
+  });
+});
+
+describe("repairUnsupportedClaims", () => {
+  it("keeps known ids, drops prose, and leaves every other field identical", () => {
+    const output = makeOutput({
+      unsupportedClaims: [
+        "evidence-1",
+        "  The claim is stated as an absolute but research is divided.  ",
+        "evidence-2",
+      ],
+    });
+
+    const result = repairUnsupportedClaims(
+      output,
+      (value) => value === "evidence-1" || value === "evidence-2",
+    );
+
+    expect(result.output).toEqual({
+      ...output,
+      unsupportedClaims: ["evidence-1", "evidence-2"],
+    });
+    expect(result.output).not.toBe(output);
+    expect(result.output.evidenceFor).toBe(output.evidenceFor);
+    expect(result.output.evidenceAgainst).toBe(output.evidenceAgainst);
+    expect(result.output.decisiveEvidence).toBe(output.decisiveEvidence);
+    expect(result.output.publicReasoningTrace).toBe(output.publicReasoningTrace);
+    expect(result.dropped).toEqual([
+      "The claim is stated as an absolute but research is divided.",
+    ]);
+    expect(unsupportedClaimsRepairNote(result.dropped[0]!)).toBe(
+      'unsupportedClaims: dropped entry that is not an evidence id: "The claim is stated as an absolute but research is divided."',
+    );
+  });
+
+  it("leaves a missing or non-array field for the schema and drops non-strings", () => {
+    const missing = { ...makeOutput() } as Record<string, unknown>;
+    delete missing.unsupportedClaims;
+    const untouched = repairUnsupportedClaims(
+      missing as unknown as Parameters<typeof repairUnsupportedClaims>[0],
+      () => true,
+    );
+    expect(untouched.output).toBe(missing);
+    expect(untouched.dropped).toEqual([]);
+
+    const objects = repairUnsupportedClaims(
+      makeOutput({
+        unsupportedClaims: [{ claim: "prose" } as unknown as string, "evidence-1"],
+      }),
+      (value) => value === "evidence-1",
+    );
+    expect(objects.output.unsupportedClaims).toEqual(["evidence-1"]);
+    expect(objects.dropped).toEqual(['{"claim":"prose"}']);
+  });
+
+  it("caps recorded text at 200 characters", () => {
+    const result = repairUnsupportedClaims(
+      makeOutput({ unsupportedClaims: [`  ${"x".repeat(250)}  `] }),
+      () => false,
+    );
+
+    expect(result.output.unsupportedClaims).toEqual([]);
+    expect(result.dropped).toEqual(["x".repeat(200)]);
   });
 });
 

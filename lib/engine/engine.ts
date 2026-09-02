@@ -20,8 +20,10 @@ import {
   canonicalJsonString,
   hashCanonicalJson,
   promptSpecHash,
+  repairUnsupportedClaims,
   tableVotePromptSpecHash,
   toolPolicyHash,
+  unsupportedClaimsRepairNote,
   validateOutputAgainstManifest,
   type GonkaAttemptRecord,
   type GonkaRouterAdapter,
@@ -3025,6 +3027,27 @@ class OpenVerdictEngine implements Engine {
           continue;
         }
         completion.attempt.audit.status = "SCHEMA_VALID";
+        if (validated.repairs.length > 0) {
+          // Publish the repair before the seat commit so auditors see it in order.
+          await this.emit({
+            claimId: claim.claimId,
+            phase: claimStateName(claim.state),
+            kind: "output_repaired",
+            source: "ENGINE",
+            visibility: "PUBLIC_NOW",
+            actorId: seat.agentProfileId,
+            runId: baseRunId,
+            payload: {
+              claim_id: claim.claimId,
+              jury_seat_id: seat.jurySeatId,
+              agent_profile_id: seat.agentProfileId,
+              run_id: baseRunId,
+              phase: 2,
+              field: "unsupportedClaims",
+              dropped: validated.repairs,
+            },
+          });
+        }
         const runResult: GonkaRunResult = {
           type: "gonka-run-result",
           attempts,
@@ -3308,6 +3331,27 @@ class OpenVerdictEngine implements Engine {
         request: loop.request,
         gateway: loop.gateway,
       };
+      if (loop.repairs.length > 0) {
+        // The vote and every other evidentiary field still passed strict validation.
+        await this.emit({
+          claimId: claim.claimId,
+          phase: claimStateName(claim.state),
+          kind: "output_repaired",
+          source: "ENGINE",
+          visibility: "PUBLIC_NOW",
+          actorId: seat.agentProfileId,
+          runId: baseRunId,
+          payload: {
+            claim_id: claim.claimId,
+            jury_seat_id: seat.jurySeatId,
+            agent_profile_id: seat.agentProfileId,
+            run_id: baseRunId,
+            phase: 1,
+            field: "unsupportedClaims",
+            dropped: loop.repairs,
+          },
+        });
+      }
       await this.finishSeatRun({
         claim,
         committee,
@@ -5299,13 +5343,19 @@ export function validateTableVote(
     maximumReasonLength: number;
   },
 ):
-  | { ok: true; output: OracleInferenceOutput }
+  | { ok: true; output: OracleInferenceOutput; repairs: string[] }
   | { ok: false; errors: string[] } {
   try {
     if (typeof content !== "string") {
       throw new Error("table vote output must be JSON content");
     }
-    const output = extractJsonObject(content) as OracleInferenceOutput;
+    const extracted = extractJsonObject(content) as OracleInferenceOutput;
+    // MiniMax sometimes writes a sentence here. No other output field is repaired.
+    const repair = repairUnsupportedClaims(
+      extracted,
+      (evidenceId) => ctx.frozenEvidenceIds.includes(evidenceId),
+    );
+    const output = repair.output;
     const evidenceManifest: OracleInferenceInput["evidenceManifest"] = {
       root: "",
       items: ctx.frozenEvidenceIds.map((evidenceId) => ({
@@ -5323,7 +5373,11 @@ export function validateTableVote(
         `reasoning exceeds ${ctx.maximumReasonLength} characters`,
       );
     }
-    return { ok: true, output };
+    return {
+      ok: true,
+      output,
+      repairs: repair.dropped.map(unsupportedClaimsRepairNote),
+    };
   } catch (error) {
     return {
       ok: false,

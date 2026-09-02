@@ -179,7 +179,52 @@ describe("research answer validation", () => {
         ...citation,
         found: true,
       })),
+      repairs: [],
     });
+  });
+
+  it("drops prose from unsupportedClaims and records the repair", () => {
+    const prose = "The claim is stated as an absolute but research is divided.";
+    const result = validateResearchAnswer(
+      { ...validSearchAnswer(), unsupportedClaims: [prose] },
+      context(),
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.output.unsupportedClaims).toEqual([]);
+    expect(result.repairs).toEqual([
+      `unsupportedClaims: dropped entry that is not an evidence id: "${prose}"`,
+    ]);
+  });
+
+  it("keeps and resolves a valid unsupportedClaims ref beside prose", () => {
+    const prose = "Research is divided on the absolute wording.";
+    const result = validateResearchAnswer(
+      { ...validSearchAnswer(), unsupportedClaims: ["p2", prose] },
+      context(),
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.output.unsupportedClaims).toEqual([SUBMITTED_ID]);
+    expect(result.repairs).toEqual([
+      `unsupportedClaims: dropped entry that is not an evidence id: "${prose}"`,
+    ]);
+  });
+
+  it("still rejects prose in evidenceFor", () => {
+    const prose = "This sentence is not an evidence id.";
+    const result = validateResearchAnswer(
+      { ...validSearchAnswer(), evidenceFor: [prose] },
+      context(),
+    );
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.errors).toContain(
+      `unknown page ref or evidence id: ${prose}`,
+    );
   });
 
   it("resolves page refs in every evidence ID position", () => {
