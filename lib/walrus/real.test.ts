@@ -223,6 +223,30 @@ describe("createRealWalrusStore", () => {
     expect(sleep).toHaveBeenCalledWith(1_500);
   });
 
+  it("retries a transient publisher failure such as a 500 internal client error", async () => {
+    const transientError = new Error("500 internal client error");
+    writeBlobMock.mockReset().mockRejectedValueOnce(transientError).mockResolvedValueOnce({
+      blobId: "D".repeat(43),
+      blobObject: { id: "0xfed", storage: { end_epoch: 52 } },
+    });
+    const sleep = vi
+      .fn<(milliseconds: number) => Promise<void>>()
+      .mockResolvedValue(undefined);
+    const store = createRealWalrusStore({
+      ...testConfig,
+      signer: Ed25519Keypair.generate(),
+      sleep,
+    });
+
+    await expect(store.put(new Uint8Array([3]))).resolves.toEqual({
+      blobId: "D".repeat(43),
+      objectId: "0xfed",
+      endEpoch: 52,
+    });
+    expect(writeBlobMock).toHaveBeenCalledTimes(2);
+    expect(sleep).toHaveBeenCalledTimes(1);
+  });
+
   it("does not retry an unrelated Walrus write error", async () => {
     const error = new Error("insufficient WAL");
     writeBlobMock.mockReset().mockRejectedValue(error);

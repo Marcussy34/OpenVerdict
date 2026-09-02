@@ -231,8 +231,11 @@ type WalrusWriteFlow = {
 
 // Parallel writes from one signer race on the gas and WAL coins; every one of
 // these wordings means "rebuild with fresh versions and try again".
+// Stale object versions from the shared gas coin, plus transient publisher
+// and network failures (a Walrus 5xx or a dropped connection) that a fresh
+// attempt a few seconds later normally clears.
 const STALE_WALRUS_WRITE_PATTERN =
-  /unavailable for consumption|needs to be rebuilt|ObjectVersionUnavailableForConsumption|provided version doesn't match|already locked by a different transaction|reserved for another transaction/i;
+  /unavailable for consumption|needs to be rebuilt|ObjectVersionUnavailableForConsumption|provided version doesn't match|already locked by a different transaction|reserved for another transaction|internal client error|internal server error|\b50[234]\b|bad gateway|service unavailable|gateway timeout|ECONNRESET|fetch failed|socket hang up/i;
 // Five seats finishing together write five sealed bundles and approve five
 // runs on one gas coin; the budget below rides out such a burst.
 const WALRUS_WRITE_ATTEMPTS = 8;
