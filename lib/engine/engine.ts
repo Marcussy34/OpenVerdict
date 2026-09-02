@@ -406,6 +406,7 @@ const DEFAULT_EVIDENCE_POLICY: RetrievalPolicy = {
 };
 
 interface EngineDependencies {
+  sleep: (milliseconds: number) => Promise<void>;
   repository: Repository;
   manifest: ReleaseManifest;
   gateway: SuiGateway;
@@ -445,6 +446,7 @@ export async function createEngine(
       config.research ??
       (manifest.gonka.mode === "fake" ? createFakeResearchProvider() : undefined),
     now: config.now ?? Date.now,
+    sleep: config.sleep ?? sleep,
     retrieve: config.retrieve ?? retrieveEvidence,
     retrievalPolicy: config.retrievalPolicy ?? manifestEvidencePolicy(manifest),
     eventPollIntervalMs: config.eventPollIntervalMs ?? 1_000,
@@ -464,6 +466,7 @@ class OpenVerdictEngine implements Engine {
   readonly #gonka: GonkaRouterAdapter;
   readonly #research: ResearchProvider | undefined;
   readonly #now: () => number;
+  readonly #sleep: (milliseconds: number) => Promise<void>;
   /** Per-claim chain of votesCommit calls so seats commit as they finish, never concurrently. */
   readonly #commitQueues = new Map<string, Promise<void>>();
   /** One debate runner per claim prevents overlapping worker ticks from duplicating turns. */
@@ -489,6 +492,7 @@ class OpenVerdictEngine implements Engine {
     this.#gonka = dependencies.gonka;
     this.#research = dependencies.research;
     this.#now = dependencies.now;
+    this.#sleep = dependencies.sleep;
     this.#retrieve = dependencies.retrieve;
     this.#retrievalPolicy = dependencies.retrievalPolicy;
     this.#eventPollIntervalMs = dependencies.eventPollIntervalMs;
@@ -3264,6 +3268,7 @@ class OpenVerdictEngine implements Engine {
         pages,
         searchCache,
         now: this.#now,
+        sleep: this.#sleep,
         deadlineMs: seatDeadlineMs,
         onStep: ({ kind, ordinal }) => {
           // Public ticks expose activity shape only and cannot fail the seat.

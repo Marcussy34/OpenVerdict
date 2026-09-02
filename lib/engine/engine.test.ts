@@ -2436,6 +2436,7 @@ async function registrationSetup(options: {
       .map((agent, index) => toEngineAgent(agent, index)),
     zkLoginVerifier: { verify },
     now: () => Date.parse("2026-08-27T00:00:00.000Z"),
+    sleep: async () => undefined,
   });
   return { engine, db, gateway, verify, walrus };
 }
@@ -2529,6 +2530,7 @@ async function engineSetup(
       ? {}
       : { sealEscrow: options.sealEscrow }),
     now: () => nowMs,
+    sleep: async () => undefined,
     eventPollIntervalMs: 5,
   });
   return {

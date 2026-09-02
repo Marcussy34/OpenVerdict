@@ -42,5 +42,7 @@ export interface EngineConfig {
     policy: RetrievalPolicy,
   ) => Promise<RetrievedArtifact | RetrievalRejection>;
   now?: () => number;
+  /** Pause between provider retries inside a seat (tests pass a no-op). */
+  sleep?: (milliseconds: number) => Promise<void>;
   eventPollIntervalMs?: number;
 }

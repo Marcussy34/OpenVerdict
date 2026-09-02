@@ -329,6 +329,8 @@ function loopDependencies(options: {
 }) {
   return {
     complete: options.complete,
+    // Provider retries back off with real time in production; tests skip the wait.
+    sleep: async () => undefined,
     provider: options.provider ?? createFakeResearchProvider(),
     policy: options.policy ?? policy(),
     spec: options.spec ?? DEFAULT_PROMPT_SPEC_V2,
@@ -654,8 +656,14 @@ describe("research loop", () => {
     ]);
   });
 
-  it("returns a model provider failure with its recorded attempt", async () => {
-    const script = scriptedCompletion([{ status: "PROVIDER_ERROR" }]);
+  it("retries a persistent provider failure four times, then fails closed with every attempt recorded", async () => {
+    const script = scriptedCompletion([
+      { status: "PROVIDER_ERROR" },
+      { status: "PROVIDER_ERROR" },
+      { status: "PROVIDER_ERROR" },
+      { status: "PROVIDER_ERROR" },
+      { status: "PROVIDER_ERROR" },
+    ]);
 
     const result = await runResearchLoop(
       loopDependencies({ complete: script.complete }),
@@ -664,8 +672,42 @@ describe("research loop", () => {
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.status).toBe("PROVIDER_ERROR");
-    expect(result.attempts).toHaveLength(1);
+    expect(result.attempts).toHaveLength(5);
+    expect(result.attempts.slice(1).every((attempt) => attempt.kind === "RETRY")).toBe(true);
     expect(result.transcript.steps).toHaveLength(0);
+  });
+
+  it("recovers from a shed call: two provider failures, then the scripted research continues", async () => {
+    const script = scriptedCompletion([
+      { status: "PROVIDER_ERROR" },
+      { status: "TIMEOUT" },
+      unsureAnswer(),
+    ]);
+
+    const result = await runResearchLoop(
+      loopDependencies({ complete: script.complete }),
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.attempts.map((attempt) => attempt.kind)).toEqual(["PRIMARY", "RETRY", "RETRY"]);
+  });
+
+  it("does not start a retry that cannot finish before the seat deadline", async () => {
+    const clock = 1_000;
+    const script = scriptedCompletion([{ status: "PROVIDER_ERROR" }]);
+
+    const result = await runResearchLoop(
+      loopDependencies({
+        complete: script.complete,
+        now: () => clock,
+        deadlineMs: clock + 10_000,
+      }),
+    );
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.attempts).toHaveLength(1);
   });
 
   it("uses a stored page without calling the provider open method", async () => {

@@ -166,6 +166,11 @@ const SEARCH_INTENT_REQUIRED_MESSAGE =
 
 /** Premature YES/NO answers refused before the usual validation and repair take over. */
 const MAX_RESEARCH_NUDGES = 2;
+/** Provider retries per model call: 429 shedding and 524 timeouts come in bursts. */
+const MAX_PROVIDER_RETRIES = 4;
+const PROVIDER_RETRY_BACKOFF_MS = [5_000, 10_000, 20_000, 30_000];
+/** Do not start a retry that cannot get a real answer before the seat deadline. */
+const MIN_RETRY_CALL_MS = 20_000;
 
 function isCitationFailure(errors: readonly string[]): boolean {
   return errors.some((error) => {
@@ -238,6 +243,8 @@ export async function runResearchLoop(
     searchCache: SearchCache;
     now?: () => number;
     onStep?: (info: { kind: "search" | "open"; ordinal: number }) => void;
+    /** Injectable pause between provider retries (tests pass a no-op). */
+    sleep?: (milliseconds: number) => Promise<void>;
     /**
      * Wall-clock point (ms) after which this seat cannot commit in time. The
      * loop stops with TIMEOUT before a turn that would start past it and
@@ -248,6 +255,10 @@ export async function runResearchLoop(
   },
 ): Promise<ResearchLoopResult> {
   const now = deps.now ?? Date.now;
+  const sleep =
+    deps.sleep ??
+    ((milliseconds: number) =>
+      new Promise<void>((resolve) => setTimeout(resolve, milliseconds)));
   const startedAt = now();
   const policy = deps.policy;
   const attempts: GonkaAttemptRecord[] = [];
@@ -430,6 +441,34 @@ export async function runResearchLoop(
         input: deps.input,
         attempts,
         ...timeout,
+      });
+    }
+    // A shed or timed-out call is transport weather, not juror behaviour:
+    // retry it with backoff while the seat still has time, and record every
+    // attempt in the sealed bundle. Malformed output still fails closed below.
+    for (
+      let retry = 0;
+      !completion.ok && retry < MAX_PROVIDER_RETRIES;
+      retry += 1
+    ) {
+      const waitMs =
+        PROVIDER_RETRY_BACKOFF_MS[retry] ?? PROVIDER_RETRY_BACKOFF_MS.at(-1)!;
+      const remainingMs =
+        deps.deadlineMs === undefined ? undefined : deps.deadlineMs - now();
+      if (remainingMs !== undefined && remainingMs <= waitMs + MIN_RETRY_CALL_MS) {
+        break;
+      }
+      await sleep(waitMs);
+      completion = await deps.complete({
+        manifest: deps.manifest,
+        messages,
+        kind: "RETRY",
+        jsonMode,
+        input: deps.input,
+        attempts,
+        ...(deps.deadlineMs === undefined
+          ? {}
+          : { timeoutMs: deps.deadlineMs - now() }),
       });
     }
     if (!completion.ok) {
