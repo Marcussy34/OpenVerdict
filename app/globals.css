@@ -161,7 +161,7 @@
     /* --- Semantic signals (all AA on white) ------------------------------ */
     --signal-yes: #0e7a4b;
     --signal-no: #ce2c2c;
-    --signal-unsure: #a56800;
+    --signal-unsure: #8a5600; /* Darkened from #a56800 to pass 4.5:1 WCAG AA on #f8f3eb (5.57:1) and #ffffff (6.16:1) */
     --signal-sealed: #5145cd;
     --signal-chain: var(--brand-sea-ink);
     --signal-live: #0e7a4b;
@@ -174,7 +174,7 @@
     --chart-1: var(--brand-sea-strong);
     --chart-2: #0e7a4b;
     --chart-3: #5145cd;
-    --chart-4: #a56800;
+    --chart-4: #8a5600;
     --chart-5: #ce2c2c;
 
     /* Zero, so every rounded-* utility resolves square. The landing's sharp
@@ -457,6 +457,19 @@
     font-size: 11px;
     line-height: 15px;
     letter-spacing: 0.88px;
+}
+
+/* Mobile typography floor: raise sub-12px microcopy to 12px on phone viewports for legibility. */
+@media (max-width: 640px) {
+    .ov-micro-sm {
+        font-size: 12px;
+        line-height: 16px;
+        letter-spacing: 0.72px;
+    }
+    .text-\[10px\],
+    .text-\[11px\] {
+        font-size: 12px;
+    }
 }
 
 /* Display type: 400 weight even at 88px — the big sizes are NOT bold. */

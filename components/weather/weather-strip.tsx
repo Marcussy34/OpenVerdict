@@ -171,7 +171,9 @@ export function WeatherStrip({
   const probedAtMs = report?.probedAtMs ?? null;
   const probedAgoText = formatProbedAgo(probedAtMs, nowMs);
 
-  // Match the three canonical families in order: DeepSeek, MiniMax, Kimi
+  // Match the three canonical families in order: DeepSeek, MiniMax, Kimi.
+  // Rendering the three chips in the "no recent probe" state while the first report
+  // loads reserves the strip height and prevents layout shifts before fetch resolves.
   const chips: FamilyChipData[] = ORDERED_FAMILIES.map((famKey) => {
     const found = report?.families.find(
       (f) => f.family.toLowerCase() === famKey || f.modelId.toLowerCase().includes(famKey),

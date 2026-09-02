@@ -130,15 +130,26 @@ function RecentFactChecks() {
       </p>
 
       {rows === null ? (
-        <div className="space-y-2">
-          {[0, 1, 2].map((index) => (
-            <div key={index} className="h-14 animate-pulse rounded-xl bg-surface-2" />
+        /* Five placeholder rows matching the list container to reserve height and prevent layout shift */
+        <ul
+          aria-hidden="true"
+          className="ov-edge divide-y divide-border overflow-hidden rounded-2xl border border-border bg-card animate-pulse"
+        >
+          {[0, 1, 2, 3, 4].map((index) => (
+            <li key={index} className="flex min-h-[58px] items-center gap-3 px-4 py-3">
+              <div className="min-w-0 flex-1 space-y-1.5">
+                <div className="h-4 w-3/4 rounded bg-surface-2" />
+                <div className="h-3 w-1/3 rounded bg-surface-2" />
+              </div>
+              <div className="h-5 w-16 shrink-0 rounded-full bg-surface-2" />
+            </li>
           ))}
-        </div>
+        </ul>
       ) : rows.length === 0 ? (
-        <p className="rounded-xl border border-dashed border-border bg-surface p-4 text-xs text-muted-foreground">
+        /* Maintain stable container height with single-row height for empty state */
+        <div className="ov-edge flex min-h-[58px] items-center rounded-2xl border border-dashed border-border bg-surface px-4 py-3 text-xs text-muted-foreground">
           No verifications yet. Yours can be the first.
-        </p>
+        </div>
       ) : (
         <ul className="ov-edge divide-y divide-border overflow-hidden rounded-2xl border border-border bg-card">
           {rows.map((row) => {
@@ -191,7 +202,8 @@ function RecentFactChecks() {
 function HowItRuns() {
   return (
     <details className="group mx-auto w-full max-w-3xl rounded-2xl border border-border bg-card">
-      <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 px-4 py-3 text-sm font-semibold text-ocean focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset focus-visible:outline-none">
+      {/* Fixed min-height reserves summary row height to prevent layout shift */}
+      <summary className="flex min-h-[46px] cursor-pointer list-none items-center gap-2 px-4 py-3 text-sm font-semibold text-ocean focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset focus-visible:outline-none">
         <ArrowDown2
           size="14"
           variant="Bold"
@@ -355,7 +367,9 @@ function FactCheckContent() {
       <div className="mx-auto max-w-3xl space-y-4 text-center">
         <h1 className="ov-display text-5xl text-ocean md:text-6xl">
           Verify any{" "}
-          <span aria-label="claim" className="ov-wave-word">
+          <span className="ov-wave-word">
+            {/* Screen reader text replaces prohibited aria-label on plain span */}
+            <span className="sr-only">claim</span>
             {"claim".split("").map((letter, index) => (
               <span
                 key={index}

@@ -225,7 +225,8 @@ function FooterColumn({
 }) {
   return (
     <div>
-      <h3 className="ov-micro text-[#F3F3F3]/60">{heading}</h3>
+      {/* Use h2 to avoid skipping heading levels under the page h1 */}
+      <h2 className="ov-micro text-[#F3F3F3]/60">{heading}</h2>
       <ul className="mt-4 space-y-2.5 text-[17px] leading-snug font-medium">{children}</ul>
     </div>
   );
