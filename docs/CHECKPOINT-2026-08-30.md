@@ -1457,6 +1457,50 @@ continuous daily calorie restriction.") only on 3/3 + app healthy + no
 NON-STRANDED live claim (stranded state-6 EV claim excluded by deadline
 check). Red wine claim queues after a clean fasting lifecycle.
 
+## 3aa. MORNING: DEBATE WINDOW STRETCH SHIPPED + KIMI OUTAGE 2026-09-02 ~11:00
+
+OVERNIGHT RESULT: nothing fired. 33 sentry cycles (04:05 to 10:26) never
+saw 3/3. Kimi-K2.6 failed EVERY fresh-nonce probe since 02:29 (Cloudflare
+524 after ~125 s, or 429 "too many concurrent requests (152/152)",
+type upstream_error, a network-wide cap: our traffic was ~3 req/10 min);
+even a 20-token "reply OK" prompt 524s (cf-ray a3493240a943fda2-SIN,
+02:50 UTC). DeepSeek/MiniMax oscillated 1/3 to 2/3; 0/3 at 04:53, 08:37,
+10:26. GET /v1/models still lists exactly the three families (the owner
+confirmed Gonka has only three, so no fourth-family insurance).
+
+OWNER DECISIONS (morning): (1) SHIP the discussion-window stretch;
+(2) keep the 3/3 fire rule (no firing at 2/3: a dead Kimi holds 1 or 2 of
+5 seats, 2 dead seats can never reach 4-of-5, so roughly one claim in
+three could finalize); (3) no fourth family; instead DRAFT a message for
+the GonkaRouter devrel Discord (scratchpad/gonkarouter-devrel-message.md,
+owner pastes it).
+
+CORRECTED DEBATE MATH (this is why every debate was silent, in ANY
+weather, not only after a missed seat): the discussion opens only at
+the first reveal deadline (+570 s; resolution-worker holds a split round
+at its fixed boundary) and a turn starts only if now + 60 s (PER_TURN_
+BUDGET_MS) <= discussionDeadline - 120 s (evidence freeze lead), so the
+old +630 s deadline meant the last possible turn start was +450 s,
+before the phase even opened. A full debate = 10 turns (5 debaters x 2
+exchanges) x 60 s + 120 s freeze = 720 s window.
+
+SHIPPED 24225ed (deploy 57648f8a SUCCESS 10:49, board held only the
+stranded EV claim): hosted ladder discussion +1290 s, second commit
++1740 s, second reveal +1860 s (round two keeps 450 s / 120 s windows;
+two-round claim ~31 min, one-round verdict still ~10 min). Move only
+requires strictly increasing deadlines under a 30-day cap; no test pins
+the ladder. PRD 1.1 item 14, STATUS fast-mode ladder, and runbook
+updated. Verified in the container: lib/engine/engine.ts and the Next
+server chunk both carry t+129e4 / t+174e4 / t+186e4. Gate: 513/513,
+typecheck 0, lint 0 errors (2 pre-existing warnings), build green.
+
+SENTRY re-armed after the deploy (task bkat3ymrj, same night-sentry2.sh,
+fresh 60 cycles): fires the fasting claim on 3/3 + app healthy + no
+non-stranded live claim. Red wine claim still queues after a clean
+fasting lifecycle. Pre-demo wipe (claim tables only, manifests kept)
+remains owner-gated. First SPOKEN debate still never exercised: it
+now needs only a split round one in healthy weather.
+
 ## 4. Planned next (owner-approved direction)
 
 - Attestation (docs/superpowers/specs/2026-08-30-attested-inference-design.md):
