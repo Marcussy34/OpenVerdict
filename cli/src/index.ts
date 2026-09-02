@@ -7,18 +7,23 @@ import {
   InvalidArgumentError,
 } from "commander";
 import { z } from "zod";
+import { buildHandler as buildClaimExtractionHandler } from "../../lib/claim-extraction/handler";
 import type {
   Engine,
   FactCheckSubmission,
   ResolutionEvent,
 } from "../../lib/engine/contract";
-import { getServerEngine } from "../../lib/engine/server";
+import {
+  getServerClaimExtractionRuntime,
+  getServerEngine,
+} from "../../lib/engine/server";
 import { OUTCOME, type VoteOutcome } from "../../lib/protocol";
 import { SignerRegistry } from "../../lib/sui";
 
 export interface CliDependencies {
   engine?: Engine;
   engineProvider?: () => Promise<Engine>;
+  claimExtractionHandler?: (request: Request) => Promise<Response>;
   stdout?: (value: string) => void;
   stderr?: (value: string) => void;
   env?: Record<string, string | undefined>;
@@ -55,6 +60,31 @@ const factCheckSchema = z
   })
   .strict();
 
+const claimExtractionResponseSchema = z
+  .object({
+    claims: z.array(
+      z
+        .object({
+          claim: z.string(),
+          reason: z.string(),
+          quote: z.string(),
+        })
+        .strict(),
+    ),
+    language: z.string(),
+    claim: z.string(),
+    sourceUrl: z.string().optional(),
+    modelId: z.string(),
+    gonkaRequestId: z.string().optional(),
+    gatewayRequestId: z.string().optional(),
+  })
+  .strict();
+
+const claimExtractionErrorSchema = z.object({
+  error: z.string(),
+  message: z.string().optional(),
+});
+
 const claimCreateSchema = z
   .object({
     statement: z.string().min(1),
@@ -80,6 +110,14 @@ export function createCliProgram(dependencies: CliDependencies = {}): Command {
     dependencies.engine ??
     (dependencies.engineProvider ?? getServerEngine)();
   const environment = dependencies.env ?? process.env;
+  // Local CLI extraction reuses the route logic without public HTTP guards.
+  const claimExtractionHandler =
+    dependencies.claimExtractionHandler ??
+    buildClaimExtractionHandler({
+      getRuntime: getServerClaimExtractionRuntime,
+      requirePublicWritesEnabled: () => null,
+      rateLimitPublic: () => null,
+    });
 
   program
     .name("openverdict")
@@ -114,6 +152,32 @@ export function createCliProgram(dependencies: CliDependencies = {}): Command {
       const launched = { claimId: result.claimId };
       writer.value(launched, json);
       if (options.follow) await followEvents(service, result.claimId, writer, json);
+    });
+
+  factCheck
+    .command("extract")
+    .description("extract up to three checkable claims")
+    .argument("[url]", "source page URL")
+    .option("--text <text>", "pasted source text")
+    .action(async (
+      url: string | undefined,
+      options: { text?: string },
+      command: Command,
+    ) => {
+      const body = claimExtractionRequestBody(url, options.text);
+      const response = await claimExtractionHandler(
+        new Request("http://localhost/api/extract-claim", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(body),
+        }),
+      );
+      const payload = await response.json() as unknown;
+      if (!response.ok) throw claimExtractionError(payload, response.status);
+
+      const result = claimExtractionResponseSchema.parse(payload);
+      const json = jsonMode(command);
+      writer.value(json ? result : formatExtractedClaims(result.claims), json);
     });
 
   factCheck
@@ -415,6 +479,29 @@ function parseOutcome(value: string): VoteOutcome {
   throw new InvalidArgumentError("outcome must be YES, NO, or UNSURE");
 }
 
+function claimExtractionRequestBody(
+  url: string | undefined,
+  text: string | undefined,
+): { url: string } | { text: string } {
+  if (url !== undefined && text === undefined) return { url };
+  if (url === undefined && text !== undefined) return { text };
+  throw new InvalidArgumentError("provide exactly one URL argument or --text");
+}
+
+function claimExtractionError(payload: unknown, status: number): Error {
+  const parsed = claimExtractionErrorSchema.safeParse(payload);
+  if (!parsed.success) {
+    return Object.assign(
+      new Error(`Claim extraction failed with status ${status}.`),
+      { code: "CLAIM_EXTRACTION_FAILED" },
+    );
+  }
+  return Object.assign(
+    new Error(parsed.data.message ?? parsed.data.error),
+    { code: parsed.data.error },
+  );
+}
+
 async function readJson(path: string): Promise<unknown> {
   return JSON.parse(await readFile(path, "utf8")) as unknown;
 }
@@ -423,6 +510,14 @@ function formatHuman(value: unknown): string {
   if (value === null) return "No state transition was needed.";
   if (typeof value === "string") return value;
   return JSON.stringify(value, null, 2);
+}
+
+function formatExtractedClaims(
+  claims: Array<{ claim: string; quote: string }>,
+): string {
+  return claims
+    .map(({ claim, quote }, index) => `${index + 1}. ${claim}\n   ${quote}`)
+    .join("\n");
 }
 
 function formatQueuedSubmission(

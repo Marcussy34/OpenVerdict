@@ -76,6 +76,52 @@ describe("OpenVerdict CLI", () => {
     expect(errors.join("\n")).toContain("CLI_USAGE");
   });
 
+  it("extracts pasted text and prints each claim with its quote", async () => {
+    const sourceText =
+      "Acme opened a Penang factory in 2023. It employed 800 people there in 2024.";
+    const requests: unknown[] = [];
+    const output: string[] = [];
+
+    const code = await runCli(
+      ["fact-check", "extract", "--text", sourceText],
+      {
+        claimExtractionHandler: async (request) => {
+          requests.push(await request.json());
+          return Response.json({
+            claims: [
+              {
+                claim: "Acme opened a factory in Penang in 2023.",
+                reason: "The opening can be checked.",
+                quote: "Acme opened a Penang factory in 2023.",
+              },
+              {
+                claim: "Acme employed 800 people in Penang in 2024.",
+                reason: "The dated headcount can be checked.",
+                quote: "It employed 800 people there in 2024.",
+              },
+            ],
+            language: "en",
+            claim: "Acme opened a factory in Penang in 2023.",
+            modelId: "vendor/model-a",
+          });
+        },
+        stdout: (value) => output.push(value),
+        stderr: () => undefined,
+      },
+    );
+
+    expect(code).toBe(0);
+    expect(requests).toEqual([{ text: sourceText }]);
+    expect(output).toEqual([
+      [
+        "1. Acme opened a factory in Penang in 2023.",
+        "   Acme opened a Penang factory in 2023.",
+        "2. Acme employed 800 people in Penang in 2024.",
+        "   It employed 800 people there in 2024.",
+      ].join("\n"),
+    ]);
+  });
+
   it("prints a queue id and one line for each model family", async () => {
     const directory = await mkdtemp(join(tmpdir(), "openverdict-cli-"));
     temporaryDirectories.push(directory);
