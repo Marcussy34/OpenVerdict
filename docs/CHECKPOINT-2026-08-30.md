@@ -1845,6 +1845,37 @@ the protocol. Owner decision to raise at catch-up: swap the two Kimi
 seats for MiniMax (the judge's own advice), since Kimi is the family
 that fails most and each committee draws two Kimi seats half the time.
 
+### 3af progress, 04:45
+
+MORE DEPLOYS: d06198ca (04:17, Railway variable GONKA_RESEARCH_TIMEOUT_MS
+240000 -> 90000; the code default alone did not apply because the
+variable overrides it; GONKA_REQUEST_TIMEOUT_MS stays 240000), 9fa75f6b
+(04:19, 4ed11d8: research-shaped weather probe, 400 tokens, so "clear"
+means the families can do real work), 6806662a (04:43, 6742ecc: first
+commit window 600 s, later windows shift by 150 s, one-round verdict
+about 12 min, table verdict about 32 min; queue and relaunch spacing
+10 min; docs/STATUS.md and docs/demo/runbook.md updated).
+
+SEEDS: Bitcoin halving gave up (attempt 3: the single Kimi seat, 524
+twice while 2 MiniMax + 2 DeepSeek committed). Great Wall gave up
+(attempts voided by DeepSeek timeout, Kimi provider error, Kimi again).
+Every void tonight was Gonka weather, never the protocol. Seeder
+(nohup, scratchpad/seeder.sh, log seeder.log) holds three seeds (ten
+percent brain, Sui mainnet May 2023, 21 million cap) and fires one at a
+time on a clear probe with no live or pending attempt; a
+scratchpad/seeder.pause file holds it during deploys.
+
+DETACHED HELPERS (nohup, survive harness kills): seeder.sh, board-watch.sh
+(board-watch.log), unpause-after-deploy.sh. The harness killed plain
+background tasks twice tonight (02:22, 02:50).
+
+OWNER ITEMS FOR THE CATCH-UP: (1) the night's numbers and the fact that
+no settled claim exists yet under the new protocol; (2) Kimi selection
+weight: the Move rule needs three families in every committee, so Kimi
+cannot be removed, but its weight can be lowered on-chain so committees
+draw one Kimi seat instead of two (roster change, owner-gated); (3) the
+demo recording depends on one good-weather run; daytime worked before.
+
 ## 4. Planned next (owner-approved direction)
 
 - Attestation (docs/superpowers/specs/2026-08-30-attested-inference-design.md):
