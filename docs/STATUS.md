@@ -66,8 +66,16 @@ Postgres. Tests: 512 vitest, 70 Move.
   allowlist, fail-closed SKIPPED turns), every turn streams live as a
   DELIBERATION_TURN event into the claim page's chat dock, and the transcript
   freezes as phase-2 evidence (urn:openverdict:deliberation-transcript).
-  Round-2 seats render as R2 satellites on their agent's disc. Deployed;
-  the first live contested-claim debate has not yet been exercised.
+  Round-2 seats render as R2 satellites on their agent's disc. Deployed.
+  First live debate 2026-09-02 (claim 0x1d53f02c, fasting): 6/6 turns
+  spoken in 3 min once the discussion window was 720 s, but a unanimous
+  NO jury at temperature 0 produced three near-identical briefs. Prompt
+  spec V2 (same day, engine-only: the deliberation prompt is not part of
+  the juror manifests) adds engine-generated turnInstructions per turn:
+  answer the most recent speaker by seat, add a point nobody made,
+  dispute a specific citation when a seat dissents, steelman the opposite
+  outcome when unanimous, and apply the SKEPTIC / SOURCE_AUTHENTICITY
+  role; V1 stays byte-identical for old transcripts (hash pinned by test).
 - Track amendments SHIPPED 2026-08-31: URL claim extraction live on GonkaRouter (verified live: the full en.wikipedia Bitcoin article yields the Satoshi whitepaper claim, `devshard-67842-201`), round-two jurors receive the revealed round-one public record (also frozen as phase-2 evidence `round-1-public-record:<claimId>`), the deliberation canvas + explorer landing + open-verification language shipped across the product, and `docs/GONKA-INTEGRATION.md` documents the integration for judges.
 - Live testnet canary COMPLETE (2026-08-27): full lifecycle with live GonkaRouter juries — 5/5 SCHEMA_VALID across 3 model families, YES @ 9700 bps recomputed == on-chain, certificate `0x8efdabe0…1a8634` (see docs/demo/runbook.md table).
 - Live GonkaRouter inference VERIFIED 2026-08-27: account catalog = deepseek-ai/DeepSeek-V4-Flash-0731, MiniMaxAI/MiniMax-M2.7, moonshotai/Kimi-K2.6 (3 families); real completion returned id `devshard-…` (the OpenAI-compatible endpoint id shape — preserved verbatim as the Gonka Request ID). Full live jury round runs at the testnet canary.

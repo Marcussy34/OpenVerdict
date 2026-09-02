@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   DELIBERATION_PROMPT_SPEC_V1,
+  DELIBERATION_PROMPT_SPEC_V2,
   DEFAULT_PROMPT_SPEC_V1,
   DEFAULT_PROMPT_SPEC_V2,
   DEFAULT_PROMPT_SPEC_V3,
@@ -65,6 +66,12 @@ describe("promptSpec", () => {
 });
 
 describe("deliberation prompt spec v1", () => {
+  it("pins the immutable deliberation v1 hash", () => {
+    expect(promptSpecHash(DELIBERATION_PROMPT_SPEC_V1)).toBe(
+      "0x1a62061fc3848089121346a027435d3c9e9e8b4f9f687f2471933cb96294fadb",
+    );
+  });
+
   it("binds the single-shot public debate contract", () => {
     expect(DELIBERATION_PROMPT_SPEC_V1).toMatchObject({
       version: "1",
@@ -85,6 +92,28 @@ describe("deliberation prompt spec v1", () => {
     );
     expect(promptSpecHash(DELIBERATION_PROMPT_SPEC_V1)).toMatch(
       /^0x[0-9a-f]{64}$/,
+    );
+  });
+});
+
+describe("deliberation prompt spec v2", () => {
+  it("binds turn instructions to the larger debate budget", () => {
+    expect(DELIBERATION_PROMPT_SPEC_V2).toMatchObject({
+      version: "2",
+      providerId: "gonkarouter",
+      temperature: 0,
+      maxOutputTokens: 800,
+      responseFormat: "json_object",
+    });
+    expect(DELIBERATION_PROMPT_SPEC_V2.systemPrompt).toContain(
+      "turnInstructions",
+    );
+    expect(DELIBERATION_PROMPT_SPEC_V2.systemPrompt).toContain("Seat N");
+    expect(DELIBERATION_PROMPT_SPEC_V2.systemPrompt).toContain(
+      "allowedCitations",
+    );
+    expect(promptSpecHash(DELIBERATION_PROMPT_SPEC_V2)).not.toBe(
+      promptSpecHash(DELIBERATION_PROMPT_SPEC_V1),
     );
   });
 });

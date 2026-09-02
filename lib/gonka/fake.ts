@@ -6,7 +6,10 @@ import type {
   OracleInferenceOutput,
 } from "../protocol/types";
 import { createGonkaAdapterWithDependencies } from "./adapter";
-import { DELIBERATION_PROMPT_SPEC_V1 } from "./promptSpec";
+import {
+  DELIBERATION_PROMPT_SPEC_V1,
+  DELIBERATION_PROMPT_SPEC_V2,
+} from "./promptSpec";
 import type {
   GonkaAttemptRecord,
   GonkaCompletionRequest,
@@ -414,7 +417,10 @@ export function createFakeGonkaAdapter(fixtures: FakeFixture[]): GonkaRouterAdap
   async function complete(
     request: GonkaCompletionRequest,
   ): Promise<GonkaCompletionResult> {
-    if (request.messages[0]?.content === DELIBERATION_PROMPT_SPEC_V1.systemPrompt) {
+    if (
+      request.messages[0]?.content === DELIBERATION_PROMPT_SPEC_V1.systemPrompt ||
+      request.messages[0]?.content === DELIBERATION_PROMPT_SPEC_V2.systemPrompt
+    ) {
       const deliberation = nextDeliberation(request.input, request.manifest);
       return createFixtureAdapter(
         deliberation.active,

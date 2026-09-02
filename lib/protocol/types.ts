@@ -327,6 +327,14 @@ export type DeliberationPromptSpecV1 = {
   maxOutputTokens: 700;
   responseFormat: "json_object";
 };
+export type DeliberationPromptSpecV2 = {
+  version: "2";
+  providerId: "gonkarouter";
+  systemPrompt: string;
+  temperature: 0;
+  maxOutputTokens: 800;
+  responseFormat: "json_object";
+};
 export type PromptSpec =
   | PromptSpecV1
   | PromptSpecV2

@@ -5,7 +5,7 @@ import { PGlite } from "@electric-sql/pglite";
 import { Ed25519Keypair } from "@mysten/sui/keypairs/ed25519";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
-  DELIBERATION_PROMPT_SPEC_V1,
+  DELIBERATION_PROMPT_SPEC_V2,
   DEFAULT_PROMPT_SPEC_V2,
   DEFAULT_PROMPT_SPEC_V3,
   DEFAULT_PROMPT_SPEC_V4,
@@ -63,6 +63,7 @@ import {
   agentBackingStatus,
   buildZkLoginBackingMessage,
   createEngine,
+  deliberationTurnInstructions,
   EngineNoEvidenceError,
   EngineStateError,
   EngineValidationError,
@@ -1421,6 +1422,83 @@ describe("headless engine", () => {
   });
 });
 
+describe("deliberationTurnInstructions", () => {
+  it("steelmans YES for a unanimous NO jury in exchange two", () => {
+    const instructions = deliberationTurnInstructions({
+      exchange: 2,
+      role: "SOURCE_AUTHENTICITY",
+      outcome: "NO",
+      seatIndex: 0,
+      roundOneSeats: [
+        { seatIndex: 0, outcome: "NO" },
+        { seatIndex: 1, outcome: "NO" },
+      ],
+      mostRecentSpeaker: 1,
+    });
+
+    expect(instructions).toContain("best case for YES");
+  });
+
+  it("names a dissenter and requires a specific dispute in exchange one", () => {
+    const instructions = deliberationTurnInstructions({
+      exchange: 1,
+      role: "SOURCE_AUTHENTICITY",
+      outcome: "YES",
+      seatIndex: 0,
+      roundOneSeats: [
+        { seatIndex: 0, outcome: "YES" },
+        { seatIndex: 3, outcome: "NO" },
+      ],
+      mostRecentSpeaker: 3,
+    });
+
+    expect(instructions).toContain("Seat 3 voted NO");
+    expect(instructions).toContain("dispute one specific citation");
+  });
+
+  it("steelmans a definite outcome for a unanimous UNSURE jury", () => {
+    const instructions = deliberationTurnInstructions({
+      exchange: 2,
+      role: "SOURCE_AUTHENTICITY",
+      outcome: "UNSURE",
+      seatIndex: 0,
+      roundOneSeats: [
+        { seatIndex: 0, outcome: "UNSURE" },
+        { seatIndex: 1, outcome: "UNSURE" },
+      ],
+      mostRecentSpeaker: 1,
+    });
+
+    expect(instructions).toContain("a definite YES or NO");
+  });
+
+  it("adds the SKEPTIC role instruction", () => {
+    const instructions = deliberationTurnInstructions({
+      exchange: 1,
+      role: "SKEPTIC",
+      outcome: "YES",
+      seatIndex: 0,
+      roundOneSeats: [{ seatIndex: 0, outcome: "YES" }],
+      mostRecentSpeaker: null,
+    });
+
+    expect(instructions).toContain("SKEPTIC role");
+  });
+
+  it("uses the evidence instruction for an unknown role", () => {
+    const instructions = deliberationTurnInstructions({
+      exchange: 1,
+      role: "OTHER",
+      outcome: "YES",
+      seatIndex: 0,
+      roundOneSeats: [{ seatIndex: 0, outcome: "YES" }],
+      mostRecentSpeaker: null,
+    });
+
+    expect(instructions).toContain("Argue only from the evidence");
+  });
+});
+
 describe("public deliberation", () => {
   it("streams two exchanges and freezes the transcript as phase-two evidence", async () => {
     const setup = await discussionSetup(2, {
@@ -1449,7 +1527,7 @@ describe("public deliberation", () => {
     ]);
     expect(stored.every((turn) => turn.gonkaRequestId !== undefined)).toBe(true);
     expect(stored.every(
-      (turn) => turn.promptSpecHash === promptSpecHash(DELIBERATION_PROMPT_SPEC_V1),
+      (turn) => turn.promptSpecHash === promptSpecHash(DELIBERATION_PROMPT_SPEC_V2),
     )).toBe(true);
 
     const events = (await repository.listResolutionEvents(setup.claimId)).filter(
@@ -1484,6 +1562,9 @@ describe("public deliberation", () => {
     const requests = setup.gonkaComplete.mock.calls.slice(callsBefore);
     expect(requests).toHaveLength(4);
     expect(requests.every(([request]) => request.messages.length === 2)).toBe(true);
+    expect(requests[0]?.[0].messages[0]?.content).toBe(
+      DELIBERATION_PROMPT_SPEC_V2.systemPrompt,
+    );
     const firstInput = JSON.parse(
       requests[0]?.[0].messages[1]?.content ?? "null",
     ) as Record<string, unknown>;
@@ -1492,8 +1573,27 @@ describe("public deliberation", () => {
       resolutionCriteria: expect.any(String),
       roundOneRecord: { phase: 1 },
       debateSoFar: [],
-      self: { seatIndex: 0 },
+      exchange: 1,
+      mostRecentSpeaker: null,
+      turnInstructions: expect.stringContaining("Exchange one"),
+      self: { seatIndex: 0, role: expect.any(String) },
       allowedCitations: expect.any(Array),
+    });
+    const secondInput = JSON.parse(
+      requests[1]?.[0].messages[1]?.content ?? "null",
+    ) as Record<string, unknown>;
+    expect(secondInput).toMatchObject({
+      exchange: 1,
+      mostRecentSpeaker: 0,
+      turnInstructions: expect.stringContaining("Begin by answering Seat 0"),
+    });
+    const secondExchangeInput = JSON.parse(
+      requests[2]?.[0].messages[1]?.content ?? "null",
+    ) as Record<string, unknown>;
+    expect(secondExchangeInput).toMatchObject({
+      exchange: 2,
+      mostRecentSpeaker: expect.any(Number),
+      turnInstructions: expect.stringContaining("Exchange two"),
     });
     const phaseOneManifest = await repository.getEvidenceManifest(setup.claimId, 1);
     const allowedCitations = firstInput.allowedCitations as string[];

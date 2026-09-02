@@ -11,7 +11,7 @@ import {
   type RetrievedArtifact,
 } from "../evidence";
 import {
-  DELIBERATION_PROMPT_SPEC_V1,
+  DELIBERATION_PROMPT_SPEC_V2,
   EMPTY_TOOL_TRANSCRIPT_HASH,
   GonkaRunError,
   canonicalJsonBytes,
@@ -168,7 +168,7 @@ const DEFAULT_EVIDENCE_FREEZE_LEAD_MS = 120_000;
 const MAX_DELIBERATION_CITATIONS = 8;
 const MAX_DELIBERATION_ALLOWED_CITATIONS = 60;
 const DELIBERATION_PROMPT_SPEC_HASH = promptSpecHash(
-  DELIBERATION_PROMPT_SPEC_V1,
+  DELIBERATION_PROMPT_SPEC_V2,
 );
 
 export function agentBackingStatus(
@@ -3607,21 +3607,36 @@ class OpenVerdictEngine implements Engine {
         "PROVIDER_ERROR",
       );
     }
-    const debateSoFar = priorTurns
+    const spokenPriorTurns = priorTurns
       .filter(
         (prior) => prior.ordinal < turn.ordinal && prior.status === "SPOKEN",
       )
-      .sort((left, right) => left.ordinal - right.ordinal)
-      .map((prior) => ({
-        seat: seatIndexById.get(prior.jurySeatId),
-        exchange: prior.exchange,
-        argument: prior.argument,
-        citations: prior.citations,
-      }));
+      .sort((left, right) => left.ordinal - right.ordinal);
+    const lastSpokenTurn = spokenPriorTurns.at(-1);
+    const mostRecentSpeaker = lastSpokenTurn === undefined
+      ? null
+      : (seatIndexById.get(lastSpokenTurn.jurySeatId) ?? null);
+    const debateSoFar = spokenPriorTurns.map((prior) => ({
+      seat: seatIndexById.get(prior.jurySeatId),
+      exchange: prior.exchange,
+      argument: prior.argument,
+      citations: prior.citations,
+    }));
+    const turnInstructions = deliberationTurnInstructions({
+      exchange: turn.exchange,
+      role: debater.manifest.role,
+      outcome: debater.outcome,
+      seatIndex: debater.seatIndex,
+      roundOneSeats: priorRound.seats.map(({ seatIndex, outcome }) => ({
+        seatIndex,
+        outcome,
+      })),
+      mostRecentSpeaker,
+    });
     const messages = [
       {
         role: "system" as const,
-        content: DELIBERATION_PROMPT_SPEC_V1.systemPrompt,
+        content: DELIBERATION_PROMPT_SPEC_V2.systemPrompt,
       },
       {
         role: "user" as const,
@@ -3630,9 +3645,13 @@ class OpenVerdictEngine implements Engine {
           resolutionCriteria: claim.resolutionCriteria,
           roundOneRecord: priorRound,
           debateSoFar,
+          exchange: turn.exchange,
+          mostRecentSpeaker,
+          turnInstructions,
           self: {
             jurySeatId: debater.jurySeatId,
             seatIndex: debater.seatIndex,
+            role: debater.manifest.role,
             outcome: debater.outcome,
             confidenceBps: debater.confidenceBps,
           },
@@ -3649,7 +3668,7 @@ class OpenVerdictEngine implements Engine {
         input: debater.input,
         attempts: [],
         timeoutMs: PER_TURN_BUDGET_MS,
-        maxOutputTokens: DELIBERATION_PROMPT_SPEC_V1.maxOutputTokens,
+        maxOutputTokens: DELIBERATION_PROMPT_SPEC_V2.maxOutputTokens,
       });
       if (!completion.ok) {
         return this.deliberationTurnRecord(
@@ -4048,6 +4067,70 @@ function acceptanceFloorMs(
   const startMs = Date.parse(phase === 1 ? committee.createdAt : committee.updatedAt);
   if (!Number.isFinite(startMs) || startMs >= commitDeadlineMs) return commitDeadlineMs;
   return startMs + Math.floor((commitDeadlineMs - startMs) / 2) + 2_000;
+}
+
+// V2 assigns turn duties because V1 produced identical monologues for unanimous juries.
+export function deliberationTurnInstructions(input: {
+  exchange: 1 | 2;
+  role: string;
+  outcome: "YES" | "NO" | "UNSURE";
+  seatIndex: number;
+  roundOneSeats: Array<{
+    seatIndex: number;
+    outcome: "YES" | "NO" | "UNSURE";
+  }>;
+  mostRecentSpeaker: number | null;
+}): string {
+  const others = input.roundOneSeats.filter(
+    (seat) => seat.seatIndex !== input.seatIndex,
+  );
+  const dissenters = others.filter((seat) => seat.outcome !== input.outcome);
+  const unanimous = dissenters.length === 0;
+  const oppositeOutcome = input.outcome === "YES"
+    ? "NO"
+    : input.outcome === "NO"
+      ? "YES"
+      : "a definite YES or NO";
+  const roleSentence = input.role === "SKEPTIC"
+    ? "You hold the SKEPTIC role: attack the weakest link in the majority reasoning even when you share the vote."
+    : input.role === "SOURCE_AUTHENTICITY"
+      ? "You hold the SOURCE_AUTHENTICITY role: weigh the reliability and relevance of the sources cited so far and say which deserve less weight."
+      : "Argue only from the evidence in the record.";
+
+  if (input.exchange === 1) {
+    const sentences = [
+      "Exchange one.",
+      typeof input.mostRecentSpeaker === "number"
+        ? `Begin by answering Seat ${input.mostRecentSpeaker}, the most recent speaker: name the specific claim, citation or inference of theirs you endorse or dispute.`
+        : "You speak first.",
+      `Then give the single strongest reason for your ${input.outcome} vote that no seat has stated yet.`,
+    ];
+    if (dissenters.length > 0) {
+      const dissentingVotes = dissenters
+        .map((seat) => `Seat ${seat.seatIndex} voted ${seat.outcome}`)
+        .join(" and ");
+      sentences.push(
+        `${dissentingVotes}, so dispute one specific citation or inference from at least one of them.`,
+      );
+    } else {
+      sentences.push(
+        `Every revealed seat voted ${input.outcome}, so state the strongest objection to that consensus and answer it.`,
+      );
+    }
+    sentences.push(roleSentence);
+    return sentences.join(" ");
+  }
+
+  return [
+    "Exchange two.",
+    "Answer the strongest objection raised against your position in exchange one, naming the seat that raised it.",
+    unanimous
+      ? `Every seat agrees with you, so present the best case for ${oppositeOutcome} using the allowed source that supports it most, and explain why it does not change your vote.`
+      : "If a seat changed its reasoning or conceded a point, say whether that moves you.",
+    "Do not restate points already made in this debate; add only new reasoning or direct answers.",
+    "Close with your final position: whether you keep, raise, lower or change your confidence, and why.",
+    roleSentence,
+  ].join(" ");
 }
 
 function defaultDeadlines(
