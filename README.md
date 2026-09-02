@@ -350,6 +350,18 @@ the coordination, the settlement and the currency; Walrus keeps the public
 evidence and Seal keeps the time-locked keys (both Mysten stack, detailed
 per-sponsor in the next section).
 
+### The three pillars
+
+| Pillar | What it provides | Why it is irreplaceable here | Track requirement satisfied |
+| --- | --- | --- | --- |
+| **Gonka (GonkaRouter): the only mind** | Every reasoning pass: claim extraction, five independent research runs, each debate turn, each table vote. Three model families behind one gateway, with a request id, devshard id and fingerprint kept for every call. | A jury is only as independent as its minds. One gateway serving three families lets the protocol enforce "no family holds a majority" and pin each juror's model in a manifest; the request ids are the receipts a verifier re-checks against Gonka's public lookup. A single vendor would make the jury steerable and unverifiable. | Gonka track: all AI reasoning through GonkaRouter, URL or text input, multi-model cross-verification, Truth Score with a reasoning trace, Gonka Request IDs shown. |
+| **Sui: the only judge** | The clock and the court: claims and deadlines as objects, the jury drawn by native randomness under family limits, commit-reveal enforced in Move, evidence roots frozen before any reveal, the immutable certificate and Truth Score, payout tickets, the demo pool that settles on the certificate, zkLogin seat backing. | Nobody picks the judges (native randomness) and nobody edits the result (Move rules, immutable objects). The verdict is not a number a judge is asked to trust; it is something the chain acts on: it settles the pool and pays the seats. | Sui Track 02: Sui is integral, ownership and identity as owned objects, on-chain execution of deadlines, thresholds and payouts, a working live demo path. |
+| **Walrus + Seal (Mysten): the only memory** | The public record: claim text, every page a juror opened, evidence manifests, sealed and revealed run bundles, debate transcripts, failure records, all content-addressed and hash-pinned on Sui. Seal time-locks each reveal key so sealed bundles open after the deadline without the operator. | "Anyone can recompute" is only true if the bytes are public and cannot be swapped. Walrus gives the bytes an address the on-chain hash commits to; Seal removes the operator from the reveal path. Without this pillar the verification checks have nothing to run on. | Sui Track 02 signals: Walrus evidence layer, reveal-key escrow with Seal, recheck everything in the browser. |
+
+Gonka is the only mind, Sui is the only judge, Walrus is the only memory,
+SUI is the working currency. No AI runs outside Gonka, no rule is enforced
+outside Sui, no evidence lives outside Walrus.
+
 **MUBA Gonka Track — AI for Society** (fact checker):
 
 | Requirement | OpenVerdict |
