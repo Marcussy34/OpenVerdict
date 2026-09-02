@@ -1754,6 +1754,30 @@ checkpoint + memory; the wake-up catch-up message.
 SENTRY byqsvuhog still armed (3/3 rule, fires the minimum-wage canary).
 Weather at 23:36 was 1/3 (DeepSeek 429, Kimi 429).
 
+### 3af progress, 01:05
+
+SHIPPED: deploy 947d062f (SUCCESS 00:59:21) at 64b1395 = 564820b (weather
+front door: gonka_weather + fact_check_queue tables, weatherTick /
+queueTick in the resolution worker (probe runs alongside the claim loop),
+GET /api/weather, POST /api/fact-checks 202 on bad weather, queue page,
+weather strip, voided panel rewrite) + 64b1395 (featured verifications on
+/app, ?replay=1 autoplay at 30x) + 5dd9156 (chip copy "second vote",
+committed, not yet deployed). Gate 583/583, tsc and lint clean. Verified
+live: /api/weather returns the three families (DeepSeek TIMEOUT, MiniMax
+ok, Kimi TIMEOUT at 01:00); a submission returned 202 and the queue page
+renders. README: Gonka compliance table (dd5964e).
+
+SEEDS QUEUED (launch one per minute on the first clear probe): minimum
+wage 0x9fc97947..., Bitcoin halving 0xf687cff9..., Great Wall
+0xfdb67be6.... Queue watch bafsmle2b (~6 h). The external sentry is
+retired (killed 01:01); the engine queue replaces it.
+
+IN FLIGHT: Codex task-mtkc9ujr-9gr9o4 (claim picker handler + route +
+CLI --text; watcher bsl2bmae7), then Gemini for the picker page
+(scratchpad/gemini-picker-prompt.md). Then: deploy at a clean window
+(queued items may launch on any clear probe: check /api/weather and the
+board before deploying), QA pass, README test counts, catch-up message.
+
 ## 4. Planned next (owner-approved direction)
 
 - Attestation (docs/superpowers/specs/2026-08-30-attested-inference-design.md):
