@@ -1778,6 +1778,26 @@ CLI --text; watcher bsl2bmae7), then Gemini for the picker page
 (queued items may launch on any clear probe: check /api/weather and the
 board before deploying), QA pass, README test counts, catch-up message.
 
+### 3af progress, 01:25
+
+BUG FOUND BY THE SEEDS: the inference worker processed claims one after
+another (forEachClaim), so with three claims launched a minute apart the
+second and third never started their seats before their own commit
+deadlines ("seat deadline reached before the commit window" on all five
+seats). Fixed in 1b5d613 (claims run side by side; the operator lane
+still serializes transactions) and deployed as 39164840 (SUCCESS
+01:20:45) together with the claim picker (d00f81a handler, f1c9910 page)
+and the chip fix. Committed, NOT deployed: 3baf302 (mobile QA pass:
+CLS reservations, 12px floor on phones, darker amber #8a5600, wave word
+sr-only, footer h2). Deploy it at the next clean window.
+
+SEED STATE 01:25: minimum wage attempt 1 voided (Kimi timeout), attempt
+2 (0xcc592ebd) voided (DeepSeek provider error), attempt 3 pending;
+Bitcoin attempt 1 voided (starvation), attempt 2 (0xd3f35c20) running
+under the restarted worker with little time left; Great Wall attempt 1
+voided (starvation), attempt 2 (0xd3139ba3) running. Expect attempt 3s
+to launch together around 01:24 to 01:27 and run concurrently.
+
 ## 4. Planned next (owner-approved direction)
 
 - Attestation (docs/superpowers/specs/2026-08-30-attested-inference-design.md):
