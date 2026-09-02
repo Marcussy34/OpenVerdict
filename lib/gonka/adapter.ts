@@ -69,7 +69,11 @@ import {
 
 const DEFAULT_BASE_URL = "https://api.gonkarouter.io/v1";
 const DEFAULT_TIMEOUT_MS = 120_000;
-const DEFAULT_RESEARCH_TIMEOUT_MS = 240_000;
+// A research turn that has not answered in 90 s is abandoned and retried: the
+// gateway edge times out at about 125 s anyway, and waiting for that 524 twice
+// spent a whole seat window (Kimi seats, 2026-09-03 02:09). Healthy turns
+// answer in 10 to 50 s.
+const DEFAULT_RESEARCH_TIMEOUT_MS = 90_000;
 const DEFAULT_HEDGE_AFTER_MS = 25_000;
 const MIN_HEDGE_REMAINING_MS = 5_000;
 const HEDGE_ABANDONED_MESSAGE =

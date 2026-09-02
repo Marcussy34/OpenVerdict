@@ -198,7 +198,7 @@ function createServerGonkaAdapter(manifest: ReleaseManifest): GonkaRouterAdapter
       baseUrl: readEnv(process.env.GONKA_ROUTER_BASE_URL, manifest.gonka.baseUrl),
       apiKey,
       timeoutMs: numberEnv("GONKA_REQUEST_TIMEOUT_MS", 120_000),
-      researchTimeoutMs: numberEnv("GONKA_RESEARCH_TIMEOUT_MS", 240_000),
+      researchTimeoutMs: numberEnv("GONKA_RESEARCH_TIMEOUT_MS", 90_000),
       hedgeAfterMs: numberEnv("GONKA_HEDGE_AFTER_MS", 25_000),
       maxRetries: numberEnv("GONKA_MAX_RETRIES", 1),
     },
