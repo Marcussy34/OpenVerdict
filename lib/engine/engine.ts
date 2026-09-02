@@ -205,6 +205,10 @@ export const WEATHER_PROBE_INTERVAL_MS = 120_000;
 export const WEATHER_STALE_MS = 300_000;
 /** A queued submission waits no longer than the relaunch policy. */
 export const QUEUE_TTL_MS = 6 * 60 * 60 * 1000;
+/** The research provider's row in the weather table (not a Gonka model). */
+export const RESEARCH_WEATHER_ID = "research:firecrawl";
+/** The credit check is a single small GET; it never waits on a model. */
+export const RESEARCH_PROBE_TIMEOUT_MS = 15_000;
 /**
  * Cleared weather launches at most one queued or relaunched claim per window.
  * Round-one research runs from +70 s to +600 s, so ten minutes keeps two
@@ -550,17 +554,39 @@ class OpenVerdictEngine implements Engine {
       return;
     }
 
-    const results = await this.#gonka.probeModels(
-      this.#manifest.gonka.models,
-      RELAUNCH_PROBE_TIMEOUT_MS,
-    );
+    // The research provider is probed alongside the families: a jury with
+    // no web search answers UNSURE on everything (five seats did, 2026-09-03
+    // 05:00, on a 402 from the search API). Its row shares the weather table
+    // under the RESEARCH_WEATHER_ID key.
+    const [modelResults, researchProbe] = await Promise.all([
+      this.#gonka.probeModels(
+        this.#manifest.gonka.models,
+        RELAUNCH_PROBE_TIMEOUT_MS,
+      ),
+      this.#research?.probe?.(RESEARCH_PROBE_TIMEOUT_MS) ?? Promise.resolve(undefined),
+    ]);
+    const results: GonkaWeatherProbe[] =
+      researchProbe === undefined
+        ? modelResults
+        : [
+            ...modelResults,
+            {
+              modelId: RESEARCH_WEATHER_ID,
+              ok: researchProbe.ok,
+              latencyMs: researchProbe.latencyMs,
+              status: researchProbe.status as GonkaWeatherProbe["status"],
+            },
+          ];
     const probedAt = new Date(probedAtMs).toISOString();
     await this.#repository.saveGonkaWeather(
       results.map((result) => ({
         modelId: result.modelId,
         ok: result.ok,
         latencyMs: result.latencyMs,
-        status: String(result.status),
+        status:
+          result.modelId === RESEARCH_WEATHER_ID && researchProbe?.detail !== undefined
+            ? `${result.status} ${researchProbe.detail}`
+            : String(result.status),
         probedAt,
       })),
     );
@@ -5344,6 +5370,7 @@ function newestWeatherAtMs(rows: readonly GonkaWeatherRecord[]): number | null {
 }
 
 function weatherFamily(modelId: string): WeatherFamily["family"] {
+  if (modelId === RESEARCH_WEATHER_ID) return "research";
   const normalized = modelId.toLowerCase();
   if (normalized.includes("deepseek")) return "deepseek";
   if (normalized.includes("minimax")) return "minimax";

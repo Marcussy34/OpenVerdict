@@ -168,7 +168,7 @@ export default function QueuedFactCheckPage() {
           </span>
         </div>
         <p className="text-sm text-muted-foreground">
-          A jury needs all three model families. Yours starts on the first clear probe.
+          A jury needs all three model families and web search. Yours starts on the first clear probe.
         </p>
       </div>
 

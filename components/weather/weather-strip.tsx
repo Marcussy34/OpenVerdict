@@ -20,7 +20,8 @@ interface FamilyChipData {
   latencyText?: string;
 }
 
-const ORDERED_FAMILIES = ["deepseek", "minimax", "kimi"] as const;
+// The fourth chip is the web search provider: a jury needs it as much as the models.
+const ORDERED_FAMILIES = ["deepseek", "minimax", "kimi", "research"] as const;
 
 /** Map raw family identifier to canonical display name. */
 function familyDisplayName(family: string, modelId: string): string {
@@ -28,6 +29,7 @@ function familyDisplayName(family: string, modelId: string): string {
   if (norm === "deepseek") return "DeepSeek";
   if (norm === "minimax") return "MiniMax";
   if (norm === "kimi") return "Kimi";
+  if (norm === "research") return "Web search";
   return modelId || family;
 }
 
@@ -275,7 +277,7 @@ export function WeatherStrip({
             isDark ? "text-white/60" : "text-muted-foreground",
           )}
         >
-          A jury needs all three model families.
+          A jury needs all three model families and web search.
         </p>
       ) : null}
     </div>

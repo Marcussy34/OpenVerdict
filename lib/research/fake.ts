@@ -17,13 +17,24 @@ function slugify(query: string): string {
 export function createFakeResearchProvider(options?: {
   pageChars?: number;
   failHosts?: string[];
-}): ResearchProvider {
+  /** Weather tests flip this; the fake provider is healthy by default. */
+  probeOk?: boolean;
+}): ResearchProvider & { setProbeOk(ok: boolean): void } {
   const pageChars = Math.max(0, options?.pageChars ?? 2_000);
   const failHosts = new Set(options?.failHosts ?? ["fail.evidence.test"]);
+  let probeOk = options?.probeOk ?? true;
 
   return {
     name: "fake",
     mode: "fake",
+
+    setProbeOk(ok: boolean) {
+      probeOk = ok;
+    },
+
+    async probe() {
+      return { ok: probeOk, latencyMs: 1, status: probeOk ? "200" : "402" };
+    },
 
     async search(query, { limit }) {
       const slug = slugify(query);

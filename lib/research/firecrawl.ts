@@ -6,6 +6,8 @@ import {
 } from "./provider";
 
 export const FIRECRAWL_CLOUD_URL = "https://api.firecrawl.dev";
+/** A jury's searches and page opens cost a few dozen credits; below this the weather is not clear. */
+export const FIRECRAWL_MIN_CREDITS = 50;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
@@ -134,6 +136,51 @@ export function createFirecrawlProvider(config: {
   return {
     name: "firecrawl",
     mode: base.host === "api.firecrawl.dev" ? "cloud" : "selfhost",
+
+    // The credit-usage endpoint is free and answers in well under a second,
+    // so the weather can say "web search down" before a jury is drawn: a
+    // 402 on every search left five jurors answering UNSURE with no evidence
+    // (2026-09-03 05:00). A self-hosted Firecrawl has no credits: always ok.
+    async probe(timeoutMs) {
+      const startedAtMs = Date.now();
+      if (base.host !== "api.firecrawl.dev") {
+        return { ok: true, latencyMs: 0, status: "selfhost" };
+      }
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), timeoutMs);
+      try {
+        const response = await fetchImpl(`${base.url}/v2/team/credit-usage`, {
+          method: "GET",
+          headers: { authorization: `Bearer ${config.apiKey}` },
+          signal: controller.signal,
+        });
+        const latencyMs = Math.max(0, Date.now() - startedAtMs);
+        let payload: unknown = undefined;
+        try {
+          payload = await response.json();
+        } catch {
+          payload = undefined;
+        }
+        const data = isRecord(payload) && isRecord(payload.data) ? payload.data : undefined;
+        const remaining = typeof data?.remainingCredits === "number" ? data.remainingCredits : undefined;
+        const ok = response.ok && remaining !== undefined && remaining >= FIRECRAWL_MIN_CREDITS;
+        return {
+          ok,
+          latencyMs,
+          status: String(response.status),
+          ...(remaining === undefined ? {} : { detail: `${remaining} credits` }),
+        };
+      } catch (error) {
+        const timedOut = controller.signal.aborted || isAbortError(error);
+        return {
+          ok: false,
+          latencyMs: Math.max(0, Date.now() - startedAtMs),
+          status: timedOut ? "TIMEOUT" : "ERROR",
+        };
+      } finally {
+        clearTimeout(timer);
+      }
+    },
 
     async search(query, options) {
       const payload = await post(

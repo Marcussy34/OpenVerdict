@@ -36,7 +36,11 @@ import {
   type TableVoteStance,
 } from "../protocol";
 import { sampleTableVoteInput } from "../protocol/table-vote.fixture";
-import { transcriptHash } from "../research";
+import {
+  createFakeResearchProvider,
+  transcriptHash,
+  type ResearchProvider,
+} from "../research";
 import type { SealEscrowService } from "../seal/escrow";
 import { parseSealIdentity, sealIdentityHex } from "../seal/identity";
 import {
@@ -68,6 +72,7 @@ import { openSealedRunBundle } from "./runBundle";
 import { isVoidedAttempt } from "./claim-lifecycle";
 import {
   QUEUE_LAUNCH_SPACING_MS,
+  RESEARCH_WEATHER_ID,
   QUEUE_TTL_MS,
   RELAUNCH_GIVE_UP_MS,
   WEATHER_PROBE_INTERVAL_MS,
@@ -261,9 +266,11 @@ describe("weather-aware submissions", () => {
     await setup.engine.weatherTick();
 
     const rows = await createRepository(setup.db).listGonkaWeather();
-    expect(rows).toHaveLength(3);
+    // Three families plus the research provider's row.
+    expect(rows).toHaveLength(4);
     expect(rows.every((row) => row.ok)).toBe(true);
     expect(rows.every((row) => row.status === "200")).toBe(true);
+    expect(rows.some((row) => row.modelId === RESEARCH_WEATHER_ID)).toBe(true);
     await expect(setup.engine.weather()).resolves.toMatchObject({
       probedAtMs: setup.now(),
       stale: false,
@@ -423,6 +430,29 @@ describe("weather-aware submissions", () => {
       status: "LAUNCHED",
       claimId: expect.any(String),
     });
+  });
+
+  it("holds submissions while the research provider is down", async () => {
+    const research = createFakeResearchProvider({ probeOk: false });
+    const setup = await engineSetup(new FakeSuiGateway(), 5, { research });
+    setup.gonka.setWeather([{ modelId: "model-b", ok: true }]);
+    await setup.engine.weatherTick();
+    const weather = await setup.engine.weather();
+    expect(weather.clear).toBe(false);
+    expect(
+      weather.families.find((family) => family.family === "research"),
+    ).toMatchObject({ ok: false, status: "402" });
+
+    const submission = await setup.engine.factCheckSubmit({
+      claim: "No web search means no jury for now.",
+      urls: [],
+    });
+    expect(submission.kind).toBe("queued");
+
+    research.setProbeOk(true);
+    setup.setNow(setup.now() + WEATHER_PROBE_INTERVAL_MS);
+    await setup.engine.weatherTick();
+    expect((await setup.engine.weather()).clear).toBe(true);
   });
 
   it("expires queued submissions after six hours", async () => {
@@ -2783,6 +2813,8 @@ async function engineSetup(
     deliberationResponses?: Partial<Record<number, string[]>>;
     /** Replaces the local store (for example a store with a retention clock). */
     walrus?: WalrusStore;
+    /** Replaces the fake research provider (weather tests flip its probe). */
+    research?: ResearchProvider;
     seal?: NonNullable<ReleaseManifest["seal"]>;
     sealEscrow?: SealEscrowService;
     /** Only relaunch tests move time beyond the shared fixed fixture clock. */
@@ -2855,6 +2887,7 @@ async function engineSetup(
     ...(options.sealEscrow === undefined
       ? {}
       : { sealEscrow: options.sealEscrow }),
+    ...(options.research === undefined ? {} : { research: options.research }),
     now: () => nowMs,
     sleep: async () => undefined,
     eventPollIntervalMs: 5,

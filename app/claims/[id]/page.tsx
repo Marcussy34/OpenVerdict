@@ -419,7 +419,7 @@ function StageBanner({
             <p className="text-[11px] text-white/60">
               {claim.attemptChain.status === "GAVE_UP"
                 ? "All-or-nothing: no partial verdict was finalized. This verification gave up; submit the claim again to start a fresh one."
-                : "All-or-nothing: no partial verdict is ever finalized. The engine relaunches automatically once all three families answer."}
+                : "All-or-nothing: no partial verdict is ever finalized. The engine relaunches automatically once all three families and web search answer."}
             </p>
           </div>
 

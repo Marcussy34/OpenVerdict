@@ -419,14 +419,14 @@ export type ZkBackedRegistrationResult = {
 export type WeatherFamily = {
   modelId: string;
   /** Derived from the model id; anything unknown keeps the model id as label. */
-  family: "deepseek" | "minimax" | "kimi" | string;
+  family: "deepseek" | "minimax" | "kimi" | "research" | string;
   ok: boolean;
   latencyMs: number;
   /** HTTP status as text, or TIMEOUT / ERROR. */
   status: string;
 };
 
-/** The three families' latest probes. A jury needs all three to be ok. */
+/** The three families' latest probes plus the web search provider. A jury needs all of them ok. */
 export type WeatherReport = {
   probedAtMs: number | null;
   /** No probe, or the newest probe is older than WEATHER_STALE_MS. */
