@@ -8,7 +8,9 @@ import {
   DEFAULT_TOOL_POLICY_V2,
   DEFAULT_TOOL_POLICY_V3,
   DEFAULT_TOOL_POLICY_V4,
+  TABLE_VOTE_PROMPT_SPEC_V1,
   promptSpecHash,
+  tableVotePromptSpecHash,
   toolPolicyHash,
 } from "../gonka/promptSpec";
 import {
@@ -26,6 +28,12 @@ const base = {
   modelId: "MiniMaxAI/MiniMax-M2.7",
   promptSpec: DEFAULT_PROMPT_SPEC_V1,
   evidencePolicyId: "OPENVERDICT_EVIDENCE_POLICY_V1",
+};
+
+const v5Params = {
+  ...base,
+  promptSpec: DEFAULT_PROMPT_SPEC_V4,
+  toolPolicy: DEFAULT_TOOL_POLICY_V4,
 };
 
 describe("buildAgentManifestDocument", () => {
@@ -108,11 +116,7 @@ describe("buildAgentManifestDocument", () => {
   });
 
   it("round-trips a v5 document with bound v4 hashes", () => {
-    const built = buildAgentManifestDocument({
-      ...base,
-      promptSpec: DEFAULT_PROMPT_SPEC_V4,
-      toolPolicy: DEFAULT_TOOL_POLICY_V4,
-    });
+    const built = buildAgentManifestDocument(v5Params);
 
     expect(built.document.version).toBe("5");
     expect(built.promptHash).toBe(promptSpecHash(DEFAULT_PROMPT_SPEC_V4));
@@ -125,5 +129,26 @@ describe("buildAgentManifestDocument", () => {
         toolPolicy: DEFAULT_TOOL_POLICY_V4,
       }).manifestHash,
     ).toBe(built.manifestHash);
+  });
+
+  it("builds and parses a v6 document that pins the table vote prompt", () => {
+    const built = buildAgentManifestDocument({
+      ...v5Params,
+      tableVotePromptSpec: TABLE_VOTE_PROMPT_SPEC_V1,
+    });
+    expect(built.document.version).toBe("6");
+    expect(built.tableVotePromptHash).toBe(tableVotePromptSpecHash());
+    const parsed = parseAgentManifestDocument(built.bytes);
+    expect(parsed.version).toBe("6");
+    if (parsed.version === "6") {
+      expect(parsed.tableVotePromptHash).toBe(built.tableVotePromptHash);
+      expect(parsed.tableVotePromptSpec).toEqual(TABLE_VOTE_PROMPT_SPEC_V1);
+    }
+  });
+
+  it("still builds a v5 document when no table vote spec is given", () => {
+    const built = buildAgentManifestDocument(v5Params);
+    expect(built.document.version).toBe("5");
+    expect(built.tableVotePromptHash).toBeUndefined();
   });
 });

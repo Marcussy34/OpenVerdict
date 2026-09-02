@@ -21,9 +21,12 @@ import type {
   PublicRunBundleCoreV3,
   PublicRunBundleCoreV4,
   PublicRunBundleCoreV5,
+  PublicRunBundleCoreV6,
   ResearchTranscriptV1,
   RunBundleSeal,
   SealedRunBundleV2,
+  TableVoteInput,
+  TableVotePromptSpecV1,
   ToolPolicyV2,
   ToolPolicyV3,
   ToolPolicyV4,
@@ -138,6 +141,47 @@ export function buildRunBundleCore(
     version: 3,
     promptSpec: params.promptSpec,
     toolPolicy: params.toolPolicy,
+  };
+}
+
+/** Build the auditable round-two bundle without research-only fields. */
+export function buildTableVoteBundleCore(params: {
+  input: TableVoteInput;
+  runResult: GonkaRunResult;
+  validatedOutput: OracleInferenceOutput;
+  audit: InferenceRunAudit;
+  runHash: HexString;
+  promptSpec: TableVotePromptSpecV1;
+}): PublicRunBundleCoreV6 {
+  return {
+    version: 6,
+    kind: "run-bundle",
+    runId: params.audit.runId,
+    claimId: params.audit.claimObjectId,
+    phase: params.audit.phase,
+    agentProfileId: params.audit.agentProfileId,
+    jurySeatId: params.audit.jurySeatId,
+    promptSpec: params.promptSpec,
+    promptHash: params.audit.promptHash,
+    input: params.input,
+    inputHash: params.audit.inputHash,
+    request: params.runResult.request,
+    attempts: params.runResult.attempts,
+    rawResponse: params.runResult.response,
+    gateway: params.runResult.gateway,
+    validatedOutput: params.validatedOutput,
+    outputHash: params.audit.outputHash,
+    audit: params.audit,
+    runHash: params.runHash,
+    verify: {
+      promptHash: "blake2b256(canonicalJson(promptSpec))",
+      inputHash: "blake2b256(canonicalJson(input))",
+      outputHash: "blake2b256(canonicalJson(validatedOutput))",
+      toolTranscriptHash: "blake2b256(0x00) (no tools in a table vote)",
+      systemPrompt: "promptSpec.systemPrompt",
+      runHash: "blake2b256(BCS(RunRecordV1))",
+      commitment: "blake2b256(BCS(VotePreimageV1))",
+    },
   };
 }
 

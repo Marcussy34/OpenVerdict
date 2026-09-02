@@ -7,12 +7,15 @@ import {
   DEFAULT_TOOL_POLICY_V2,
   DEFAULT_TOOL_POLICY_V3,
   DEFAULT_TOOL_POLICY_V4,
+  TABLE_VOTE_PROMPT_SPEC_V1,
   composeSystemPrompt,
   promptSpecHash,
   toolPolicyHash,
 } from "../gonka/promptSpec";
 import { canonicalJsonBytes } from "../gonka/canonical";
+import { EMPTY_TOOL_TRANSCRIPT_HASH } from "../gonka/audit";
 import { blake2b256, toHex } from "../protocol";
+import { sampleTableVoteInput } from "../protocol/table-vote.fixture";
 import type {
   PublicRunBundleCoreV3,
   PublicRunBundleCoreV4,
@@ -24,6 +27,7 @@ import { makeInput, makeOutput } from "../gonka/fixtures.test-utils";
 import type { GonkaRunResult } from "../gonka/types";
 import {
   buildRunBundleCore,
+  buildTableVoteBundleCore,
   canonicalCoreBytes,
   openSealedRunBundle,
   sealRunBundle,
@@ -258,6 +262,36 @@ describe("run bundle sealing", () => {
     expect((core as PublicRunBundleCoreV5).promptSpec.version).toBe("4");
     expect((core as PublicRunBundleCoreV5).toolPolicy.version).toBe("4");
     expect((core as PublicRunBundleCoreV5).toolPolicy.maxOpensPerTurn).toBe(3);
+  });
+
+  it("builds, seals and reopens a v6 table vote bundle with no transcript", () => {
+    const expected = makeCore();
+    const sampleRunResult: GonkaRunResult = {
+      type: "gonka-run-result",
+      attempts: [],
+      response: expected.rawResponse,
+      request: expected.request,
+      gateway: expected.gateway,
+    };
+    const core = buildTableVoteBundleCore({
+      input: sampleTableVoteInput(),
+      runResult: sampleRunResult,
+      validatedOutput: makeOutput(),
+      audit: {
+        ...expected.audit,
+        phase: 2,
+        toolTranscriptHash: EMPTY_TOOL_TRANSCRIPT_HASH,
+        toolCallCount: 0,
+      },
+      runHash: expected.runHash,
+      promptSpec: TABLE_VOTE_PROMPT_SPEC_V1,
+    });
+    expect(core.version).toBe(6);
+    expect("toolPolicy" in core).toBe(false);
+    expect("transcript" in core).toBe(false);
+    expect(core.verify.systemPrompt).toBe("promptSpec.systemPrompt");
+    const { sealed, seal } = sealRunBundle(core, { runId: core.runId });
+    expect(openSealedRunBundle(sealed, seal)).toEqual(core);
   });
 
   it("round-trips through AES-256-GCM and binds the core hash", () => {

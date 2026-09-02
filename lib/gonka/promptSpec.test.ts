@@ -10,15 +10,19 @@ import {
   DEFAULT_TOOL_POLICY_V2,
   DEFAULT_TOOL_POLICY_V3,
   DEFAULT_TOOL_POLICY_V4,
+  TABLE_VOTE_PROMPT_SPEC_V1,
   buildPrimaryMessages,
   buildRepairMessages,
   buildResearchMessages,
+  buildTableVoteMessages,
   composeSystemPrompt,
   promptSpecHash,
+  tableVotePromptSpecHash,
   toolPolicyHash,
 } from "./promptSpec";
 import { canonicalJsonString } from "./canonical";
 import { makeInput } from "./fixtures.test-utils";
+import { sampleTableVoteInput } from "../protocol/table-vote.fixture";
 
 describe("promptSpec", () => {
   it("hashes canonically and stably", () => {
@@ -115,6 +119,44 @@ describe("deliberation prompt spec v2", () => {
     expect(promptSpecHash(DELIBERATION_PROMPT_SPEC_V2)).not.toBe(
       promptSpecHash(DELIBERATION_PROMPT_SPEC_V1),
     );
+  });
+});
+
+describe("table vote prompt spec v1", () => {
+  it("pins the table vote contract", () => {
+    expect(TABLE_VOTE_PROMPT_SPEC_V1).toMatchObject({
+      version: "1",
+      providerId: "gonkarouter",
+      temperature: 0,
+      maxOutputTokens: 2048,
+      responseFormat: "json_object",
+    });
+    expect(TABLE_VOTE_PROMPT_SPEC_V1.systemPrompt).toContain(
+      "evidence on the table",
+    );
+    expect(TABLE_VOTE_PROMPT_SPEC_V1.systemPrompt).toContain(
+      "Do not request or use tools",
+    );
+    expect(tableVotePromptSpecHash()).toBe(
+      promptSpecHash(TABLE_VOTE_PROMPT_SPEC_V1),
+    );
+    expect(tableVotePromptSpecHash()).not.toBe(
+      promptSpecHash(DEFAULT_PROMPT_SPEC_V4),
+    );
+  });
+
+  it("builds a two-message table vote request with canonical JSON input", () => {
+    const input = sampleTableVoteInput();
+    const messages = buildTableVoteMessages(TABLE_VOTE_PROMPT_SPEC_V1, input);
+    expect(messages).toHaveLength(2);
+    expect(messages[0]).toEqual({
+      role: "system",
+      content: TABLE_VOTE_PROMPT_SPEC_V1.systemPrompt,
+    });
+    expect(JSON.parse(messages[1]!.content)).toMatchObject({
+      kind: "TABLE_VOTE",
+      runId: input.runId,
+    });
   });
 });
 

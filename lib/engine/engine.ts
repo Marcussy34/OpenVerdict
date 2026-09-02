@@ -3559,7 +3559,10 @@ class OpenVerdictEngine implements Engine {
           confidenceBps: reveal.confidenceBps,
           run,
           manifest: await this.#repository.getAgentManifest(reveal.agentProfileId),
-          input: core?.input,
+          // Debaters are round-one research seats; a v6 table vote core carries a
+          // TableVoteInput and never reaches this path.
+          input:
+            core !== undefined && !("kind" in core.input) ? core.input : undefined,
           openedUrls:
             core !== undefined && "transcript" in core
               ? core.transcript.opened.flatMap((page) => [page.url, page.finalUrl])

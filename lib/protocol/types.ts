@@ -71,6 +71,7 @@ export type AgentManifest = {
   codeCommit?: string;
   containerDigest?: string;
   promptHash: HexString;
+  tableVotePromptHash?: HexString;
   modelId: string;
   modelRevision?: string;
   providerId: "gonkarouter";
@@ -181,6 +182,49 @@ export type OracleInferenceOutput = {
   }>;
   citations?: Citation[];
   counterEvidenceSummary?: string;
+};
+
+/** The table vote uses one deterministic prompt with no tools. */
+export type TableVotePromptSpecV1 = {
+  version: "1";
+  providerId: "gonkarouter";
+  systemPrompt: string;
+  temperature: 0;
+  maxOutputTokens: 2048;
+  responseFormat: "json_object";
+};
+
+export type TableVoteStance = "YES" | "NO" | "UNSURE";
+
+/** One public debate turn supplied to every table voter. */
+export type TableVoteDebateTurn = {
+  seat: number;
+  exchange: 1 | 2 | 3;
+  argument: string;
+  citations: string[];
+  stance: TableVoteStance;
+  confidenceBps: number;
+};
+
+/** The sealed round-two input contains only frozen public evidence. */
+export type TableVoteInput = {
+  protocolVersion: "1.0";
+  kind: "TABLE_VOTE";
+  runId: string;
+  agentRole: string;
+  claim: { statement: string; resolutionCriteria: string };
+  evidenceManifest: OracleInferenceInput["evidenceManifest"];
+  priorRound: NonNullable<OracleInferenceInput["priorRound"]>;
+  debate: TableVoteDebateTurn[];
+  convergedAfterExchange: 1 | 2 | 3 | null;
+  self: {
+    seatIndex: number;
+    role: string;
+    roundOneOutcome: TableVoteStance;
+    roundOneConfidenceBps: number;
+    roundOneOutput: OracleInferenceOutput;
+  };
+  outputContract: OracleInferenceInput["outputContract"];
 };
 
 export type PromptSpecV1 = {
@@ -384,11 +428,21 @@ export type AgentManifestDocumentV5 = Omit<
   AgentManifestDocumentV4,
   "version" | "promptSpec" | "toolPolicy"
 > & { version: "5"; promptSpec: PromptSpecV4; toolPolicy: ToolPolicyV4 };
+/** V6 also pins the no-tools table-vote prompt. */
+export type AgentManifestDocumentV6 = Omit<
+  AgentManifestDocumentV5,
+  "version"
+> & {
+  version: "6";
+  tableVotePromptSpec: TableVotePromptSpecV1;
+  tableVotePromptHash: HexString;
+};
 export type AgentManifestDocument =
   | AgentManifestDocumentV2
   | AgentManifestDocumentV3
   | AgentManifestDocumentV4
-  | AgentManifestDocumentV5;
+  | AgentManifestDocumentV5
+  | AgentManifestDocumentV6;
 
 export type ResearchSearchResult = {
   rank: number;
@@ -576,13 +630,42 @@ export type PublicRunBundleCoreV5 = Omit<
 export type PublicRunBundleV5 = PublicRunBundleCoreV5 & {
   seal: RunBundleSeal;
 };
+/** V6 proves a no-tools table vote without a research transcript. */
+export type PublicRunBundleCoreV6 = Omit<
+  PublicRunBundleCoreV5,
+  | "version"
+  | "promptSpec"
+  | "toolPolicy"
+  | "toolPolicyHash"
+  | "transcript"
+  | "input"
+  | "verify"
+> & {
+  version: 6;
+  promptSpec: TableVotePromptSpecV1;
+  input: TableVoteInput;
+  verify: {
+    promptHash: "blake2b256(canonicalJson(promptSpec))";
+    inputHash: "blake2b256(canonicalJson(input))";
+    outputHash: "blake2b256(canonicalJson(validatedOutput))";
+    toolTranscriptHash: "blake2b256(0x00) (no tools in a table vote)";
+    systemPrompt: "promptSpec.systemPrompt";
+    runHash: "blake2b256(BCS(RunRecordV1))";
+    commitment: "blake2b256(BCS(VotePreimageV1))";
+  };
+};
+export type PublicRunBundleV6 = PublicRunBundleCoreV6 & {
+  seal: RunBundleSeal;
+};
 export type PublicRunBundleCore =
   | PublicRunBundleCoreV2
   | PublicRunBundleCoreV3
   | PublicRunBundleCoreV4
-  | PublicRunBundleCoreV5;
+  | PublicRunBundleCoreV5
+  | PublicRunBundleCoreV6;
 export type PublicRunBundle =
   | PublicRunBundleV2
   | PublicRunBundleV3
   | PublicRunBundleV4
-  | PublicRunBundleV5;
+  | PublicRunBundleV5
+  | PublicRunBundleV6;

@@ -10,12 +10,14 @@ import type {
   AgentManifestDocumentV3,
   AgentManifestDocumentV4,
   AgentManifestDocumentV5,
+  AgentManifestDocumentV6,
   HexString,
   PromptSpec,
   PromptSpecV1,
   PromptSpecV2,
   PromptSpecV3,
   PromptSpecV4,
+  TableVotePromptSpecV1,
   ToolPolicyV2,
   ToolPolicyV3,
   ToolPolicyV4,
@@ -69,6 +71,18 @@ const promptSpecV3Schema = promptSpecV2Schema
 const promptSpecV4Schema = promptSpecV2Schema
   .extend({ version: z.literal("4") })
   .strict() satisfies z.ZodType<PromptSpecV4>;
+
+/** V6 validates the fixed shape of the no-tools table-vote prompt. */
+const tableVotePromptSpecV1Schema = z
+  .object({
+    version: z.literal("1"),
+    providerId: z.literal("gonkarouter"),
+    systemPrompt: z.string().min(1),
+    temperature: z.literal(0),
+    maxOutputTokens: z.literal(2048),
+    responseFormat: z.literal("json_object"),
+  })
+  .strict() satisfies z.ZodType<TableVotePromptSpecV1>;
 
 const toolPolicyV2Schema = z
   .object({
@@ -163,11 +177,21 @@ const agentManifestDocumentV5Schema = agentManifestDocumentV4Schema
   })
   .strict() satisfies z.ZodType<AgentManifestDocumentV5>;
 
+/** V6 binds the table-vote prompt beside the unchanged v5 fields. */
+const agentManifestDocumentV6Schema = agentManifestDocumentV5Schema
+  .extend({
+    version: z.literal("6"),
+    tableVotePromptSpec: tableVotePromptSpecV1Schema,
+    tableVotePromptHash: hexStringSchema,
+  })
+  .strict() satisfies z.ZodType<AgentManifestDocumentV6>;
+
 const agentManifestDocumentSchema = z.discriminatedUnion("version", [
   agentManifestDocumentV2Schema,
   agentManifestDocumentV3Schema,
   agentManifestDocumentV4Schema,
   agentManifestDocumentV5Schema,
+  agentManifestDocumentV6Schema,
 ]);
 
 export type BuildAgentManifestDocumentParams = {
@@ -180,6 +204,7 @@ export type BuildAgentManifestDocumentParams = {
   modelId: string;
   promptSpec: PromptSpec;
   toolPolicy?: ToolPolicyV2 | ToolPolicyV3 | ToolPolicyV4;
+  tableVotePromptSpec?: TableVotePromptSpecV1;
   evidencePolicyId: string;
 };
 
@@ -189,6 +214,7 @@ export type BuiltAgentManifestDocument = {
   manifestHash: HexString;
   promptHash: HexString;
   toolPolicyHash: HexString;
+  tableVotePromptHash?: HexString;
 };
 
 export function buildAgentManifestDocument(
@@ -200,13 +226,14 @@ export function buildAgentManifestDocument(
   );
   let document: AgentManifestDocument;
   let policyHash: HexString;
+  let tableVotePromptHash: HexString | undefined;
 
   if (params.promptSpec.version === "4") {
     if (params.toolPolicy?.version !== "4") {
       throw new Error("a v4 prompt spec requires a v4 tool policy");
     }
     policyHash = toolPolicyHash(params.toolPolicy);
-    document = {
+    const v5Document: AgentManifestDocumentV5 = {
       version: "5",
       network: params.network,
       backingKind: params.backingKind,
@@ -223,6 +250,17 @@ export function buildAgentManifestDocument(
       evidencePolicyId: params.evidencePolicyId,
       evidencePolicyHash,
     };
+    if (params.tableVotePromptSpec) {
+      tableVotePromptHash = promptSpecHash(params.tableVotePromptSpec);
+      document = {
+        ...v5Document,
+        version: "6",
+        tableVotePromptSpec: params.tableVotePromptSpec,
+        tableVotePromptHash,
+      };
+    } else {
+      document = v5Document;
+    }
   } else if (params.promptSpec.version === "3") {
     if (params.toolPolicy?.version !== "3") {
       throw new Error("a v3 prompt spec requires a v3 tool policy");
@@ -298,6 +336,7 @@ export function buildAgentManifestDocument(
     manifestHash: toHex(blake2b256(bytes)),
     promptHash,
     toolPolicyHash: policyHash,
+    ...(tableVotePromptHash === undefined ? {} : { tableVotePromptHash }),
   };
 }
 
