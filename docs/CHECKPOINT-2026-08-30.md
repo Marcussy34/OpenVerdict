@@ -1819,6 +1819,32 @@ Sui mainnet May 2023, 21 million cap). Watch for the first settled
 claim under the new protocol. Follow-up if storms persist: a
 process-wide cap on concurrent Gonka calls in lib/gonka/adapter.ts.
 
+### 3af progress, 02:28
+
+DEPLOYS: 4641d23f (SUCCESS 01:55) = spacing 7 min + retry budget 12 +
+mobile QA + receipt line; b586acfe (SUCCESS 02:24) = ec682e2: research
+call timeout 90 s (was 240 s; the gateway edge 524s at 125 s and two of
+those ate a Kimi seat's window), footer explorer row always present
+(0.35 CLS), fact-check Suspense fallback paints the hero. Lighthouse
+after the QA deploy: accessibility 100, best practices 100, SEO 100 on
+/fact-check; performance 53 to 70 on throttled mobile (LCP waits on
+hydration); claim pages report NO_LCP (canvas), left alone.
+
+SEED RUNS UNDER THE FIXES: Bitcoin halving 0xb6927024 attempt 1 voided
+(both Kimi seats: 524 twice each), attempt 2 0xf288313b voided (DeepSeek
+provider error), attempt 3 pending on weather (DeepSeek 429, Kimi
+TIMEOUT at 02:24). The other seeds wait in scratchpad/seeder.sh
+(b8gn7wns3): one submission at a time, only when no attempt is live or
+pending relaunch and the weather is clear. Board watcher bl5bafa4w.
+Background tasks were killed once by the harness at ~02:22 (three
+watchers); restart them after a compaction if missing.
+
+STILL NOT PROVEN: a settled claim under the new protocol. Every void
+tonight was Gonka weather (429 storms, 524 edge timeouts on Kimi), never
+the protocol. Owner decision to raise at catch-up: swap the two Kimi
+seats for MiniMax (the judge's own advice), since Kimi is the family
+that fails most and each committee draws two Kimi seats half the time.
+
 ## 4. Planned next (owner-approved direction)
 
 - Attestation (docs/superpowers/specs/2026-08-30-attested-inference-design.md):
