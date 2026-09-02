@@ -423,6 +423,22 @@ on testnet at https://app.openverdict.info.
 | Inference provenance | Response `id`, `x-request-id`, devshard id and fingerprint stored for every attempt (retries, repairs, hedges) and cross-checked against Gonka's public receipts lookup | "Run provenance" on any revealed run |
 | Latency hedging | A same-model hedge fires after a 25 s stall; every attempt lands in the audit trail | Revealed run bundle on Walrus |
 
+**Gonka compliance rules, enforced in code (not policy):**
+
+| Rule | Where | What happens when it is broken |
+| --- | --- | --- |
+| Host pinned to `api.gonkarouter.io`; no other provider exists in the repository | `lib/gonka/adapter.ts` | There is no code path to any other model host |
+| `X-Gonka-No-Fallback: true` on every call | `lib/gonka/adapter.ts` (default headers) | The gateway may not silently substitute a model; the `x-gonka-fallback` header is recorded if it ever appears |
+| The served model must equal the juror's manifest model | `lib/gonka/adapter.ts`, `RESPONSE_MODEL_MISMATCH` | The response is a provider error, never a vote |
+| A response without a Gonka Request ID is rejected | `lib/gonka/adapter.ts`, `normalizeRawResponse` | The run fails; nothing is committed |
+| The Request ID is committed on Sui before the vote | `lib/protocol/bcs.ts`, `RunRecordV1.gonka_request_id` is inside the run hash written as a `RunApproval` and inside the vote commitment | A vote cannot be revealed against a run whose Request ID was not committed first; the certificate depends on those votes |
+| Receipts cross-checked after reveal | `/api/gateway-receipts/[requestId]`, "Run provenance" panel | Model, devshard and timing compared against Gonka's public receipts lookup; a mismatch is shown, never hidden |
+| One seat failure voids the whole attempt | `lib/engine/engine.ts`, `voidAttempt` | No partial jury ever finalizes; the attempt relaunches when all three families answer |
+
+The Request ID row is the one to notice: on OpenVerdict the Gonka receipt is
+not attached to the verdict afterwards, it is part of what the jury commits
+to on-chain before anyone reveals.
+
 ### Sui
 
 | Used for | How | Check it |
