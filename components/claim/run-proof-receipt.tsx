@@ -130,6 +130,13 @@ export function GatewayReceiptCheck({
         (the in-page check relays through this server only because the gateway
         does not send CORS headers yet).
       </p>
+      {/* The receipt is not attached after the fact: the request id sits inside
+          the run hash that the seat committed on Sui before any vote revealed. */}
+      <p className="text-xs leading-relaxed text-muted-foreground">
+        This Request ID is part of the run hash committed on Sui before the
+        vote was revealed, so the receipt and the verdict are bound together
+        on-chain, not matched up afterwards.
+      </p>
 
       {error && (
         <p className="rounded-lg border border-unsure/30 bg-unsure/8 p-2.5 text-xs font-semibold text-unsure">

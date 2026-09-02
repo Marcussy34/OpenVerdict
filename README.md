@@ -173,7 +173,7 @@ dark mode).
 
 ---
 
-## 🧱 Technology stack (implemented, versions verified 2026-08-31)
+## 🧱 Technology stack (implemented, versions verified 2026-09-03)
 
 | Layer | Technology | Purpose |
 | --- | --- | --- |
@@ -190,7 +190,7 @@ dark mode).
 | Hashing | `@noble/hashes` blake2b-256 == `sui::hash::blake2b256` | One commitment format across TS and Move |
 | Onboarding | `@mysten/enoki` (zkLogin) + dapp-kit v2 | Social-login self-custodial addresses; env-gated, wallet-standard |
 | Object metadata | Sui Object Display (`display_meta` module) | Certificates/profiles/positions render in wallets + explorers |
-| Tests | vitest 4 + `sui move test` | 512 TS + 77 Move (73 protocol, 4 Seal policy), incl. the cross-language parity gate |
+| Tests | vitest 4 + `sui move test` | 601 TS + 77 Move (73 protocol, 4 Seal policy), incl. the cross-language parity gate |
 
 ---
 
@@ -396,7 +396,7 @@ and the chain does not get shorter; it breaks.
 | --- | --- |
 | Sui is integral | Native `Random` jury selection, owned `JurySeat`s, Move capabilities, immutable certificates, coin settlement |
 | Ownership & identity | `AgentProfile` + `AgentCap`; every seat, approval, ticket is an owned object |
-| On-chain execution | Deadlines, commit-reveal, thresholds, and payouts enforced in Move — 66 tests |
+| On-chain execution | Deadlines, commit-reveal, thresholds, and payouts enforced in Move — 73 tests |
 | Working demo path | Localnet E2E exit 0 AND finalized LIVE testnet lifecycles on https://app.openverdict.info: YES certificate [`0xff3191bc…`](https://suiscan.xyz/testnet/object/0xff3191bcad4a645f44a6caccf2e6c661e8defcbf4943b44ec8b08d91b4f4133c) (claim #25, 5 of 5 seats, Seal escrows) and NO certificate [`0x975b3ae1…`](https://suiscan.xyz/testnet/object/0x975b3ae103c7832c4405714196528808af70ef975fe0d0db3ae70017191c00e4) (claim #26, hedged calls); see `docs/demo/runbook.md` |
 | Walrus evidence layer | Every fetched page, evidence manifest, sealed and revealed run bundle is a public Walrus blob; its hash is pinned on-chain, so blobs are content addresses a verifier can fetch |
 | Reveal-key escrow (Seal) | Mysten Seal time-lock policy on testnet; sealed juror bundles open after the deadline without the operator |
@@ -443,7 +443,7 @@ to on-chain before anyone reveals.
 
 | Used for | How | Check it |
 | --- | --- | --- |
-| Protocol of record | Claims, committees, jury seats, revealed votes, certificates and payout tickets are Sui objects; deadlines, thresholds and payouts enforced in Move (66 tests) | Every object and tx in the UI opens on Suiscan |
+| Protocol of record | Claims, committees, jury seats, revealed votes, certificates and payout tickets are Sui objects; deadlines, thresholds and payouts enforced in Move (73 tests) | Every object and tx in the UI opens on Suiscan |
 | Jury selection | Native `Random` draw under the model-family constraints | `move/openverdict/sources/jury.move` |
 | Commit-reveal voting | Commitments bind the approved run hash on-chain before any reveal; `blake2b256(BCS(preimage))` is recomputable by anyone | `/verify` recomputes it in the browser |
 | Evidence freezing | The manifest merkle root is frozen into an `EvidenceBundle` object before any vote reveals | Report page, evidence bundle chip |
