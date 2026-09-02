@@ -851,6 +851,7 @@ function createFakeController(): FakeController {
         }
         return adapter.complete(request);
       },
+      probeModels: utility.probeModels,
       normalizeResponse: utility.normalizeResponse,
       validateOutput: utility.validateOutput,
       buildRunAudit: utility.buildRunAudit,

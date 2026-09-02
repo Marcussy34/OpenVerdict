@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ClaimInspection } from "../lib/engine/contract";
+import { EngineStateError } from "../lib/engine/errors";
 import { CLAIM_MODE, CLAIM_STATE } from "../lib/protocol";
 import {
   allExpectedSeatsCommitted,
@@ -24,6 +25,7 @@ function claim(overrides: {
     committed: number;
     revealed: number;
   };
+  attemptChain?: ClaimInspection["attemptChain"];
 }): ClaimInspection {
   const expectedJurySeatIds = Array.from(
     { length: overrides.round?.expected ?? 0 },
@@ -48,6 +50,9 @@ function claim(overrides: {
       bundleId: `bundle-${phase}`,
     })),
     commitments: [],
+    ...(overrides.attemptChain === undefined
+      ? {}
+      : { attemptChain: overrides.attemptChain }),
     ...(overrides.round === undefined
       ? {}
       : {
@@ -82,6 +87,7 @@ function resolutionEngine(inspected: ClaimInspection) {
       digest: "finalize",
     })),
     inspect: vi.fn(async () => inspected),
+    voidAttempt: vi.fn(async () => undefined),
   };
 }
 
@@ -159,7 +165,7 @@ describe("resolution worker triage", () => {
     expect(engine.advance).not.toHaveBeenCalled();
   });
 
-  it("keeps the commit deadline fallback for a missing seat", async () => {
+  it("voids a partial commit round at its deadline", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(NOW);
     const partial = claim({
@@ -171,7 +177,11 @@ describe("resolution worker triage", () => {
 
     await resolveClaim(engine, partial);
 
-    expect(engine.advance).toHaveBeenCalledWith(partial.claimId);
+    expect(engine.voidAttempt).toHaveBeenCalledWith(partial.claimId, {
+      reason: "MISSING_COMMIT",
+      phase: 1,
+    });
+    expect(engine.advance).not.toHaveBeenCalled();
   });
 
   it("finalizes a fully revealed round before its reveal deadline", async () => {
@@ -209,7 +219,7 @@ describe("resolution worker triage", () => {
     expect(engine.finalize).not.toHaveBeenCalled();
   });
 
-  it("keeps the reveal deadline fallback for a missing reveal", async () => {
+  it("voids a partial reveal round at its deadline", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(NOW);
     const partial = claim({
@@ -221,7 +231,32 @@ describe("resolution worker triage", () => {
 
     await resolveClaim(engine, partial);
 
-    expect(engine.finalize).toHaveBeenCalledWith(partial.claimId);
+    expect(engine.voidAttempt).toHaveBeenCalledWith(partial.claimId, {
+      reason: "MISSING_REVEAL",
+      phase: 1,
+    });
+    expect(engine.finalize).not.toHaveBeenCalled();
+    expect(engine.advance).not.toHaveBeenCalled();
+  });
+
+  it("keeps the split-round deadline path when every seat revealed", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(NOW);
+    const complete = claim({
+      state: CLAIM_STATE.REVEAL_1,
+      round: { phase: 1, expected: 5, committed: 5, revealed: 5 },
+    });
+    complete.deadlines.firstRevealDeadlineMs = NOW - 3_000;
+    const engine = resolutionEngine(complete);
+    engine.finalize.mockRejectedValueOnce(
+      new EngineStateError("round one has no threshold; advance to discussion"),
+    );
+
+    await resolveClaim(engine, complete);
+
+    expect(engine.finalize).toHaveBeenCalledWith(complete.claimId);
+    expect(engine.advance).toHaveBeenCalledWith(complete.claimId);
+    expect(engine.voidAttempt).not.toHaveBeenCalled();
   });
 
   it("keeps claims that still have a move available", () => {
@@ -239,6 +274,24 @@ describe("resolution worker triage", () => {
       ),
     ).toBe(false);
     expect(isDead(claim({ state: CLAIM_STATE.DISCUSSION }), NOW)).toBe(false);
+  });
+
+  it("treats a voided attempt as dead", () => {
+    expect(
+      isDead(
+        claim({
+          state: CLAIM_STATE.COMMIT_1,
+          attemptChain: {
+            verificationId: "0xverification",
+            attempt: 1,
+            maxAttempts: 3,
+            status: "VOIDED",
+            previousAttempts: [],
+          },
+        }),
+        NOW,
+      ),
+    ).toBe(true);
   });
 
   it("backs off a failing claim exponentially up to ten minutes", () => {

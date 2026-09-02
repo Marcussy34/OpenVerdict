@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { ClaimInspection } from "./contract";
 import { CLAIM_MODE, CLAIM_STATE } from "../protocol";
-import { isStrandedDiscussion } from "./claim-lifecycle";
+import { isStrandedDiscussion, isVoidedAttempt } from "./claim-lifecycle";
 
 const NOW = 1_000_000;
 
@@ -119,5 +119,40 @@ describe("isStrandedDiscussion", () => {
         NOW,
       ),
     ).toBe(false);
+  });
+});
+
+describe("isVoidedAttempt", () => {
+  it("returns true for voided and exhausted attempts", () => {
+    for (const status of ["VOIDED", "GAVE_UP"] as const) {
+      expect(
+        isVoidedAttempt({
+          attemptChain: {
+            verificationId: "0xverification",
+            attempt: 1,
+            maxAttempts: 3,
+            status,
+            previousAttempts: [],
+          },
+        }),
+      ).toBe(true);
+    }
+  });
+
+  it("returns false for active, settled, and missing attempt chains", () => {
+    for (const status of ["ACTIVE", "SETTLED"] as const) {
+      expect(
+        isVoidedAttempt({
+          attemptChain: {
+            verificationId: "0xverification",
+            attempt: 1,
+            maxAttempts: 3,
+            status,
+            previousAttempts: [],
+          },
+        }),
+      ).toBe(false);
+    }
+    expect(isVoidedAttempt({})).toBe(false);
   });
 });

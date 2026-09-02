@@ -419,6 +419,17 @@ export interface Engine {
   votesReveal(claimId: string, phase: 1 | 2): Promise<TxResult[]>;
   advance(claimId: string): Promise<TxResult | null>;
   finalize(claimId: string): Promise<FinalizeReport>;
+  voidAttempt(
+    claimId: string,
+    reason: {
+      reason: string;
+      message?: string;
+      seatId?: string;
+      modelId?: string;
+      phase?: 1 | 2;
+    },
+  ): Promise<void>;
+  relaunchTick(): Promise<void>;
   inspect(claimId: string, opts?: { verify?: boolean }): Promise<ClaimInspection>;
   report(claimId: string): Promise<FactCheckReport>;
   listClaims(filter?: { state?: ClaimState }): Promise<ClaimInspection[]>;

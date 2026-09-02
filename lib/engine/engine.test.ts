@@ -64,7 +64,9 @@ import {
   parseAgentManifestDocument,
 } from "./agentManifestDocument";
 import { openSealedRunBundle } from "./runBundle";
+import { isVoidedAttempt } from "./claim-lifecycle";
 import {
+  RELAUNCH_GIVE_UP_MS,
   agentBackingStatus,
   buildZkLoginBackingMessage,
   createEngine,
@@ -77,6 +79,7 @@ import {
   validateTableVote,
   type EngineAgentConfig,
 } from "./index";
+import { isDead } from "../../workers/resolution-worker";
 
 const databases: PGlite[] = [];
 
@@ -213,6 +216,189 @@ describe("evidence artifact storage", () => {
     await expect(
       repository.getEvidenceArtifact(discovered.evidenceId),
     ).resolves.toEqual(discovered);
+  });
+});
+
+describe("verification attempt lifecycle", () => {
+  it("creates an active first attempt for a fact check", async () => {
+    const setup = await engineSetup(new FakeSuiGateway(), 5);
+    const { claimId } = await setup.engine.factCheckStart({
+      claim: "Every fact check starts a visible verification attempt.",
+      urls: [],
+    });
+    const repository = createRepository(setup.db);
+
+    await expect(repository.getVerificationAttempt(claimId)).resolves.toMatchObject({
+      verificationId: claimId,
+      claimId,
+      attempt: 1,
+      status: "ACTIVE",
+    });
+    await expect(setup.engine.inspect(claimId)).resolves.toMatchObject({
+      attemptChain: {
+        verificationId: claimId,
+        attempt: 1,
+        maxAttempts: 3,
+        status: "ACTIVE",
+        previousAttempts: [],
+      },
+    });
+  });
+
+  it("voids a research attempt when one seat fails", async () => {
+    const setup = await engineSetup(new FakeSuiGateway(), 5, {
+      failures: { 0: "provider_5xx" },
+    });
+    const { claimId } = await setup.engine.factCheckStart({
+      claim: "A failed binding jury seat voids the whole attempt.",
+      text: "Local evidence for the failure-path test.",
+      urls: [],
+    });
+    await setup.engine.selectCommittee(claimId);
+    await setup.engine.evidenceFreeze(claimId, 1);
+    await setup.engine.juryRun(claimId, 1);
+
+    const repository = createRepository(setup.db);
+    const failedRun = (await repository.listInferenceRuns(claimId, 1)).find(
+      (run) => run.failure !== undefined,
+    );
+    if (!failedRun) throw new Error("expected a failed inference run");
+    await expect(repository.getVerificationAttempt(claimId)).resolves.toMatchObject({
+      status: "VOIDED",
+      voidReason: failedRun.failure?.status,
+      voidedSeatId: failedRun.jurySeatId,
+      voidedModelId: failedRun.modelId,
+      voidedPhase: 1,
+    });
+    const events = await repository.listResolutionEvents(claimId, 1);
+    expect(events.filter((event) => event.kind === "verification_voided")).toHaveLength(1);
+
+    const inspection = await setup.engine.inspect(claimId);
+    expect(inspection.attemptChain?.status).toBe("VOIDED");
+    expect(isVoidedAttempt(inspection)).toBe(true);
+    expect(isDead(inspection, setup.now())).toBe(true);
+  });
+
+  it("relaunches a voided attempt once when every model is healthy", async () => {
+    const setup = await engineSetup(new FakeSuiGateway(), 5);
+    const request = {
+      claim: "A healthy model fleet permits the same verification.",
+      text: "The submitted context must survive the relaunch.",
+      urls: [] as string[],
+    };
+    const { claimId } = await setup.engine.factCheckStart(request);
+    await setup.engine.voidAttempt(claimId, { reason: "PROVIDER_ERROR", phase: 1 });
+
+    await setup.engine.relaunchTick();
+
+    const repository = createRepository(setup.db);
+    const attempts = await repository.listVerificationAttempts(claimId);
+    expect(attempts).toHaveLength(2);
+    expect(attempts[0]).toMatchObject({
+      claimId,
+      attempt: 1,
+      status: "VOIDED",
+      relaunchedAs: attempts[1]?.claimId,
+    });
+    expect(attempts[1]).toMatchObject({
+      verificationId: claimId,
+      attempt: 2,
+      parentClaimId: claimId,
+      status: "ACTIVE",
+    });
+    const relaunchedClaim = await repository.getClaim(attempts[1]!.claimId);
+    expect(relaunchedClaim).toMatchObject({
+      statement: request.claim,
+      submittedText: request.text,
+      submittedUrls: request.urls,
+    });
+    const firstEvents = await repository.listResolutionEvents(claimId, 1);
+    expect(
+      firstEvents.filter((event) => event.kind === "verification_relaunched"),
+    ).toHaveLength(1);
+
+    await setup.engine.relaunchTick();
+
+    await expect(repository.listVerificationAttempts(claimId)).resolves.toHaveLength(2);
+    const secondEvents = await repository.listResolutionEvents(claimId, 1);
+    expect(
+      secondEvents.filter((event) => event.kind === "verification_relaunched"),
+    ).toHaveLength(1);
+  });
+
+  it("gives up after unhealthy weather exceeds the relaunch window", async () => {
+    const setup = await engineSetup(new FakeSuiGateway(), 5);
+    const { claimId } = await setup.engine.factCheckStart({
+      claim: "A persistently unavailable model family eventually stops retries.",
+      urls: [],
+    });
+    setup.gonka.setWeather([{ modelId: "model-b", ok: false }]);
+    await setup.engine.voidAttempt(claimId, { reason: "TIMEOUT", phase: 1 });
+
+    await setup.engine.relaunchTick();
+
+    const repository = createRepository(setup.db);
+    await expect(repository.listVerificationAttempts(claimId)).resolves.toHaveLength(1);
+    const voided = await repository.getVerificationAttempt(claimId);
+    expect(voided?.status).toBe("VOIDED");
+    expect(voided?.relaunchedAs).toBeUndefined();
+
+    setup.setNow(setup.now() + RELAUNCH_GIVE_UP_MS + 1);
+    await setup.engine.relaunchTick();
+
+    await expect(repository.getVerificationAttempt(claimId)).resolves.toMatchObject({
+      status: "GAVE_UP",
+      gaveUpReason: "WEATHER_TIMEOUT",
+    });
+    const events = await repository.listResolutionEvents(claimId, 1);
+    expect(events.filter((event) => event.kind === "verification_gave_up")).toHaveLength(1);
+  });
+
+  it("gives up an exhausted third attempt without probing weather", async () => {
+    const setup = await engineSetup(new FakeSuiGateway(), 5);
+    const { claimId } = await setup.engine.factCheckStart({
+      claim: "A third failed attempt cannot launch a fourth claim.",
+      urls: [],
+    });
+    const repository = createRepository(setup.db);
+    const attempt = await repository.getVerificationAttempt(claimId);
+    if (!attempt) throw new Error("expected a verification attempt");
+    await repository.saveVerificationAttempt({
+      ...attempt,
+      attempt: 3,
+      status: "VOIDED",
+      voidReason: "PROVIDER_ERROR",
+      voidedAt: new Date(setup.now()).toISOString(),
+      updatedAt: new Date(setup.now()).toISOString(),
+    });
+    const probe = vi.spyOn(setup.gonka, "probeModels");
+
+    await setup.engine.relaunchTick();
+
+    await expect(repository.getVerificationAttempt(claimId)).resolves.toMatchObject({
+      status: "GAVE_UP",
+      gaveUpReason: "ATTEMPTS_EXHAUSTED",
+    });
+    expect(probe).not.toHaveBeenCalled();
+  });
+
+  it("marks the attempt settled after finalization", async () => {
+    const setup = await engineSetup(new FakeSuiGateway(), 5);
+    const { claimId } = await setup.engine.factCheckStart({
+      claim: "A finalized claim settles its verification attempt.",
+      urls: [],
+    });
+    await setup.engine.selectCommittee(claimId);
+    await setup.engine.evidenceFreeze(claimId, 1);
+    await setup.engine.juryRun(claimId, 1);
+    await setup.engine.votesCommit(claimId, 1);
+    await setup.engine.advance(claimId);
+    await setup.engine.votesReveal(claimId, 1);
+    await setup.engine.finalize(claimId);
+
+    await expect(
+      createRepository(setup.db).getVerificationAttempt(claimId),
+    ).resolves.toMatchObject({ status: "SETTLED" });
   });
 });
 
@@ -2247,6 +2433,8 @@ async function engineSetup(
     walrus?: WalrusStore;
     seal?: NonNullable<ReleaseManifest["seal"]>;
     sealEscrow?: SealEscrowService;
+    /** Only relaunch tests move time beyond the shared fixed fixture clock. */
+    nowMs?: number;
   } = {},
 ) {
   const directory = await mkdtemp(join(tmpdir(), "openverdict-engine-"));
@@ -2297,6 +2485,7 @@ async function engineSetup(
   const gonka = createFakeGonkaAdapter(fixtures);
   const gonkaComplete = vi.spyOn(gonka, "complete");
   const walrus = options.walrus ?? createLocalWalrusStore(join(directory, "walrus"));
+  let nowMs = options.nowMs ?? Date.parse("2026-08-27T00:00:00.000Z");
   const engine = await createEngine({
     network: "localnet",
     manifestPath,
@@ -2308,10 +2497,20 @@ async function engineSetup(
     ...(options.sealEscrow === undefined
       ? {}
       : { sealEscrow: options.sealEscrow }),
-    now: () => Date.parse("2026-08-27T00:00:00.000Z"),
+    now: () => nowMs,
     eventPollIntervalMs: 5,
   });
-  return { engine, db, gonkaComplete, walrus };
+  return {
+    engine,
+    db,
+    gonka,
+    gonkaComplete,
+    walrus,
+    now: () => nowMs,
+    setNow: (value: number) => {
+      nowMs = value;
+    },
+  };
 }
 
 async function roundTwoSetup(manifestVersion: "5" | "6") {

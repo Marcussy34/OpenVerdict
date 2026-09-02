@@ -14,6 +14,14 @@ import type {
 
 export type GonkaCompletionInput = OracleInferenceInput | TableVoteInput;
 
+/** A tiny direct probe records only whether one configured model answered. */
+export type GonkaWeatherProbe = {
+  modelId: string;
+  ok: boolean;
+  latencyMs: number;
+  status: number | "TIMEOUT" | "ERROR";
+};
+
 /** Narrow application boundary from PRD section 20.8. */
 export interface GonkaRouterAdapter {
   promptSpec(): PromptSpecV2;
@@ -25,6 +33,10 @@ export interface GonkaRouterAdapter {
   complete(
     request: GonkaCompletionRequest<GonkaCompletionInput>,
   ): Promise<GonkaCompletionResult>;
+  probeModels(
+    modelIds: readonly string[],
+    timeoutMs: number,
+  ): Promise<GonkaWeatherProbe[]>;
   normalizeResponse(response: unknown): Promise<{
     gonkaRequestId: string;
     modelId: string;

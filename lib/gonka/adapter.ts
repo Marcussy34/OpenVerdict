@@ -64,6 +64,7 @@ import {
   type GonkaCompletionResult,
   type GonkaInvestigationFlag,
   type GonkaRouterAdapter,
+  type GonkaWeatherProbe,
 } from "./types";
 
 const DEFAULT_BASE_URL = "https://api.gonkarouter.io/v1";
@@ -1151,6 +1152,58 @@ export function createGonkaAdapterWithDependencies(
     return standaloneAudit(response, now);
   }
 
+  /** Weather checks bypass juror audits because they are availability signals only. */
+  async function probeModels(
+    modelIds: readonly string[],
+    probeTimeoutMs: number,
+  ): Promise<GonkaWeatherProbe[]> {
+    return Promise.all(
+      modelIds.map(async (modelId) => {
+        const startedAtMs = now();
+        try {
+          const result = await client.chat.completions.create(
+            {
+              model: modelId,
+              // A fresh nonce per probe: the gateway caches identical
+              // temperature-0 requests, and a cached answer says nothing
+              // about whether the model answers right now.
+              messages: [
+                {
+                  role: "user",
+                  content: `Reply with the single word OK. Probe ${startedAtMs}.`,
+                },
+              ],
+              max_tokens: 8,
+              temperature: 0,
+            },
+            { timeout: probeTimeoutMs },
+          ).withResponse();
+          const content = result.data.choices[0]?.message.content;
+          return {
+            modelId,
+            ok:
+              result.response.status === 200 &&
+              typeof content === "string" &&
+              content.trim().length > 0,
+            latencyMs: Math.max(0, now() - startedAtMs),
+            status: result.response.status,
+          };
+        } catch (error) {
+          const errorStatus = getGonkaErrorStatus(error);
+          const status: GonkaWeatherProbe["status"] = isGonkaTimeoutError(error)
+            ? "TIMEOUT"
+            : errorStatus ?? "ERROR";
+          return {
+            modelId,
+            ok: false,
+            latencyMs: Math.max(0, now() - startedAtMs),
+            status,
+          };
+        }
+      }),
+    );
+  }
+
   return {
     promptSpec: () => researchSpec,
     promptSpecHash: () => hashPromptSpec(researchSpec),
@@ -1159,6 +1212,7 @@ export function createGonkaAdapterWithDependencies(
     legacyPromptSpec: () => legacySpec,
     run,
     complete,
+    probeModels,
     normalizeResponse,
     validateOutput,
     buildRunAudit,

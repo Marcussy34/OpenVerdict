@@ -79,6 +79,8 @@ function fakeEngine(): Engine {
     selectCommittee: async () => ({ digest: "digest-select" }),
     evidenceFreeze: async () => ({ digest: "digest-evidence" }),
     runDeliberation: async () => undefined,
+    voidAttempt: async () => undefined,
+    relaunchTick: async () => undefined,
     juryRun: async (claimId, phase) => ({ claimId, phase, runs: [] }),
     votesCommit: async () => [],
     votesReveal: async () => [],

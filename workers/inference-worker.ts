@@ -1,4 +1,5 @@
 import { getServerEngine } from "../lib/engine/server";
+import { isVoidedAttempt } from "../lib/engine/claim-lifecycle";
 import { CLAIM_STATE } from "../lib/protocol";
 import {
   LIVE_CLAIM_STATES,
@@ -11,7 +12,9 @@ import {
 /** Resolves true while any claim is in flight (keeps the fast poll). */
 export async function inferenceWorkerTick(): Promise<boolean> {
   const engine = await getServerEngine();
-  const claims = await listLiveClaims(engine, LIVE_CLAIM_STATES);
+  const claims = (await listLiveClaims(engine, LIVE_CLAIM_STATES)).filter(
+    (claim) => !isVoidedAttempt(claim),
+  );
   await forEachClaim("inference-worker", claims, async (claim) => {
     if (claim.state === CLAIM_STATE.DISCUSSION) {
       await engine.runDeliberation(claim.claimId);

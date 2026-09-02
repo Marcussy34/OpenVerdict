@@ -26,6 +26,7 @@ import {
   type GonkaAttemptRecord,
   type GonkaRouterAdapter,
   type GonkaRunResult,
+  type GonkaWeatherProbe,
 } from "../gonka";
 import { extractJsonObject } from "../gonka/adapter";
 import {
@@ -93,6 +94,7 @@ import {
   type RevealRecord,
   type RoundTallyRecord,
   type RunApprovalRecord,
+  type VerificationAttemptRecord,
   type VotePackageRecord,
   type RunProofRecord,
 } from "../storage";
@@ -180,6 +182,14 @@ const MAX_DELIBERATION_CITATIONS = 8;
 const MAX_DELIBERATION_ALLOWED_CITATIONS = 60;
 /** Three exchanges bound the public debate before the table vote. */
 export const MAX_DELIBERATION_EXCHANGES = 3;
+/** Three total claims bound automatic retries after binding failures. */
+export const MAX_VERIFICATION_ATTEMPTS = 3;
+/** One probe serves nearby worker ticks and every pending relaunch. */
+export const RELAUNCH_WEATHER_CACHE_MS = 120_000;
+/** Six hours bounds how long an unavailable model family blocks a verification. */
+export const RELAUNCH_GIVE_UP_MS = 6 * 60 * 60 * 1000;
+/** A model family gets one minute to answer its direct health check. */
+export const RELAUNCH_PROBE_TIMEOUT_MS = 60_000;
 const DELIBERATION_PROMPT_SPEC_HASH = promptSpecHash(
   DELIBERATION_PROMPT_SPEC_V3,
 );
@@ -222,6 +232,13 @@ type InferenceFailureInput =
   | OracleInferenceInput
   | TableVoteInput
   | Pick<TableVoteInput, "kind" | "runId" | "evidenceManifest">;
+
+/** Relaunch context keeps every new claim linked to its first verification. */
+type VerificationRelaunchContext = {
+  verificationId: string;
+  attempt: 2 | 3;
+  parentClaimId: string;
+};
 
 type DeliberationFailureStatus =
   | "PROVIDER_ERROR"
@@ -455,6 +472,11 @@ class OpenVerdictEngine implements Engine {
   readonly #commitQueues = new Map<string, Promise<void>>();
   /** One debate runner per claim prevents overlapping worker ticks from duplicating turns. */
   readonly #pendingDeliberations = new Map<string, Promise<void>>();
+  /** Weather survives worker ticks so pending claims share the same short probe window. */
+  #weatherProbeCache: {
+    probedAtMs: number;
+    results: GonkaWeatherProbe[];
+  } | null = null;
   readonly #retrieve: NonNullable<EngineConfig["retrieve"]>;
   readonly #retrievalPolicy: RetrievalPolicy;
   readonly #eventPollIntervalMs: number;
@@ -494,7 +516,10 @@ class OpenVerdictEngine implements Engine {
     }
   }
 
-  async factCheckStart(req: FactCheckRequest): Promise<{ claimId: string }> {
+  async factCheckStart(
+    req: FactCheckRequest,
+    relaunch?: VerificationRelaunchContext,
+  ): Promise<{ claimId: string }> {
     validateFactCheckRequest(req);
     if (process.env.OPENVERDICT_DEBUG_DEADLINES === "1") {
       console.error("FCS req.deadlines:", JSON.stringify(req.deadlines));
@@ -520,9 +545,151 @@ class OpenVerdictEngine implements Engine {
         submittedText: req.text?.trim(),
         submittedUrls: req.urls,
       },
+      relaunch,
     );
     await this.ingestFactCheckEvidence(claim, req);
     return { claimId: claim.claimId };
+  }
+
+  async voidAttempt(
+    claimId: string,
+    reason: {
+      reason: string;
+      message?: string;
+      seatId?: string;
+      modelId?: string;
+      phase?: 1 | 2;
+    },
+  ): Promise<void> {
+    const claim = await this.claim(claimId);
+    const attempt = await this.ensureVerificationAttempt(claim);
+    if (
+      attempt.status === "VOIDED" ||
+      attempt.status === "SETTLED" ||
+      attempt.status === "GAVE_UP"
+    ) {
+      return;
+    }
+    const timestamp = this.isoNow();
+    await this.#repository.saveVerificationAttempt({
+      ...attempt,
+      status: "VOIDED",
+      voidReason: reason.reason,
+      ...(reason.message === undefined ? {} : { voidMessage: reason.message }),
+      ...(reason.seatId === undefined ? {} : { voidedSeatId: reason.seatId }),
+      ...(reason.modelId === undefined ? {} : { voidedModelId: reason.modelId }),
+      ...(reason.phase === undefined ? {} : { voidedPhase: reason.phase }),
+      voidedAt: timestamp,
+      updatedAt: timestamp,
+    });
+    await this.emit({
+      claimId,
+      phase: claimStateName(claim.state),
+      kind: "verification_voided",
+      source: "ENGINE",
+      visibility: "PUBLIC_NOW",
+      payload: {
+        claim_id: claimId,
+        verification_id: attempt.verificationId,
+        attempt: attempt.attempt,
+        reason: reason.reason,
+        message: reason.message,
+        jury_seat_id: reason.seatId,
+        model_id: reason.modelId,
+        phase: reason.phase,
+      },
+    });
+  }
+
+  async relaunchTick(): Promise<void> {
+    const attempts = await this.#repository.listVerificationAttemptsByStatus(
+      "VOIDED",
+    );
+    for (const attempt of attempts) {
+      if (attempt.relaunchedAs !== undefined) continue;
+      try {
+        const claim = await this.claim(attempt.claimId);
+        if (attempt.attempt >= MAX_VERIFICATION_ATTEMPTS) {
+          await this.giveUpVerificationAttempt(
+            claim,
+            attempt,
+            "ATTEMPTS_EXHAUSTED",
+          );
+          continue;
+        }
+        if (attempt.voidedAt === undefined) {
+          throw new Error("voided attempt has no void timestamp");
+        }
+        const voidedAtMs = Date.parse(attempt.voidedAt);
+        if (!Number.isFinite(voidedAtMs)) {
+          throw new Error("voided attempt has an invalid void timestamp");
+        }
+        const nowMs = this.#now();
+        if (nowMs - voidedAtMs > RELAUNCH_GIVE_UP_MS) {
+          await this.giveUpVerificationAttempt(
+            claim,
+            attempt,
+            "WEATHER_TIMEOUT",
+          );
+          continue;
+        }
+        if (
+          this.#weatherProbeCache === null ||
+          nowMs - this.#weatherProbeCache.probedAtMs >=
+            RELAUNCH_WEATHER_CACHE_MS
+        ) {
+          const results = await this.#gonka.probeModels(
+            this.#manifest.gonka.models,
+            RELAUNCH_PROBE_TIMEOUT_MS,
+          );
+          this.#weatherProbeCache = { probedAtMs: nowMs, results };
+        }
+        if (!this.#weatherProbeCache.results.every((result) => result.ok)) {
+          continue;
+        }
+        const nextAttempt: 2 | 3 = attempt.attempt === 1 ? 2 : 3;
+        const relaunched = await this.factCheckStart(
+          {
+            claim: claim.statement,
+            ...(claim.submittedText === undefined
+              ? {}
+              : { text: claim.submittedText }),
+            urls: claim.submittedUrls,
+            resolutionCriteria: claim.resolutionCriteria,
+          },
+          {
+            verificationId: attempt.verificationId,
+            attempt: nextAttempt,
+            parentClaimId: attempt.claimId,
+          },
+        );
+        await this.#repository.saveVerificationAttempt({
+          ...attempt,
+          relaunchedAs: relaunched.claimId,
+          updatedAt: this.isoNow(),
+        });
+        await this.emit({
+          claimId: attempt.claimId,
+          phase: claimStateName(claim.state),
+          kind: "verification_relaunched",
+          source: "ENGINE",
+          visibility: "PUBLIC_NOW",
+          payload: {
+            claim_id: attempt.claimId,
+            verification_id: attempt.verificationId,
+            attempt: attempt.attempt,
+            relaunched_as: relaunched.claimId,
+            next_attempt: nextAttempt,
+          },
+        });
+      } catch (error) {
+        process.stderr.write(
+          `relaunch: claim ${attempt.claimId.slice(0, 10)}: ${
+            error instanceof Error ? error.message : String(error)
+          }\n`,
+        );
+      }
+    }
   }
 
   async registerZkBackedAgent(
@@ -1674,6 +1841,57 @@ class OpenVerdictEngine implements Engine {
       revealedJurySeatIds: tally.revealedJurySeatIds,
     }));
     const result = await this.#repository.getResolutionCertificate(claimId);
+    const attempt = await this.#repository.getVerificationAttempt(claimId);
+    let attemptChain: ClaimInspection["attemptChain"];
+    if (attempt !== undefined) {
+      const siblings = await this.#repository.listVerificationAttempts(
+        attempt.verificationId,
+      );
+      attemptChain = {
+        verificationId: attempt.verificationId,
+        attempt: attempt.attempt,
+        maxAttempts: 3,
+        status: attempt.status,
+        ...(attempt.status === "VOIDED" &&
+        attempt.voidReason !== undefined &&
+        attempt.voidedAt !== undefined
+          ? {
+              void: {
+                ...(attempt.voidedSeatId === undefined
+                  ? {}
+                  : { seatId: attempt.voidedSeatId }),
+                ...(attempt.voidedModelId === undefined
+                  ? {}
+                  : { modelId: attempt.voidedModelId }),
+                ...(attempt.voidedPhase === undefined
+                  ? {}
+                  : { phase: attempt.voidedPhase }),
+                reason: attempt.voidReason,
+                ...(attempt.voidMessage === undefined
+                  ? {}
+                  : { message: attempt.voidMessage }),
+                atMs: Date.parse(attempt.voidedAt),
+              },
+            }
+          : {}),
+        ...(attempt.relaunchedAs === undefined
+          ? {}
+          : { relaunchedAs: attempt.relaunchedAs }),
+        ...(attempt.gaveUpReason === undefined
+          ? {}
+          : { gaveUpReason: attempt.gaveUpReason }),
+        previousAttempts: siblings
+          .filter((sibling) => sibling.attempt < attempt.attempt)
+          .map((sibling) => ({
+            claimId: sibling.claimId,
+            attempt: sibling.attempt,
+            status: sibling.status,
+            ...(sibling.voidReason === undefined
+              ? {}
+              : { voidReason: sibling.voidReason }),
+          })),
+      };
+    }
     const deliberation = (
       await this.#repository.listDeliberationTurns(claimId)
     ).map(toPublicDeliberationTurn);
@@ -1706,6 +1924,7 @@ class OpenVerdictEngine implements Engine {
       commitments,
       rounds,
       ...(deliberation.length === 0 ? {} : { deliberation }),
+      ...(attemptChain === undefined ? {} : { attemptChain }),
       ...(convergedAfterExchange === null
         ? {}
         : { debateConvergedAfterExchange: convergedAfterExchange }),
@@ -2333,6 +2552,7 @@ class OpenVerdictEngine implements Engine {
       submittedText?: string;
       submittedUrls: string[];
     },
+    relaunch?: VerificationRelaunchContext,
   ): Promise<ClaimRecord> {
     const ladder = (): ClaimCreateRequest["deadlines"] =>
       request.deadlines ?? defaultDeadlines(this.#now(), this.#manifest.network);
@@ -2399,6 +2619,17 @@ class OpenVerdictEngine implements Engine {
       updatedAt: timestamp,
     };
     await this.#repository.saveClaim(claim);
+    await this.#repository.saveVerificationAttempt({
+      verificationId: relaunch?.verificationId ?? claim.claimId,
+      claimId: claim.claimId,
+      attempt: relaunch?.attempt ?? 1,
+      ...(relaunch === undefined
+        ? {}
+        : { parentClaimId: relaunch.parentClaimId }),
+      status: "ACTIVE",
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    });
     await this.emit({
       claimId: result.claimId,
       phase: "CREATE",
@@ -3243,6 +3474,13 @@ class OpenVerdictEngine implements Engine {
         latencyMs: audit.latencyMs,
       },
     });
+    await this.voidAttempt(claim.claimId, {
+      reason: status,
+      message,
+      seatId: seat.jurySeatId,
+      modelId: agent.manifest.modelId,
+      phase: seat.phase,
+    });
   }
 
   private async emitRunApproval(
@@ -3343,6 +3581,12 @@ class OpenVerdictEngine implements Engine {
       result,
       ...(truthScoreBps === null ? {} : { truthScoreBps }),
       transactionDigest: chain.digest,
+    });
+    const attempt = await this.ensureVerificationAttempt(claim);
+    await this.#repository.saveVerificationAttempt({
+      ...attempt,
+      status: "SETTLED",
+      updatedAt: timestamp,
     });
     const tally = await this.#repository.getRoundTally(claim.claimId, phase);
     if (tally) {
@@ -3880,6 +4124,52 @@ class OpenVerdictEngine implements Engine {
     const updated = { ...claim, updatedAt: this.isoNow() };
     await this.#repository.saveClaim(updated);
     return updated;
+  }
+
+  /** Legacy claims receive the same first-attempt row before a terminal update. */
+  private async ensureVerificationAttempt(
+    claim: ClaimRecord,
+  ): Promise<VerificationAttemptRecord> {
+    const existing = await this.#repository.getVerificationAttempt(claim.claimId);
+    if (existing !== undefined) return existing;
+    const attempt: VerificationAttemptRecord = {
+      verificationId: claim.claimId,
+      claimId: claim.claimId,
+      attempt: 1,
+      status: "ACTIVE",
+      createdAt: claim.createdAt,
+      updatedAt: this.isoNow(),
+    };
+    await this.#repository.saveVerificationAttempt(attempt);
+    return attempt;
+  }
+
+  /** One terminal path keeps give-up rows and their public events consistent. */
+  private async giveUpVerificationAttempt(
+    claim: ClaimRecord,
+    attempt: VerificationAttemptRecord,
+    reason: "ATTEMPTS_EXHAUSTED" | "WEATHER_TIMEOUT",
+  ): Promise<void> {
+    const timestamp = this.isoNow();
+    await this.#repository.saveVerificationAttempt({
+      ...attempt,
+      status: "GAVE_UP",
+      gaveUpReason: reason,
+      updatedAt: timestamp,
+    });
+    await this.emit({
+      claimId: attempt.claimId,
+      phase: claimStateName(claim.state),
+      kind: "verification_gave_up",
+      source: "ENGINE",
+      visibility: "PUBLIC_NOW",
+      payload: {
+        claim_id: attempt.claimId,
+        verification_id: attempt.verificationId,
+        attempt: attempt.attempt,
+        reason,
+      },
+    });
   }
 
   private async executeDeliberation(claimId: string): Promise<void> {

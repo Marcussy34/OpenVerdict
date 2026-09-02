@@ -18,6 +18,7 @@ import type {
   GonkaCompletionRequest,
   GonkaCompletionResult,
   GonkaRouterAdapter,
+  GonkaWeatherProbe,
   PromptMessage,
 } from "./types";
 
@@ -70,6 +71,11 @@ type ActiveFixture = {
     url: string;
     text: string;
   };
+};
+
+/** Fake weather controls stay available to tests without widening production adapters. */
+export type FakeGonkaAdapter = GonkaRouterAdapter & {
+  setWeather(entries: { modelId: string; ok: boolean }[]): void;
 };
 
 function completionResponse(
@@ -319,7 +325,7 @@ function createFixtureAdapter(
 
 
 /** Deterministic offline adapter with the same opaque run/audit envelope. */
-export function createFakeGonkaAdapter(fixtures: FakeFixture[]): GonkaRouterAdapter {
+export function createFakeGonkaAdapter(fixtures: FakeFixture[]): FakeGonkaAdapter {
   const fixturesByAgent = new Map<string, FakeFixture[]>();
   for (const fixture of fixtures) {
     const queue = fixturesByAgent.get(fixture.agentProfileId) ?? [];
@@ -329,6 +335,7 @@ export function createFakeGonkaAdapter(fixtures: FakeFixture[]): GonkaRouterAdap
 
   const cursors = new Map<string, number>();
   const deliberationCursors = new Map<string, number>();
+  const weatherByModel = new Map<string, boolean>();
   const activeByAttempts = new WeakMap<GonkaAttemptRecord[], ActiveFixture>();
   const utilityAdapter = createGonkaAdapterWithDependencies(
     {
@@ -455,6 +462,18 @@ export function createFakeGonkaAdapter(fixtures: FakeFixture[]): GonkaRouterAdap
     legacyPromptSpec: utilityAdapter.legacyPromptSpec,
     run,
     complete,
+    // Healthy defaults keep existing offline fixtures deterministic.
+    probeModels: async (modelIds): Promise<GonkaWeatherProbe[]> =>
+      modelIds.map((modelId) => ({
+        modelId,
+        ok: weatherByModel.get(modelId) ?? true,
+        latencyMs: 0,
+        status: 200,
+      })),
+    // Tests override only named models so mixed-family weather is easy to model.
+    setWeather: (entries) => {
+      for (const entry of entries) weatherByModel.set(entry.modelId, entry.ok);
+    },
     normalizeResponse: utilityAdapter.normalizeResponse,
     validateOutput: utilityAdapter.validateOutput,
     buildRunAudit: utilityAdapter.buildRunAudit,

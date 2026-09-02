@@ -1,7 +1,10 @@
 import type { ClaimInspection, Engine } from "../lib/engine/contract";
 import { getServerEngine } from "../lib/engine/server";
 import { EngineStateError } from "../lib/engine/errors";
-import { isStrandedDiscussion } from "../lib/engine/claim-lifecycle";
+import {
+  isStrandedDiscussion,
+  isVoidedAttempt,
+} from "../lib/engine/claim-lifecycle";
 import { CLAIM_STATE } from "../lib/protocol";
 import {
   LIVE_CLAIM_STATES,
@@ -38,7 +41,11 @@ const TERMINAL_STATES = new Set<number>([
  * exactly when finalize is allowed.
  */
 export function isDead(claim: ClaimInspection, nowMs: number): boolean {
-  return TERMINAL_STATES.has(claim.state) || isStrandedDiscussion(claim, nowMs);
+  return (
+    TERMINAL_STATES.has(claim.state) ||
+    isStrandedDiscussion(claim, nowMs) ||
+    isVoidedAttempt(claim)
+  );
 }
 
 // A claim whose transaction aborts every tick (a stuck residue claim) is
@@ -78,7 +85,12 @@ export function urgency(state: number): number {
 
 type ResolutionEngine = Pick<
   Engine,
-  "selectCommittee" | "advance" | "votesReveal" | "finalize" | "inspect"
+  | "selectCommittee"
+  | "advance"
+  | "votesReveal"
+  | "finalize"
+  | "inspect"
+  | "voidAttempt"
 >;
 
 function allExpectedSeats(
@@ -121,6 +133,15 @@ export async function resolutionWorkerTick(): Promise<boolean> {
       throw error;
     }
   });
+  try {
+    await engine.relaunchTick();
+  } catch (error) {
+    process.stderr.write(
+      `resolution-worker: relaunch: ${
+        error instanceof Error ? error.message : String(error)
+      }\n`,
+    );
+  }
   return claims.length > 0;
 }
 
@@ -138,7 +159,14 @@ export async function resolveClaim(
       claim.state === CLAIM_STATE.COMMIT_1
         ? claim.deadlines.firstCommitDeadlineMs
         : claim.deadlines.secondCommitDeadlineMs;
-    if (!allExpectedSeatsCommitted(claim, phase) && !reached(commitDeadlineMs)) return;
+    if (!allExpectedSeatsCommitted(claim, phase)) {
+      if (!reached(commitDeadlineMs)) return;
+      await engine.voidAttempt(claim.claimId, {
+        reason: "MISSING_COMMIT",
+        phase,
+      });
+      return;
+    }
     await engine.advance(claim.claimId);
     return;
   }
@@ -162,7 +190,14 @@ export async function resolveClaim(
         : claim.deadlines.secondRevealDeadlineMs;
     const deadlineReached = reached(revealDeadlineMs);
     const latest = await engine.inspect(claim.claimId);
-    if (!allExpectedSeatsRevealed(latest, phase) && !deadlineReached) return;
+    if (!allExpectedSeatsRevealed(latest, phase)) {
+      if (!deadlineReached) return;
+      await engine.voidAttempt(claim.claimId, {
+        reason: "MISSING_REVEAL",
+        phase,
+      });
+      return;
+    }
     try {
       await engine.finalize(claim.claimId);
     } catch (error) {
