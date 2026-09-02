@@ -46,6 +46,7 @@ import {
   migrate,
   type EvidenceArtifactRecord,
   type DeliberationTurnRecord,
+  type FactCheckQueueRecord,
 } from "../storage";
 import {
   FakeSuiGateway,
@@ -66,7 +67,11 @@ import {
 import { openSealedRunBundle } from "./runBundle";
 import { isVoidedAttempt } from "./claim-lifecycle";
 import {
+  QUEUE_LAUNCH_SPACING_MS,
+  QUEUE_TTL_MS,
   RELAUNCH_GIVE_UP_MS,
+  WEATHER_PROBE_INTERVAL_MS,
+  WEATHER_STALE_MS,
   agentBackingStatus,
   buildZkLoginBackingMessage,
   createEngine,
@@ -234,6 +239,268 @@ describe("evidence artifact storage", () => {
     await expect(
       repository.getEvidenceArtifact(discovered.evidenceId),
     ).resolves.toEqual(discovered);
+  });
+});
+
+describe("weather-aware submissions", () => {
+  it("stores probes and shares the fresh cache with relaunches", async () => {
+    const setup = await engineSetup(new FakeSuiGateway(), 5);
+    const { claimId } = await setup.engine.factCheckStart({
+      claim: "Fresh weather should serve both queues and relaunches.",
+      urls: [],
+    });
+    await setup.engine.voidAttempt(claimId, {
+      reason: "PROVIDER_ERROR",
+      phase: 1,
+    });
+    const probe = vi.spyOn(setup.gonka, "probeModels");
+
+    await setup.engine.weatherTick();
+    await setup.engine.weatherTick();
+
+    const rows = await createRepository(setup.db).listGonkaWeather();
+    expect(rows).toHaveLength(3);
+    expect(rows.every((row) => row.ok)).toBe(true);
+    expect(rows.every((row) => row.status === "200")).toBe(true);
+    await expect(setup.engine.weather()).resolves.toMatchObject({
+      probedAtMs: setup.now(),
+      stale: false,
+      clear: true,
+    });
+
+    await setup.engine.relaunchTick();
+
+    expect(probe).toHaveBeenCalledTimes(1);
+  });
+
+  it("validates before reading weather", async () => {
+    const setup = await engineSetup(new FakeSuiGateway(), 5);
+    const weather = vi.spyOn(setup.engine, "weather");
+
+    await expect(
+      setup.engine.factCheckSubmit({ claim: "", urls: [] }),
+    ).rejects.toThrow("claim must contain 1 to 32000 characters");
+
+    expect(weather).not.toHaveBeenCalled();
+  });
+
+  it("derives family labels and marks down or old probes unclear", async () => {
+    const setup = await engineSetup(new FakeSuiGateway(), 5);
+    const repository = createRepository(setup.db);
+    const probedAt = new Date(setup.now()).toISOString();
+    await repository.saveGonkaWeather([
+      {
+        modelId: "provider/DeepSeek-R1",
+        ok: true,
+        latencyMs: 10,
+        status: "200",
+        probedAt,
+      },
+      {
+        modelId: "MiniMax-M2",
+        ok: true,
+        latencyMs: 20,
+        status: "200",
+        probedAt,
+      },
+      {
+        modelId: "kimi-k2",
+        ok: true,
+        latencyMs: 30,
+        status: "200",
+        probedAt,
+      },
+    ]);
+
+    const clear = await setup.engine.weather();
+    expect(clear.clear).toBe(true);
+    expect(clear.families.map((family) => family.family).sort()).toEqual([
+      "deepseek",
+      "kimi",
+      "minimax",
+    ]);
+
+    await repository.saveGonkaWeather([
+      {
+        modelId: "MiniMax-M2",
+        ok: false,
+        latencyMs: 60_000,
+        status: "TIMEOUT",
+        probedAt,
+      },
+    ]);
+    await expect(setup.engine.weather()).resolves.toMatchObject({
+      stale: false,
+      clear: false,
+    });
+
+    setup.setNow(setup.now() + WEATHER_STALE_MS + 1);
+    await expect(setup.engine.weather()).resolves.toMatchObject({
+      stale: true,
+      clear: false,
+    });
+  });
+
+  it("queues on fresh bad weather and launches on clear or unknown weather", async () => {
+    const setup = await engineSetup(new FakeSuiGateway(), 5);
+    setup.gonka.setWeather([{ modelId: "model-b", ok: false }]);
+    await setup.engine.weatherTick();
+
+    const queued = await setup.engine.factCheckSubmit({
+      claim: "Known bad weather should hold this submission.",
+      urls: [],
+    });
+    expect(queued.kind).toBe("queued");
+    if (queued.kind !== "queued") throw new Error("expected a queued submission");
+    expect(queued.queueId).toMatch(/^0x[0-9a-f]{64}$/);
+    await expect(setup.engine.getQueuedFactCheck(queued.queueId)).resolves.toMatchObject({
+      queueId: queued.queueId,
+      status: "QUEUED",
+      statement: "Known bad weather should hold this submission.",
+    });
+    await expect(setup.engine.listQueuedFactChecks()).resolves.toHaveLength(1);
+
+    setup.setNow(setup.now() + WEATHER_PROBE_INTERVAL_MS);
+    setup.gonka.setWeather([{ modelId: "model-b", ok: true }]);
+    await setup.engine.weatherTick();
+    await expect(
+      setup.engine.factCheckSubmit({
+        claim: "Clear weather should launch this submission.",
+        urls: [],
+      }),
+    ).resolves.toMatchObject({ kind: "claim" });
+
+    setup.setNow(setup.now() + WEATHER_STALE_MS + 1);
+    await expect(
+      setup.engine.factCheckSubmit({
+        claim: "Unknown weather should preserve immediate launch behavior.",
+        urls: [],
+      }),
+    ).resolves.toMatchObject({ kind: "claim" });
+  });
+
+  it("launches the oldest queued claim at one-minute spacing", async () => {
+    const setup = await engineSetup(new FakeSuiGateway(), 5);
+    setup.gonka.setWeather([{ modelId: "model-b", ok: false }]);
+    await setup.engine.weatherTick();
+    const first = await setup.engine.factCheckSubmit({
+      claim: "The oldest queued submission launches first.",
+      urls: [],
+    });
+    setup.setNow(setup.now() + 1);
+    const second = await setup.engine.factCheckSubmit({
+      claim: "The newer queued submission waits one minute.",
+      urls: [],
+    });
+    if (first.kind !== "queued" || second.kind !== "queued") {
+      throw new Error("expected queued submissions");
+    }
+
+    setup.setNow(setup.now() + WEATHER_PROBE_INTERVAL_MS);
+    setup.gonka.setWeather([{ modelId: "model-b", ok: true }]);
+    await setup.engine.weatherTick();
+    await setup.engine.queueTick();
+    await expect(setup.engine.getQueuedFactCheck(first.queueId)).resolves.toMatchObject({
+      status: "LAUNCHED",
+      claimId: expect.any(String),
+    });
+    await expect(setup.engine.getQueuedFactCheck(second.queueId)).resolves.toMatchObject({
+      status: "QUEUED",
+    });
+
+    await setup.engine.queueTick();
+    await expect(setup.engine.getQueuedFactCheck(second.queueId)).resolves.toMatchObject({
+      status: "QUEUED",
+    });
+
+    setup.setNow(setup.now() + QUEUE_LAUNCH_SPACING_MS);
+    await setup.engine.queueTick();
+    await expect(setup.engine.getQueuedFactCheck(second.queueId)).resolves.toMatchObject({
+      status: "LAUNCHED",
+      claimId: expect.any(String),
+    });
+  });
+
+  it("expires queued submissions after six hours", async () => {
+    const setup = await engineSetup(new FakeSuiGateway(), 5);
+    setup.gonka.setWeather([{ modelId: "model-b", ok: false }]);
+    await setup.engine.weatherTick();
+    const queued = await setup.engine.factCheckSubmit({
+      claim: "A queue entry must not wait forever.",
+      urls: [],
+    });
+    if (queued.kind !== "queued") throw new Error("expected a queued submission");
+
+    setup.setNow(setup.now() + QUEUE_TTL_MS);
+    await setup.engine.queueTick();
+
+    await expect(setup.engine.getQueuedFactCheck(queued.queueId)).resolves.toMatchObject({
+      status: "EXPIRED",
+    });
+  });
+
+  it("cancels requests that no longer pass launch validation", async () => {
+    const setup = await engineSetup(new FakeSuiGateway(), 5);
+    await setup.engine.weatherTick();
+    const now = new Date(setup.now()).toISOString();
+    const item: FactCheckQueueRecord = {
+      queueId: `0x${"33".repeat(32)}`,
+      status: "QUEUED",
+      request: { claim: "", urls: [] },
+      holdReason: "WEATHER",
+      createdAt: now,
+      updatedAt: now,
+      expiresAt: new Date(setup.now() + QUEUE_TTL_MS).toISOString(),
+    };
+    const repository = createRepository(setup.db);
+    await repository.saveFactCheckQueueItem(item);
+
+    await setup.engine.queueTick();
+
+    await expect(repository.getFactCheckQueueItem(item.queueId)).resolves.toMatchObject({
+      status: "CANCELLED",
+      launchError: "claim must contain 1 to 32000 characters",
+    });
+  });
+
+  it("keeps transient launch failures queued for a later tick", async () => {
+    const setup = await engineSetup(new FakeSuiGateway(), 5);
+    await setup.engine.weatherTick();
+    const now = new Date(setup.now()).toISOString();
+    const item: FactCheckQueueRecord = {
+      queueId: `0x${"44".repeat(32)}`,
+      status: "QUEUED",
+      request: { claim: "A transient failure should be retried.", urls: [] },
+      holdReason: "WEATHER",
+      createdAt: now,
+      updatedAt: now,
+      expiresAt: new Date(setup.now() + QUEUE_TTL_MS).toISOString(),
+    };
+    const repository = createRepository(setup.db);
+    await repository.saveFactCheckQueueItem(item);
+    const start = vi
+      .spyOn(setup.engine, "factCheckStart")
+      .mockRejectedValueOnce(new Error("temporary launch failure"));
+    const stderr = vi.spyOn(process.stderr, "write").mockReturnValue(true);
+
+    await setup.engine.queueTick();
+
+    await expect(repository.getFactCheckQueueItem(item.queueId)).resolves.toMatchObject({
+      status: "QUEUED",
+      launchError: "temporary launch failure",
+    });
+    expect(stderr).toHaveBeenCalled();
+    start.mockRestore();
+    stderr.mockRestore();
+
+    await setup.engine.queueTick();
+
+    const launched = await repository.getFactCheckQueueItem(item.queueId);
+    expect(launched).toMatchObject({
+      status: "LAUNCHED",
+      launchedClaimId: expect.any(String),
+    });
+    expect(launched).not.toHaveProperty("launchError");
   });
 });
 

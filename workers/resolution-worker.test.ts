@@ -2,11 +2,21 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ClaimInspection } from "../lib/engine/contract";
 import { EngineStateError } from "../lib/engine/errors";
 import { CLAIM_MODE, CLAIM_STATE } from "../lib/protocol";
+
+const { getServerEngineMock } = vi.hoisted(() => ({
+  getServerEngineMock: vi.fn(),
+}));
+
+vi.mock("../lib/engine/server", () => ({
+  getServerEngine: getServerEngineMock,
+}));
+
 import {
   allExpectedSeatsCommitted,
   allExpectedSeatsRevealed,
   backoffDelayMs,
   isDead,
+  resolutionWorkerTick,
   resolveClaim,
   urgency,
 } from "./resolution-worker";
@@ -93,6 +103,8 @@ function resolutionEngine(inspected: ClaimInspection) {
 
 afterEach(() => {
   vi.useRealTimers();
+  getServerEngineMock.mockReset();
+  vi.restoreAllMocks();
 });
 
 describe("resolution worker triage", () => {
@@ -314,5 +326,31 @@ describe("resolution worker triage", () => {
     expect(ordered.slice(0, 2)).toEqual([CLAIM_STATE.REVEAL_1, CLAIM_STATE.REVEAL_2]);
     expect(ordered.slice(2, 4)).toEqual([CLAIM_STATE.COMMIT_2, CLAIM_STATE.REVIEW_REQUESTED]);
     expect(ordered[4]).toBe(CLAIM_STATE.DISCUSSION);
+  });
+
+  it("runs weather, relaunch, and queue work independently in order", async () => {
+    const calls: string[] = [];
+    const engine = {
+      weatherTick: vi.fn(async () => {
+        calls.push("weather");
+        throw new Error("probe failed");
+      }),
+      listClaims: vi.fn(async () => []),
+      relaunchTick: vi.fn(async () => {
+        calls.push("relaunch");
+        throw new Error("relaunch failed");
+      }),
+      queueTick: vi.fn(async () => {
+        calls.push("queue");
+        throw new Error("queue failed");
+      }),
+    };
+    getServerEngineMock.mockResolvedValue(engine);
+    const stderr = vi.spyOn(process.stderr, "write").mockReturnValue(true);
+
+    await expect(resolutionWorkerTick()).resolves.toBe(false);
+
+    expect(calls).toEqual(["weather", "relaunch", "queue"]);
+    expect(stderr).toHaveBeenCalledTimes(3);
   });
 });

@@ -120,6 +120,15 @@ export function allExpectedSeatsRevealed(claim: ClaimInspection, phase: 1 | 2): 
 /** Resolves true while any claim is in flight (keeps the fast poll). */
 export async function resolutionWorkerTick(): Promise<boolean> {
   const engine = await getServerEngine();
+  // The probe can take up to a minute when a family times out; it runs
+  // alongside the claim loop so a reveal window is never spent waiting on it.
+  const weather = engine.weatherTick().catch((error: unknown) => {
+    process.stderr.write(
+      `resolution-worker: weather: ${
+        error instanceof Error ? error.message : String(error)
+      }\n`,
+    );
+  });
   const now = Date.now();
   const claims = (await listLiveClaims(engine, LIVE_CLAIM_STATES))
     .filter((claim) => !isDead(claim, now) && !inBackoff(claim.claimId, now))
@@ -133,11 +142,22 @@ export async function resolutionWorkerTick(): Promise<boolean> {
       throw error;
     }
   });
+  // Relaunch and queue reuse this tick's probe, so it must have settled first.
+  await weather;
   try {
     await engine.relaunchTick();
   } catch (error) {
     process.stderr.write(
       `resolution-worker: relaunch: ${
+        error instanceof Error ? error.message : String(error)
+      }\n`,
+    );
+  }
+  try {
+    await engine.queueTick();
+  } catch (error) {
+    process.stderr.write(
+      `resolution-worker: queue: ${
         error instanceof Error ? error.message : String(error)
       }\n`,
     );

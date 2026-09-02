@@ -1,11 +1,13 @@
 import {
   bigint,
   boolean,
+  index,
   integer,
   jsonb,
   pgTable,
   primaryKey,
   text,
+  timestamp,
   uniqueIndex,
 } from "drizzle-orm/pg-core";
 
@@ -219,6 +221,37 @@ export const verificationAttempts = pgTable("verification_attempts", {
   ...auditColumns(),
 });
 
+/** Latest direct health probe for each configured Gonka model. */
+export const gonkaWeather = pgTable("gonka_weather", {
+  modelId: text("model_id").primaryKey(),
+  ok: boolean("ok").notNull(),
+  latencyMs: integer("latency_ms").notNull(),
+  status: text("status").notNull(),
+  probedAt: timestamp("probed_at", { withTimezone: true, mode: "string" }).notNull(),
+});
+
+/** Public submissions held until every model family answers. */
+export const factCheckQueue = pgTable(
+  "fact_check_queue",
+  {
+    queueId: text("queue_id").primaryKey(),
+    status: text("status").notNull(),
+    request: jsonb("request").notNull(),
+    holdReason: text("hold_reason").notNull(),
+    launchError: text("launch_error"),
+    launchedClaimId: text("launched_claim_id"),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "string" }).notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true, mode: "string" }).notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true, mode: "string" }).notNull(),
+  },
+  (table) => [
+    index("fact_check_queue_status_created_idx").on(
+      table.status,
+      table.createdAt,
+    ),
+  ],
+);
+
 export const toolCalls = pgTable(
   "tool_calls",
   {
@@ -373,6 +406,8 @@ export const storageSchema = {
   runProofs,
   deliberationTurns,
   verificationAttempts,
+  gonkaWeather,
+  factCheckQueue,
   toolCalls,
   runApprovals,
   votePackages,

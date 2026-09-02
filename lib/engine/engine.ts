@@ -89,6 +89,8 @@ import {
   type EvidenceArtifactRecord,
   type EvidenceManifestRecord,
   type EvidenceSubmissionRecord,
+  type FactCheckQueueRecord,
+  type GonkaWeatherRecord,
   type InferenceRunRecord,
   type JurySeatRecord,
   type Repository,
@@ -128,13 +130,17 @@ import type {
   EngineStatus,
   FactCheckReport,
   FactCheckRequest,
+  FactCheckSubmission,
   FinalizeReport,
   JuryRunReport,
+  QueuedFactCheck,
   ResolutionEvent,
   ResolutionEventSource,
   ResolutionEventVisibility,
   RunProofResult,
   TxResult,
+  WeatherFamily,
+  WeatherReport,
   ZkBackedRegistrationRequest,
   ZkBackedRegistrationResult,
 } from "./contract";
@@ -193,6 +199,14 @@ export const RELAUNCH_WEATHER_CACHE_MS = 120_000;
 export const RELAUNCH_GIVE_UP_MS = 6 * 60 * 60 * 1000;
 /** A model family gets one minute to answer its direct health check. */
 export const RELAUNCH_PROBE_TIMEOUT_MS = 60_000;
+/** Stored probes are refreshed at most once every two minutes. */
+export const WEATHER_PROBE_INTERVAL_MS = 120_000;
+/** Unknown weather must not hold a public submission. */
+export const WEATHER_STALE_MS = 300_000;
+/** A queued submission waits no longer than the relaunch policy. */
+export const QUEUE_TTL_MS = 6 * 60 * 60 * 1000;
+/** Cleared weather launches at most one queued claim each minute. */
+export const QUEUE_LAUNCH_SPACING_MS = 60_000;
 const DELIBERATION_PROMPT_SPEC_HASH = promptSpecHash(
   DELIBERATION_PROMPT_SPEC_V3,
 );
@@ -485,6 +499,7 @@ class OpenVerdictEngine implements Engine {
   readonly #operationalAgentSlots: readonly { address: string; index: number }[];
   readonly #sealEscrow: SealEscrowService | undefined;
   #registrationTail: Promise<void> = Promise.resolve();
+  #lastQueueLaunchAtMs: number | null = null;
 
   constructor(dependencies: EngineDependencies) {
     this.#repository = dependencies.repository;
@@ -516,6 +531,158 @@ class OpenVerdictEngine implements Engine {
         updatedAt: timestamp,
       });
     }
+  }
+
+  async weatherTick(): Promise<void> {
+    const stored = await this.#repository.listGonkaWeather();
+    const newestStoredAtMs = newestWeatherAtMs(stored);
+    const probedAtMs = this.#now();
+    if (
+      newestStoredAtMs !== null &&
+      probedAtMs - newestStoredAtMs < WEATHER_PROBE_INTERVAL_MS
+    ) {
+      return;
+    }
+
+    const results = await this.#gonka.probeModels(
+      this.#manifest.gonka.models,
+      RELAUNCH_PROBE_TIMEOUT_MS,
+    );
+    const probedAt = new Date(probedAtMs).toISOString();
+    await this.#repository.saveGonkaWeather(
+      results.map((result) => ({
+        modelId: result.modelId,
+        ok: result.ok,
+        latencyMs: result.latencyMs,
+        status: String(result.status),
+        probedAt,
+      })),
+    );
+    // Relaunches share this probe so the three families are never called twice.
+    this.#weatherProbeCache = { probedAtMs, results };
+  }
+
+  async weather(): Promise<WeatherReport> {
+    const rows = await this.#repository.listGonkaWeather();
+    const probedAtMs = newestWeatherAtMs(rows);
+    const stale =
+      probedAtMs === null || this.#now() - probedAtMs >= WEATHER_STALE_MS;
+    const families = rows.map<WeatherFamily>((row) => ({
+      modelId: row.modelId,
+      family: weatherFamily(row.modelId),
+      ok: row.ok,
+      latencyMs: row.latencyMs,
+      status: row.status,
+    }));
+    return {
+      probedAtMs,
+      stale,
+      // A jury needs every stored model family, while stale weather stays unknown.
+      clear: !stale && families.every((family) => family.ok),
+      families,
+    };
+  }
+
+  async factCheckSubmit(req: FactCheckRequest): Promise<FactCheckSubmission> {
+    validateFactCheckRequest(req);
+    const weather = await this.weather();
+    // Unknown weather preserves immediate launch behavior instead of holding work.
+    if (weather.clear || weather.stale) {
+      const result = await this.factCheckStart(req);
+      return { kind: "claim", claimId: result.claimId };
+    }
+
+    const nowMs = this.#now();
+    const createdAt = new Date(nowMs).toISOString();
+    const queueId = `0x${randomBytes(32).toString("hex")}`;
+    await this.#repository.saveFactCheckQueueItem({
+      queueId,
+      status: "QUEUED",
+      request: req,
+      holdReason: "WEATHER",
+      createdAt,
+      updatedAt: createdAt,
+      expiresAt: new Date(nowMs + QUEUE_TTL_MS).toISOString(),
+    });
+    return { kind: "queued", queueId, weather };
+  }
+
+  async getQueuedFactCheck(
+    queueId: string,
+  ): Promise<QueuedFactCheck | undefined> {
+    const item = await this.#repository.getFactCheckQueueItem(queueId);
+    if (item === undefined) return undefined;
+    return queuedFactCheck(item, await this.weather());
+  }
+
+  async listQueuedFactChecks(): Promise<QueuedFactCheck[]> {
+    const items = await this.#repository.listFactCheckQueueItems("QUEUED");
+    if (items.length === 0) return [];
+    const weather = await this.weather();
+    return items.map((item) => queuedFactCheck(item, weather));
+  }
+
+  async queueTick(): Promise<void> {
+    const nowMs = this.#now();
+    const updatedAt = new Date(nowMs).toISOString();
+    const queued = await this.#repository.listFactCheckQueueItems("QUEUED");
+    const launchable: FactCheckQueueRecord[] = [];
+    for (const item of queued) {
+      if (Date.parse(item.expiresAt) <= nowMs) {
+        await this.#repository.saveFactCheckQueueItem({
+          ...item,
+          status: "EXPIRED",
+          updatedAt,
+        });
+      } else {
+        launchable.push(item);
+      }
+    }
+    if (launchable.length === 0) return;
+
+    const weather = await this.weather();
+    if (!weather.clear) return;
+    if (
+      this.#lastQueueLaunchAtMs !== null &&
+      nowMs - this.#lastQueueLaunchAtMs < QUEUE_LAUNCH_SPACING_MS
+    ) {
+      return;
+    }
+
+    const item = launchable[0]!;
+    let launched: { claimId: string };
+    try {
+      launched = await this.factCheckStart(item.request);
+    } catch (error) {
+      const launchError = errorMessage(error);
+      if (error instanceof EngineValidationError) {
+        await this.#repository.saveFactCheckQueueItem({
+          ...item,
+          status: "CANCELLED",
+          launchError,
+          updatedAt,
+        });
+        return;
+      }
+      process.stderr.write(
+        `queue: ${item.queueId.slice(0, 10)}: ${launchError}\n`,
+      );
+      await this.#repository.saveFactCheckQueueItem({
+        ...item,
+        launchError,
+        updatedAt,
+      });
+      return;
+    }
+
+    this.#lastQueueLaunchAtMs = nowMs;
+    await this.#repository.saveFactCheckQueueItem({
+      ...item,
+      status: "LAUNCHED",
+      launchedClaimId: launched.claimId,
+      launchError: undefined,
+      updatedAt,
+    });
   }
 
   async factCheckStart(
@@ -5143,6 +5310,46 @@ export function defaultDeadlines(
     secondCommitDeadlineMs: now + 1650 * second,
     secondRevealDeadlineMs: now + 1770 * second,
   };
+}
+
+function newestWeatherAtMs(rows: readonly GonkaWeatherRecord[]): number | null {
+  let newest: number | null = null;
+  for (const row of rows) {
+    const parsed = Date.parse(row.probedAt);
+    if (!Number.isFinite(parsed)) continue;
+    newest = newest === null ? parsed : Math.max(newest, parsed);
+  }
+  return newest;
+}
+
+function weatherFamily(modelId: string): WeatherFamily["family"] {
+  const normalized = modelId.toLowerCase();
+  if (normalized.includes("deepseek")) return "deepseek";
+  if (normalized.includes("minimax")) return "minimax";
+  if (normalized.includes("kimi")) return "kimi";
+  return modelId;
+}
+
+function queuedFactCheck(
+  item: FactCheckQueueRecord,
+  weather: WeatherReport,
+): QueuedFactCheck {
+  return {
+    queueId: item.queueId,
+    status: item.status,
+    statement: item.request.claim,
+    createdAt: item.createdAt,
+    expiresAt: item.expiresAt,
+    ...(item.launchedClaimId === undefined
+      ? {}
+      : { claimId: item.launchedClaimId }),
+    ...(item.launchError === undefined ? {} : { launchError: item.launchError }),
+    weather,
+  };
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
 function validateFactCheckRequest(request: FactCheckRequest): void {

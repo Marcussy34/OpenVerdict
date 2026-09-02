@@ -155,11 +155,17 @@ export async function POST(req: Request) {
     };
 
     const engine = await getServerEngine();
-    const result = await engine.factCheckStart(requestData);
+    const result = await engine.factCheckSubmit(requestData);
     // Idle workers poll slowly; the wake file ends their wait at once.
     touchWake();
 
-    return NextResponse.json(result, { status: 201 });
+    if (result.kind === "claim") {
+      return NextResponse.json({ claimId: result.claimId }, { status: 200 });
+    }
+    return NextResponse.json(
+      { queued: true, queueId: result.queueId, weather: result.weather },
+      { status: 202 },
+    );
   } catch (error) {
     if (error instanceof EngineNotWiredError || (error as Error)?.name === "EngineNotWiredError") {
       return NextResponse.json({ error: "engine_not_wired" }, { status: 503 });

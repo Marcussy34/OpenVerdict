@@ -72,6 +72,10 @@ export function useClaimSubmission() {
       }
 
       const data = await res.json();
+      if (res.status === 202 && data.queueId) {
+        router.push(`/fact-check/queue/${encodeURIComponent(data.queueId)}`);
+        return true;
+      }
       if (!res.ok) {
         setErrorMessage(data.message || data.error || "Failed to submit the claim");
         return false;

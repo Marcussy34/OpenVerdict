@@ -1,7 +1,9 @@
 "use client";
 
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import {
+  Suspense,
   use,
   useCallback,
   useEffect,
@@ -16,6 +18,7 @@ import { motion } from "motion/react";
 import { JurorAvatar } from "@/components/agents/avatar";
 import { RunProof } from "@/components/claim/run-proof";
 import { StateBadge } from "@/components/claim/state-badge";
+import { WeatherStrip } from "@/components/weather/weather-strip";
 import {
   Clock,
   ArrowLeft2,
@@ -219,28 +222,50 @@ function finalStage(claim: ClaimInspection): StageInfo {
   };
 }
 
+function formatLocalHourMinute(ms: number): string {
+  try {
+    const d = new Date(ms);
+    if (Number.isNaN(d.getTime())) return "";
+    return d.toLocaleTimeString(undefined, {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  } catch {
+    return "";
+  }
+}
+
 /** Attempt failures use short public copy while preserving the recorded reason. */
 function attemptFailureSentence(claim: ClaimInspection): string {
   const chain = claim.attemptChain;
   const reason = chain?.gaveUpReason ?? chain?.void?.reason;
-  if (reason === "MISSING_COMMIT") return "A seat missed the commit deadline";
-  if (reason === "MISSING_REVEAL") return "A seat missed the reveal deadline";
-  if (reason === "WEATHER_TIMEOUT") {
-    return "A juror family was unavailable for six hours";
-  }
-  if (reason === "ATTEMPTS_EXHAUSTED") return "Three attempts were voided";
-  if (chain?.void?.seatId !== undefined) {
+  let base = "Verification could not continue";
+  if (reason === "MISSING_COMMIT") {
+    base = "A seat missed the commit deadline";
+  } else if (reason === "MISSING_REVEAL") {
+    base = "A seat missed the reveal deadline";
+  } else if (reason === "WEATHER_TIMEOUT") {
+    base = "A juror family was unavailable for six hours";
+  } else if (reason === "ATTEMPTS_EXHAUSTED") {
+    base = "Three attempts were voided";
+  } else if (chain?.void?.seatId !== undefined) {
     const seatIndex = claim.commitments.findIndex(
       (commitment) => commitment.jurySeatId === chain.void?.seatId,
     );
     const seatLabel = seatIndex >= 0 ? `Seat ${(seatIndex % 5) + 1}` : "A seat";
     const modelLabel = chain.void.modelId ?? "model unavailable";
-    return `${seatLabel} (${modelLabel}) failed: ${chain.void.message ?? chain.void.reason}`;
+    base = `${seatLabel} (${modelLabel}) failed: ${chain.void.message ?? chain.void.reason}`;
+  } else if (chain?.void?.message) {
+    base = chain.void.message;
+  } else if (chain?.void?.reason !== undefined) {
+    base = `Verification stopped: ${chain.void.reason}`;
   }
-  return chain?.void?.message
-    ?? (chain?.void?.reason !== undefined
-      ? `Verification stopped: ${chain.void.reason}`
-      : "Verification could not continue");
+
+  if (!chain) return base;
+  if (chain.status === "GAVE_UP") {
+    return `Attempt ${chain.attempt} of ${chain.maxAttempts}: ${base}`;
+  }
+  return `Attempt ${chain.attempt} of ${chain.maxAttempts} voided: ${base}`;
 }
 
 /** The live protocol stage, from the on-chain claim state. */
@@ -385,33 +410,54 @@ function StageBanner({
         ) : null}
       </motion.div>
       {attemptStopped && claim.attemptChain !== undefined ? (
-        <div className="pointer-events-auto flex max-w-2xl flex-wrap items-center justify-center gap-x-3 gap-y-2 rounded-2xl border border-[#ff8d84]/30 bg-[#07162f]/95 px-4 py-3 text-xs text-white/75 shadow-xl backdrop-blur-md">
-          <span className="flex min-w-0 items-center gap-2">
-            <CloseCircle size="16" variant="Bold" className="shrink-0 text-[#ff8d84]" />
-            <span className="break-words">{attemptFailureSentence(claim)}</span>
-          </span>
-          {claim.attemptChain.previousAttempts.map((attempt) => (
-            <Link
-              key={attempt.claimId}
-              href={`/claims/${attempt.claimId}`}
-              className="inline-flex min-h-10 items-center gap-1 rounded px-1 font-semibold text-[#72b6ff] transition-colors hover:text-white focus-visible:ring-2 focus-visible:ring-white/80 focus-visible:outline-none"
-            >
-              <ArrowLeft2 size="13" variant="Bold" />
-              Previous attempt {attempt.attempt}
-            </Link>
-          ))}
-          {claim.attemptChain.relaunchedAs !== undefined ? (
-            <Link
-              href={`/claims/${claim.attemptChain.relaunchedAs}`}
-              className="inline-flex min-h-10 items-center gap-1 rounded px-1 font-semibold text-[#72b6ff] transition-colors hover:text-white focus-visible:ring-2 focus-visible:ring-white/80 focus-visible:outline-none"
-            >
-              <Refresh size="13" variant="Bold" />
-              Relaunched as attempt {Math.min(
-                claim.attemptChain.attempt + 1,
-                claim.attemptChain.maxAttempts,
-              )}
-            </Link>
+        <div className="pointer-events-auto flex max-w-2xl flex-col items-center gap-3 rounded-2xl border border-[#ff8d84]/30 bg-[#07162f]/95 px-5 py-4 text-xs text-white/75 shadow-xl backdrop-blur-md">
+          <div className="flex w-full flex-col gap-1 text-center">
+            <span className="flex items-center justify-center gap-2 font-medium text-white">
+              <CloseCircle size="16" variant="Bold" className="shrink-0 text-[#ff8d84]" />
+              <span className="break-words">{attemptFailureSentence(claim)}</span>
+            </span>
+            <p className="text-[11px] text-white/60">
+              {claim.attemptChain.status === "GAVE_UP"
+                ? "All-or-nothing: no partial verdict was finalized. This verification gave up; submit the claim again to start a fresh one."
+                : "All-or-nothing: no partial verdict is ever finalized. The engine relaunches automatically once all three families answer."}
+            </p>
+          </div>
+
+          {/* The weather only matters while a relaunch is still possible. */}
+          {claim.attemptChain.status === "VOIDED" ? <WeatherStrip compact tone="dark" /> : null}
+
+          {claim.attemptChain.status === "VOIDED" && !claim.attemptChain.relaunchedAs && claim.attemptChain.void?.atMs ? (
+            <p className="text-[11px] text-white/50">
+              gives up at {formatLocalHourMinute(claim.attemptChain.void.atMs + 6 * 60 * 60 * 1000)}
+            </p>
           ) : null}
+
+          {(claim.attemptChain.previousAttempts.length > 0 || claim.attemptChain.relaunchedAs !== undefined) && (
+            <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-2 border-t border-white/10 pt-2">
+              {claim.attemptChain.previousAttempts.map((attempt) => (
+                <Link
+                  key={attempt.claimId}
+                  href={`/claims/${attempt.claimId}`}
+                  className="inline-flex min-h-10 items-center gap-1 rounded px-1 font-semibold text-[#72b6ff] transition-colors hover:text-white focus-visible:ring-2 focus-visible:ring-white/80 focus-visible:outline-none"
+                >
+                  <ArrowLeft2 size="13" variant="Bold" />
+                  Previous attempt {attempt.attempt}
+                </Link>
+              ))}
+              {claim.attemptChain.relaunchedAs !== undefined ? (
+                <Link
+                  href={`/claims/${claim.attemptChain.relaunchedAs}`}
+                  className="inline-flex min-h-10 items-center gap-1 rounded px-1 font-semibold text-[#72b6ff] transition-colors hover:text-white focus-visible:ring-2 focus-visible:ring-white/80 focus-visible:outline-none"
+                >
+                  <Refresh size="13" variant="Bold" />
+                  Relaunched as attempt {Math.min(
+                    claim.attemptChain.attempt + 1,
+                    claim.attemptChain.maxAttempts,
+                  )}
+                </Link>
+              ) : null}
+            </div>
+          )}
         </div>
       ) : null}
     </div>
@@ -505,9 +551,16 @@ function LeftRail({
       {terminal ? (
         <div className="space-y-3 border-t border-white/10 pt-5">
           <div className="flex items-center justify-between gap-3">
-            <p className="text-[10px] font-semibold tracking-[0.16em] text-white/45 uppercase">
-              Replay
-            </p>
+            <div>
+              <p className="text-[10px] font-semibold tracking-[0.16em] text-white/45 uppercase">
+                Replay
+              </p>
+              {!replay.active && (
+                <p className="mt-0.5 text-[11px] text-white/55">
+                  Watch this verification at 30x
+                </p>
+              )}
+            </div>
             <button
               type="button"
               onClick={replay.toggle}
@@ -1170,12 +1223,14 @@ function MobileSheet({
   );
 }
 
-export default function ClaimCanvasPage({ params }: ClaimCanvasPageProps) {
+function ClaimCanvasContent({ params }: ClaimCanvasPageProps) {
   const { id } = use(params);
+  const searchParams = useSearchParams();
   const now = useNow();
   const { events, status: streamStatus } = useClaimEvents(id);
   const hasClaimRef = useRef(false);
   const requestedProofsRef = useRef(new Set<string>());
+  const autoReplayStartedRef = useRef(false);
 
   const [claim, setClaim] = useState<ClaimInspection | null>(null);
   const [proofsByRunId, setProofsByRunId] = useState<ProofCache>({});
@@ -1346,6 +1401,21 @@ export default function ClaimCanvasPage({ params }: ClaimCanvasPageProps) {
     return [...byOrdinal.values()].sort((left, right) => left.ordinal - right.ordinal);
   }, [claim, events]);
   const replay = useReplay(graph, claim !== null && claim.state >= 9);
+
+  // Autoplay replay once when requested via ?replay=1 on a terminal claim.
+  // We wait until events or graph nodes have loaded so the replay has a valid span.
+  const autoReplay = searchParams.get("replay") === "1";
+  const isTerminal = claim !== null && claim.state >= 9;
+
+  useEffect(() => {
+    if (!autoReplay || !isTerminal || autoReplayStartedRef.current) return;
+    if (events.length === 0 && streamStatus === "connecting") return;
+    if (graph.nodes.length === 0) return;
+
+    autoReplayStartedRef.current = true;
+    replay.setSpeed(30);
+    replay.start();
+  }, [autoReplay, isTerminal, events.length, streamStatus, graph.nodes.length, replay]);
   const selectedNode = useMemo(
     () => replay.visible.nodes.find((node) => node.id === selectedId) ?? null,
     [replay.visible.nodes, selectedId],
@@ -1583,5 +1653,21 @@ function CollapsibleRail({ children }: { children: ReactNode }) {
         {open ? <ArrowLeft2 size="14" /> : <ArrowRight2 size="14" />}
       </button>
     </>
+  );
+}
+
+export default function ClaimCanvasPage(props: ClaimCanvasPageProps) {
+  return (
+    <Suspense
+      fallback={
+        <div className="space-y-6 px-5 py-16 md:px-7">
+          <div className="h-9 w-52 animate-pulse rounded-lg bg-surface-2" />
+          <div className="h-56 animate-pulse rounded-2xl bg-surface" />
+          <div className="h-72 animate-pulse rounded-2xl bg-surface" />
+        </div>
+      }
+    >
+      <ClaimCanvasContent {...props} />
+    </Suspense>
   );
 }

@@ -1,6 +1,19 @@
-import { describe, expect, it, vi } from "vitest";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Engine } from "../../lib/engine/contract";
 import { runCli } from "./index";
+
+const temporaryDirectories: string[] = [];
+
+afterEach(async () => {
+  await Promise.all(
+    temporaryDirectories.splice(0).map((directory) =>
+      rm(directory, { recursive: true, force: true }),
+    ),
+  );
+});
 
 describe("OpenVerdict CLI", () => {
   it("parses nested report arguments and emits one JSON object per line", async () => {
@@ -62,10 +75,81 @@ describe("OpenVerdict CLI", () => {
     expect(code).toBe(2);
     expect(errors.join("\n")).toContain("CLI_USAGE");
   });
+
+  it("prints a queue id and one line for each model family", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "openverdict-cli-"));
+    temporaryDirectories.push(directory);
+    const requestPath = join(directory, "request.json");
+    await writeFile(
+      requestPath,
+      JSON.stringify({ claim: "Weather can queue this claim.", urls: [] }),
+    );
+    const engine = fakeEngine();
+    vi.spyOn(engine, "factCheckSubmit").mockResolvedValue({
+      kind: "queued",
+      queueId: `0x${"55".repeat(32)}`,
+      weather: {
+        probedAtMs: 1,
+        stale: false,
+        clear: false,
+        families: [
+          {
+            modelId: "deepseek-r1",
+            family: "deepseek",
+            ok: true,
+            latencyMs: 12,
+            status: "200",
+          },
+          {
+            modelId: "minimax-m2",
+            family: "minimax",
+            ok: false,
+            latencyMs: 60_000,
+            status: "TIMEOUT",
+          },
+          {
+            modelId: "kimi-k2",
+            family: "kimi",
+            ok: true,
+            latencyMs: 31,
+            status: "200",
+          },
+        ],
+      },
+    });
+    const output: string[] = [];
+
+    const code = await runCli(
+      ["fact-check", "start", "--file", requestPath],
+      {
+        engine,
+        stdout: (value) => output.push(value),
+        stderr: () => undefined,
+      },
+    );
+
+    expect(code).toBe(0);
+    const rendered = output.join("\n");
+    expect(rendered).toContain(`Queue ID: 0x${"55".repeat(32)}`);
+    expect(rendered).toContain("deepseek: ok (12 ms, status 200)");
+    expect(rendered).toContain("minimax: down (60000 ms, status TIMEOUT)");
+    expect(rendered).toContain("kimi: ok (31 ms, status 200)");
+  });
 });
 
 function fakeEngine(): Engine {
   return {
+    factCheckSubmit: async () => ({ kind: "claim", claimId: "0xclaim" }),
+    getQueuedFactCheck: async () => undefined,
+    listQueuedFactChecks: async () => [],
+    queueTick: async () => undefined,
+    weatherTick: async () => undefined,
+    weather: async () => ({
+      probedAtMs: null,
+      stale: true,
+      clear: false,
+      families: [],
+    }),
     factCheckStart: async () => ({ claimId: "0xclaim" }),
     registerZkBackedAgent: async () => ({
       agentProfileId: "0xagent",

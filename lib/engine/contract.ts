@@ -415,7 +415,55 @@ export type ZkBackedRegistrationResult = {
   digest: string;
 };
 
+/** One model family's latest health probe (public "weather"). */
+export type WeatherFamily = {
+  modelId: string;
+  /** Derived from the model id; anything unknown keeps the model id as label. */
+  family: "deepseek" | "minimax" | "kimi" | string;
+  ok: boolean;
+  latencyMs: number;
+  /** HTTP status as text, or TIMEOUT / ERROR. */
+  status: string;
+};
+
+/** The three families' latest probes. A jury needs all three to be ok. */
+export type WeatherReport = {
+  probedAtMs: number | null;
+  /** No probe, or the newest probe is older than WEATHER_STALE_MS. */
+  stale: boolean;
+  /** Not stale and every family ok. Unknown weather is never "clear". */
+  clear: boolean;
+  families: WeatherFamily[];
+};
+
+export type FactCheckSubmission =
+  | { kind: "claim"; claimId: string }
+  | { kind: "queued"; queueId: string; weather: WeatherReport };
+
+export type QueuedFactCheckStatus = "QUEUED" | "LAUNCHED" | "EXPIRED" | "CANCELLED";
+
+/** A submission held until all three families answer a probe. */
+export type QueuedFactCheck = {
+  queueId: string;
+  status: QueuedFactCheckStatus;
+  statement: string;
+  createdAt: string;
+  expiresAt: string;
+  claimId?: string;
+  launchError?: string;
+  weather: WeatherReport;
+};
+
 export interface Engine {
+  /** Submit a fact check: launch now on clear or unknown weather, queue otherwise. */
+  factCheckSubmit(req: FactCheckRequest): Promise<FactCheckSubmission>;
+  getQueuedFactCheck(queueId: string): Promise<QueuedFactCheck | undefined>;
+  listQueuedFactChecks(): Promise<QueuedFactCheck[]>;
+  /** Launch queued submissions (one per tick) once the weather is clear; expire old ones. */
+  queueTick(): Promise<void>;
+  /** Probe the three families when the stored probe is older than the interval. */
+  weatherTick(): Promise<void>;
+  weather(): Promise<WeatherReport>;
   /** Start a fact check; `relaunch` links a new attempt to a voided one (engine internal). */
   factCheckStart(
     req: FactCheckRequest,

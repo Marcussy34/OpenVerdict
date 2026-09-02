@@ -100,6 +100,18 @@ CREATE TABLE IF NOT EXISTS verification_attempts (
   created_at TEXT NOT NULL, updated_at TEXT NOT NULL, record_json JSONB NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS gonka_weather (
+  model_id TEXT PRIMARY KEY, ok BOOLEAN NOT NULL, latency_ms INTEGER NOT NULL,
+  status TEXT NOT NULL, probed_at TIMESTAMPTZ NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS fact_check_queue (
+  queue_id TEXT PRIMARY KEY, status TEXT NOT NULL, request JSONB NOT NULL,
+  hold_reason TEXT NOT NULL, launch_error TEXT, launched_claim_id TEXT,
+  created_at TIMESTAMPTZ NOT NULL, updated_at TIMESTAMPTZ NOT NULL,
+  expires_at TIMESTAMPTZ NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS tool_calls (
   tool_call_id TEXT PRIMARY KEY, run_id TEXT NOT NULL, call_index INTEGER NOT NULL,
   tool_name TEXT NOT NULL, argument_hash TEXT NOT NULL, result_hash TEXT,
@@ -188,6 +200,8 @@ CREATE INDEX IF NOT EXISTS deliberation_turns_claim_ordinal_idx
   ON deliberation_turns (claim_id, ordinal);
 CREATE INDEX IF NOT EXISTS verification_attempts_verification_idx ON verification_attempts (verification_id, attempt);
 CREATE INDEX IF NOT EXISTS verification_attempts_status_idx ON verification_attempts (status);
+CREATE INDEX IF NOT EXISTS fact_check_queue_status_created_idx
+  ON fact_check_queue (status, created_at);
 CREATE INDEX IF NOT EXISTS resolution_events_claim_sequence_idx ON resolution_events (claim_id, sequence);
 `;
 

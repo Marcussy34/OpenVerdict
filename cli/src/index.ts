@@ -7,7 +7,11 @@ import {
   InvalidArgumentError,
 } from "commander";
 import { z } from "zod";
-import type { Engine, ResolutionEvent } from "../../lib/engine/contract";
+import type {
+  Engine,
+  FactCheckSubmission,
+  ResolutionEvent,
+} from "../../lib/engine/contract";
 import { getServerEngine } from "../../lib/engine/server";
 import { OUTCOME, type VoteOutcome } from "../../lib/protocol";
 import { SignerRegistry } from "../../lib/sui";
@@ -101,9 +105,15 @@ export function createCliProgram(dependencies: CliDependencies = {}): Command {
         functionName: "start_fact_check",
         objects: { registry: "configured release registry" },
       });
-      const result = await service.factCheckStart(request);
-      writer.value(result, jsonMode(command));
-      if (options.follow) await followEvents(service, result.claimId, writer, jsonMode(command));
+      const result = await service.factCheckSubmit(request);
+      const json = jsonMode(command);
+      if (result.kind === "queued") {
+        writer.value(json ? result : formatQueuedSubmission(result), json);
+        return;
+      }
+      const launched = { claimId: result.claimId };
+      writer.value(launched, json);
+      if (options.follow) await followEvents(service, result.claimId, writer, json);
     });
 
   factCheck
@@ -413,6 +423,18 @@ function formatHuman(value: unknown): string {
   if (value === null) return "No state transition was needed.";
   if (typeof value === "string") return value;
   return JSON.stringify(value, null, 2);
+}
+
+function formatQueuedSubmission(
+  submission: Extract<FactCheckSubmission, { kind: "queued" }>,
+): string {
+  return [
+    `Queue ID: ${submission.queueId}`,
+    ...submission.weather.families.map(
+      (family) =>
+        `${family.family}: ${family.ok ? "ok" : "down"} (${family.latencyMs} ms, status ${family.status})`,
+    ),
+  ].join("\n");
 }
 
 function stableErrorCode(error: unknown): string {
