@@ -1665,6 +1665,57 @@ container); cwd resets between Bash calls; railway commands from
 scratchpad/railway-tree; Codex bridges: watch `codex-companion.mjs status
 <job>` not processes, cancel by job id, always run the gate yourself.
 
+## 3ae. TOLERANCE + DERIVATION RELEASE 2026-09-02 ~23:40 (read 3ad then this after a compaction)
+
+OWNER DIRECTION (22:20, after catching up on 3ad): "do whatever you think
+is the best and makes the most sense". Decisions taken: engine-side
+MiniMax tolerance (no prompt change, no manifest republish), the Walrus
+retry deployed with it, the report-page derivation and agreement line,
+the Brier-score roadmap paragraph. Rejected on purpose: a preliminary
+"fast lane" score, per-claim decomposition before submission, median or
+dissent knobs, and a confidence floor in the schema (it would be a new
+fail-closed rule the jurors were never told about; it goes in only as a
+pair with a prompt anchor on the next manifest republish).
+
+CANARY 2 CLOSED: attempt 2 (0xb65af7189078) voided MISSING_COMMIT (the
+relaunch's evidence ingestion hit a Walrus 500, so nothing could freeze);
+attempt 3 (0xc297cf71f4cb) voided 21:46 on the MiniMax prose fault; the
+verification is GAVE_UP ATTEMPTS_EXHAUSTED. Relaunch mechanics worked
+every time (links both ways, cap honoured).
+
+RELEASE 8a9178d = deploy 42fb7373 (SUCCESS 23:36:15), on top of 6258adb:
+- 3676120 walrus: transient 5xx / dropped-connection writes retry.
+- 73660ae report: finalRoundVotes carry jurySeatId + valid; the formula
+  text says confidence is read as the juror's probability that its own
+  vote is correct.
+- 4786feb report page: "How the score is computed" table (seat, vote,
+  confidence, mapped probability with the rule), Sum and Mean footer over
+  valid votes, "3 of 4 NO · spread 10.00 to 50.00" beside the score;
+  README "Next rung: seat weights from track record (roadmap)".
+- 8a9178d engine: repairUnsupportedClaims (lib/gonka/schemas.ts) drops
+  entries of unsupportedClaims that are not a known evidence id or page
+  ref, in validateResearchAnswer (round one) and validateTableVote (round
+  two); the drop is recorded in the transcript answer step (repairs?,
+  omitted when empty so old hashes hold) and emitted as a public
+  output_repaired event (payload: claim_id, jury_seat_id,
+  agent_profile_id, run_id, phase, field, dropped). Vote, confidence and
+  every other evidence array still fail closed. Gate: tsc clean, vitest
+  571/571, lint 0 errors.
+Verified live: /api/status healthy; the fasting report renders the table
+and the mean 8500 / 4 = 2125 bps, score 21.25.
+
+RUNNING: sentry byqsvuhog (scratchpad/day-sentry-minwage2.sh, log
+scratchpad/sentry-night3.log) fires a fresh minimum-wage claim on 3/3
+weather with no live attempt; claim monitor b7iz50ncl persists. Weather
+at 21:24 was DeepSeek ok, MiniMax ok, Kimi 524 (Kimi is the gate).
+
+NEXT: when the canary fires, watch the phases (round one, output_repaired
+events if MiniMax writes prose, 4 of 5 settlement or debate + table vote,
+certificate); if it settles, that is the demo recording candidate. Then
+the owner-facing items unchanged from 3ad (wipe, roster, devrel message).
+Workers: Codex job task-mtk8s21g-bs6577 built the tolerance (12 min, one
+hardening patch by me for raw JSON); Gemini built the report page.
+
 ## 4. Planned next (owner-approved direction)
 
 - Attestation (docs/superpowers/specs/2026-08-30-attested-inference-design.md):
