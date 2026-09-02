@@ -202,6 +202,13 @@ export type RoundReadinessStatus = {
 };
 
 /** Attempt states let later engine work expose one verification chain. */
+/** Relaunch context: which verification and attempt a new claim continues. */
+export type VerificationRelaunchContext = {
+  verificationId: string;
+  attempt: 2 | 3;
+  parentClaimId: string;
+};
+
 export type AttemptChainStatus = "ACTIVE" | "VOIDED" | "SETTLED" | "GAVE_UP";
 
 /** Public links and failures across at most three verification attempts. */
@@ -403,7 +410,11 @@ export type ZkBackedRegistrationResult = {
 };
 
 export interface Engine {
-  factCheckStart(req: FactCheckRequest): Promise<{ claimId: string }>;
+  /** Start a fact check; `relaunch` links a new attempt to a voided one (engine internal). */
+  factCheckStart(
+    req: FactCheckRequest,
+    relaunch?: VerificationRelaunchContext,
+  ): Promise<{ claimId: string }>;
   /** Verify the zkLogin signature, derive the backing hash, register on-chain. */
   registerZkBackedAgent(
     req: ZkBackedRegistrationRequest,

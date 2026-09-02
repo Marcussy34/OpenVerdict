@@ -279,6 +279,37 @@ describe("verification attempt lifecycle", () => {
     expect(isDead(inspection, setup.now())).toBe(true);
   });
 
+  it("adopts a next attempt created by an earlier partial relaunch instead of launching twice", async () => {
+    const setup = await engineSetup(new FakeSuiGateway(), 5);
+    const request = {
+      claim: "A partial relaunch must not create a second attempt.",
+      urls: [] as string[],
+    };
+    const { claimId } = await setup.engine.factCheckStart(request);
+    await setup.engine.voidAttempt(claimId, { reason: "PROVIDER_ERROR", phase: 1 });
+    const repository = createRepository(setup.db);
+    // Simulate a tick that created attempt 2 and failed before linking it.
+    const { claimId: nextClaimId } = await setup.engine.factCheckStart(request, {
+      verificationId: claimId,
+      attempt: 2,
+      parentClaimId: claimId,
+    });
+    const first = await repository.getVerificationAttempt(claimId);
+    // The link is written the moment the relaunched claim exists.
+    expect(first?.relaunchedAs).toBe(nextClaimId);
+    await repository.saveVerificationAttempt({
+      ...first!,
+      relaunchedAs: undefined,
+    });
+    expect((await repository.getVerificationAttempt(claimId))?.relaunchedAs).toBeUndefined();
+
+    await setup.engine.relaunchTick();
+
+    const attempts = await repository.listVerificationAttempts(claimId);
+    expect(attempts).toHaveLength(2);
+    expect(attempts[0]?.relaunchedAs).toBe(nextClaimId);
+  });
+
   it("relaunches a voided attempt once when every model is healthy", async () => {
     const setup = await engineSetup(new FakeSuiGateway(), 5);
     const request = {

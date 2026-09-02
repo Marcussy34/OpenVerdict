@@ -114,6 +114,7 @@ import type {
   AgentBackingStatus,
   AgentCard,
   AgentDirectoryEntry,
+  VerificationRelaunchContext,
   AgentRunSummary,
   AgentTrackRecord,
   ChallengeReason,
@@ -234,11 +235,6 @@ type InferenceFailureInput =
   | Pick<TableVoteInput, "kind" | "runId" | "evidenceManifest">;
 
 /** Relaunch context keeps every new claim linked to its first verification. */
-type VerificationRelaunchContext = {
-  verificationId: string;
-  attempt: 2 | 3;
-  parentClaimId: string;
-};
 
 type DeliberationFailureStatus =
   | "PROVIDER_ERROR"
@@ -547,8 +543,28 @@ class OpenVerdictEngine implements Engine {
       },
       relaunch,
     );
+    // Link the parent the moment the relaunched claim exists: the evidence
+    // ingestion below can fail on a Walrus hiccup, and an unlinked parent
+    // would be relaunched again on the next tick (duplicate claims).
+    if (relaunch !== undefined) {
+      await this.linkRelaunchedAttempt(relaunch.parentClaimId, claim.claimId);
+    }
     await this.ingestFactCheckEvidence(claim, req);
     return { claimId: claim.claimId };
+  }
+
+  /** Record on the parent attempt which claim replaced it (idempotent). */
+  private async linkRelaunchedAttempt(
+    parentClaimId: string,
+    relaunchedAs: string,
+  ): Promise<void> {
+    const parent = await this.#repository.getVerificationAttempt(parentClaimId);
+    if (parent === undefined || parent.relaunchedAs !== undefined) return;
+    await this.#repository.saveVerificationAttempt({
+      ...parent,
+      relaunchedAs,
+      updatedAt: this.isoNow(),
+    });
   }
 
   async voidAttempt(
@@ -608,6 +624,19 @@ class OpenVerdictEngine implements Engine {
     for (const attempt of attempts) {
       if (attempt.relaunchedAs !== undefined) continue;
       try {
+        // A previous tick may have created the next attempt and failed before
+        // linking it; adopt that claim instead of launching another one.
+        const existingNext = (
+          await this.#repository.listVerificationAttempts(attempt.verificationId)
+        ).find(
+          (row) =>
+            row.parentClaimId === attempt.claimId &&
+            row.attempt === attempt.attempt + 1,
+        );
+        if (existingNext !== undefined) {
+          await this.linkRelaunchedAttempt(attempt.claimId, existingNext.claimId);
+          continue;
+        }
         const claim = await this.claim(attempt.claimId);
         if (attempt.attempt >= MAX_VERIFICATION_ATTEMPTS) {
           await this.giveUpVerificationAttempt(
