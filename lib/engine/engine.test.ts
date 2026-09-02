@@ -174,9 +174,11 @@ describe("defaultDeadlines", () => {
     const now = Date.parse("2026-09-02T00:00:00.000Z");
 
     expect(defaultDeadlines(now, "testnet")).toMatchObject({
-      discussionDeadlineMs: now + 1_410_000,
-      secondCommitDeadlineMs: now + 1_650_000,
-      secondRevealDeadlineMs: now + 1_770_000,
+      firstCommitDeadlineMs: now + 600_000,
+      firstRevealDeadlineMs: now + 720_000,
+      discussionDeadlineMs: now + 1_560_000,
+      secondCommitDeadlineMs: now + 1_800_000,
+      secondRevealDeadlineMs: now + 1_920_000,
     });
     expect(defaultDeadlines(now, "localnet")).toMatchObject({
       discussionDeadlineMs: now + 600_000,

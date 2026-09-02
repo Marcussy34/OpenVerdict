@@ -207,12 +207,12 @@ export const WEATHER_STALE_MS = 300_000;
 export const QUEUE_TTL_MS = 6 * 60 * 60 * 1000;
 /**
  * Cleared weather launches at most one queued or relaunched claim per window.
- * Round-one research runs from +70 s to +450 s, so seven minutes keeps two
+ * Round-one research runs from +70 s to +600 s, so ten minutes keeps two
  * engine-launched juries from researching at the same time: three juries
  * side by side drew a 429 storm from the shared gateway (2026-09-03 01:48).
  * A direct submission on clear weather still launches at once.
  */
-export const QUEUE_LAUNCH_SPACING_MS = 7 * 60_000;
+export const QUEUE_LAUNCH_SPACING_MS = 10 * 60_000;
 const DELIBERATION_PROMPT_SPEC_HASH = promptSpecHash(
   DELIBERATION_PROMPT_SPEC_V3,
 );
@@ -5313,16 +5313,23 @@ export function defaultDeadlines(
   // 2026-09-02: the 840 s discussion window allows up to fifteen 60 s turns
   // plus the 120 s freeze lead. The 240 s second commit window allows five
   // short vote runs plus their approve and commit transactions.
+  // 2026-09-03 04:45: under the all-or-nothing rule every seat must finish,
+  // and the night's voids were seats still retrying shed or timed-out calls
+  // at the deadline (four of five committed by about +330 s, the fifth
+  // stuck), so the first commit window grows from 450 s to 600 s (about
+  // 500 s of research). The later windows keep their lengths and shift by
+  // 150 s: a one-round verdict lands about 12 min after the POST, a
+  // two-round claim about 32 min.
   const second = 1_000;
   return {
     evidenceCutoffMs: now + 60 * second,
     proposalDeadlineMs: now + 65 * second,
     challengeDeadlineMs: now + 70 * second,
-    firstCommitDeadlineMs: now + 450 * second,
-    firstRevealDeadlineMs: now + 570 * second,
-    discussionDeadlineMs: now + 1410 * second,
-    secondCommitDeadlineMs: now + 1650 * second,
-    secondRevealDeadlineMs: now + 1770 * second,
+    firstCommitDeadlineMs: now + 600 * second,
+    firstRevealDeadlineMs: now + 720 * second,
+    discussionDeadlineMs: now + 1560 * second,
+    secondCommitDeadlineMs: now + 1800 * second,
+    secondRevealDeadlineMs: now + 1920 * second,
   };
 }
 

@@ -206,7 +206,13 @@ against the recorded model, or opened through Seal after the deadline.
    commit +1650 s (240 s: five short table-vote runs plus their approve
    and commit transactions on the operator lane), second reveal +1770 s,
    so a table verdict lands about 29.5 min after the POST (one-round
-   verdicts unchanged at about 10 min). Do not redeploy while a claim is live: a container
+   verdicts unchanged at about 10 min). On 2026-09-03 the first commit
+   window grew to 600 s (all-or-nothing attempts need every seat to
+   finish; the night's voids were seats still retrying shed calls at the
+   deadline), so the ladder is now first commit +600 s, first reveal
+   +720 s, discussion +1560 s, second commit +1800 s, second reveal
+   +1920 s: a one-round verdict about 12 min after the POST, a table
+   verdict about 32 min. Do not redeploy while a claim is live: a container
    restart drops every in-flight research run (those seats fail closed).
 5. Model health: Kimi-K2.6 on GonkaRouter was slow or failing most of the
    night (calls longer than the seat budget), then answered in 40 to 72 s on

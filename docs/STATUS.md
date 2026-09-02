@@ -136,9 +136,10 @@ Postgres. Tests: 512 vitest, 70 Move.
   see docs/demo/runbook.md for the latest claim ids and results.
 - FAST MODE 2026-08-30 (measured through eleven hosted claims overnight):
   the hosted ladder is measured from the `create_claim` transaction
-  (evidence cutoff +60 s, first commit +450 s, first reveal +570 s,
-  discussion +1410 s, second commit +1650 s, second reveal +1770 s since
-  2026-09-02 (round two at the table replaced the second research round,
+  (evidence cutoff +60 s, first commit +600 s, first reveal +720 s,
+  discussion +1560 s, second commit +1800 s, second reveal +1920 s since
+  2026-09-03 (the first commit window grew from 450 s to 600 s for the
+  all-or-nothing rule; on 2026-09-02 round two at the table replaced the second research round,
   so a table verdict now ends about 29.5 min after the POST instead of
   about 31 min; before that the ladder was evidence cutoff +60 s,
   commit +450 s, reveal +570 s, discussion +1290 s,
