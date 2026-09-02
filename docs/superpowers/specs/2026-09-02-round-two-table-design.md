@@ -82,9 +82,10 @@ table cannot settle is marked unresolved, with the score, never forced.
    per claim with `verificationId` (the first attempt's claim id),
    `claimId`, `attempt` (1 to 3), `parentClaimId`, `status`
    (`ACTIVE | VOIDED | SETTLED | GAVE_UP`), `voidReason`, `voidedSeatId`,
-   `voidedModelId`, `voidedAt`, `relaunchedAs`, the original fact-check
-   request (`claim`, `text`, `urls`) needed to relaunch, `createdAt`,
-   `updatedAt`. Every claim created through the fact-check path gets an
+   `voidedModelId`, `voidedAt`, `relaunchedAs`, `createdAt`, `updatedAt`.
+   A relaunch is built from the voided claim's own record (statement,
+   resolution criteria, submitted text and URLs are already stored on
+   `ClaimRecord`), so the row carries no copy of the request. Every claim created through the fact-check path gets an
    attempt row (attempt 1) at creation; direct operator claims get one too
    so the page can always show the chain.
 2. **Void detection (engine + resolution worker).** `engine.voidAttempt(claimId, reason)` marks the row VOIDED, emits `verification_voided`
@@ -159,9 +160,11 @@ table cannot settle is marked unresolved, with the score, never forced.
    own scale. One-round verdicts stay at about ten minutes; a table verdict
    ends about 29.5 minutes after the POST.
 9. **Contract and API (`lib/engine/contract.ts`, `app/api`).** `ClaimInspection`
-   gains `verification: { verificationId, attempt, maxAttempts: 3, status,
+   gains `attemptChain: { verificationId, attempt, maxAttempts: 3, status,
    void?: { seatId, modelId, reason, message, atMs }, relaunchedAs?,
-   previousAttempts: Array<{ claimId, attempt, status, voidReason? }> }`,
+   previousAttempts: Array<{ claimId, attempt, status, voidReason? }> }`
+   (named `attemptChain` because `ClaimInspection.verification` already
+   carries the proof-check results),
    `deliberation` turns gain `stance` and `confidenceBps`, the inspection
    gains `debateConvergedAfterExchange?: 1 | 2 | 3`, and phase-two runs are
    marked `kind: "TABLE_VOTE"` in the public run proof. New event kinds:
