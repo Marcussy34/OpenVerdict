@@ -362,6 +362,52 @@ Gonka is the only mind, Sui is the only judge, Walrus is the only memory,
 SUI is the working currency. No AI runs outside Gonka, no rule is enforced
 outside Sui, no evidence lives outside Walrus.
 
+### Remove one pillar and the app fails
+
+The three pillars are not features bolted onto a fact checker. Each one
+carries a load the other two cannot take. Remove any one and what is left
+is not a weaker OpenVerdict; it is a different and untrustworthy product.
+
+**Without Gonka there is no jury, only an opinion.** Every verdict is built
+from five runs across three model families, capped at two seats per family,
+each run carrying a GonkaRouter request id that a verifier re-checks against
+Gonka's public receipts. Take the gateway away and one of two things
+happens. Either a single vendor answers, and the "jury" becomes one mind
+voting five times, steerable by whoever controls that vendor. Or five
+separate vendor keys are stitched together, and the family cap, the
+manifest-pinned model ids and the receipts all stop being one enforceable
+rule and become five private promises. The Truth Score would still print a
+number. It would no longer mean anything.
+
+**Without Sui there is no judge, only an operator.** Sui draws the seats
+with native randomness, holds the deadlines, locks each vote as a commitment
+before any reveal, freezes the evidence root before any model reasons, and
+writes the certificate as an immutable object that pays the seats and
+settles the pool. Replace it with a database and every one of those becomes
+a line the operator can edit: pick friendlier jurors, reopen a vote, swap
+the evidence after the fact, change the result, then delete the log.
+Nothing on the claim page could be distinguished from a fabrication, and
+the verdict would go back to being a number people are asked to trust
+instead of one the chain acts on.
+
+**Without Walrus and Seal there is no record, only a story.** "Anyone can
+recompute" needs the bytes: every page a juror opened, every manifest, every
+sealed and revealed run bundle, every transcript, stored where their hashes
+can be checked against the roots on Sui. Put them in the operator's own
+bucket and they can be rewritten or withdrawn at will; the on-chain hashes
+would still exist, but they would point at nothing anyone can fetch, and
+the verification checks would have no input. Seal closes the last gap:
+without the time-locked keys, opening a sealed bundle needs the operator's
+cooperation, so the one party with a motive to hide a bad run is the one
+holding the key.
+
+**Why they only work together.** Gonka produces the work and the receipts.
+Sui commits to that work before it is revealed and enforces what happens
+next. Walrus keeps the bytes those commitments point at, and Seal makes
+them openable without us. The verification page walks that chain end to
+end: fetch the bytes from Walrus, hash them, compare to Sui, re-ask Gonka.
+Cut any link and the chain does not get shorter; it breaks.
+
 **MUBA Gonka Track — AI for Society** (fact checker):
 
 | Requirement | OpenVerdict |
