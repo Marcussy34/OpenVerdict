@@ -76,6 +76,16 @@ Postgres. Tests: 512 vitest, 70 Move.
   dispute a specific citation when a seat dissents, steelman the opposite
   outcome when unanimous, and apply the SKEPTIC / SOURCE_AUTHENTICITY
   role; V1 stays byte-identical for old transcripts (hash pinned by test).
+  Round two at the table SHIPPED 2026-09-02: deliberation prompt spec V3
+  adds a public, non-binding stance and confidence to every turn (V2 stays
+  byte-identical for old transcripts), the debate grows to three exchanges
+  and stops early once a full exchange changes no seat's stance ("nobody
+  moved", recorded as converged_after_exchange), and round two itself is
+  now one sealed table-vote run per juror (no tools, no new research) over
+  the round-one record and the debate transcript, sealed and revealed like
+  a research run under manifest v6 (pins TABLE_VOTE_PROMPT_SPEC_V1) and
+  run bundle v6; four matching table votes settle the claim, otherwise it
+  ends UNRESOLVED with the truth score.
 - Track amendments SHIPPED 2026-08-31: URL claim extraction live on GonkaRouter (verified live: the full en.wikipedia Bitcoin article yields the Satoshi whitepaper claim, `devshard-67842-201`), round-two jurors receive the revealed round-one public record (also frozen as phase-2 evidence `round-1-public-record:<claimId>`), the deliberation canvas + explorer landing + open-verification language shipped across the product, and `docs/GONKA-INTEGRATION.md` documents the integration for judges.
 - Live testnet canary COMPLETE (2026-08-27): full lifecycle with live GonkaRouter juries — 5/5 SCHEMA_VALID across 3 model families, YES @ 9700 bps recomputed == on-chain, certificate `0x8efdabe0…1a8634` (see docs/demo/runbook.md table).
 - Live GonkaRouter inference VERIFIED 2026-08-27: account catalog = deepseek-ai/DeepSeek-V4-Flash-0731, MiniMaxAI/MiniMax-M2.7, moonshotai/Kimi-K2.6 (3 families); real completion returned id `devshard-…` (the OpenAI-compatible endpoint id shape — preserved verbatim as the Gonka Request ID). Full live jury round runs at the testnet canary.
@@ -126,7 +136,12 @@ Postgres. Tests: 512 vitest, 70 Move.
   see docs/demo/runbook.md for the latest claim ids and results.
 - FAST MODE 2026-08-30 (measured through eleven hosted claims overnight):
   the hosted ladder is measured from the `create_claim` transaction
-  (evidence cutoff +60 s, commit +450 s, reveal +570 s, discussion +1290 s,
+  (evidence cutoff +60 s, first commit +450 s, first reveal +570 s,
+  discussion +1410 s, second commit +1650 s, second reveal +1770 s since
+  2026-09-02 (round two at the table replaced the second research round,
+  so a table verdict now ends about 29.5 min after the POST instead of
+  about 31 min; before that the ladder was evidence cutoff +60 s,
+  commit +450 s, reveal +570 s, discussion +1290 s,
   second round +1740 / +1860 s since 2026-09-02 (the discussion window was
   60 s, +630 s, and never had room for a debate turn; it is now 720 s and
   round two shifts with it, so two-round claims take about 31 min),
@@ -139,7 +154,7 @@ Postgres. Tests: 512 vitest, 70 Move.
   a MiniMax seat exhausting its ten turns; from juror research
   v2 until then the windows were 330 / 450 / 510 / 690 / 810 s, whose six
   to ten turns per seat had not fit the earlier 240 s commit window: every
-  seat of claim #20 hit the seat deadline mid-research). Seats commit as they finish (a per-claim
+  seat of claim #20 hit the seat deadline mid-research)). Seats commit as they finish (a per-claim
   commit pump from the chain's acceptance floor), reveal bundles publish
   one at a time on the operator lane (about 15 s each, which is why the
   reveal window is 120 s) and the five agent-signed reveal transactions

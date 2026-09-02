@@ -1,6 +1,9 @@
 #!/usr/bin/env node
 /**
- * Publish deterministic v5 manifests for the seven existing testnet agents.
+ * Publish deterministic v6 manifests for the seven existing testnet agents.
+ * Manifest v6 pins the table-vote prompt (TABLE_VOTE_PROMPT_SPEC_V1) alongside
+ * the existing research prompt and tool policy, so the engine can verify a
+ * juror's table-vote runs the same way it verifies research runs.
  *
  * Dry run:
  *   SUI_OPERATOR_SECRET_KEY=<secret> OPENVERDICT_AGENT_SEED=<seed> DATABASE_URL=<url> OPENVERDICT_SUI_GRPC_URL=<url> pnpm tsx scripts/publish-agent-manifests.ts --dry-run
@@ -16,6 +19,7 @@ import { buildAgentManifestDocument } from "../lib/engine";
 import {
   DEFAULT_PROMPT_SPEC_V4,
   DEFAULT_TOOL_POLICY_V4,
+  TABLE_VOTE_PROMPT_SPEC_V1,
 } from "../lib/gonka";
 import {
   blake2b256,
@@ -47,6 +51,7 @@ interface PublishRow {
   profile: string;
   "old hash": string;
   "new hash": string;
+  "table vote hash": string;
   "blob id": string;
   digest: string;
 }
@@ -120,13 +125,18 @@ async function main(): Promise<void> {
         modelId,
         promptSpec: DEFAULT_PROMPT_SPEC_V4,
         toolPolicy: DEFAULT_TOOL_POLICY_V4,
+        tableVotePromptSpec: TABLE_VOTE_PROMPT_SPEC_V1,
         evidencePolicyId: EVIDENCE_POLICY_ID,
       });
+      // v6 always pins a table-vote hash because tableVotePromptSpec is always passed above.
+      assert.ok(built.tableVotePromptHash, "manifest v6 requires a table vote prompt hash");
+      const tableVotePromptHash = built.tableVotePromptHash;
       const row = {
         index: agent.index,
         profile: agent.profileId,
         "old hash": agent.manifestHash,
         "new hash": built.manifestHash,
+        "table vote hash": tableVotePromptHash,
         "blob id": agent.manifestBlobId,
         digest: "skipped",
       } satisfies PublishRow;
@@ -145,7 +155,7 @@ async function main(): Promise<void> {
       }
 
       const upload = await walrus.put(built.bytes, {
-        identifier: `testnet-agent-${agent.index}-manifest-v5.json`,
+        identifier: `testnet-agent-${agent.index}-manifest-v6.json`,
       });
       const modelHash = blake2b256(encoder.encode(modelId));
       const roleHash = blake2b256(encoder.encode(`OPENVERDICT_ROLE_${role}`));
@@ -177,6 +187,7 @@ async function main(): Promise<void> {
           manifestBlobId: upload.blobId,
           manifestHash: built.manifestHash,
           promptHash: built.promptHash,
+          tableVotePromptHash,
           modelId,
           providerId: "gonkarouter",
           toolPolicyHash: built.toolPolicyHash,
@@ -203,3 +214,4 @@ main().catch((error: unknown) => {
   console.error(error instanceof Error ? (error.stack ?? error.message) : error);
   process.exitCode = 1;
 });
+

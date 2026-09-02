@@ -199,7 +199,14 @@ against the recorded model, or opened through Seal after the deadline.
    budget plus the 120 s evidence-freeze lead before the discussion
    deadline; the window is now 720 s (discussion +1290 s, second commit
    +1740 s, second reveal +1860 s), so a two-round claim takes about
-   31 min and one-round verdicts still about 10 min. Do not redeploy while a claim is live: a container
+   31 min and one-round verdicts still about 10 min. Later the same day,
+   round two at the table replaced the second research round: the ladder
+   is now evidence cutoff +60 s, first commit +450 s, first reveal +570 s,
+   discussion +1410 s (an 840 s window, room for three exchanges), second
+   commit +1650 s (240 s: five short table-vote runs plus their approve
+   and commit transactions on the operator lane), second reveal +1770 s,
+   so a table verdict lands about 29.5 min after the POST (one-round
+   verdicts unchanged at about 10 min). Do not redeploy while a claim is live: a container
    restart drops every in-flight research run (those seats fail closed).
 5. Model health: Kimi-K2.6 on GonkaRouter was slow or failing most of the
    night (calls longer than the seat budget), then answered in 40 to 72 s on
@@ -273,6 +280,21 @@ against the recorded model, or opened through Seal after the deadline.
    verdict: open any of its four revealed runs), #16 `0x9169c707…` (YES
    9860 under v1), #18 `0xb526116e…` and #19 `0xe46d6997…` (two-round
    UNRESOLVED with v2 trails).
+
+7. Attempts: a voided attempt (any seat failing a binding step in either
+   round) relaunches automatically once the three model families answer a
+   health probe, up to two relaunches (three attempts total); the claim
+   page's attempt pill reads "Attempt N of 3" and a voided banner names
+   the seat, model and reason with links to the previous and next attempt.
+   A voided attempt lapses on-chain without a certificate: the settlement
+   contract has no mid-flight cancel once a claim leaves the CREATED
+   state, so the void is an engine fact only, not a chain state. Republish
+   agent manifests to v6 before a live demo (manifest v6 pins the
+   table-vote prompt): in the container run `pnpm tsx
+   scripts/publish-agent-manifests.ts --dry-run`, check the seven printed
+   hashes (manifest hash and table vote hash) match what you expect, then
+   run it again without `--dry-run` to publish live, then confirm
+   `GET /api/agents` shows `tableVotePromptHash` for all seven.
 
 ## 5. Human end-to-end walkthrough (the user's test)
 

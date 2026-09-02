@@ -58,6 +58,14 @@ jury settles as UNRESOLVED rather than forcing an answer. The Truth Score
 (0 to 100) is the confidence-weighted aggregate of the revealed votes and
 is minted into the on-chain resolution certificate.
 
+## The table vote
+
+When a jury splits in round one, it debates in public (up to three exchanges, stopping early once nobody moves) and then round two is a second kind of GonkaRouter call:
+one sealed chat completion per juror, no tools, over a pinned prompt (`TABLE_VOTE_PROMPT_SPEC_V1`,
+hashed into manifest v6 alongside the research prompt). The juror sees only what is already on the
+table (the round-one record and the debate transcript), casts one vote, and that run is sealed,
+committed, revealed and verified exactly like a research run, just without a research trail.
+
 ## How to verify our Gonka usage yourself
 
 1. Open any finalized claim and click a juror, then "Open proof". The run
