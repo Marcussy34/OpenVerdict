@@ -365,48 +365,20 @@ outside Sui, no evidence lives outside Walrus.
 ### Remove one pillar and the app fails
 
 The three pillars are not features bolted onto a fact checker. Each one
-carries a load the other two cannot take. Remove any one and what is left
-is not a weaker OpenVerdict; it is a different and untrustworthy product.
+carries a load the other two cannot take.
 
-**Without Gonka there is no jury, only an opinion.** Every verdict is built
-from five runs across three model families, capped at two seats per family,
-each run carrying a GonkaRouter request id that a verifier re-checks against
-Gonka's public receipts. Take the gateway away and one of two things
-happens. Either a single vendor answers, and the "jury" becomes one mind
-voting five times, steerable by whoever controls that vendor. Or five
-separate vendor keys are stitched together, and the family cap, the
-manifest-pinned model ids and the receipts all stop being one enforceable
-rule and become five private promises. The Truth Score would still print a
-number. It would no longer mean anything.
+| Pillar removed | What you would replace it with | What breaks immediately | Why the substitute does not work | What is left |
+| --- | --- | --- | --- | --- |
+| **Gonka** | One vendor API, or five separate vendor keys | The three-family jury, the two-seats-per-family cap, the manifest-pinned model ids, the request-id receipts a verifier re-checks against Gonka's public lookup | One vendor is one mind voting five times, steerable by whoever controls it. Five keys turn one enforceable rule into five private promises nobody can audit as one | A Truth Score that still prints a number and no longer means anything |
+| **Sui** | A database run by the operator | The random jury draw, the deadlines, the vote commitments before reveal, the evidence root frozen before any reasoning, the immutable certificate, the payouts, the pool settlement | Every one of those becomes a line the operator can edit: pick friendlier jurors, reopen a vote, swap evidence after the fact, change the result, delete the log | A verdict people are asked to trust, instead of one the chain acts on |
+| **Walrus + Seal** | The operator's own storage bucket, keys held by the operator | The bytes behind every on-chain hash: opened pages, manifests, sealed and revealed run bundles, transcripts; the operator-free opening of sealed bundles after the deadline | Files in the operator's bucket can be rewritten or withdrawn; the on-chain hashes then point at nothing anyone can fetch, and the verification checks have no input. Without Seal, the party with a motive to hide a bad run is the one holding the key | A story about evidence, with no record to check it against |
 
-**Without Sui there is no judge, only an operator.** Sui draws the seats
-with native randomness, holds the deadlines, locks each vote as a commitment
-before any reveal, freezes the evidence root before any model reasons, and
-writes the certificate as an immutable object that pays the seats and
-settles the pool. Replace it with a database and every one of those becomes
-a line the operator can edit: pick friendlier jurors, reopen a vote, swap
-the evidence after the fact, change the result, then delete the log.
-Nothing on the claim page could be distinguished from a fabrication, and
-the verdict would go back to being a number people are asked to trust
-instead of one the chain acts on.
-
-**Without Walrus and Seal there is no record, only a story.** "Anyone can
-recompute" needs the bytes: every page a juror opened, every manifest, every
-sealed and revealed run bundle, every transcript, stored where their hashes
-can be checked against the roots on Sui. Put them in the operator's own
-bucket and they can be rewritten or withdrawn at will; the on-chain hashes
-would still exist, but they would point at nothing anyone can fetch, and
-the verification checks would have no input. Seal closes the last gap:
-without the time-locked keys, opening a sealed bundle needs the operator's
-cooperation, so the one party with a motive to hide a bad run is the one
-holding the key.
-
-**Why they only work together.** Gonka produces the work and the receipts.
+**Why they only work together:** Gonka produces the work and the receipts.
 Sui commits to that work before it is revealed and enforces what happens
 next. Walrus keeps the bytes those commitments point at, and Seal makes
 them openable without us. The verification page walks that chain end to
-end: fetch the bytes from Walrus, hash them, compare to Sui, re-ask Gonka.
-Cut any link and the chain does not get shorter; it breaks.
+end: fetch from Walrus, hash, compare to Sui, re-ask Gonka. Cut any link
+and the chain does not get shorter; it breaks.
 
 **MUBA Gonka Track — AI for Society** (fact checker):
 
