@@ -1798,6 +1798,27 @@ under the restarted worker with little time left; Great Wall attempt 1
 voided (starvation), attempt 2 (0xd3139ba3) running. Expect attempt 3s
 to launch together around 01:24 to 01:27 and run concurrently.
 
+### 3af progress, 01:55
+
+SEEDS OUTCOME: all three verifications ended GAVE_UP after their third
+attempts were voided by a 429 storm on the shared gateway (01:48, three
+juries side by side, retries exhausted after about a minute). The
+protocol behaved exactly as designed (nothing partial finalized, every
+attempt public), but the demo needs settled claims, so two more fixes:
+12b57d4 (queue launches and relaunches share one seven-minute spacing
+window, so engine-launched juries never research at the same time; a
+direct submission on clear weather still launches at once) and 69b92fa
+(provider retry budget 12, bounded by the seat deadline). Deploying as
+4641d23f at 01:53 together with 3baf302 (mobile QA) and 65f7b19 (receipt
+panel line, README counts 601 TS + 77 Move).
+
+NEXT: after SUCCESS, run scratchpad/seeder.sh in the background: it
+submits one seed at a time only when no attempt is live and the weather
+is clear (five claims: Bitcoin halving, Great Wall, ten percent brain,
+Sui mainnet May 2023, 21 million cap). Watch for the first settled
+claim under the new protocol. Follow-up if storms persist: a
+process-wide cap on concurrent Gonka calls in lib/gonka/adapter.ts.
+
 ## 4. Planned next (owner-approved direction)
 
 - Attestation (docs/superpowers/specs/2026-08-30-attested-inference-design.md):
