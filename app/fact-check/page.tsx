@@ -569,8 +569,15 @@ export default function FactCheckPage() {
   return (
     <Suspense
       fallback={
-        <div className="mx-auto max-w-2xl px-5 py-24 md:px-7">
-          <div className="h-40 animate-pulse rounded-2xl bg-surface" />
+        // The fallback paints the same hero and bar footprint as the page, so
+        // the largest paint lands before the client bundle finishes hydrating.
+        <div className="mx-auto max-w-5xl space-y-12 px-5 py-16 md:px-7 md:py-24">
+          <div className="mx-auto max-w-3xl space-y-4 text-center">
+            <h1 className="ov-display text-5xl text-ocean md:text-6xl">Verify any claim</h1>
+          </div>
+          <div className="mx-auto w-full max-w-3xl space-y-3">
+            <div className="ov-edge h-16 animate-pulse rounded-2xl border border-border bg-card" />
+          </div>
         </div>
       }
     >

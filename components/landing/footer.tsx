@@ -87,7 +87,9 @@ export function LandingFooter() {
   const resources = [
     { href: REPO, label: "GitHub repository" },
     { href: `${REPO}/blob/main/docs/demo/runbook.md`, label: "Demo runbook" },
-    ...(explorer ? [{ href: explorer, label: "Sui explorer · package" }] : []),
+    // Always one row: the link fills in when /api/status answers, so the
+    // footer never grows after first paint (that growth was a 0.35 layout shift).
+    { href: explorer ?? "https://suiscan.xyz/testnet", label: "Sui explorer · package" },
     { href: "https://gonkarouter.io", label: "GonkaRouter" },
   ];
 
