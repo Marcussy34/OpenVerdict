@@ -92,7 +92,11 @@ export default function AppHomePage() {
   const stats = useMemo(() => {
     const settled = claims.filter((c) => c.state >= 9 && c.state !== 12).length;
     const running = claims.filter(
-      (c) => c.state >= 3 && c.state < 9 && (now === null || !isStrandedDiscussion(c, now)),
+      (c) => c.state >= 3
+        && c.state < 9
+        && c.attemptChain?.status !== "VOIDED"
+        && c.attemptChain?.status !== "GAVE_UP"
+        && (now === null || !isStrandedDiscussion(c, now)),
     ).length;
     const seats = claims.reduce((n, c) => n + (c.commitments?.length ?? 0), 0);
     return { settled, running, seats, jurors: agents.filter((a) => a.active).length };
@@ -174,6 +178,7 @@ export default function AppHomePage() {
                     <StateBadge
                       state={claim.state}
                       stranded={now !== null && isStrandedDiscussion(claim, now)}
+                      attemptStatus={claim.attemptChain?.status}
                       size="sm"
                     />
                   </Link>

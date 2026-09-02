@@ -46,16 +46,25 @@ export function ClaimCard({ claim }: ClaimCardProps) {
   // already says. Drop the chip whenever it would only repeat the badge.
   const chipEchoesBadge =
     claim.result?.result?.toUpperCase() ===
-    getStateConfig(claim.state, stranded).short.toUpperCase();
+    getStateConfig(
+      claim.state,
+      stranded,
+      claim.attemptChain?.status,
+    ).short.toUpperCase();
 
   return (
     <Link
-      href={`/claims/${claim.claimId}`}
+      href={`/claims/${claim.attemptChain?.relaunchedAs ?? claim.claimId}`}
       className="ov-edge ov-lift group flex aspect-square flex-col gap-3 overflow-hidden rounded-2xl border border-border bg-card p-4 transition-colors hover:border-sea/40 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
     >
       {/* Where it stands on the left, what it settled on to the right. */}
       <div className="flex items-start justify-between gap-2">
-        <StateBadge state={claim.state} stranded={stranded} size="sm" />
+        <StateBadge
+          state={claim.state}
+          stranded={stranded}
+          attemptStatus={claim.attemptChain?.status}
+          size="sm"
+        />
         {claim.result && !scored && !chipEchoesBadge && (
           <span
             className={cn(

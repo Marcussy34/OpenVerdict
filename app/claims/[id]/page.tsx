@@ -219,8 +219,41 @@ function finalStage(claim: ClaimInspection): StageInfo {
   };
 }
 
+/** Attempt failures use short public copy while preserving the recorded reason. */
+function attemptFailureSentence(claim: ClaimInspection): string {
+  const chain = claim.attemptChain;
+  const reason = chain?.gaveUpReason ?? chain?.void?.reason;
+  if (reason === "MISSING_COMMIT") return "A seat missed the commit deadline";
+  if (reason === "MISSING_REVEAL") return "A seat missed the reveal deadline";
+  if (reason === "WEATHER_TIMEOUT") {
+    return "A juror family was unavailable for six hours";
+  }
+  if (reason === "ATTEMPTS_EXHAUSTED") return "Three attempts were voided";
+  if (chain?.void?.seatId !== undefined) {
+    const seatIndex = claim.commitments.findIndex(
+      (commitment) => commitment.jurySeatId === chain.void?.seatId,
+    );
+    const seatLabel = seatIndex >= 0 ? `Seat ${(seatIndex % 5) + 1}` : "A seat";
+    const modelLabel = chain.void.modelId ?? "model unavailable";
+    return `${seatLabel} (${modelLabel}) failed: ${chain.void.message ?? chain.void.reason}`;
+  }
+  return chain?.void?.message
+    ?? (chain?.void?.reason !== undefined
+      ? `Verification stopped: ${chain.void.reason}`
+      : "Verification could not continue");
+}
+
 /** The live protocol stage, from the on-chain claim state. */
 function liveStage(claim: ClaimInspection, stranded: boolean): StageInfo {
+  if (claim.attemptChain?.status === "VOIDED" || claim.attemptChain?.status === "GAVE_UP") {
+    return {
+      key: "voided",
+      label: claim.attemptChain.status === "VOIDED"
+        ? "Verification voided"
+        : "Could not be completed",
+      tone: "no",
+    };
+  }
   if (stranded) return { key: "stranded", label: "Discussion · expired", tone: "no" };
   switch (claim.state) {
     case CLAIM_STATE.CREATED:
@@ -294,14 +327,18 @@ function StageBanner({
   const stage = replaying
     ? replayStage(claim, graph, replay.t)
     : liveStage(claim, stranded);
-  const settled = !replaying && claim.state >= 9;
+  const attemptStopped = claim.attemptChain?.status === "VOIDED"
+    || claim.attemptChain?.status === "GAVE_UP";
+  const showAttempt = claim.attemptChain !== undefined
+    && (claim.attemptChain.attempt > 1 || claim.attemptChain.status !== "ACTIVE");
+  const settled = !replaying && (claim.state >= 9 || attemptStopped);
   // Broadcast-style marker: the claim is still running AND this tab follows
   // the live event stream (amber SYNCING while the stream catches up).
-  const live = !replaying && !stranded && claim.state < 9;
+  const live = !replaying && !stranded && !attemptStopped && claim.state < 9;
   return (
-    <div className="pointer-events-none absolute inset-x-0 top-16 z-30 flex justify-center xl:top-4">
+    <div className="pointer-events-none absolute inset-x-0 top-16 z-30 flex flex-col items-center gap-2 px-4 xl:top-4">
       <motion.div
-        key={`${stage.key}-${replaying ? "replay" : "live"}`}
+        key={`${stage.key}-${claim.attemptChain?.status ?? "none"}-${replaying ? "replay" : "live"}`}
         initial={{ opacity: 0, y: -12, scale: 0.94 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
         transition={{ duration: 0.35, ease: "easeOut" }}
@@ -310,7 +347,9 @@ function StageBanner({
           STAGE_TONE[stage.tone],
         )}
       >
-        {settled ? (
+        {attemptStopped ? (
+          <CloseCircle size="14" variant="Bold" />
+        ) : settled ? (
           <ShieldTick size="14" variant="Bold" />
         ) : (
           <span aria-hidden className="relative flex size-2">
@@ -318,6 +357,11 @@ function StageBanner({
             <span className="relative inline-flex size-2 rounded-full bg-current" />
           </span>
         )}
+        {showAttempt ? (
+          <span className="rounded-full border border-white/15 bg-black/15 px-2 py-0.5 text-[9px] font-extrabold tracking-[0.14em] whitespace-nowrap uppercase">
+            Attempt {claim.attemptChain?.attempt} of {claim.attemptChain?.maxAttempts}
+          </span>
+        ) : null}
         <span className="text-[11px] font-bold tracking-[0.16em] whitespace-nowrap uppercase">
           {replaying ? `Replay · ${stage.label}` : stage.label}
         </span>
@@ -340,6 +384,36 @@ function StageBanner({
           </span>
         ) : null}
       </motion.div>
+      {attemptStopped && claim.attemptChain !== undefined ? (
+        <div className="pointer-events-auto flex max-w-2xl flex-wrap items-center justify-center gap-x-3 gap-y-2 rounded-2xl border border-[#ff8d84]/30 bg-[#07162f]/95 px-4 py-3 text-xs text-white/75 shadow-xl backdrop-blur-md">
+          <span className="flex min-w-0 items-center gap-2">
+            <CloseCircle size="16" variant="Bold" className="shrink-0 text-[#ff8d84]" />
+            <span className="break-words">{attemptFailureSentence(claim)}</span>
+          </span>
+          {claim.attemptChain.previousAttempts.map((attempt) => (
+            <Link
+              key={attempt.claimId}
+              href={`/claims/${attempt.claimId}`}
+              className="inline-flex min-h-10 items-center gap-1 rounded px-1 font-semibold text-[#72b6ff] transition-colors hover:text-white focus-visible:ring-2 focus-visible:ring-white/80 focus-visible:outline-none"
+            >
+              <ArrowLeft2 size="13" variant="Bold" />
+              Previous attempt {attempt.attempt}
+            </Link>
+          ))}
+          {claim.attemptChain.relaunchedAs !== undefined ? (
+            <Link
+              href={`/claims/${claim.attemptChain.relaunchedAs}`}
+              className="inline-flex min-h-10 items-center gap-1 rounded px-1 font-semibold text-[#72b6ff] transition-colors hover:text-white focus-visible:ring-2 focus-visible:ring-white/80 focus-visible:outline-none"
+            >
+              <Refresh size="13" variant="Bold" />
+              Relaunched as attempt {Math.min(
+                claim.attemptChain.attempt + 1,
+                claim.attemptChain.maxAttempts,
+              )}
+            </Link>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -380,6 +454,7 @@ function LeftRail({
         <StateBadge
           state={claim.state}
           stranded={stranded}
+          attemptStatus={claim.attemptChain?.status}
           className="border-white/15 bg-white/5 text-white/80"
         />
         <p className="flex items-center gap-2 text-xs text-white/60 tabular-nums">
@@ -586,7 +661,9 @@ function SeatInspector({
           key={`proof-${commitment.jurySeatId}`}
           claimId={claim.claimId}
           runId={runId}
-          seatLabel={`Seat ${seatIndex + 1}, phase ${phase}`}
+          seatLabel={phase === 2
+            ? `Seat ${seatIndex + 1}, table vote`
+            : `Seat ${seatIndex + 1}, phase ${phase}`}
         />
       ) : (
         <p className="rounded-xl border border-white/10 bg-white/[0.04] p-3 text-xs leading-relaxed text-white/45">
@@ -1258,9 +1335,13 @@ export default function ClaimCanvasPage({ params }: ClaimCanvasPageProps) {
       if (event.kind !== "DELIBERATION_TURN") continue;
       const payload = event.payload as Partial<DeliberationTurnPublic>;
       if (typeof payload.ordinal !== "number" || typeof payload.jurySeatId !== "string") continue;
-      if (!byOrdinal.has(payload.ordinal)) {
-        byOrdinal.set(payload.ordinal, payload as DeliberationTurnPublic);
-      }
+      const existing = byOrdinal.get(payload.ordinal);
+      byOrdinal.set(
+        payload.ordinal,
+        existing === undefined
+          ? payload as DeliberationTurnPublic
+          : { ...existing, ...payload },
+      );
     }
     return [...byOrdinal.values()].sort((left, right) => left.ordinal - right.ordinal);
   }, [claim, events]);
@@ -1347,6 +1428,7 @@ export default function ClaimCanvasPage({ params }: ClaimCanvasPageProps) {
           }
           commitments={claim.commitments}
           live={claim.state === CLAIM_STATE.DISCUSSION}
+          convergedAfterExchange={claim.debateConvergedAfterExchange ?? null}
         />
 
         <button

@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { motion, useReducedMotion } from "motion/react";
 
 import { JurorAvatar } from "@/components/agents/avatar";
+import { OUTCOME_CHIP } from "@/components/claim/claim-format";
 import { Judge } from "@/components/icons";
 import type {
   ClaimInspection,
@@ -74,10 +75,12 @@ export function DeliberationChat({
   turns,
   commitments,
   live,
+  convergedAfterExchange,
 }: {
   turns: DeliberationTurnPublic[];
   commitments: ClaimInspection["commitments"];
   live: boolean;
+  convergedAfterExchange?: 1 | 2 | 3 | null;
 }) {
   const reduceMotion = useReducedMotion() ?? false;
   const [open, setOpen] = useState(true);
@@ -126,56 +129,91 @@ export function DeliberationChat({
                 Jurors are preparing their arguments…
               </p>
             ) : (
-              turns.map((turn) => {
+              turns.map((turn, index) => {
                 const seat = meta.get(turn.jurySeatId);
                 const skipped = turn.status === "SKIPPED";
+                const lastInExchange = turns[index + 1]?.exchange !== turn.exchange;
+                const convergenceCopy = lastInExchange
+                  && turn.exchange === convergedAfterExchange
+                  ? `Debate converged after exchange ${turn.exchange}: nobody moved`
+                  : !live
+                    && convergedAfterExchange == null
+                    && turn.exchange === 3
+                    && index === turns.length - 1
+                    ? "Three exchanges, no convergence: to the vote"
+                    : null;
                 return (
-                  <motion.div
-                    key={turn.ordinal}
-                    initial={reduceMotion ? false : { opacity: 0, y: 8 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.25, ease: "easeOut" }}
-                    className={cn("flex gap-2.5", skipped && "opacity-60")}
-                  >
-                    <JurorAvatar
-                      family={seat?.family ?? "unknown"}
-                      ordinal={turn.ordinal}
-                      avatarKey={seat?.avatarKey}
-                      size={26}
-                      className={cn("mt-0.5", skipped && "grayscale")}
-                    />
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-baseline gap-1.5">
-                        <span className="text-[11px] font-bold text-white/90">
-                          {seat?.seatTag ?? "Seat ?"}
-                        </span>
-                        <span className="rounded-full bg-white/10 px-1.5 py-px text-[8px] font-bold tracking-wide text-white/55">
-                          R1 · E{turn.exchange}
-                        </span>
-                      </div>
-                      {skipped ? (
-                        <p className="mt-0.5 text-[11px] text-white/45 italic">
-                          did not speak
-                          {turn.failureStatus === undefined
-                            ? ""
-                            : ` · ${SKIP_LABEL[turn.failureStatus] ?? turn.failureStatus.toLowerCase()}`}
-                        </p>
-                      ) : (
-                        <>
-                          <p className="mt-0.5 text-[12px] leading-relaxed break-words text-white/90">
-                            {turn.argument}
+                  <Fragment key={turn.ordinal}>
+                    <motion.div
+                      initial={reduceMotion ? false : { opacity: 0, y: 8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.25, ease: "easeOut" }}
+                      className={cn("flex gap-2.5", skipped && "opacity-60")}
+                    >
+                      <JurorAvatar
+                        family={seat?.family ?? "unknown"}
+                        ordinal={turn.ordinal}
+                        avatarKey={seat?.avatarKey}
+                        size={26}
+                        className={cn("mt-0.5", skipped && "grayscale")}
+                      />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-baseline gap-1.5">
+                          <span className="text-[11px] font-bold text-white/90">
+                            {seat?.seatTag ?? "Seat ?"}
+                          </span>
+                          <span className="rounded-full bg-white/10 px-1.5 py-px text-[8px] font-bold tracking-wide text-white/55">
+                            R1 · E{turn.exchange}
+                          </span>
+                        </div>
+                        {skipped ? (
+                          <p className="mt-0.5 text-[11px] text-white/45 italic">
+                            did not speak
+                            {turn.failureStatus === undefined
+                              ? ""
+                              : ` · ${SKIP_LABEL[turn.failureStatus] ?? turn.failureStatus.toLowerCase()}`}
                           </p>
-                          {turn.citations.length > 0 ? (
-                            <div className="mt-1.5 flex flex-wrap gap-1">
-                              {turn.citations.map((citation) => (
-                                <CitationChip key={citation} value={citation} />
-                              ))}
-                            </div>
-                          ) : null}
-                        </>
-                      )}
-                    </div>
-                  </motion.div>
+                        ) : (
+                          <>
+                            <p className="mt-0.5 text-[12px] leading-relaxed break-words text-white/90">
+                              {turn.argument}
+                            </p>
+                            {turn.stance !== undefined || turn.confidenceBps !== undefined ? (
+                              <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                                {turn.stance !== undefined ? (
+                                  <span className={cn(
+                                    "rounded-full px-2 py-0.5 text-[9px] font-bold",
+                                    OUTCOME_CHIP[turn.stance],
+                                  )}>
+                                    {turn.stance}
+                                  </span>
+                                ) : null}
+                                {turn.confidenceBps !== undefined ? (
+                                  <span className="text-[10px] font-medium text-white/55 tabular-nums">
+                                    confidence {turn.confidenceBps / 100}%
+                                  </span>
+                                ) : null}
+                              </div>
+                            ) : null}
+                            {turn.citations.length > 0 ? (
+                              <div className="mt-1.5 flex flex-wrap gap-1">
+                                {turn.citations.map((citation) => (
+                                  <CitationChip key={citation} value={citation} />
+                                ))}
+                              </div>
+                            ) : null}
+                          </>
+                        )}
+                      </div>
+                    </motion.div>
+                    {convergenceCopy !== null ? (
+                      <div className="flex items-center gap-2 py-1 text-center text-[10px] font-semibold text-[#ffd98c]">
+                        <span className="h-px flex-1 bg-white/10" />
+                        <span>{convergenceCopy}</span>
+                        <span className="h-px flex-1 bg-white/10" />
+                      </div>
+                    ) : null}
+                  </Fragment>
                 );
               })
             )}

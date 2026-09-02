@@ -35,6 +35,10 @@ import {
 import { RunProofSeal } from "@/components/claim/run-proof-seal";
 import { GatewayReceiptCheck } from "@/components/claim/run-proof-receipt";
 import {
+  TableVotePanel,
+  TableVoteSystemPrompt,
+} from "@/components/claim/run-proof-table-vote";
+import {
   EverythingElse,
   EvidenceSidesPanel,
   ProvenanceStrip,
@@ -387,15 +391,27 @@ export function RunProofDetails({ proof }: { proof: TransparentRunProof }) {
             </div>
           ) : (
             <>
-              <ResearchTrail
-                bundle={bundle}
-                walrusUrl={walrusAggregatorUrl}
-                runId={proof.runId}
-              />
+              {bundle.version === 6 ? (
+                <>
+                  <TableVotePanel bundle={bundle} />
+                  <EvidenceSidesPanel bundle={bundle} />
+                  <TableVoteSystemPrompt
+                    systemPrompt={bundle.promptSpec?.systemPrompt}
+                  />
+                </>
+              ) : (
+                <>
+                  <ResearchTrail
+                    bundle={bundle}
+                    walrusUrl={walrusAggregatorUrl}
+                    runId={proof.runId}
+                  />
 
-              <SystemPromptAndBudgets bundle={bundle} />
+                  <SystemPromptAndBudgets bundle={bundle} />
 
-              <EvidenceSidesPanel bundle={bundle} />
+                  <EvidenceSidesPanel bundle={bundle} />
+                </>
+              )}
 
               <Button
                 type="button"

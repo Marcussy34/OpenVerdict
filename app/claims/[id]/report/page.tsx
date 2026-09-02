@@ -248,6 +248,19 @@ export default function ClaimDetailPage({ params }: ClaimDetailPageProps) {
   const sealedCount = claim.commitments?.filter((c) => c.committed).length ?? 0;
   const verification = claim.verification;
   const stranded = now !== null && isStrandedDiscussion(claim, now);
+  const attemptStopped = claim.attemptChain?.status === "VOIDED"
+    || claim.attemptChain?.status === "GAVE_UP";
+  const attemptRows = claim.attemptChain === undefined
+    ? []
+    : [
+        ...claim.attemptChain.previousAttempts,
+        {
+          claimId: claim.claimId,
+          attempt: claim.attemptChain.attempt,
+          status: claim.attemptChain.status,
+          voidReason: claim.attemptChain.gaveUpReason ?? claim.attemptChain.void?.reason,
+        },
+      ];
 
   return (
     <div className="space-y-8 px-5 py-10 md:px-7 lg:py-12">
@@ -260,10 +273,14 @@ export default function ClaimDetailPage({ params }: ClaimDetailPageProps) {
         badges={
           <div>
             <div className="flex flex-wrap items-center gap-2">
-              <StateBadge state={claim.state} stranded={stranded} />
+              <StateBadge
+                state={claim.state}
+                stranded={stranded}
+                attemptStatus={claim.attemptChain?.status}
+              />
               <ExperimentalTag />
             </div>
-            {stranded && (
+            {stranded && !attemptStopped && (
               <p className="mt-1 text-xs text-muted-foreground">
                 The discussion window closed without a second round, so this claim can no longer resolve.
               </p>
@@ -294,6 +311,66 @@ export default function ClaimDetailPage({ params }: ClaimDetailPageProps) {
       >
         Back to the canvas
       </Link>
+
+      {claim.attemptChain !== undefined ? (
+        <Panel
+          label="Verification attempts"
+          icon={Refresh}
+          tone={attemptStopped ? "warn" : "chain"}
+          action={
+            <MetaTag
+              tone={attemptStopped ? "default" : "chain"}
+              className={attemptStopped ? "border-no/30 bg-no/8 text-no" : undefined}
+            >
+              Attempt {claim.attemptChain.attempt} of {claim.attemptChain.maxAttempts}
+            </MetaTag>
+          }
+        >
+          <ul className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-surface">
+            {attemptRows.map((attempt) => (
+              <li
+                key={attempt.claimId}
+                className="grid gap-2 px-3 py-3 sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:items-center"
+              >
+                <span className="ov-micro ov-micro-sm text-muted-foreground">
+                  Attempt {attempt.attempt}
+                </span>
+                <Link
+                  href={`/claims/${attempt.claimId}`}
+                  className="inline-flex min-h-10 min-w-0 items-center break-all font-mono text-[11px] font-semibold text-ocean transition-colors hover:text-primary hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                >
+                  {attempt.claimId}
+                </Link>
+                <span className={cn(
+                  "w-fit rounded-full px-2 py-0.5 text-[10px] font-bold",
+                  attempt.status === "SETTLED"
+                    ? "bg-yes/10 text-yes"
+                    : attempt.status === "ACTIVE"
+                      ? "bg-unsure/10 text-unsure"
+                      : "bg-no/10 text-no",
+                )}>
+                  {attempt.status}
+                </span>
+                <p className="text-xs text-muted-foreground sm:col-start-2 sm:col-span-2">
+                  {attempt.voidReason ?? "No void reason"}
+                </p>
+              </li>
+            ))}
+          </ul>
+          {claim.attemptChain.relaunchedAs !== undefined ? (
+            <Link
+              href={`/claims/${claim.attemptChain.relaunchedAs}`}
+              className="mt-3 inline-flex min-h-10 items-center gap-2 text-xs font-semibold text-primary transition-colors hover:text-ocean hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+            >
+              <Refresh size="14" variant="Bold" />
+              View relaunched attempt {Math.min(
+                claim.attemptChain.attempt + 1,
+                claim.attemptChain.maxAttempts,
+              )}
+            </Link>
+          ) : null}
+        </Panel>
+      ) : null}
 
       {/* ------------------------------------------------ Assertion + verdict */}
       <div className="grid gap-5 lg:grid-cols-3">

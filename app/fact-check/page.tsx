@@ -16,6 +16,7 @@ import {
 } from "@/components/claim/use-claim-submission";
 import { useNow } from "@/components/use-now";
 import { cn } from "@/lib/utils";
+import type { ClaimInspection } from "@/lib/engine/contract";
 import {
   ArrowDown2,
   ArrowRight,
@@ -32,6 +33,7 @@ type ExplorerRow = {
   claimId: string;
   statement: string;
   state: number;
+  attemptChain?: ClaimInspection["attemptChain"];
   deadlines?: { evidenceCutoffMs?: number };
   result?: {
     result: "YES" | "NO" | "UNSURE" | "UNRESOLVED";
@@ -163,7 +165,12 @@ function RecentFactChecks() {
                       {score ? ` ${score}` : ""}
                     </span>
                   )}
-                  <StateBadge state={row.state} size="sm" className="shrink-0" />
+                  <StateBadge
+                    state={row.state}
+                    attemptStatus={row.attemptChain?.status}
+                    size="sm"
+                    className="shrink-0"
+                  />
                   <ArrowRight2 size="14" className="shrink-0 text-muted-foreground" />
                 </Link>
               </li>

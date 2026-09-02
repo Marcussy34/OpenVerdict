@@ -31,13 +31,14 @@ import {
   RowVertical,
 } from "@/components/icons";
 
-type FilterTab = "ALL" | "ACTIVE" | "PROPOSED" | "JURY" | "FINALIZED" | "UNRESOLVED";
+type FilterTab = "ALL" | "ACTIVE" | "PROPOSED" | "JURY" | "VOIDED" | "FINALIZED" | "UNRESOLVED";
 
 const TABS: { key: FilterTab; label: string }[] = [
   { key: "ALL", label: "All" },
   { key: "ACTIVE", label: "Active" },
   { key: "PROPOSED", label: "Proposed" },
   { key: "JURY", label: "In jury" },
+  { key: "VOIDED", label: "Voided" },
   { key: "FINALIZED", label: "Finalized" },
   { key: "UNRESOLVED", label: "Unresolved" },
 ];
@@ -90,20 +91,24 @@ function writeView(next: ViewMode): void {
   viewListeners.forEach((notify) => notify());
 }
 
-function matchesTab(state: number, tab: FilterTab): boolean {
+function matchesTab(claim: ClaimInspection, tab: FilterTab): boolean {
+  const voided = claim.attemptChain?.status === "VOIDED"
+    || claim.attemptChain?.status === "GAVE_UP";
   switch (tab) {
     case "ALL":
       return true;
     case "ACTIVE":
-      return state < 9;
+      return !voided && claim.state < 9;
     case "PROPOSED":
-      return state === 1;
+      return claim.state === 1;
     case "JURY":
-      return state >= 3 && state <= 8;
+      return !voided && claim.state >= 3 && claim.state <= 8;
+    case "VOIDED":
+      return voided;
     case "FINALIZED":
-      return state === 9 || state === 10;
+      return claim.state === 9 || claim.state === 10;
     case "UNRESOLVED":
-      return state === 11;
+      return claim.state === 11;
   }
 }
 
@@ -172,7 +177,7 @@ export default function ClaimsPage() {
   const counts = useMemo(() => {
     const out = {} as Record<FilterTab, number>;
     for (const tab of TABS) {
-      out[tab.key] = claims.filter((c) => matchesTab(c.state, tab.key)).length;
+      out[tab.key] = claims.filter((claim) => matchesTab(claim, tab.key)).length;
     }
     return out;
   }, [claims]);
@@ -189,7 +194,7 @@ export default function ClaimsPage() {
             return false;
           }
         }
-        return matchesTab(claim.state, activeFilter);
+        return matchesTab(claim, activeFilter);
       }),
     [claims, searchQuery, activeFilter],
   );
@@ -340,7 +345,7 @@ export default function ClaimsPage() {
               return (
                 <li key={claim.claimId}>
                   <Link
-                    href={`/claims/${claim.claimId}`}
+                    href={`/claims/${claim.attemptChain?.relaunchedAs ?? claim.claimId}`}
                     className="flex items-center gap-3 px-4 py-3 transition-colors hover:bg-surface focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset focus-visible:outline-none"
                   >
                     <div className="min-w-0 flex-1">
@@ -361,7 +366,13 @@ export default function ClaimsPage() {
                         {score ? ` ${score}` : ""}
                       </span>
                     )}
-                    <StateBadge state={claim.state} stranded={stranded} size="sm" className="shrink-0" />
+                    <StateBadge
+                      state={claim.state}
+                      stranded={stranded}
+                      attemptStatus={claim.attemptChain?.status}
+                      size="sm"
+                      className="shrink-0"
+                    />
                     <ArrowRight2 size="14" className="shrink-0 text-muted-foreground" />
                   </Link>
                 </li>

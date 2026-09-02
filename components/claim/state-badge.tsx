@@ -1,6 +1,7 @@
 "use client";
 
 import { CLAIM_STATE, type ClaimState } from "@/lib/protocol/constants";
+import type { AttemptChainStatus } from "@/lib/engine/contract";
 import { cn } from "@/lib/utils";
 import {
   Clock,
@@ -19,11 +20,12 @@ import {
 interface StateBadgeProps {
   state: ClaimState | number | string;
   stranded?: boolean;
+  attemptStatus?: AttemptChainStatus;
   className?: string;
   size?: "sm" | "md" | "lg";
 }
 
-type Tone = "open" | "settled" | "unresolved";
+type Tone = "open" | "settled" | "unresolved" | "no";
 
 interface StateConfig {
   label: string;
@@ -40,12 +42,22 @@ const TONE_CLASS: Record<Tone, string> = {
   open: "border-unsure/30 bg-unsure/8 text-unsure",
   settled: "border-yes/30 bg-yes/8 text-yes",
   unresolved: "border-no/30 bg-no/8 text-no",
+  no: "border-no/30 bg-no/8 text-no",
 };
 
 export function getStateConfig(
   state: ClaimState | number | string,
   stranded = false,
+  attemptStatus?: AttemptChainStatus,
 ): StateConfig {
+  if (attemptStatus === "VOIDED" || attemptStatus === "GAVE_UP") {
+    return {
+      label: "Verification voided",
+      short: "Voided",
+      icon: CloseCircle,
+      tone: "no",
+    };
+  }
   const numericState = typeof state === "number" ? state : Number(state);
 
   switch (numericState) {
@@ -117,10 +129,11 @@ export function getStateConfig(
 export function StateBadge({
   state,
   stranded = false,
+  attemptStatus,
   className = "",
   size = "md",
 }: StateBadgeProps) {
-  const config = getStateConfig(state, stranded);
+  const config = getStateConfig(state, stranded, attemptStatus);
   const Icon = config.icon;
 
   const iconSize = size === "sm" ? "12" : size === "lg" ? "16" : "13";
