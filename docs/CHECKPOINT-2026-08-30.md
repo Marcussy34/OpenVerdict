@@ -1550,6 +1550,61 @@ the owner's request: no web search, Python-only, stealth-fetch optics;
 not a Firecrawl replacement (self-hosted Firecrawl is the zero-code
 alternative via FIRECRAWL_API_URL).
 
+## 3ac. ROUND TWO AT THE TABLE SHIPPED 2026-09-02 ~20:05
+
+OWNER DIRECTION (14:00 to 15:00, full delegation, 5 days to submission):
+round one compiles evidence and votes under seal; a strong majority
+settles; otherwise the jury brings its evidence and decisions to the
+table, argues, and votes again on what is on the table (no second
+research trip); if anyone has errors the whole verification is scrapped
+and a new one launched (automatic, weather-gated, capped at two
+relaunches); no conclusion at the table = UNRESOLVED (escalation is
+roadmap); implementation fork A = manifest v6 pins the table-vote prompt.
+Spec docs/superpowers/specs/2026-09-02-round-two-table-design.md
+(118e34c), plan docs/superpowers/plans/2026-09-02-round-two-table.md
+(ea98fda).
+
+BUILT (nine tasks, Codex and Gemini workers, my review and gate per task):
+465c623 protocol: TABLE_VOTE_PROMPT_SPEC_V1 (hash 0x0fde6e8cd3989a8a33c5
+ae72c81cc2314965e53b7b41da0e5be2618a339d0333), TableVoteInput, manifest
+document v6, run bundle v6; 80e63f7 storage: verification_attempts;
+3a8ccdd verifier v6 (research checks reported not applicable); 888f1e9
+publish script v6 + docs (PRD 1.1 item 22, STATUS, runbook, GONKA-
+INTEGRATION); 41b7588 deliberation V3 (public stance + confidence per
+turn, up to three exchanges, stops when nobody moved, debate_converged
+event, V1/V2 pinned); d5d2497 the table vote as round two (one call, no
+tools, sealed v6 bundle, manifest guard, finishSeatRun shared with
+research) + ladder discussion +1410 s, second commit +1650 s, second
+reveal +1770 s; 2ca620d UI (attempt pill, voided banner, stance chips,
+convergence divider, table-vote run panel, Voided states, report
+attempts panel); ac2ef54 all-or-nothing attempts + weather-gated
+relaunch (voidAttempt, relaunchTick, probeModels with a fresh nonce per
+probe, isVoidedAttempt, events verification_voided / _relaunched /
+_gave_up). Release gate: 558/558 tests, typecheck clean, lint 0 errors,
+build green.
+
+DEPLOYED a1afb708 (SUCCESS 19:55:48) at ac2ef54; app healthy. MANIFESTS
+REPUBLISHED v6 in the container (scripts/publish-agent-manifests.ts,
+dry run then live): seven Walrus blobs + seven update_agent_manifest
+txs; /api/agents serves the seven new manifest hashes, the manifest
+document for agent 0 is version 6 with the table vote hash. Old v5 rows
+stay in agent_manifests (registered_checkpoint 0 for all rows, so the
+newer v6 rows win getAgentManifest).
+
+WORKER LESSONS: bridges that background Codex leave the broker job
+running after the companion process exits (watch job status, not the
+process); one bridge cancelled the wrong job (Task 6 at 99%), finished
+by hand (CLI mock stubs + probe nonce); Task 6's first launch sent no
+prompt (Codex printed usage). Always run the gate yourself.
+
+CANARY: sentry b03db83cz (day-sentry-minwage.sh) fires "Raising the
+minimum wage reduces overall employment." on 3/3 (a claim the literature
+splits on, to reach the table). Expected path: five seats, if any fails
+the attempt voids and relaunches once weather allows; five reveals
+without four matching open the V3 debate, then five table votes (bundle
+v6), then a certificate or UNRESOLVED. Owner-gated pre-demo wipe still
+pending; the pool stays 3 DeepSeek + 2 MiniMax + 2 Kimi.
+
 ## 4. Planned next (owner-approved direction)
 
 - Attestation (docs/superpowers/specs/2026-08-30-attested-inference-design.md):
