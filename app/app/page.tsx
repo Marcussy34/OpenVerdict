@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Panel } from "@/components/viz/panel";
 import { StatTile } from "@/components/viz/stat-tile";
 import { StateBadge } from "@/components/claim/state-badge";
+import { FeaturedVerifications } from "@/components/claim/featured-verifications";
 import { isStrandedDiscussion } from "@/lib/engine/claim-lifecycle";
 import { useNow } from "@/components/use-now";
 import { Arrow } from "@/components/landing/primitives";
@@ -154,6 +155,8 @@ export default function AppHomePage() {
           </Link>
         ))}
       </div>
+
+      <FeaturedVerifications claims={claims} />
 
       <div className="grid gap-4 lg:grid-cols-3">
         <Panel label="Latest claims" icon={DocumentText} className="lg:col-span-2" flush>
