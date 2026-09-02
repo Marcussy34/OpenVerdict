@@ -30,7 +30,7 @@ export type TokenUsage = {
 };
 
 export interface AttemptAuditOptions {
-  input: OracleInferenceInput;
+  input: Pick<OracleInferenceInput, "runId" | "evidenceManifest">;
   manifest: AgentManifest;
   attempt: number;
   requestedAtMs: number;

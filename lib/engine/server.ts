@@ -252,7 +252,7 @@ function createDynamicFakeAdapter(): GonkaRouterAdapter {
   const utility = createFakeGonkaAdapter([{ agentProfileId: utilityAgentId }]);
   const completionAdapters = new WeakMap<object, GonkaRouterAdapter>();
   const adapterFor = (
-    input: OracleInferenceInput,
+    input: Pick<OracleInferenceInput, "runId">,
     manifest: AgentManifest,
   ): GonkaRouterAdapter => {
     const confidenceOffset = blake2b256(

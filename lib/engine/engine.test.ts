@@ -12,9 +12,12 @@ import {
   DEFAULT_TOOL_POLICY_V2,
   DEFAULT_TOOL_POLICY_V3,
   DEFAULT_TOOL_POLICY_V4,
+  EMPTY_TOOL_TRANSCRIPT_HASH,
+  TABLE_VOTE_PROMPT_SPEC_V1,
   canonicalJsonBytes,
   createFakeGonkaAdapter,
   promptSpecHash,
+  tableVotePromptSpecHash,
   toolPolicyHash,
   type FakeAction,
   type FakeFailure,
@@ -28,9 +31,11 @@ import {
   type AgentManifest,
   type PublicRunBundleCoreV3,
   type PublicRunBundleCoreV5,
+  type PublicRunBundleCoreV6,
   type SealedRunBundleV2,
   type TableVoteStance,
 } from "../protocol";
+import { sampleTableVoteInput } from "../protocol/table-vote.fixture";
 import { transcriptHash } from "../research";
 import type { SealEscrowService } from "../seal/escrow";
 import { parseSealIdentity, sealIdentityHex } from "../seal/identity";
@@ -46,7 +51,6 @@ import {
   FakeSuiGateway,
   SignerRegistry,
   fakeId,
-  outcomeLabel,
   type BoundAgentSigner,
   type GatewayAcceptSeatInput,
   type GatewayBindEvidenceInput,
@@ -65,10 +69,12 @@ import {
   buildZkLoginBackingMessage,
   createEngine,
   debateConvergedAfterExchange,
+  defaultDeadlines,
   deliberationTurnInstructions,
   EngineNoEvidenceError,
   EngineStateError,
   EngineValidationError,
+  validateTableVote,
   type EngineAgentConfig,
 } from "./index";
 
@@ -76,6 +82,82 @@ const databases: PGlite[] = [];
 
 afterEach(async () => {
   await Promise.all(databases.splice(0).map((database) => database.close()));
+});
+
+describe("validateTableVote", () => {
+  const input = sampleTableVoteInput();
+  const output = input.self.roundOneOutput;
+  const ctx = {
+    frozenEvidenceIds: input.evidenceManifest.items.map((item) => item.evidenceId),
+    maximumReasonLength: input.outputContract.maximumReasonLength,
+  };
+
+  it("accepts a well-formed vote whose evidence ids are frozen", () => {
+    expect(validateTableVote(JSON.stringify(output), ctx)).toEqual({
+      ok: true,
+      output,
+    });
+  });
+
+  it("rejects a vote with an unknown evidence id", () => {
+    const result = validateTableVote(
+      JSON.stringify({ ...output, evidenceFor: ["unknown-evidence"] }),
+      ctx,
+    );
+
+    expect(result).toMatchObject({ ok: false });
+  });
+
+  it("rejects confidence outside basis-point bounds", () => {
+    const result = validateTableVote(
+      JSON.stringify({ ...output, confidenceBps: 10_001 }),
+      ctx,
+    );
+
+    expect(result).toMatchObject({ ok: false });
+  });
+
+  it("rejects reasoning longer than the output contract", () => {
+    const result = validateTableVote(
+      JSON.stringify({ ...output, reasoning: "too long" }),
+      { ...ctx, maximumReasonLength: 4 },
+    );
+
+    expect(result).toMatchObject({ ok: false });
+  });
+
+  it("rejects a vote with a missing required key", () => {
+    const missingReasoning = {
+      outcome: output.outcome,
+      confidenceBps: output.confidenceBps,
+      evidenceFor: output.evidenceFor,
+      evidenceAgainst: output.evidenceAgainst,
+      unsupportedClaims: output.unsupportedClaims,
+      decisiveEvidence: output.decisiveEvidence,
+      publicReasoningTrace: output.publicReasoningTrace,
+    };
+
+    expect(validateTableVote(JSON.stringify(missingReasoning), ctx)).toMatchObject({
+      ok: false,
+    });
+  });
+});
+
+describe("defaultDeadlines", () => {
+  it("uses the table-vote deadline ladder for hosted and localnet claims", () => {
+    const now = Date.parse("2026-09-02T00:00:00.000Z");
+
+    expect(defaultDeadlines(now, "testnet")).toMatchObject({
+      discussionDeadlineMs: now + 1_410_000,
+      secondCommitDeadlineMs: now + 1_650_000,
+      secondRevealDeadlineMs: now + 1_770_000,
+    });
+    expect(defaultDeadlines(now, "localnet")).toMatchObject({
+      discussionDeadlineMs: now + 600_000,
+      secondCommitDeadlineMs: now + 720_000,
+      secondRevealDeadlineMs: now + 840_000,
+    });
+  });
 });
 
 describe("evidence artifact storage", () => {
@@ -537,7 +619,8 @@ describe("headless engine", () => {
     expect(cores.every((core) => core.toolPolicy.version === "4")).toBe(true);
     expect(
       setup.gonkaComplete.mock.calls.every(
-        ([request]) => request.input.promptVersion === "4",
+        ([request]) =>
+          !("kind" in request.input) && request.input.promptVersion === "4",
       ),
     ).toBe(true);
   });
@@ -1294,103 +1377,63 @@ describe("headless engine", () => {
     expect((await setup.engine.inspect(claimId)).commitments).toHaveLength(5);
   });
 
-  it("opens discussion and finalizes from an independent second round", async () => {
-    const gateway = new FakeSuiGateway();
-    const setup = await engineSetup(gateway, [
-      ["YES", "YES", "YES", "NO", "NO"],
-      ["NO", "NO", "NO", "NO", "YES"],
-    ]);
-    const { claimId } = await setup.engine.factCheckStart({
-      claim: "A split first round requires an independent second round.",
-      text: "Local evidence for both rounds.",
-      urls: [],
-    });
-
-    await setup.engine.selectCommittee(claimId);
-    await setup.engine.evidenceFreeze(claimId, 1);
-    await setup.engine.juryRun(claimId, 1);
-    await setup.engine.votesCommit(claimId, 1);
-    await setup.engine.advance(claimId);
-    await setup.engine.votesReveal(claimId, 1);
+  it("runs phase two as five sealed table votes and finalizes the result", async () => {
+    const setup = await roundTwoSetup("6");
     const repository = createRepository(setup.db);
-    const firstTally = await repository.getRoundTally(claimId, 1);
-    if (!firstTally) throw new Error("expected the first round tally");
-    const firstReveals = await repository.listReveals(claimId, 1);
-    const firstRuns = await repository.listInferenceRuns(claimId, 1);
-    const expectedPriorRound = {
-      phase: 1,
-      seats: firstTally.expectedJurySeatIds.map((jurySeatId, seatIndex) => {
-        const reveal = firstReveals.find(
-          (candidate) => candidate.jurySeatId === jurySeatId,
-        );
-        const run = firstRuns.find((candidate) => candidate.runId === reveal?.runId);
-        if (!reveal || !run?.output) {
-          throw new Error(`expected a revealed run for seat ${seatIndex}`);
-        }
-        return {
-          seatIndex,
-          modelId: run.modelId,
-          outcome: outcomeLabel(reveal.outcome),
-          confidenceBps: reveal.confidenceBps,
-          publicReasoningTrace: run.output.publicReasoningTrace,
-        };
-      }),
-    };
-    await setup.engine.advance(claimId);
-    await setup.engine.evidenceFreeze(claimId, 2);
-    const publicRecordEvidenceId = `round-1-public-record:${claimId}`;
-    const phaseTwoArtifacts = await repository.listEvidenceArtifacts(claimId, 2);
-    const publicRecordArtifact = phaseTwoArtifacts.find(
-      (artifact) => artifact.evidenceId === publicRecordEvidenceId,
+    const firstRuns = await repository.listInferenceRuns(setup.claimId, 1);
+    const spokenTurns = (await repository.listDeliberationTurns(setup.claimId)).filter(
+      (turn) => turn.status === "SPOKEN",
     );
-    if (!publicRecordArtifact) throw new Error("expected the round one public record artifact");
-    const publicRecordContent = new TextDecoder().decode(
-      await setup.walrus.get(publicRecordArtifact.canonicalWalrusBlobId),
-    );
-    expect(publicRecordContent).toBe(
-      new TextDecoder().decode(canonicalJsonBytes(expectedPriorRound)),
-    );
-    const phaseTwoManifest = await repository.getEvidenceManifest(claimId, 2);
-    if (!phaseTwoManifest) throw new Error("expected the second evidence manifest");
-    const phaseTwoManifestDocument = JSON.parse(
-      new TextDecoder().decode(await setup.walrus.get(phaseTwoManifest.manifestBlobId)),
-    ) as { items: Array<{ evidenceId: string }> };
-    expect(phaseTwoManifestDocument.items).toContainEqual(
-      expect.objectContaining({ evidenceId: publicRecordEvidenceId }),
-    );
-    await setup.engine.advance(claimId);
+    const callsBeforeTableVote = setup.gonkaComplete.mock.calls.length;
 
-    const callsBeforeSecondRound = setup.gonkaComplete.mock.calls.length;
-    for (const [request] of setup.gonkaComplete.mock.calls) {
-      expect(request.input).not.toHaveProperty("priorRound");
-      expect(
-        JSON.parse(request.messages[1]?.content ?? "null"),
-      ).not.toHaveProperty("priorRound");
-    }
-    await setup.engine.juryRun(claimId, 2);
-    const phaseTwoRequests = setup.gonkaComplete.mock.calls.slice(
-      callsBeforeSecondRound,
-    );
+    await setup.engine.juryRun(setup.claimId, 2);
+
+    const tableVoteCalls = setup.gonkaComplete.mock.calls.slice(callsBeforeTableVote);
+    expect(tableVoteCalls).toHaveLength(5);
     expect(
-      phaseTwoRequests.length,
-    ).toBeGreaterThanOrEqual(15);
-    expect(new Set(phaseTwoRequests.map(([request]) => request.input.runId)).size).toBe(5);
-    for (const [request] of phaseTwoRequests) {
-      const serializedInput = JSON.parse(
-        request.messages[1]?.content ?? "null",
-      ) as Record<string, unknown>;
-      expect(request.input).toMatchObject({ priorRound: expectedPriorRound });
-      expect(serializedInput).toEqual(request.input);
-      expect(serializedInput).toMatchObject({ priorRound: expectedPriorRound });
+      tableVoteCalls.every(
+        ([request]) =>
+          request.messages[0]?.content === TABLE_VOTE_PROMPT_SPEC_V1.systemPrompt,
+      ),
+    ).toBe(true);
+    const phaseTwoRuns = await repository.listInferenceRuns(setup.claimId, 2);
+    expect(phaseTwoRuns).toHaveLength(5);
+    for (const run of phaseTwoRuns) {
+      expect(run.promptHash).toBe(tableVotePromptSpecHash());
+      expect(run.audit.promptHash).toBe(tableVotePromptSpecHash());
+      expect(run.audit.toolTranscriptHash).toBe(EMPTY_TOOL_TRANSCRIPT_HASH);
+      expect(run.audit.toolCallCount).toBe(0);
+      const core = JSON.parse(
+        run.audit.bundleCore ?? "null",
+      ) as PublicRunBundleCoreV6;
+      expect(core.version).toBe(6);
+      expect(core.input.kind).toBe("TABLE_VOTE");
+      expect(core.input.debate).toHaveLength(spokenTurns.length);
+      const firstRun = firstRuns.find(
+        (candidate) => candidate.agentProfileId === run.agentProfileId,
+      );
+      expect(core.input.self.roundOneOutput).toEqual(firstRun?.output);
+      expect("transcript" in core).toBe(false);
     }
-    await setup.engine.votesCommit(claimId, 2);
-    await setup.engine.advance(claimId);
-    await setup.engine.votesReveal(claimId, 2);
-    const finalized = await setup.engine.finalize(claimId);
+
+    await setup.engine.votesCommit(setup.claimId, 2);
+    await setup.engine.advance(setup.claimId);
+    await setup.engine.votesReveal(setup.claimId, 2);
+    const finalized = await setup.engine.finalize(setup.claimId);
 
     expect(finalized).toMatchObject({ result: "NO", truthScoreBps: 3_200 });
-    expect((await setup.engine.inspect(claimId)).state).toBe(10);
-    expect((await setup.engine.report(claimId)).finalRoundVotes).toHaveLength(5);
+    expect((await setup.engine.inspect(setup.claimId)).state).toBe(10);
+    expect((await setup.engine.report(setup.claimId)).finalRoundVotes).toHaveLength(5);
+  });
+
+  it("rejects v5 manifests before phase-two table votes with republish guidance", async () => {
+    const setup = await roundTwoSetup("5");
+    const callsBeforeTableVote = setup.gonkaComplete.mock.calls.length;
+
+    await expect(setup.engine.juryRun(setup.claimId, 2)).rejects.toThrow(
+      /run pnpm tsx scripts\/publish-agent-manifests\.ts/,
+    );
+    expect(setup.gonkaComplete).toHaveBeenCalledTimes(callsBeforeTableVote);
   });
 
   it("fails closed when round one reveals are missing before phase two", async () => {
@@ -2269,6 +2312,75 @@ async function engineSetup(
     eventPollIntervalMs: 5,
   });
   return { engine, db, gonkaComplete, walrus };
+}
+
+async function roundTwoSetup(manifestVersion: "5" | "6") {
+  const setup = await engineSetup(new FakeSuiGateway(), [
+    ["YES", "YES", "YES", "NO", "NO"],
+    ["NO", "NO", "NO", "NO", "YES"],
+  ]);
+  const { claimId } = await setup.engine.factCheckStart({
+    claim: "A split first round must end with a sealed table vote.",
+    text: "Local evidence for the first round and the table.",
+    urls: [],
+  });
+  await setup.engine.selectCommittee(claimId);
+  await setup.engine.evidenceFreeze(claimId, 1);
+  await setup.engine.juryRun(claimId, 1);
+  await setup.engine.votesCommit(claimId, 1);
+  await setup.engine.advance(claimId);
+  await setup.engine.votesReveal(claimId, 1);
+  await setup.engine.advance(claimId);
+  await setup.engine.runDeliberation(claimId);
+  await setup.engine.evidenceFreeze(claimId, 2);
+  await publishAgentManifestDocuments(setup, manifestVersion);
+  await setup.engine.advance(claimId);
+  expect((await setup.engine.inspect(claimId)).state).toBe(CLAIM_STATE.COMMIT_2);
+  return { ...setup, claimId };
+}
+
+async function publishAgentManifestDocuments(
+  setup: Awaited<ReturnType<typeof engineSetup>>,
+  version: "5" | "6",
+): Promise<void> {
+  const repository = createRepository(setup.db);
+  const agents = await repository.listAgentManifests();
+  for (const [index, agent] of agents.entries()) {
+    const built = buildAgentManifestDocument({
+      network: "localnet",
+      backingKind: "TESTNET_DEMO_ALLOWLIST",
+      humanBackingHash: agent.manifest.humanAttestationHash,
+      humanVerificationProvider: agent.manifest.humanVerificationProvider,
+      operationalOwner: agent.manifest.owner,
+      role: agent.role,
+      modelId: agent.manifest.modelId,
+      promptSpec: DEFAULT_PROMPT_SPEC_V4,
+      toolPolicy: DEFAULT_TOOL_POLICY_V4,
+      ...(version === "6"
+        ? { tableVotePromptSpec: TABLE_VOTE_PROMPT_SPEC_V1 }
+        : {}),
+      evidencePolicyId: EVIDENCE_POLICY_V1_LABEL,
+    });
+    const upload = await setup.walrus.put(built.bytes, {
+      identifier: `agent-${index}-manifest-v${version}.json`,
+    });
+    await repository.saveAgentManifest({
+      ...agent,
+      manifest: {
+        ...agent.manifest,
+        version: built.document.version,
+        manifestBlobId: upload.blobId,
+        manifestHash: built.manifestHash,
+        promptHash: built.promptHash,
+        ...(built.tableVotePromptHash === undefined
+          ? {}
+          : { tableVotePromptHash: built.tableVotePromptHash }),
+        toolPolicyHash: built.toolPolicyHash,
+        evidencePolicyHash: built.document.evidencePolicyHash,
+        registeredCheckpoint: agent.manifest.registeredCheckpoint + 1,
+      },
+    });
+  }
 }
 
 async function discussionSetup(

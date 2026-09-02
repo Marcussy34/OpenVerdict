@@ -795,7 +795,9 @@ function createFakeController(): FakeController {
   const utility = createFakeGonkaAdapter([{ agentProfileId: utilityId }]);
   const completionAdapters = new WeakMap<object, GonkaRouterAdapter>();
   const adapterFor = (
-    input: OracleInferenceInput,
+    input: Pick<OracleInferenceInput, "runId"> & {
+      claim: Pick<OracleInferenceInput["claim"], "statement" | "resolutionCriteria">;
+    },
     manifest: AgentManifest,
   ): GonkaRouterAdapter => {
     const queue = plans.get(input.claim.statement)?.get(manifest.agentProfileId);

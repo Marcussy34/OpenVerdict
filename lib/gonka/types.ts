@@ -8,8 +8,11 @@ import type {
   PromptSpecV1,
   PromptSpecV2,
   ProviderRequestRecord,
+  TableVoteInput,
   ToolPolicyV2,
 } from "../protocol/types";
+
+export type GonkaCompletionInput = OracleInferenceInput | TableVoteInput;
 
 /** Narrow application boundary from PRD section 20.8. */
 export interface GonkaRouterAdapter {
@@ -19,7 +22,9 @@ export interface GonkaRouterAdapter {
   toolPolicyHash(): HexString;
   legacyPromptSpec(): PromptSpecV1;
   run(input: OracleInferenceInput, manifest: AgentManifest): Promise<unknown>;
-  complete(request: GonkaCompletionRequest): Promise<GonkaCompletionResult>;
+  complete(
+    request: GonkaCompletionRequest<GonkaCompletionInput>,
+  ): Promise<GonkaCompletionResult>;
   normalizeResponse(response: unknown): Promise<{
     gonkaRequestId: string;
     modelId: string;
@@ -70,13 +75,15 @@ export type PromptMessage = {
   content: string;
 };
 
-export type GonkaCompletionRequest = {
+export type GonkaCompletionRequest<
+  TInput extends GonkaCompletionInput = GonkaCompletionInput,
+> = {
   manifest: AgentManifest;
   messages: PromptMessage[];
   /** HEDGE is assigned only to backup calls created inside the adapter. */
   kind: Exclude<GonkaAttemptKind, "HEDGE">;
   jsonMode: boolean;
-  input: OracleInferenceInput;
+  input: TInput;
   /** Shared across the whole run; complete() appends one record per model call. */
   attempts: GonkaAttemptRecord[];
   /** Upper bound for this single model call (the seat's remaining time), in ms. */
@@ -103,7 +110,7 @@ export type GonkaCompletionResult =
     };
 
 export type GonkaCompletion = (
-  request: GonkaCompletionRequest,
+  request: GonkaCompletionRequest<OracleInferenceInput>,
 ) => Promise<GonkaCompletionResult>;
 
 export type GonkaRunResult = {

@@ -10,9 +10,11 @@ import {
   DELIBERATION_PROMPT_SPEC_V1,
   DELIBERATION_PROMPT_SPEC_V2,
   DELIBERATION_PROMPT_SPEC_V3,
+  TABLE_VOTE_PROMPT_SPEC_V1,
 } from "./promptSpec";
 import type {
   GonkaAttemptRecord,
+  GonkaCompletionInput,
   GonkaCompletionRequest,
   GonkaCompletionResult,
   GonkaRouterAdapter,
@@ -60,7 +62,7 @@ type ActiveFixture = {
   fixture: FakeFixture;
   fixtureIndex: number;
   requestCall: number;
-  input: OracleInferenceInput;
+  input: GonkaCompletionInput;
   manifest: AgentManifest;
   clock: number;
   opened?: {
@@ -315,6 +317,7 @@ function createFixtureAdapter(
   );
 }
 
+
 /** Deterministic offline adapter with the same opaque run/audit envelope. */
 export function createFakeGonkaAdapter(fixtures: FakeFixture[]): GonkaRouterAdapter {
   const fixturesByAgent = new Map<string, FakeFixture[]>();
@@ -342,7 +345,7 @@ export function createFakeGonkaAdapter(fixtures: FakeFixture[]): GonkaRouterAdap
   );
 
   const nextActive = (
-    input: OracleInferenceInput,
+    input: GonkaCompletionInput,
     manifest: AgentManifest,
   ): ActiveFixture => {
     const queue = fixturesByAgent.get(manifest.agentProfileId);
@@ -365,7 +368,7 @@ export function createFakeGonkaAdapter(fixtures: FakeFixture[]): GonkaRouterAdap
   };
 
   const nextDeliberation = (
-    input: OracleInferenceInput,
+    input: GonkaCompletionInput,
     manifest: AgentManifest,
   ): { active: ActiveFixture; content: string } => {
     const queue = fixturesByAgent.get(manifest.agentProfileId);
@@ -418,28 +421,30 @@ export function createFakeGonkaAdapter(fixtures: FakeFixture[]): GonkaRouterAdap
   }
 
   async function complete(
-    request: GonkaCompletionRequest,
+    request: GonkaCompletionRequest<GonkaCompletionInput>,
   ): Promise<GonkaCompletionResult> {
+    if (request.messages[0]?.content === TABLE_VOTE_PROMPT_SPEC_V1.systemPrompt) {
+      let active = activeByAttempts.get(request.attempts);
+      if (!active) {
+        active = nextActive(request.input, request.manifest);
+        activeByAttempts.set(request.attempts, active);
+      }
+      return createFixtureAdapter(active, JSON.stringify(fixtureOutput(active))).complete(request);
+    }
     if (
       request.messages[0]?.content === DELIBERATION_PROMPT_SPEC_V1.systemPrompt ||
       request.messages[0]?.content === DELIBERATION_PROMPT_SPEC_V2.systemPrompt ||
       request.messages[0]?.content === DELIBERATION_PROMPT_SPEC_V3.systemPrompt
     ) {
       const deliberation = nextDeliberation(request.input, request.manifest);
-      return createFixtureAdapter(
-        deliberation.active,
-        deliberation.content,
-      ).complete(request);
+      return createFixtureAdapter(deliberation.active, deliberation.content).complete(request);
     }
     let active = activeByAttempts.get(request.attempts);
     if (!active) {
       active = nextActive(request.input, request.manifest);
       activeByAttempts.set(request.attempts, active);
     }
-    return createFixtureAdapter(
-      active,
-      scriptedContent(active, request.messages),
-    ).complete(request);
+    return createFixtureAdapter(active, scriptedContent(active, request.messages)).complete(request);
   }
 
   return {

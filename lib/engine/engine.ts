@@ -13,16 +13,21 @@ import {
 import {
   DELIBERATION_PROMPT_SPEC_V3,
   EMPTY_TOOL_TRANSCRIPT_HASH,
+  TABLE_VOTE_PROMPT_SPEC_V1,
   GonkaRunError,
+  buildTableVoteMessages,
   canonicalJsonBytes,
   canonicalJsonString,
   hashCanonicalJson,
   promptSpecHash,
+  tableVotePromptSpecHash,
   toolPolicyHash,
+  validateOutputAgainstManifest,
   type GonkaAttemptRecord,
   type GonkaRouterAdapter,
   type GonkaRunResult,
 } from "../gonka";
+import { extractJsonObject } from "../gonka/adapter";
 import {
   CLAIM_MODE,
   CLAIM_STATE,
@@ -39,6 +44,8 @@ import {
   type AgentManifestDocumentV3,
   type AgentManifestDocumentV4,
   type AgentManifestDocumentV5,
+  type AgentManifestDocumentV6,
+  type HexString,
   type InferenceFailureV1,
   type InferenceRunAudit,
   type OracleInferenceInput,
@@ -53,6 +60,8 @@ import {
   type ToolPolicyV2,
   type ToolPolicyV3,
   type ToolPolicyV4,
+  type TableVoteDebateTurn,
+  type TableVoteInput,
   type TableVoteStance,
   type VoteOutcome,
 } from "../protocol";
@@ -139,6 +148,7 @@ import {
 } from "./agentManifestDocument";
 import {
   buildRunBundleCore,
+  buildTableVoteBundleCore,
   canonicalCoreBytes,
   sealRunBundle,
 } from "./runBundle";
@@ -207,6 +217,11 @@ function trackRecordFor(
 }
 
 type PriorRoundPublicRecord = NonNullable<OracleInferenceInput["priorRound"]>;
+
+type InferenceFailureInput =
+  | OracleInferenceInput
+  | TableVoteInput
+  | Pick<TableVoteInput, "kind" | "runId" | "evidenceManifest">;
 
 type DeliberationFailureStatus =
   | "PROVIDER_ERROR"
@@ -927,13 +942,26 @@ class OpenVerdictEngine implements Engine {
     if (seats.length !== 5) throw new EngineStateError("jury run requires five selected seats");
     const priorRound =
       phase === 2 ? await this.roundOnePublicRecord(claimId) : undefined;
+    const tableVoteContext =
+      phase === 2 ? await this.tableVoteDebate(claimId) : undefined;
     const researchConfigs = new Map<string, SeatResearchConfig>();
     for (const seat of seats) {
       const agent = await this.requiredAgent(seat.agentProfileId);
+      if (phase === 2) {
+        const document = await this.agentManifestDocument(seat.agentProfileId);
+        if (document === null) {
+          throw new EngineValidationError(
+            `agent ${seat.agentProfileId} table vote manifest document is missing; run pnpm tsx scripts/publish-agent-manifests.ts`,
+          );
+        }
+        this.assertTableVoteManifestHashes(agent.manifest, document);
+        continue;
+      }
       if (
         agent.manifest.version === "3" ||
         agent.manifest.version === "4" ||
-        agent.manifest.version === "5"
+        agent.manifest.version === "5" ||
+        agent.manifest.version === "6"
       ) {
         const document = await this.agentManifestDocument(seat.agentProfileId);
         if (
@@ -941,7 +969,8 @@ class OpenVerdictEngine implements Engine {
           document.version !== agent.manifest.version ||
           (document.version !== "3" &&
             document.version !== "4" &&
-            document.version !== "5")
+            document.version !== "5" &&
+            document.version !== "6")
         ) {
           throw new EngineValidationError(
             `agent ${seat.agentProfileId} manifest document is missing or has the wrong version`,
@@ -949,7 +978,7 @@ class OpenVerdictEngine implements Engine {
         }
         this.assertResearchManifestHashes(agent.manifest, document);
         let researchConfig: SeatResearchConfig;
-        if (document.version === "5") {
+        if (document.version === "5" || document.version === "6") {
           researchConfig = {
             bundleVersion: 5,
             spec: document.promptSpec,
@@ -995,7 +1024,7 @@ class OpenVerdictEngine implements Engine {
       });
     }
     const research = this.#research;
-    if (!research) {
+    if (phase === 1 && !research) {
       throw new EngineValidationError("research provider not configured");
     }
     // approve_run and commit_vote need the seat bound to the frozen evidence
@@ -1061,11 +1090,32 @@ class OpenVerdictEngine implements Engine {
             (run) => run.jurySeatId === seat.jurySeatId,
           );
           if (existing !== undefined) return;
+          if (phase === 2) {
+            if (priorRound === undefined || tableVoteContext === undefined) {
+              throw new EngineStateError("table vote context is missing");
+            }
+            await this.runTableVoteSeat(
+              claim,
+              committee,
+              seat,
+              evidence,
+              artifacts,
+              priorRound,
+              tableVoteContext.debate,
+              tableVoteContext.convergedAfterExchange,
+              seatDeadlineMs,
+              commitFloorMs,
+            );
+            return;
+          }
           const researchConfig = researchConfigs.get(seat.agentProfileId);
           if (researchConfig === undefined) {
             throw new EngineValidationError(
               `agent ${seat.agentProfileId} has no validated research configuration`,
             );
+          }
+          if (research === undefined) {
+            throw new EngineValidationError("research provider not configured");
           }
           await this.runSeat(
             claim,
@@ -1992,7 +2042,8 @@ class OpenVerdictEngine implements Engine {
       (record.manifest.version !== "2" &&
         record.manifest.version !== "3" &&
         record.manifest.version !== "4" &&
-        record.manifest.version !== "5")
+        record.manifest.version !== "5" &&
+        record.manifest.version !== "6")
     ) {
       return null;
     }
@@ -2001,6 +2052,209 @@ class OpenVerdictEngine implements Engine {
       return parseAgentManifestDocument(bytes);
     } catch {
       return null;
+    }
+  }
+
+  /** Keep sealing, approval and persistence identical across both run kinds. */
+  private async finishSeatRun(params: {
+    claim: ClaimRecord;
+    committee: CommitteeRecord;
+    seat: JurySeatRecord;
+    agent: AgentManifestRecord;
+    evidence: EvidenceManifestRecord;
+    input: OracleInferenceInput | TableVoteInput;
+    runResult: GonkaRunResult;
+    output: OracleInferenceOutput;
+    transcript: ResearchTranscriptV1 | null;
+    promptHash: HexString;
+    buildCore: (
+      audit: InferenceRunAudit,
+      runHash: HexString,
+    ) => PublicRunBundleCore;
+    commitFloorMs: number;
+  }): Promise<void> {
+    const adapterAudit = await this.#gonka.buildRunAudit(params.runResult);
+    const normalized = {
+      gonkaRequestId: adapterAudit.gonkaRequestId,
+      modelId: adapterAudit.responseModelId ?? adapterAudit.modelId,
+      output: params.output,
+    };
+    // One canonical run ID spans visible retry attempts for this jury seat.
+    const runId = params.input.runId as HexString;
+    const outputHash = toHex(blake2b256(canonicalJsonBytes(normalized.output)));
+    const toolTranscriptHash = params.transcript === null
+      ? EMPTY_TOOL_TRANSCRIPT_HASH
+      : transcriptHash(params.transcript);
+    const audit: InferenceRunAudit = {
+      ...adapterAudit,
+      runId,
+      claimObjectId: params.claim.claimId as HexString,
+      agentProfileId: params.seat.agentProfileId as HexString,
+      jurySeatId: params.seat.jurySeatId as HexString,
+      phase: params.seat.phase,
+      modelId: params.agent.manifest.modelId,
+      responseModelId: normalized.modelId,
+      gonkaRequestId: normalized.gonkaRequestId,
+      promptHash: params.promptHash,
+      inputHash: hashCanonicalJson(params.input),
+      outputHash,
+      // The sealed blob ID is known only after this core is encrypted and uploaded.
+      runWalrusBlobId: "",
+      toolTranscriptHash,
+      toolTranscriptWalrusBlobId: "",
+      toolCallCount:
+        params.transcript === null
+          ? 0
+          : params.transcript.counts.searches + params.transcript.counts.opens,
+      evidenceRoot: params.evidence.root,
+      ...params.runResult.gateway,
+      status: "SCHEMA_VALID",
+    };
+    const runHash = toHex(
+      computeRunHash({
+        run_id: audit.runId,
+        claim_object_id: params.claim.claimId,
+        agent_profile_id: params.seat.agentProfileId,
+        jury_seat_id: params.seat.jurySeatId,
+        phase: params.seat.phase,
+        attempt: audit.attempt,
+        provider_id: "gonkarouter",
+        model_id: params.agent.manifest.modelId,
+        gonka_request_id: normalized.gonkaRequestId,
+        prompt_hash: fromHex(params.promptHash),
+        input_hash: fromHex(audit.inputHash),
+        output_hash: fromHex(outputHash),
+        tool_transcript_hash: fromHex(audit.toolTranscriptHash),
+        evidence_root: fromHex(params.evidence.root),
+        requested_at_ms: audit.requestedAtMs,
+        completed_at_ms: audit.completedAtMs,
+      }),
+    );
+    const core = params.buildCore(audit, runHash);
+    const bundleCore = new TextDecoder().decode(canonicalCoreBytes(core));
+    const { sealed, seal } = sealRunBundle(core, { runId: audit.runId });
+    let sealedDocument = sealed;
+    if (this.#sealEscrow) {
+      const deadlineMs =
+        params.seat.phase === 1
+          ? params.claim.deadlines.firstRevealDeadlineMs
+          : params.claim.deadlines.secondRevealDeadlineMs;
+      try {
+        const escrow = await this.#sealEscrow.escrowKey({
+          claimId: params.claim.claimId as HexString,
+          jurySeatId: params.seat.jurySeatId as HexString,
+          phase: params.seat.phase,
+          deadlineMs,
+          runId: audit.runId,
+          keyBytes: fromHex(seal.keyHex),
+        });
+        sealedDocument = { ...sealed, escrow };
+      } catch (error) {
+        // Escrow is insurance and must never cost a jury seat.
+        process.stderr.write(
+          `seal-escrow failed: claim ${params.claim.claimId} seat ${params.seat.jurySeatId}: ${
+            error instanceof Error ? error.message : String(error)
+          }\n`,
+        );
+      }
+    }
+    const sealedUpload = await this.#walrus.put(
+      canonicalJsonBytes(sealedDocument),
+      { identifier: `${runId}-sealed-run-bundle.json` },
+    );
+    const retainedUntil = endEpoch(sealedUpload) ?? MAX_LOCAL_WALRUS_EPOCH;
+    // The database keeps the Walrus epoch (renewals); the chain gets Sui epochs.
+    const chainRetainedUntil = await this.chainRetentionEpoch(
+      endEpoch(sealedUpload),
+    );
+    const approval = await this.#gateway.approveRun({
+      claimId: params.claim.claimId,
+      committeeId: params.committee.committeeId,
+      jurySeatId: params.seat.jurySeatId,
+      agentProfileId: params.seat.agentProfileId,
+      agentOwner: params.seat.agentOwner,
+      phase: params.seat.phase,
+      runHash: fromHex(runHash),
+      runBlobId: sealedUpload.blobId,
+      runBlobObjectId: sealedUpload.objectId ?? ZERO_OBJECT_ID,
+      toolBlobId: sealedUpload.blobId,
+      toolBlobObjectId: sealedUpload.objectId ?? ZERO_OBJECT_ID,
+      walrusEndEpoch: chainRetainedUntil,
+    });
+    const timestamp = this.isoNow();
+    const storedAudit: InferenceRunRecord["audit"] = {
+      ...audit,
+      runWalrusBlobId: sealedUpload.blobId,
+      toolTranscriptWalrusBlobId: sealedUpload.blobId,
+      bundleCore,
+    };
+    const run: InferenceRunRecord = {
+      runId: audit.runId,
+      claimId: params.claim.claimId,
+      phase: params.seat.phase,
+      agentProfileId: params.seat.agentProfileId,
+      jurySeatId: params.seat.jurySeatId,
+      attempt: audit.attempt,
+      providerId: "gonkarouter",
+      modelId: params.agent.manifest.modelId,
+      gonkaRequestId: normalized.gonkaRequestId,
+      promptHash: params.promptHash,
+      inputHash: audit.inputHash,
+      outputHash,
+      runHash,
+      runWalrusBlobId: sealedUpload.blobId,
+      ...(sealedUpload.objectId === undefined
+        ? {}
+        : { runWalrusObjectId: sealedUpload.objectId }),
+      sealKeyHex: seal.keyHex,
+      sealIvHex: seal.ivHex,
+      coreHash: seal.coreHash,
+      sealedBlobId: sealedUpload.blobId,
+      ...(sealedUpload.objectId === undefined
+        ? {}
+        : { sealedObjectId: sealedUpload.objectId }),
+      toolTranscriptHash: audit.toolTranscriptHash,
+      toolTranscriptWalrusBlobId: sealedUpload.blobId,
+      ...(sealedUpload.objectId === undefined
+        ? {}
+        : { toolTranscriptWalrusObjectId: sealedUpload.objectId }),
+      walrusEndEpoch: retainedUntil,
+      evidenceRoot: params.evidence.root,
+      validationStatus: "SCHEMA_VALID",
+      latencyMs: audit.latencyMs,
+      ...(audit.inputTokens === undefined ? {} : { inputTokens: audit.inputTokens }),
+      ...(audit.outputTokens === undefined ? {} : { outputTokens: audit.outputTokens }),
+      output: normalized.output,
+      audit: storedAudit,
+      requestedAt: new Date(audit.requestedAtMs).toISOString(),
+      completedAt: new Date(audit.completedAtMs).toISOString(),
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    };
+    await this.#repository.saveInferenceRun(run);
+    const approvalRecord: RunApprovalRecord = {
+      runApprovalId: approval.runApprovalId,
+      runId: run.runId,
+      claimId: params.claim.claimId,
+      jurySeatId: params.seat.jurySeatId,
+      agentProfileId: params.seat.agentProfileId,
+      runHash,
+      transactionDigest: approval.digest,
+      attestor: "operator",
+      validationErrors: [],
+      consumed: false,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    };
+    await this.#repository.saveRunApproval(approvalRecord);
+    await this.updateSeat(params.seat.jurySeatId, {
+      status: "RUN_APPROVED",
+      runHash,
+    });
+    await this.emitRunApproval(params.claim.claimId, run, approvalRecord);
+    // A finished seat commits immediately once the chain accepts the lock.
+    if (this.#now() >= params.commitFloorMs) {
+      await this.queueCommit(params.claim.claimId, params.seat.phase);
     }
   }
 
@@ -2354,6 +2608,201 @@ class OpenVerdictEngine implements Engine {
     );
   }
 
+  /** Cast round two from frozen public material without opening new pages. */
+  private async runTableVoteSeat(
+    claim: ClaimRecord,
+    committee: CommitteeRecord,
+    seat: JurySeatRecord,
+    evidence: EvidenceManifestRecord,
+    artifacts: EvidenceArtifactRecord[],
+    priorRound: PriorRoundPublicRecord,
+    debate: TableVoteDebateTurn[],
+    convergedAfterExchange: 1 | 2 | 3 | null,
+    seatDeadlineMs: number,
+    commitFloorMs: number,
+  ): Promise<void> {
+    const agent = await this.requiredAgent(seat.agentProfileId);
+    const tableVotePromptHash = agent.manifest.tableVotePromptHash;
+    if (tableVotePromptHash === undefined) {
+      throw new EngineValidationError(
+        `agent ${seat.agentProfileId} has no table vote prompt hash; run pnpm tsx scripts/publish-agent-manifests.ts`,
+      );
+    }
+    const baseRunId = deterministicId(
+      `run:${claim.claimId}:${seat.jurySeatId}:${seat.phase}`,
+    );
+    const evidenceManifest = oracleEvidenceManifest(evidence, artifacts);
+    let failureInput: InferenceFailureInput = {
+      kind: "TABLE_VOTE",
+      runId: baseRunId,
+      evidenceManifest,
+    };
+    await this.emit({
+      claimId: claim.claimId,
+      phase: `INFERENCE_${seat.phase}`,
+      kind: "inference_started",
+      source: "GONKA_ROUTER",
+      visibility: "INTERNAL_REDACTED",
+      actorId: seat.agentProfileId,
+      runId: baseRunId,
+      payload: {
+        run_id: baseRunId,
+        agent_id: seat.agentProfileId,
+        provider_id: "gonkarouter",
+        model_id: agent.manifest.modelId,
+        attempt: 1,
+      },
+    });
+    await this.emit({
+      claimId: claim.claimId,
+      phase: `INFERENCE_${seat.phase}`,
+      kind: "agent_activity",
+      source: "ENGINE",
+      visibility: "PUBLIC_NOW",
+      actorId: seat.agentProfileId,
+      runId: baseRunId,
+      payload: { genericStage: "INFERENCE", status: "RUNNING", latencyMs: 0 },
+    });
+
+    try {
+      const [firstTally, firstReveals, firstRuns] = await Promise.all([
+        this.requiredTally(claim.claimId, 1),
+        this.#repository.listReveals(claim.claimId, 1),
+        this.#repository.listInferenceRuns(claim.claimId, 1),
+      ]);
+      const firstReveal = firstReveals.find(
+        (reveal) => reveal.agentProfileId === seat.agentProfileId,
+      );
+      const firstRun = firstRuns.find(
+        (run) => run.agentProfileId === seat.agentProfileId,
+      );
+      const seatIndex = firstReveal === undefined
+        ? -1
+        : firstTally.expectedJurySeatIds.indexOf(firstReveal.jurySeatId);
+      if (
+        firstReveal === undefined ||
+        firstRun?.output === undefined ||
+        firstReveal.runId !== firstRun.runId ||
+        seatIndex < 0
+      ) {
+        throw new EngineStateError(
+          `table vote seat ${seat.jurySeatId} is missing its round one output`,
+        );
+      }
+      const input: TableVoteInput = {
+        protocolVersion: "1.0",
+        kind: "TABLE_VOTE",
+        runId: baseRunId,
+        agentRole: agent.role,
+        claim: {
+          statement: claim.statement,
+          resolutionCriteria: claim.resolutionCriteria,
+        },
+        evidenceManifest,
+        priorRound,
+        debate,
+        convergedAfterExchange,
+        self: {
+          seatIndex,
+          role: agent.role,
+          roundOneOutcome: outcomeLabel(firstReveal.outcome),
+          roundOneConfidenceBps: firstReveal.confidenceBps,
+          roundOneOutput: firstRun.output,
+        },
+        outputContract: {
+          requiredOutcome: true,
+          requiredEvidenceIds: true,
+          maximumReasonLength: 4_000,
+        },
+      };
+      failureInput = input;
+      const messages = buildTableVoteMessages(TABLE_VOTE_PROMPT_SPEC_V1, input);
+      const attempts: GonkaAttemptRecord[] = [];
+      let lastError: unknown = new Error("table vote produced no valid output");
+      for (let call = 0; call < 2; call += 1) {
+        const remainingMs = seatDeadlineMs - this.#now();
+        if (remainingMs <= 0) {
+          lastError = Object.assign(new Error("table vote seat deadline elapsed"), {
+            name: "TimeoutError",
+          });
+          break;
+        }
+        const completion = await this.#gonka.complete({
+          manifest: {
+            ...agent.manifest,
+            promptHash: tableVotePromptHash,
+          },
+          messages,
+          kind: "PRIMARY",
+          jsonMode: true,
+          input,
+          attempts,
+          timeoutMs: Math.min(120_000, remainingMs),
+          maxOutputTokens: TABLE_VOTE_PROMPT_SPEC_V1.maxOutputTokens,
+        });
+        if (!completion.ok) {
+          lastError = completion.error;
+          continue;
+        }
+        const validated = validateTableVote(completion.content, {
+          frozenEvidenceIds: evidenceManifest.items.map(
+            (item) => item.evidenceId,
+          ),
+          maximumReasonLength: input.outputContract.maximumReasonLength,
+        });
+        if (!validated.ok) {
+          // Keep invalid attempts visible even when the second call succeeds.
+          completion.attempt.audit.status = "INVALID_SCHEMA";
+          lastError = new Error(validated.errors.join("; "));
+          continue;
+        }
+        completion.attempt.audit.status = "SCHEMA_VALID";
+        const runResult: GonkaRunResult = {
+          type: "gonka-run-result",
+          attempts,
+          response: completion.response,
+          request: completion.request,
+          gateway: completion.gateway,
+        };
+        await this.finishSeatRun({
+          claim,
+          committee,
+          seat,
+          agent,
+          evidence,
+          input,
+          runResult,
+          output: validated.output,
+          transcript: null,
+          promptHash: tableVotePromptHash,
+          buildCore: (audit, runHash) =>
+            buildTableVoteBundleCore({
+              input,
+              runResult,
+              validatedOutput: validated.output,
+              audit,
+              runHash,
+              promptSpec: TABLE_VOTE_PROMPT_SPEC_V1,
+            }),
+          commitFloorMs,
+        });
+        return;
+      }
+      throw new GonkaRunError(
+        lastError instanceof Error ? lastError.message : String(lastError),
+        attempts,
+      );
+    } catch (error) {
+      await this.persistInferenceFailure(
+        claim,
+        seat,
+        agent,
+        failureInput,
+        error,
+      );
+    }
+  }
+
   private async runSeat(
     claim: ClaimRecord,
     committee: CommitteeRecord,
@@ -2590,213 +3039,51 @@ class OpenVerdictEngine implements Engine {
         request: loop.request,
         gateway: loop.gateway,
       };
-      const adapterAudit = await this.#gonka.buildRunAudit(response);
-      const normalized = {
-        gonkaRequestId: adapterAudit.gonkaRequestId,
-        modelId: adapterAudit.responseModelId ?? adapterAudit.modelId,
-        output: loop.output,
-      };
-      // One canonical run ID spans visible retry attempts for this jury seat.
-      const runId = baseRunId;
-      const outputHash = toHex(blake2b256(canonicalJsonBytes(normalized.output)));
-      const toolTranscriptHash = transcriptHash(loop.transcript);
-      const audit: InferenceRunAudit = {
-        ...adapterAudit,
-        runId: runId as `0x${string}`,
-        claimObjectId: claim.claimId as `0x${string}`,
-        agentProfileId: seat.agentProfileId as `0x${string}`,
-        jurySeatId: seat.jurySeatId as `0x${string}`,
-        phase: seat.phase,
-        modelId: agent.manifest.modelId,
-        responseModelId: normalized.modelId,
-        gonkaRequestId: normalized.gonkaRequestId,
-        inputHash: hashCanonicalJson(input),
-        outputHash,
-        // The sealed blob ID is known only after this core is encrypted and uploaded.
-        runWalrusBlobId: "",
-        toolTranscriptHash,
-        toolTranscriptWalrusBlobId: "",
-        toolCallCount:
-          loop.transcript.counts.searches + loop.transcript.counts.opens,
-        evidenceRoot: evidence.root,
-        ...response.gateway,
-        status: "SCHEMA_VALID",
-      };
-      const runHash = toHex(
-        computeRunHash({
-          run_id: audit.runId,
-          claim_object_id: claim.claimId,
-          agent_profile_id: seat.agentProfileId,
-          jury_seat_id: seat.jurySeatId,
-          phase: seat.phase,
-          attempt: audit.attempt,
-          provider_id: "gonkarouter",
-          model_id: agent.manifest.modelId,
-          gonka_request_id: normalized.gonkaRequestId,
-          prompt_hash: fromHex(agent.manifest.promptHash),
-          input_hash: fromHex(audit.inputHash),
-          output_hash: fromHex(outputHash),
-          tool_transcript_hash: fromHex(audit.toolTranscriptHash),
-          evidence_root: fromHex(evidence.root),
-          requested_at_ms: audit.requestedAtMs,
-          completed_at_ms: audit.completedAtMs,
-        }),
-      );
-      const bundleParams = {
+      await this.finishSeatRun({
+        claim,
+        committee,
+        seat,
+        agent,
+        evidence,
         input,
         runResult: response,
-        validatedOutput: normalized.output,
-        audit,
-        runHash,
+        output: loop.output,
         transcript: loop.transcript,
-      };
-      let core: PublicRunBundleCore;
-      if (researchConfig.bundleVersion === 5) {
-        core = buildRunBundleCore({
-          ...bundleParams,
-          promptSpec: researchConfig.spec,
-          toolPolicy: researchConfig.policy,
-        });
-      } else if (researchConfig.bundleVersion === 4) {
-        core = buildRunBundleCore({
-          ...bundleParams,
-          promptSpec: researchConfig.spec,
-          toolPolicy: researchConfig.policy,
-        });
-      } else {
-        core = buildRunBundleCore({
-          ...bundleParams,
-          promptSpec: researchConfig.spec,
-          toolPolicy: researchConfig.policy,
-        });
-      }
-      const bundleCore = new TextDecoder().decode(canonicalCoreBytes(core));
-      const { sealed, seal } = sealRunBundle(core, { runId: audit.runId });
-      let sealedDocument = sealed;
-      if (this.#sealEscrow) {
-        const deadlineMs =
-          seat.phase === 1
-            ? claim.deadlines.firstRevealDeadlineMs
-            : claim.deadlines.secondRevealDeadlineMs;
-        try {
-          const escrow = await this.#sealEscrow.escrowKey({
-            claimId: claim.claimId as `0x${string}`,
-            jurySeatId: seat.jurySeatId as `0x${string}`,
-            phase: seat.phase,
-            deadlineMs,
-            runId: audit.runId,
-            keyBytes: fromHex(seal.keyHex),
-          });
-          sealedDocument = { ...sealed, escrow };
-        } catch (error) {
-          // Escrow is insurance and must never cost a jury seat.
-          process.stderr.write(
-            `seal-escrow failed: claim ${claim.claimId} seat ${seat.jurySeatId}: ${
-              error instanceof Error ? error.message : String(error)
-            }\n`,
-          );
-        }
-      }
-      const sealedUpload = await this.#walrus.put(
-        canonicalJsonBytes(sealedDocument),
-        { identifier: `${baseRunId}-sealed-run-bundle.json` },
-      );
-      const retainedUntil =
-        endEpoch(sealedUpload) ?? MAX_LOCAL_WALRUS_EPOCH;
-      // The database keeps the Walrus epoch (renewals); the chain gets Sui epochs.
-      const chainRetainedUntil = await this.chainRetentionEpoch(endEpoch(sealedUpload));
-      const approval = await this.#gateway.approveRun({
-        claimId: claim.claimId,
-        committeeId: committee.committeeId,
-        jurySeatId: seat.jurySeatId,
-        agentProfileId: seat.agentProfileId,
-        agentOwner: seat.agentOwner,
-        phase: seat.phase,
-        runHash: fromHex(runHash),
-        runBlobId: sealedUpload.blobId,
-        runBlobObjectId: sealedUpload.objectId ?? ZERO_OBJECT_ID,
-        toolBlobId: sealedUpload.blobId,
-        toolBlobObjectId: sealedUpload.objectId ?? ZERO_OBJECT_ID,
-        walrusEndEpoch: chainRetainedUntil,
-      });
-      const timestamp = this.isoNow();
-      const storedAudit: InferenceRunRecord["audit"] = {
-        ...audit,
-        runWalrusBlobId: sealedUpload.blobId,
-        toolTranscriptWalrusBlobId: sealedUpload.blobId,
-        bundleCore,
-      };
-      const run: InferenceRunRecord = {
-        runId: audit.runId,
-        claimId: claim.claimId,
-        phase: seat.phase,
-        agentProfileId: seat.agentProfileId,
-        jurySeatId: seat.jurySeatId,
-        attempt: audit.attempt,
-        providerId: "gonkarouter",
-        modelId: agent.manifest.modelId,
-        gonkaRequestId: normalized.gonkaRequestId,
         promptHash: agent.manifest.promptHash,
-        inputHash: audit.inputHash,
-        outputHash,
-        runHash,
-        runWalrusBlobId: sealedUpload.blobId,
-        ...(sealedUpload.objectId === undefined
-          ? {}
-          : { runWalrusObjectId: sealedUpload.objectId }),
-        sealKeyHex: seal.keyHex,
-        sealIvHex: seal.ivHex,
-        coreHash: seal.coreHash,
-        sealedBlobId: sealedUpload.blobId,
-        ...(sealedUpload.objectId === undefined
-          ? {}
-          : { sealedObjectId: sealedUpload.objectId }),
-        toolTranscriptHash: audit.toolTranscriptHash,
-        toolTranscriptWalrusBlobId: sealedUpload.blobId,
-        ...(sealedUpload.objectId === undefined
-          ? {}
-          : { toolTranscriptWalrusObjectId: sealedUpload.objectId }),
-        walrusEndEpoch: retainedUntil,
-        evidenceRoot: evidence.root,
-        validationStatus: "SCHEMA_VALID",
-        latencyMs: audit.latencyMs,
-        ...(audit.inputTokens === undefined ? {} : { inputTokens: audit.inputTokens }),
-        ...(audit.outputTokens === undefined ? {} : { outputTokens: audit.outputTokens }),
-        output: normalized.output,
-        audit: storedAudit,
-        requestedAt: new Date(audit.requestedAtMs).toISOString(),
-        completedAt: new Date(audit.completedAtMs).toISOString(),
-        createdAt: timestamp,
-        updatedAt: timestamp,
-      };
-      await this.#repository.saveInferenceRun(run);
-      const approvalRecord: RunApprovalRecord = {
-        runApprovalId: approval.runApprovalId,
-        runId: run.runId,
-        claimId: claim.claimId,
-        jurySeatId: seat.jurySeatId,
-        agentProfileId: seat.agentProfileId,
-        runHash,
-        transactionDigest: approval.digest,
-        attestor: "operator",
-        validationErrors: [],
-        consumed: false,
-        createdAt: timestamp,
-        updatedAt: timestamp,
-      };
-      await this.#repository.saveRunApproval(approvalRecord);
-      await this.updateSeat(seat.jurySeatId, { status: "RUN_APPROVED", runHash });
-      await this.emitRunApproval(claim.claimId, run, approvalRecord);
+        buildCore: (audit, runHash) => {
+          const bundleParams = {
+            input,
+            runResult: response,
+            validatedOutput: loop.output,
+            audit,
+            runHash,
+            transcript: loop.transcript,
+          };
+          if (researchConfig.bundleVersion === 5) {
+            return buildRunBundleCore({
+              ...bundleParams,
+              promptSpec: researchConfig.spec,
+              toolPolicy: researchConfig.policy,
+            });
+          }
+          if (researchConfig.bundleVersion === 4) {
+            return buildRunBundleCore({
+              ...bundleParams,
+              promptSpec: researchConfig.spec,
+              toolPolicy: researchConfig.policy,
+            });
+          }
+          return buildRunBundleCore({
+            ...bundleParams,
+            promptSpec: researchConfig.spec,
+            toolPolicy: researchConfig.policy,
+          });
+        },
+        commitFloorMs,
+      });
     } catch (error) {
       await this.persistInferenceFailure(claim, seat, agent, input, error);
       return;
-    }
-    // Commit this seat now instead of after the slowest seat: one seat that
-    // overruns must not push every commit past the commit deadline. Before
-    // the acceptance floor the chain refuses the lock; the pump in juryRun
-    // picks the run up once the floor has passed.
-    if (this.#now() >= commitFloorMs) {
-      await this.queueCommit(claim.claimId, seat.phase);
     }
   }
 
@@ -2829,7 +3116,7 @@ class OpenVerdictEngine implements Engine {
     claim: ClaimRecord,
     seat: JurySeatRecord,
     agent: AgentManifestRecord,
-    input: OracleInferenceInput,
+    input: InferenceFailureInput,
     error: unknown,
   ): Promise<void> {
     // Surface the underlying cause: the audit row only keeps a category
@@ -2848,6 +3135,10 @@ class OpenVerdictEngine implements Engine {
       terminalFailureStatus(error) ?? failedAudit?.status ?? "PROVIDER_ERROR";
     const timestamp = new Date(timestampMs).toISOString();
     const zeroHash = hashCanonicalJson(null);
+    const promptHash =
+      "kind" in input && input.kind === "TABLE_VOTE"
+        ? agent.manifest.tableVotePromptHash ?? agent.manifest.promptHash
+        : agent.manifest.promptHash;
     let failure: InferenceFailureV1 = {
       version: 1,
       status,
@@ -2893,7 +3184,7 @@ class OpenVerdictEngine implements Engine {
       agentProfileId: seat.agentProfileId as `0x${string}`,
       jurySeatId: seat.jurySeatId as `0x${string}`,
       phase: seat.phase,
-      promptHash: agent.manifest.promptHash,
+      promptHash,
       inputHash: hashCanonicalJson(input),
       evidenceRoot: input.evidenceManifest.root as `0x${string}`,
       status,
@@ -2908,7 +3199,7 @@ class OpenVerdictEngine implements Engine {
       providerId: "gonkarouter",
       modelId: agent.manifest.modelId,
       gonkaRequestId: audit.gonkaRequestId,
-      promptHash: agent.manifest.promptHash,
+      promptHash,
       inputHash: audit.inputHash,
       outputHash: audit.outputHash,
       toolTranscriptHash: audit.toolTranscriptHash,
@@ -3287,7 +3578,8 @@ class OpenVerdictEngine implements Engine {
     document:
       | AgentManifestDocumentV3
       | AgentManifestDocumentV4
-      | AgentManifestDocumentV5,
+      | AgentManifestDocumentV5
+      | AgentManifestDocumentV6,
   ): void {
     if (document.modelId !== manifest.modelId) {
       throw new EngineValidationError(
@@ -3312,6 +3604,27 @@ class OpenVerdictEngine implements Engine {
     ) {
       throw new EngineValidationError(
         `agent ${manifest.agentProfileId} manifest tool policy hash does not match its policy document; run pnpm tsx scripts/publish-agent-manifests.ts`,
+      );
+    }
+  }
+
+  /** Phase two must bind every seat to the one published table-vote prompt. */
+  private assertTableVoteManifestHashes(
+    manifest: AgentManifest,
+    document: AgentManifestDocument,
+  ): void {
+    const expectedHash = tableVotePromptSpecHash();
+    if (
+      manifest.version !== "6" ||
+      document.version !== "6" ||
+      document.modelId !== manifest.modelId ||
+      promptSpecHash(document.tableVotePromptSpec).toLowerCase() !==
+        document.tableVotePromptHash.toLowerCase() ||
+      document.tableVotePromptHash.toLowerCase() !== expectedHash.toLowerCase() ||
+      manifest.tableVotePromptHash?.toLowerCase() !== expectedHash.toLowerCase()
+    ) {
+      throw new EngineValidationError(
+        `agent ${manifest.agentProfileId} table vote manifest is not a matching v6 document; run pnpm tsx scripts/publish-agent-manifests.ts`,
       );
     }
   }
@@ -3672,6 +3985,60 @@ class OpenVerdictEngine implements Engine {
     }
 
     await this.ensureDeliberationTranscriptArtifact(claim);
+  }
+
+  /** Freeze spoken turns in round-one seat order for every table voter. */
+  private async tableVoteDebate(claimId: string): Promise<{
+    debate: TableVoteDebateTurn[];
+    convergedAfterExchange: 1 | 2 | 3 | null;
+  }> {
+    const [tally, reveals, turns] = await Promise.all([
+      this.requiredTally(claimId, 1),
+      this.#repository.listReveals(claimId, 1),
+      this.#repository.listDeliberationTurns(claimId),
+    ]);
+    const seatIndexById = new Map(
+      tally.expectedJurySeatIds.map((jurySeatId, seatIndex) => [
+        jurySeatId,
+        seatIndex,
+      ]),
+    );
+    const debate = turns
+      .filter((turn) => turn.status === "SPOKEN")
+      .sort((left, right) => left.ordinal - right.ordinal)
+      .map((turn): TableVoteDebateTurn => {
+        const seatIndex = seatIndexById.get(turn.jurySeatId);
+        if (
+          seatIndex === undefined ||
+          turn.stance === undefined ||
+          turn.confidenceBps === undefined
+        ) {
+          throw new EngineStateError(
+            `spoken table debate turn ${turn.turnId} is incomplete`,
+          );
+        }
+        return {
+          seat: seatIndex,
+          exchange: turn.exchange,
+          argument: turn.argument,
+          citations: turn.citations,
+          stance: turn.stance,
+          confidenceBps: turn.confidenceBps,
+        };
+      });
+    const roundOneStances = new Map(
+      reveals.map((reveal) => [
+        reveal.jurySeatId,
+        outcomeLabel(reveal.outcome),
+      ]),
+    );
+    return {
+      debate,
+      convergedAfterExchange: debateConvergedAfterExchange(
+        turns,
+        roundOneStances,
+      ),
+    };
   }
 
   private async deliberationDebaters(
@@ -4333,7 +4700,7 @@ export function deliberationTurnInstructions(input: {
   return sentences.join(" ");
 }
 
-function defaultDeadlines(
+export function defaultDeadlines(
   now: number,
   network: ReleaseManifest["network"],
 ): ClaimCreateRequest["deadlines"] {
@@ -4351,7 +4718,7 @@ function defaultDeadlines(
       // tens of seconds per phase; short ladders lose whole windows to it.
       firstCommitDeadlineMs: now + 360_000,
       firstRevealDeadlineMs: now + 480_000,
-      discussionDeadlineMs: now + 540_000,
+      discussionDeadlineMs: now + 600_000,
       secondCommitDeadlineMs: now + 720_000,
       secondRevealDeadlineMs: now + 840_000,
     };
@@ -4390,16 +4757,9 @@ function defaultDeadlines(
   // as long as the first (450 s after the discussion deadline) and the
   // second reveal window stays 120 s: a two-round claim ends about 21 min
   // after the POST, a one-round verdict still at about 10 min.
-  // 2026-09-02 10:30: the debate never spoke. The discussion opens only at
-  // the first reveal deadline (the resolution worker holds a split round
-  // at its fixed boundary) and a turn starts only when it can finish
-  // PER_TURN_BUDGET_MS before the evidence freeze lead ahead of the
-  // discussion deadline, so a 60 s discussion window (+570 s to +630 s)
-  // left every turn WINDOW_EXHAUSTED in any weather. The window is now
-  // 720 s: ten turns (five debaters, two exchanges) at the 60 s budget
-  // plus the 120 s freeze lead. Round two keeps its 450 s commit and
-  // 120 s reveal windows and shifts with it, so a two-round claim ends
-  // about 31 min after the POST; one-round verdicts stay at about 10 min.
+  // 2026-09-02: the 840 s discussion window allows up to fifteen 60 s turns
+  // plus the 120 s freeze lead. The 240 s second commit window allows five
+  // short vote runs plus their approve and commit transactions.
   const second = 1_000;
   return {
     evidenceCutoffMs: now + 60 * second,
@@ -4407,9 +4767,9 @@ function defaultDeadlines(
     challengeDeadlineMs: now + 70 * second,
     firstCommitDeadlineMs: now + 450 * second,
     firstRevealDeadlineMs: now + 570 * second,
-    discussionDeadlineMs: now + 1290 * second,
-    secondCommitDeadlineMs: now + 1740 * second,
-    secondRevealDeadlineMs: now + 1860 * second,
+    discussionDeadlineMs: now + 1410 * second,
+    secondCommitDeadlineMs: now + 1650 * second,
+    secondRevealDeadlineMs: now + 1770 * second,
   };
 }
 
@@ -4603,6 +4963,47 @@ function revealedRunBundleCore(
   }
 }
 
+/** A table vote is valid only when its standard output cites frozen evidence. */
+export function validateTableVote(
+  content: unknown,
+  ctx: {
+    frozenEvidenceIds: readonly string[];
+    maximumReasonLength: number;
+  },
+):
+  | { ok: true; output: OracleInferenceOutput }
+  | { ok: false; errors: string[] } {
+  try {
+    if (typeof content !== "string") {
+      throw new Error("table vote output must be JSON content");
+    }
+    const output = extractJsonObject(content) as OracleInferenceOutput;
+    const evidenceManifest: OracleInferenceInput["evidenceManifest"] = {
+      root: "",
+      items: ctx.frozenEvidenceIds.map((evidenceId) => ({
+        evidenceId,
+        sourceClass: "TABLE_VOTE",
+        retrievedAt: "",
+        walrusBlobId: "",
+        contentHash: "",
+        excerpt: "",
+      })),
+    };
+    validateOutputAgainstManifest(output, evidenceManifest);
+    if (output.reasoning.length > ctx.maximumReasonLength) {
+      throw new Error(
+        `reasoning exceeds ${ctx.maximumReasonLength} characters`,
+      );
+    }
+    return { ok: true, output };
+  } catch (error) {
+    return {
+      ok: false,
+      errors: [error instanceof Error ? error.message : String(error)],
+    };
+  }
+}
+
 type DeliberationOutputValidation =
   | {
       ok: true;
@@ -4714,6 +5115,24 @@ function endEpoch(...uploads: WalrusPutResult[]): number | undefined {
   return epochs.length === 0 ? undefined : Math.min(...epochs);
 }
 
+/** Both rounds must hash the same frozen evidence projection. */
+function oracleEvidenceManifest(
+  manifest: EvidenceManifestRecord,
+  artifacts: EvidenceArtifactRecord[],
+): OracleInferenceInput["evidenceManifest"] {
+  return {
+    root: manifest.root,
+    items: artifacts.map((artifact) => ({
+      evidenceId: artifact.evidenceId,
+      sourceClass: "USER_SUBMITTED",
+      retrievedAt: artifact.retrievedAt,
+      walrusBlobId: artifact.canonicalWalrusBlobId,
+      contentHash: artifact.contentHash,
+      excerpt: artifact.excerpt,
+    })),
+  };
+}
+
 function oracleInput(
   claim: ClaimRecord,
   seat: JurySeatRecord,
@@ -4755,17 +5174,7 @@ function oracleInput(
           : claim.deadlines.secondCommitDeadlineMs,
       ).toISOString(),
     },
-    evidenceManifest: {
-      root: manifest.root,
-      items: artifacts.map((artifact) => ({
-        evidenceId: artifact.evidenceId,
-        sourceClass: "USER_SUBMITTED",
-        retrievedAt: artifact.retrievedAt,
-        walrusBlobId: artifact.canonicalWalrusBlobId,
-        contentHash: artifact.contentHash,
-        excerpt: artifact.excerpt,
-      })),
-    },
+    evidenceManifest: oracleEvidenceManifest(manifest, artifacts),
     ...(priorRound === undefined ? {} : { priorRound }),
     outputContract: {
       requiredOutcome: true,

@@ -12,6 +12,8 @@ import type {
   PromptSpecV3,
   PromptSpecV4,
   ProviderRequestRecord,
+  TableVoteInput,
+  TableVotePromptSpecV1,
   ToolPolicyV2,
 } from "../protocol/types";
 import {
@@ -33,6 +35,7 @@ import {
   DEFAULT_PROMPT_SPEC_V3,
   DEFAULT_PROMPT_SPEC_V4,
   DEFAULT_TOOL_POLICY_V2,
+  TABLE_VOTE_PROMPT_SPEC_V1,
   buildFallbackMessages,
   buildPrimaryMessages,
   buildRepairMessages,
@@ -56,6 +59,7 @@ import {
   isGonkaRunResult,
   type GonkaAttemptKind,
   type GonkaAttemptRecord,
+  type GonkaCompletionInput,
   type GonkaCompletionRequest,
   type GonkaCompletionResult,
   type GonkaInvestigationFlag,
@@ -91,7 +95,7 @@ export interface GonkaAdapterDependencies {
   sleep?: (delayMs: number) => Promise<void>;
   logger?: RedactingLogger;
   auditContext?: (
-    input: OracleInferenceInput,
+    input: OracleInferenceInput | TableVoteInput,
     manifest: AgentManifest,
   ) => Partial<EngineAuditContext>;
 }
@@ -470,7 +474,7 @@ export function createGonkaAdapterWithDependencies(
 
   const engineContextFor = (
     attempts: GonkaAttemptRecord[],
-    input: OracleInferenceInput,
+    input: GonkaCompletionInput,
     manifest: AgentManifest,
   ): Partial<EngineAuditContext> => {
     const existing = auditContexts.get(attempts);
@@ -512,7 +516,7 @@ export function createGonkaAdapterWithDependencies(
 
   const appendProviderFailure = (
     failure: ProviderCallFailure,
-    input: OracleInferenceInput,
+    input: GonkaCompletionInput,
     manifest: AgentManifest,
     attempts: GonkaAttemptRecord[],
   ): void => {
@@ -539,7 +543,7 @@ export function createGonkaAdapterWithDependencies(
 
   const appendAbandonedProviderCall = (
     abandoned: AbandonedProviderCall,
-    input: OracleInferenceInput,
+    input: GonkaCompletionInput,
     manifest: AgentManifest,
     attempts: GonkaAttemptRecord[],
   ): void => {
@@ -570,10 +574,15 @@ export function createGonkaAdapterWithDependencies(
     kind: GonkaAttemptKind,
     messages: GonkaMessage[],
     includeResponseFormat: boolean,
-    input: OracleInferenceInput,
+    input: GonkaCompletionInput,
     manifest: AgentManifest,
     attempts: GonkaAttemptRecord[],
-    spec: PromptSpecV1 | PromptSpecV2 | PromptSpecV3 | PromptSpecV4,
+    spec:
+      | PromptSpecV1
+      | PromptSpecV2
+      | PromptSpecV3
+      | PromptSpecV4
+      | TableVotePromptSpecV1,
     options: {
       requestTimeoutMs?: number;
       maxOutputTokens?: number;
@@ -775,7 +784,7 @@ export function createGonkaAdapterWithDependencies(
     status: "RECEIVED" | "SCHEMA_VALID" | "INVALID_SCHEMA" | "PROVIDER_ERROR",
     flags: GonkaInvestigationFlag[],
     usage: TokenUsage,
-    input: OracleInferenceInput,
+    input: GonkaCompletionInput,
     manifest: AgentManifest,
     attempts: GonkaAttemptRecord[],
   ): GonkaAttemptRecord => {
@@ -809,17 +818,29 @@ export function createGonkaAdapterWithDependencies(
   };
 
   async function complete(
-    request: GonkaCompletionRequest,
+    request: GonkaCompletionRequest<GonkaCompletionInput>,
   ): Promise<GonkaCompletionResult> {
-    const input = oracleInferenceInputSchema.parse(request.input);
+    let input: GonkaCompletionInput;
+    let completionSpec:
+      | PromptSpecV2
+      | PromptSpecV3
+      | PromptSpecV4
+      | TableVotePromptSpecV1;
+    if ("kind" in request.input && request.input.kind === "TABLE_VOTE") {
+      input = request.input;
+      completionSpec = TABLE_VOTE_PROMPT_SPEC_V1;
+    } else {
+      const researchInput = oracleInferenceInputSchema.parse(request.input);
+      input = researchInput;
+      completionSpec =
+        researchInput.promptVersion === "4"
+          ? DEFAULT_PROMPT_SPEC_V4
+          : researchInput.promptVersion === "3"
+            ? DEFAULT_PROMPT_SPEC_V3
+            : researchSpec;
+    }
     assertManifest(request.manifest);
-    // The manifest-selected input version controls research request settings.
-    const completionSpec =
-      input.promptVersion === "4"
-        ? DEFAULT_PROMPT_SPEC_V4
-        : input.promptVersion === "3"
-          ? DEFAULT_PROMPT_SPEC_V3
-          : researchSpec;
+    // The table vote has its own pinned budget and never uses research settings.
     // A seat near its commit deadline bounds the call by the time it has left.
     const callTimeoutMs =
       request.timeoutMs !== undefined && request.timeoutMs > 0
