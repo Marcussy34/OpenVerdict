@@ -8,6 +8,7 @@ import {
   type DeliberationTurnRecord,
   type InferenceRunRecord,
   type RunProofRecord,
+  type VerificationAttemptRecord,
 } from "./index";
 
 const openDatabases: PGlite[] = [];
@@ -343,3 +344,40 @@ describe("storage", () => {
     expect(records.every((event) => event.visibility === "INTERNAL_REDACTED")).toBe(true);
   });
 });
+
+describe("verification attempts", () => {
+  it("saves, updates and lists attempts of one verification", async () => {
+    const repo = await testRepository();
+    const first: VerificationAttemptRecord = {
+      verificationId: "0xaaa",
+      claimId: "0xaaa",
+      attempt: 1,
+      status: "ACTIVE",
+      createdAt: "2026-09-02T00:00:00.000Z",
+      updatedAt: "2026-09-02T00:00:00.000Z",
+    };
+    await repo.saveVerificationAttempt(first);
+    await repo.saveVerificationAttempt({
+      ...first,
+      status: "VOIDED",
+      voidReason: "TIMEOUT",
+      voidedSeatId: "0xseat",
+      relaunchedAs: "0xbbb",
+      updatedAt: "2026-09-02T00:10:00.000Z",
+    });
+    await repo.saveVerificationAttempt({
+      verificationId: "0xaaa",
+      claimId: "0xbbb",
+      attempt: 2,
+      parentClaimId: "0xaaa",
+      status: "ACTIVE",
+      createdAt: "2026-09-02T00:10:00.000Z",
+      updatedAt: "2026-09-02T00:10:00.000Z",
+    });
+    expect((await repo.getVerificationAttempt("0xaaa"))?.status).toBe("VOIDED");
+    expect((await repo.listVerificationAttempts("0xaaa")).map((row) => row.attempt)).toEqual([1, 2]);
+    expect((await repo.listVerificationAttemptsByStatus("VOIDED")).map((row) => row.claimId)).toEqual(["0xaaa"]);
+    expect(await repo.getVerificationAttempt("0xnone")).toBeUndefined();
+  });
+});
+

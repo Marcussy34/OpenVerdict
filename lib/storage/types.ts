@@ -223,6 +223,26 @@ export type DeliberationTurnRecord = DeliberationTurnPublic & {
   updatedAt: string;
 };
 
+export type VerificationAttemptStatus = "ACTIVE" | "VOIDED" | "SETTLED" | "GAVE_UP";
+
+export interface VerificationAttemptRecord {
+  verificationId: string;
+  claimId: string;
+  attempt: 1 | 2 | 3;
+  parentClaimId?: string;
+  status: VerificationAttemptStatus;
+  voidReason?: string;
+  voidMessage?: string;
+  voidedSeatId?: string;
+  voidedModelId?: string;
+  voidedPhase?: 1 | 2;
+  voidedAt?: string;
+  relaunchedAs?: string;
+  gaveUpReason?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface RunApprovalRecord {
   runApprovalId: string;
   runId: string;

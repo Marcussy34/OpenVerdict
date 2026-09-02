@@ -94,6 +94,12 @@ CREATE TABLE IF NOT EXISTS deliberation_turns (
   created_at TEXT NOT NULL, updated_at TEXT NOT NULL, record_json JSONB NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS verification_attempts (
+  claim_id TEXT PRIMARY KEY, verification_id TEXT NOT NULL, attempt INTEGER NOT NULL,
+  status TEXT NOT NULL,
+  created_at TEXT NOT NULL, updated_at TEXT NOT NULL, record_json JSONB NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS tool_calls (
   tool_call_id TEXT PRIMARY KEY, run_id TEXT NOT NULL, call_index INTEGER NOT NULL,
   tool_name TEXT NOT NULL, argument_hash TEXT NOT NULL, result_hash TEXT,
@@ -180,6 +186,8 @@ CREATE INDEX IF NOT EXISTS inference_runs_claim_phase_idx ON inference_runs (cla
 CREATE INDEX IF NOT EXISTS run_proofs_claim_idx ON run_proofs (claim_id);
 CREATE INDEX IF NOT EXISTS deliberation_turns_claim_ordinal_idx
   ON deliberation_turns (claim_id, ordinal);
+CREATE INDEX IF NOT EXISTS verification_attempts_verification_idx ON verification_attempts (verification_id, attempt);
+CREATE INDEX IF NOT EXISTS verification_attempts_status_idx ON verification_attempts (status);
 CREATE INDEX IF NOT EXISTS resolution_events_claim_sequence_idx ON resolution_events (claim_id, sequence);
 `;
 

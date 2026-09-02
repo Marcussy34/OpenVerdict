@@ -210,6 +210,15 @@ export const deliberationTurns = pgTable("deliberation_turns", {
   ...auditColumns(),
 });
 
+/** One row per claim: which attempt of a verification it is and how it ended. */
+export const verificationAttempts = pgTable("verification_attempts", {
+  claimId: text("claim_id").primaryKey(),
+  verificationId: text("verification_id").notNull(),
+  attempt: integer("attempt").notNull(),
+  status: text("status").notNull(),
+  ...auditColumns(),
+});
+
 export const toolCalls = pgTable(
   "tool_calls",
   {
@@ -363,6 +372,7 @@ export const storageSchema = {
   inferenceRuns,
   runProofs,
   deliberationTurns,
+  verificationAttempts,
   toolCalls,
   runApprovals,
   votePackages,

@@ -20,6 +20,8 @@ import type {
   RoundTallyRecord,
   RunApprovalRecord,
   RunProofRecord,
+  VerificationAttemptRecord,
+  VerificationAttemptStatus,
   VotePackageRecord,
 } from "./types";
 
@@ -462,6 +464,49 @@ export class Repository {
       this.db,
       "SELECT record_json FROM deliberation_turns WHERE claim_id = $1 ORDER BY ordinal",
       [claimId],
+    );
+  }
+
+  async saveVerificationAttempt(record: VerificationAttemptRecord): Promise<void> {
+    await saveRecord(this.db, "verification_attempts", ["claim_id"], {
+      claim_id: record.claimId,
+      verification_id: record.verificationId,
+      attempt: record.attempt,
+      status: record.status,
+      created_at: record.createdAt,
+      updated_at: record.updatedAt,
+      record_json: json(record),
+    });
+  }
+
+  async getVerificationAttempt(
+    claimId: string,
+  ): Promise<VerificationAttemptRecord | undefined> {
+    return getRecord<VerificationAttemptRecord>(
+      this.db,
+      "verification_attempts",
+      "claim_id = $1",
+      [claimId],
+    );
+  }
+
+  async listVerificationAttempts(
+    verificationId: string,
+  ): Promise<VerificationAttemptRecord[]> {
+    return listRecords<VerificationAttemptRecord>(
+      this.db,
+      "SELECT record_json FROM verification_attempts WHERE verification_id = $1 ORDER BY attempt",
+      [verificationId],
+    );
+  }
+
+  async listVerificationAttemptsByStatus(
+    status: VerificationAttemptStatus,
+  ): Promise<VerificationAttemptRecord[]> {
+    return listRecords<VerificationAttemptRecord>(
+      this.db,
+      "SELECT record_json FROM verification_attempts WHERE status = $1 ORDER BY created_at",
+      [status],
     );
   }
 
