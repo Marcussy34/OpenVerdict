@@ -3,6 +3,7 @@
 # global symlink at ~/.claude/skills/openverdict-audit.
 #
 # Usage: run.sh <claim link | claim id> [--base <url>] [--json <file>] [--out <file>] [--run <runId>] [--quiet]
+#        run.sh --list [--base <url>] [--limit <n>] [--json <file>]   (the board: every claim, newest first)
 # Exit codes come from scripts/audit-claim.ts: 0 pass (or unavailable),
 # 1 at least one check FAILED, 2 input or fetch error. This wrapper exits 2
 # on its own setup problems (no node, no node_modules).

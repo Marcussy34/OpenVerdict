@@ -3,6 +3,7 @@
  * Public claim auditor CLI (docs/superpowers/specs/2026-09-03-audit-skill-design.md).
  *
  *   pnpm audit:claim <link|id> [--base <url>] [--json <file>] [--out <file>] [--run <runId>] [--quiet]
+ *   pnpm audit:claim --list [--base <url>] [--limit <n>] [--json <file>]
  *
  * Prints the Markdown dossier to stdout (the verdict card only with --quiet),
  * writes it to --out (default .audit/<claimId>.md under the current directory)
@@ -15,7 +16,9 @@ import { dirname, resolve } from "node:path";
 import {
   AuditInputError,
   auditClaim,
+  listBoard,
   parseAuditTarget,
+  renderBoard,
   renderJson,
   renderMarkdown,
   renderVerdictCard,
@@ -29,13 +32,16 @@ type CliOptions = {
   run?: string;
   quiet: boolean;
   help: boolean;
+  list: boolean;
+  limit?: number;
 };
 
 const USAGE =
-  "usage: pnpm audit:claim <link|id> [--base <url>] [--json <file>] [--out <file>] [--run <runId>] [--quiet]";
+  "usage: pnpm audit:claim <link|id> [--base <url>] [--json <file>] [--out <file>] [--run <runId>] [--quiet]\n" +
+  "       pnpm audit:claim --list [--base <url>] [--limit <n>] [--json <file>]";
 
 function parseArgs(argv: string[]): CliOptions {
-  const options: CliOptions = { quiet: false, help: false };
+  const options: CliOptions = { quiet: false, help: false, list: false };
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index]!;
     const value = () => {
@@ -62,6 +68,17 @@ function parseArgs(argv: string[]): CliOptions {
       case "--quiet":
         options.quiet = true;
         break;
+      case "--list":
+        options.list = true;
+        break;
+      case "--limit": {
+        const limit = Number(value());
+        if (!Number.isInteger(limit) || limit < 1 || limit > 200) {
+          throw new AuditInputError("--limit expects a whole number from 1 to 200");
+        }
+        options.limit = limit;
+        break;
+      }
       case "--help":
       case "-h":
         options.help = true;
@@ -84,6 +101,19 @@ function writeFile(path: string, content: string): string {
 
 async function main(): Promise<number> {
   const options = parseArgs(process.argv.slice(2));
+  if (options.list) {
+    // The board: every claim the observer lists, so a user can pick what to audit.
+    const rows = await listBoard(options.base ?? "https://app.openverdict.info", {
+      fetch: globalThis.fetch,
+      ...(options.limit === undefined ? {} : { limit: options.limit }),
+    });
+    if (options.json) {
+      const jsonPath = writeFile(options.json, `${JSON.stringify({ version: 1, generatedAt: new Date().toISOString(), claims: rows }, null, 2)}\n`);
+      process.stderr.write(`audit: board JSON written to ${jsonPath}\n`);
+    }
+    process.stdout.write(renderBoard(rows));
+    return 0;
+  }
   if (options.help || options.input === undefined) {
     process.stderr.write(`${USAGE}\n`);
     return options.help ? 0 : 2;

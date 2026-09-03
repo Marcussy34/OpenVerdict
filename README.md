@@ -259,6 +259,7 @@ writes one Markdown dossier:
 pnpm install
 pnpm audit:claim https://app.openverdict.info/claims/<claimId>   # dossier on stdout and in .audit/<claimId>.md
 pnpm audit:claim <claimId> --json audit.json --out audit.md      # plus a JSON dump of everything fetched
+pnpm audit:claim --list                                          # the board: every claim with state, result, score, attempt
 ```
 
 Exit 0 means every check passed (or a public source was unavailable), 1 means

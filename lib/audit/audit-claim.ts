@@ -2581,6 +2581,80 @@ function provesSentence(result: Pick<AuditResult, "status" | "summary" | "votes"
  * Throws AuditInputError when there is nothing to audit; every other failure
  * is reported inside the result as UNAVAILABLE checks.
  */
+/** One row of the public board (GET {base}/api/claims). */
+export type BoardRow = {
+  claimId: string;
+  link: string;
+  state: number;
+  stateLabel: string;
+  statement: string;
+  result?: string;
+  truthScoreBps?: number;
+  attempt?: string;
+};
+
+/**
+ * List the claims the observer publishes, newest first, for "show me all the
+ * verdicts": one line per claim with its state, result, score and attempt.
+ */
+export async function listBoard(
+  base: string,
+  options: { fetch: typeof fetch; limit?: number },
+): Promise<BoardRow[]> {
+  const url = `${normalizeBase(base)}/api/claims?limit=${options.limit ?? 50}`;
+  const response = await options.fetch(url, { headers: { accept: "application/json" } });
+  if (!response.ok) throw new AuditInputError(`board request failed: HTTP ${response.status} (${url})`);
+  const body = (await response.json()) as unknown;
+  // The observer may ignore the limit, so it is applied here as well.
+  const claims = (isRecord(body) ? asArray(body.claims) : []).slice(0, options.limit ?? 50);
+  return claims.filter(isRecord).map((claim) => {
+    const claimId = asString(claim.claimId) ?? "";
+    const state = asNumber(claim.state) ?? -1;
+    const result = isRecord(claim.result) ? claim.result : undefined;
+    const chain = isRecord(claim.attemptChain) ? claim.attemptChain : undefined;
+    const attempt = chain
+      ? `${asNumber(chain.attempt) ?? "?"} of ${asNumber(chain.maxAttempts) ?? "?"} ${asString(chain.status) ?? ""}`.trim()
+      : undefined;
+    return {
+      claimId,
+      link: claimLink(normalizeBase(base), claimId),
+      state,
+      stateLabel: STATE_LABELS[state] ?? `state ${state}`,
+      statement: asString(claim.statement) ?? "",
+      ...(result && asString(result.result) ? { result: asString(result.result) } : {}),
+      ...(result && asNumber(result.truthScoreBps) !== undefined
+        ? { truthScoreBps: asNumber(result.truthScoreBps) }
+        : {}),
+      ...(attempt ? { attempt } : {}),
+    };
+  });
+}
+
+/** Markdown table of the board, the shape the skill presents before auditing. */
+export function renderBoard(rows: BoardRow[]): string {
+  const header = [
+    "| # | Claim | State | Result | Attempt | Statement |",
+    "| --- | --- | --- | --- | --- | --- |",
+  ];
+  const lines = rows.map((row, index) => {
+    const score = row.truthScoreBps === undefined ? "" : ` ${bpsToPercent(row.truthScoreBps)}`;
+    const result = row.result ? `${row.result}${score}` : "-";
+    const statement = row.statement.replace(/\|/g, "\\|").slice(0, 90);
+    return `| ${index + 1} | ${shortHex(row.claimId)} | ${row.stateLabel} | ${result} | ${row.attempt ?? "-"} | ${statement} |`;
+  });
+  const links = rows.map((row, index) => `- ${index + 1}: ${row.claimId} ${row.link}`);
+  return [
+    `# OpenVerdict board (${rows.length} claims, newest first)`,
+    "",
+    ...header,
+    ...lines,
+    "",
+    "Full ids and links:",
+    ...links,
+    "",
+  ].join("\n");
+}
+
 export async function auditClaim(target: AuditTarget, options: AuditOptions): Promise<AuditResult> {
   const net = new Net(options);
   const now = (options.now ?? Date.now)();

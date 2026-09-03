@@ -44,6 +44,8 @@ import {
   renderVerdictCard,
   type AuditCheck,
   type AuditResult,
+  listBoard,
+  renderBoard,
 } from "./audit-claim";
 
 const FIXTURES = join(dirname(fileURLToPath(import.meta.url)), "__fixtures__");
@@ -1321,5 +1323,51 @@ describe("auditClaim when a source is down", () => {
     expect(find(result, "C2", "PASS")).toHaveLength(5);
     expect(find(result, "C3", "PASS")).toHaveLength(5);
     expect(find(result, "S1", "PASS")).toHaveLength(1);
+  });
+});
+
+describe("listBoard", () => {
+  it("lists the board newest first with state, result, score and attempt", async () => {
+    const fetchBoard: typeof fetch = async (input) => {
+      expect(String(input)).toBe("https://example.test/api/claims?limit=2");
+      return new Response(
+        JSON.stringify({
+          claims: [
+            {
+              claimId: "0xaaaa",
+              state: 10,
+              statement: "Water boils at 100 C at sea level.",
+              result: { result: "YES", truthScoreBps: 9250 },
+              attemptChain: { attempt: 1, maxAttempts: 3, status: "SETTLED" },
+            },
+            { claimId: "0xbbbb", state: 4, statement: "A | pipe", attemptChain: { attempt: 2, maxAttempts: 3, status: "VOIDED" } },
+            { claimId: "0xcccc", state: 11, statement: "third" },
+          ],
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    };
+    const rows = await listBoard("https://example.test/", { fetch: fetchBoard, limit: 2 });
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).toMatchObject({
+      claimId: "0xaaaa",
+      stateLabel: "FINALIZED_REVIEWED",
+      result: "YES",
+      truthScoreBps: 9250,
+      attempt: "1 of 3 SETTLED",
+      link: "https://example.test/claims/0xaaaa",
+    });
+    expect(rows[1]).toMatchObject({ claimId: "0xbbbb", stateLabel: "COMMIT_1", attempt: "2 of 3 VOIDED" });
+    expect(rows[1]).not.toHaveProperty("result");
+    const table = renderBoard(rows);
+    expect(table).toContain("| 1 | 0xaaaa | FINALIZED_REVIEWED | YES 92.50 | 1 of 3 SETTLED | Water boils at 100 C at sea level. |");
+    // A pipe inside a statement must not break the table.
+    expect(table).toContain("A \\| pipe");
+    expect(table).toContain("- 1: 0xaaaa https://example.test/claims/0xaaaa");
+  });
+
+  it("fails with a plain message when the board request fails", async () => {
+    const failing: typeof fetch = async () => new Response("nope", { status: 503 });
+    await expect(listBoard("https://example.test", { fetch: failing })).rejects.toThrow(/board request failed: HTTP 503/);
   });
 });
