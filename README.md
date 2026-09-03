@@ -4,9 +4,14 @@
 
 See how the verdict was reached.
 
-**A decentralized verification protocol for factual claims: AI juries research,
-vote in secret and debate in public on Gonka; verdicts settle on Sui as
+**A decentralized adversarial AI jury protocol for factual disputes: jurors
+from three model families research independently, cast commit-reveal secret
+ballots, and cross-examine deadlocks on Gonka; verdicts settle on Sui as
 certificates anyone can recompute.**
+
+Not an agent swarm: five juror seats drawn on-chain, a 4-of-5 quorum,
+sealed ballots, a bounded debate over a frozen record, and `UNRESOLVED` as
+an honest outcome.
 
 **Live on Sui testnet:** [openverdict.info](https://openverdict.info) · [app.openverdict.info](https://app.openverdict.info)
 
@@ -62,6 +67,12 @@ SUI is the working currency. (Full write-up: [appendix](#appendix-the-idea-in-fu
 
 Every claim runs round one; only a deadlock runs round two.
 
+The words used throughout: a **juror** occupies a **seat** (an on-chain
+`JurySeat` governed by an `AgentCap`, never a free-floating worker
+process); the five seats form the **committee**, and **4 of 5** is the
+**quorum**; round two is **cross-examination**; the settled verdict is the
+**resolution certificate**.
+
 ### 🤫 Round One (every claim) 🤫
 
 **Step 1: Independent research**
@@ -79,6 +90,8 @@ Every claim runs round one; only a deadlock runs round two.
 - Each juror's sealed work file goes to Walrus, its key **time-locked with Seal**
 - Votes **open together**, checked against the locks
 
+**Commit-reveal prevents informational cascades:** no juror can anchor on or herd around another juror's reasoning before sealing its own stance. In a naive model swarm the first answer becomes everyone's prompt context; here nobody sees a ballot until all are sealed.
+
 <img src="docs/assets/hairline.svg" width="100%" height="1" alt="" />
 
 **Step 3: Consensus check**
@@ -94,10 +107,10 @@ Every claim runs round one; only a deadlock runs round two.
 
 - Revealed jurors bring their round-one evidence and vote **to the table** and **argue in seat order**, streamed **live**; every turn is its own GonkaRouter run
 - Each turn states a **current stance and confidence**; up to **three exchanges**, and the debate **stops early when nobody moves**
-- They challenge each other's reasoning, citing **only the frozen record**
+- They cross-examine each other's **interpretations of the frozen evidence root**; a juror may cite **only evidence ids from the frozen record**, and a turn that cites anything else is rejected, so no new or invented facts enter the debate
 - The transcript is **frozen into the evidence on Walrus**
 
-**Adversarial verification in the open, not blind discussion.**
+**Adversarial cross-examination in the open, not an ungrounded chat between bots.**
 
 <img src="docs/assets/hairline.svg" width="100%" height="1" alt="" />
 
@@ -177,7 +190,7 @@ dark mode).
 
 | Layer | Technology | Purpose |
 | --- | --- | --- |
-| AI inference | GonkaRouter (`/v1/chat/completions`, 4096-token output cap; three model families) | Every oracle-agent reasoning pass; no hidden fallback; hedged same-model calls after 25 s |
+| AI inference | GonkaRouter (`/v1/chat/completions`, 4096-token output cap; three model families) | Every juror reasoning pass; no hidden fallback; hedged same-model calls after 25 s |
 | Juror research | Firecrawl v2 REST through the engine | Engine-executed web search and page reads; every step recorded and hashed |
 | Protocol | Sui Move (edition 2024, sui CLI 1.78) | Objects, capabilities, native randomness, commit-reveal, settlement |
 | Reveal-key escrow | Mysten Seal (`@mysten/seal` 1.4, time-lock policy package on testnet) | Sealed bundles openable by anyone after the reveal deadline, without the operator |
@@ -354,7 +367,7 @@ per-sponsor in the next section).
 
 | Pillar | What it provides | Why it is irreplaceable here | Track requirement satisfied |
 | --- | --- | --- | --- |
-| **Gonka (GonkaRouter): the only mind** | Every reasoning pass: claim extraction, five independent research runs, each debate turn, each table vote. Three model families behind one gateway, with a request id, devshard id and fingerprint kept for every call. | A jury is only as independent as its minds. One gateway serving three families lets the protocol enforce "no family holds a majority" and pin each juror's model in a manifest; the request ids are the receipts a verifier re-checks against Gonka's public lookup. A single vendor would make the jury steerable and unverifiable. | Gonka track: all AI reasoning through GonkaRouter, URL or text input, multi-model cross-verification, Truth Score with a reasoning trace, Gonka Request IDs shown. |
+| **Gonka (GonkaRouter): the only mind** | Every reasoning pass: claim extraction, five independent research runs, each debate turn, each table vote. Three model families behind one gateway, with a request id, devshard id and fingerprint kept for every call. | A jury is only as independent as its minds. Correlated-failure resistance: identical models share the same training blind spots and alignment priors, so five copies of one model debating is one opinion five times. The committee rule mandates three families (DeepSeek, Kimi, MiniMax) with at most two seats per family, so no single architecture or vendor can dictate the quorum. One gateway serving three families is what makes that rule enforceable and pins each juror's model in a manifest; the request ids are the receipts a verifier re-checks against Gonka's public lookup. | Gonka track: all AI reasoning through GonkaRouter, URL or text input, multi-model cross-verification, Truth Score with a reasoning trace, Gonka Request IDs shown. |
 | **Sui: the only judge** | The clock and the court: claims and deadlines as objects, the jury drawn by native randomness under family limits, commit-reveal enforced in Move, evidence roots frozen before any reveal, the immutable certificate and Truth Score, payout tickets, the demo pool that settles on the certificate, zkLogin seat backing. | Nobody picks the judges (native randomness) and nobody edits the result (Move rules, immutable objects). The verdict is not a number a judge is asked to trust; it is something the chain acts on: it settles the pool and pays the seats. | Sui Track 02: Sui is integral, ownership and identity as owned objects, on-chain execution of deadlines, thresholds and payouts, a working live demo path. |
 | **Walrus + Seal (Mysten): the only memory** | The public record: claim text, every page a juror opened, evidence manifests, sealed and revealed run bundles, debate transcripts, failure records, all content-addressed and hash-pinned on Sui. Seal time-locks each reveal key so sealed bundles open after the deadline without the operator. | "Anyone can recompute" is only true if the bytes are public and cannot be swapped. Walrus gives the bytes an address the on-chain hash commits to; Seal removes the operator from the reveal path. Without this pillar the verification checks have nothing to run on. | Sui Track 02 signals: Walrus evidence layer, reveal-key escrow with Seal, recheck everything in the browser. |
 
@@ -386,7 +399,7 @@ and the chain does not get shorter; it breaks.
 | --- | --- |
 | All AI reasoning/verification through GonkaRouter | Single adapter, host-pinned to gonkarouter.io in code; no other provider; fail-closed on outage |
 | URL or text input | `/fact-check` and CLI accept claim, URLs, or both |
-| Multi-model cross-verification | 5 agents spanning all three GonkaRouter model families, no model majority, each juror researching both sides of the claim |
+| Multi-model cross-verification | 5 juror seats spanning all three GonkaRouter model families, no family majority, each juror researching both sides of the claim |
 | Truth Score 0–100 + reasoning trace | Deterministic, recomputable; evidence-linked public traces with the full research trail, never chain-of-thought |
 | Gonka Request IDs | Response `id`, `x-request-id`, devshard id and fingerprint preserved verbatim for every attempt, shown after reveal |
 
@@ -471,13 +484,22 @@ to on-chain before anyone reveals.
 
 ## ❓ Judge defence (short form)
 
-- **“AI agents aren't reliable.”** Five independent agents, frozen evidence,
-  4-of-5 threshold, and `UNRESOLVED` as a first-class outcome — the system
-  never manufactures certainty.
+- **“AI agents aren't reliable.”** Five independent juror seats, frozen
+  evidence, a 4-of-5 quorum, and `UNRESOLVED` as a first-class outcome — the
+  system never manufactures certainty.
+- **“Why doesn't the round-two debate amplify hallucinations like agent
+  swarms do?”** Most swarms hallucinate in loops because context accumulates
+  unchecked. Deliberation here is strictly bounded: (1) the evidence is
+  frozen on Walrus before the debate starts and a juror may cite only ids
+  from that record, never an outside URL or a new claim; (2) turns are capped
+  at three exchanges and stop early when nobody moves; (3) the second vote
+  is a sealed ballot over the frozen record, not a negotiated consensus; (4)
+  when the quorum is still missing the claim exits cleanly to `UNRESOLVED`
+  instead of forcing synthetic agreement.
 - **“Can the backend change votes?”** No: votes bind to on-chain commitments
   before reveal; anyone can recompute `blake2b256(BCS(preimage))` — the app
   even does it for you at `/verify`.
-- **“Do agents browse or transact?”** They research, but only through the
+- **“Do the jurors browse or transact?”** They research, but only through the
   engine: every web search and page open is executed server-side, recorded
   in the sealed transcript and hashed into the on-chain run hash; models
   never fetch, never hold keys, never sign. No wallet keys near models.
@@ -517,7 +539,7 @@ The long-form defence and full protocol semantics live in [PRD.md](./docs/PRD.md
 ## Appendix: the idea in full
 
 GonkaRouter-powered AI juries, coordinated and settled on Sui, with public
-evidence and agent work preserved on Walrus. The long-form one-liner:
+evidence and juror deliberation trails preserved on Walrus. The long-form one-liner:
 a decentralized verification protocol for factual claims where requesters
 fund claims in SUI, standardized AI juror seats investigate them through
 GonkaRouter-only inference, and Sui settles the verdict, the payouts and the
@@ -526,12 +548,12 @@ permanent record.
 OpenVerdict resolves questions that require evidence and judgment rather than
 one number from a price feed.
 
-Each agent request enters the decentralized Gonka network through GonkaRouter.
+Each juror request enters the decentralized Gonka network through GonkaRouter.
 Independent Gonka Hosts execute the actual LLM inference off-chain, while
 Gonka's L1 records inference inputs, outputs, and validation artifacts. Sui
 separately coordinates the OpenVerdict jury, enforces commitments and
 deadlines, records the result as objects, and settles the economic outcome.
-Walrus preserves the public evidence and agent work.
+Walrus preserves the public evidence and the juror deliberation trails.
 GonkaRouter is the exclusive inference provider by protocol rule: juror
 research and verdicts, the deliberation round, claim extraction and the
 re-execution check all run on gonkarouter.io, the adapter refuses any other
@@ -539,7 +561,7 @@ host in code, and a seat that cannot reach Gonka fails closed rather than
 falling back to another AI provider.
 
 The model in one line: Gonka is the only mind, Sui is the only judge, and
-SUI is the working currency. Claim budgets escrow at `create_claim`, agent
+SUI is the working currency. Claim budgets escrow at `create_claim`, juror
 bonds are `Balance<SUI>` in the registry, jury rewards and refunds move as
 one-time payout tickets, and the demo binary pool consumes certificates;
 delegated seat backing (stake SUI behind a seat, share its earnings) is the
@@ -559,7 +581,7 @@ OpenVerdict turns dispute resolution into a:
 
 The hackathon entry point is a public fact checker: state one bounded claim (the API and CLI still accept optional URLs and text)
 and receive a multi-model verdict, a transparent Truth Score, evidence-linked
-public reasoning traces, and the Gonka Request ID for every agent run. A
+public reasoning traces, and the Gonka Request ID for every juror run. A
 prediction market is the first economic consumer of that verdict. The engine is
 general enough to later resolve DAO milestones, grants, bounties, agent-service
 disputes, and other bounded questions.
