@@ -2320,3 +2320,84 @@ since 13:51): now 2000 cycles, pid in `ps`, first seed "Raising the
 minimum wage reduces overall employment." Board watcher (24 h loop from
 19:43) streams into the lead session. Weather at 21:40: DeepSeek 429,
 MiniMax ok, Kimi TIMEOUT, research ok: still not clear.
+
+## 3am. NIGHT 2026-09-04 02:40: REAL STAKE SHIPPED, PACKAGE UPGRADED, LIVE STAKED SEAT (read 3al then this)
+
+OWNER (01:20 to 01:45, then asleep): asked why "one seat per owner" and
+why stake matters when it cannot change a vote; agreed that stake never
+touches the verdict; approved the long-term fix and the code changes
+("we can make code changes, its fine", "ok we can do that", "ok please
+continue till the end"). Minimum stake 0.1 SUI (lead's suggestion).
+Spec: docs/superpowers/specs/2026-09-04-real-stake-design.md (045ce9c).
+
+SHIPPED (three Opus workers in parallel, reviewed by the lead; commits
+b9ebada move, 9d043a1 engine, b213d19 ui, 0cb88a0 config; all pushed):
+- Move (agent_registry, jury, settlement): register_staked_agent (staker
+  posts the bond, 0.1 SUI minimum, names the operational owner, gets a
+  StakePosition; the registry stores PayoutRecipientKey{profile} -> staker),
+  request_unstake / complete_unstake (deactivates the seat, 24 h delay,
+  pays what is left of the bond, never blocked by pause), payout_recipient
+  reader. The draw dropped the per-staker cap (contains_human_hash and
+  all_unique_hashes are gone); caps left: two per model, three families,
+  one per operational key, role rules. Committees carry a CommitteePayouts
+  dynamic field resolved at selection; settlement routes REASON_JURY_REWARD
+  tickets through payout_recipient_for_expected_index (owner fallback for
+  committees drawn before the upgrade). Move tests 88 (was 76).
+- Engine/API: POST /api/agents/stake/prepare {address, modelId, role} ->
+  {reservationId, expiresAt, target{packageId, registryObjectId,
+  clockObjectId}, args{manifestHash, manifestBlobId, modelHash, roleHash,
+  stakerHash, operationalOwner}, minStakeMist}; POST /api/agents/stake/
+  confirm {reservationId, digest} -> {agentProfileId, staker, stakeMist,
+  digest, backingKind WALLET_STAKED, operationalOwner, gasFloat}. Table
+  stake_reservations (15 min TTL). Slots from OPENVERDICT_AGENT_SLOTS
+  (default 16, minimum 7; demo agents keep 0 to 6; re-bound by owner
+  address on boot). Gas float 0.3 SUI from the operator to the seat's key
+  when below 0.2. Sponsor allowlist accepts agent_registry::
+  register_staked_agent. The signed-message route answers 403
+  free_seats_disabled unless OPENVERDICT_FREE_SEATS=enabled. `pnpm
+  stake:seat` drives the whole flow from a terminal.
+- UI/docs: components/agents/stake-seat-card.tsx (prepare, sponsor, sign,
+  confirm; wallet-gas fallback), stake-line.tsx, agents pages show
+  "Staked 0.10 SUI by 0x...", learn page, landing FAQ, README, PRD,
+  skill reference and faq state the new facts.
+- Gates at b213d19: typecheck clean, lint 0 errors, 787 tests, 88 Move
+  tests, full localnet E2E PASS twice (worker run and lead run) incl. the
+  new step 3b "sponsored staked seat" and all lifecycles.
+
+TESTNET UPGRADE 02:15: tx 5ANxGtQBxj5mN7VUzCC9vwnE3c3qTb7HitJfCh5M83me,
+new packageId 0x1f7b684d36979046a077b38caae8d567616bc691f23b018e65ac194d314f0c13
+(calls), originalPackageId 0xa9f3c2db... unchanged (types). The upgrade
+script now matches the UpgradeCap by current or original package id; it
+still could not read the published id from the response, so the id was
+taken from sui_getTransactionBlock objectChanges (type "published").
+Bytecode built with `sui move build --dump-bytecode-as-base64 --build-env
+testnet --no-tree-shaking --path move/openverdict`.
+
+DEPLOY 02:25: railway up from the repaired deploy worktree (its .git
+link had vanished; `git worktree repair` plus `git checkout -- .` restored
+165 deleted files; the Railway link survived). SUCCESS after 2 min.
+/api/status reports the new packageId; prepare validates; register
+answers 403 free_seats_disabled. Seeder paused during the deploy, then
+unpaused.
+
+LIVE STAKED SEAT 02:32 (`pnpm stake:seat --base https://app.openverdict.info
+--model deepseek-ai/DeepSeek-V4-Flash-0731 --role SKEPTIC`): throwaway
+staker 0x9cd8dcd0... funded 0.2 SUI by the operator (tx A1PNeUd4...),
+manifest SnONybvX... on Walrus, gas paid by Shinami (gas owner
+0x1c1a56df...), profile 0x81a737262c820dfff6861ba57b35f494b7dc9a558a941b55fa932d7de8add1ba,
+position 0xabea9581..., digest 62wbWxHqEPd2JXZ6tGUfEb9vE6zm6sT7y7H441fStsHn,
+seat key 0xa2661d6c... holds the 0.3 SUI float. Registry: 8 eligible, 8
+active, PayoutRecipientKey dynamic field present. /api/agents lists the
+seat with staker, stakeMist 100000000, kind WALLET. The seat is a real
+DeepSeek skeptic juror run by the engine (slot 7). The throwaway key is
+not stored, so this seat cannot be unstaked (0.2 SUI, accepted).
+Shinami fund 4.988 SUI.
+
+BOARD: weather closed all night (no clear probe since 13:51), nothing
+live, seeder armed with "Raising the minimum wage reduces overall
+employment.", board watcher streaming to the lead.
+
+LEFTOVERS: the upgrade script's published-id fallback; the on-chain
+Display string; rotate the Shinami key after the demo; double-debate cost
+fix; several stakers per seat, stake-weighted draw, slashing rules,
+independent operators (spec "Out of scope").
