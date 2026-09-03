@@ -1809,7 +1809,8 @@ describe("headless engine", () => {
       ]),
       walrusBlobId: expect.any(String),
     });
-    expect(failed.failure.attempts).toHaveLength(4);
+    // One more attempt than before: malformed answers now get two repairs.
+    expect(failed.failure.attempts).toHaveLength(5);
 
     const failedWrite = put.mock.calls.find(
       ([, options]) => options?.identifier === `${expectedRunId}-failed-run.json`,

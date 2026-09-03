@@ -571,8 +571,8 @@ describe("research loop", () => {
     ).toBe(true);
   });
 
-  it("fails closed after two invalid action replies", async () => {
-    const script = scriptedCompletion(["not json", "still not json"]);
+  it("fails closed after three invalid action replies (two repairs)", async () => {
+    const script = scriptedCompletion(["not json", "still not json", "never json"]);
 
     const result = await runResearchLoop(
       loopDependencies({ complete: script.complete }),
@@ -581,12 +581,13 @@ describe("research loop", () => {
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.status).toBe("INVALID_SCHEMA");
-    expect(result.transcript.steps).toHaveLength(2);
+    expect(result.transcript.steps).toHaveLength(3);
     expect(result.transcript.steps[0]?.result).toMatchObject({
       tool: "error",
       code: "INVALID_ACTION",
     });
     expect(result.attempts.map((attempt) => attempt.audit.status)).toEqual([
+      "INVALID_SCHEMA",
       "INVALID_SCHEMA",
       "INVALID_SCHEMA",
     ]);
@@ -652,9 +653,10 @@ describe("research loop", () => {
       url,
       quote: "This page discusses submitted in detail.",
     });
-    // Two RESEARCH_REQUIRED nudges, then validation fails, one repair, fail closed.
+    // Two RESEARCH_REQUIRED nudges, then validation fails, two repairs, fail closed.
     const script = scriptedCompletion([
       action({ action: "open", url }),
+      answer,
       answer,
       answer,
       answer,
@@ -681,6 +683,7 @@ describe("research loop", () => {
     ).toHaveLength(2);
     expect(result.attempts.map((attempt) => attempt.audit.status)).toEqual([
       "SCHEMA_VALID",
+      "CITATION_INVALID",
       "CITATION_INVALID",
       "CITATION_INVALID",
       "CITATION_INVALID",

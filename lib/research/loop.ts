@@ -167,6 +167,8 @@ const SEARCH_INTENT_REQUIRED_MESSAGE =
 
 /** Premature YES/NO answers refused before the usual validation and repair take over. */
 const MAX_RESEARCH_NUDGES = 2;
+/** Malformed final answers get this many repair rounds before the seat fails closed. */
+const MAX_ANSWER_REPAIRS = 2;
 /**
  * Provider retries per model call: 429 shedding and 524 timeouts come in
  * bursts that can outlast a minute (a storm at 01:48 on 2026-09-03 cost three
@@ -291,7 +293,11 @@ export async function runResearchLoop(
     (item) => item.evidenceId,
   );
   let jsonMode = true;
-  let repaired = false;
+  // Answer repairs: a malformed final answer gets the errors back and another
+  // try. One repair was not enough for a model that writes a sentence where
+  // an evidence-id array belongs (MiniMax, decisiveEvidence, 2026-09-03), and
+  // under the all-or-nothing rule that one seat voids the verification.
+  let repairs = 0;
   let researchNudges = 0;
   let challengeNudges = 0;
   let corroborationNudges = 0;
@@ -416,7 +422,7 @@ export async function runResearchLoop(
     counts.turns = turn;
     const kind: GonkaAttemptKind = turn === 1
       ? "PRIMARY"
-      : repaired
+      : repairs > 0
         ? "REPAIR"
         : "PRIMARY";
     const timeout = timeLeftMs === undefined ? {} : { timeoutMs: timeLeftMs };
@@ -497,8 +503,8 @@ export async function runResearchLoop(
         code: "INVALID_ACTION",
         message: parsed.error,
       });
-      if (!repaired && turn < policy.maxTurns) {
-        repaired = true;
+      if (repairs < MAX_ANSWER_REPAIRS && turn < policy.maxTurns) {
+        repairs += 1;
         push(
           toolResultContent(
             errorToolResult(
@@ -1140,8 +1146,8 @@ export async function runResearchLoop(
       valid: false,
       errors: validationErrors,
     });
-    if (!repaired && turn < policy.maxTurns) {
-      repaired = true;
+    if (repairs < MAX_ANSWER_REPAIRS && turn < policy.maxTurns) {
+      repairs += 1;
       push(
         toolResultContent(
           errorToolResult(
