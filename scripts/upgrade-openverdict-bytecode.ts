@@ -156,6 +156,17 @@ async function main(): Promise<void> {
     )?.objectId;
   }
   if (!newPackageId) {
+    // The core read above returns no "published" change on some RPCs; the
+    // JSON-RPC object changes always carry the new package id.
+    const legacy = await client.getTransactionBlock({
+      digest: txDigest,
+      options: { showObjectChanges: true },
+    });
+    const published = legacy.objectChanges?.find((change) => change.type === "published");
+    newPackageId =
+      published && "packageId" in published ? String(published.packageId) : undefined;
+  }
+  if (!newPackageId) {
     throw new Error(
       `upgrade executed (${txDigest}); read the published package id from the explorer and set packageId (calls) and originalPackageId (types) in ${testnetConfigPath}`,
     );
