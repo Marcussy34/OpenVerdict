@@ -135,17 +135,33 @@ async function main(): Promise<void> {
   if (status?.status === "failure") {
     throw new Error(status.error ?? "package upgrade failed");
   }
-  const created = (submitted as { objectChanges?: Array<{ type: string; packageId?: string }> })
+  // The executing client does not always return object changes inline;
+  // read the transaction back and take the published package from it.
+  const changes = (submitted as { objectChanges?: Array<{ type: string; packageId?: string }> })
     .objectChanges;
-  const published = created?.find((change) => change.type === "published");
-  if (!published?.packageId) {
-    throw new Error(`upgrade executed (${txDigest}) but no published package in the object changes`);
+  let newPackageId = changes?.find((change) => change.type === "published")?.packageId;
+  if (!newPackageId) {
+    // The new package is the one created object written as a package.
+    const fetched = await client.core.getTransaction({
+      digest: txDigest,
+      include: { effects: true },
+    });
+    const changed = (fetched as { transaction?: { effects?: { changedObjects?: Array<{ objectId: string; idOperation: string; outputState: string }> } } })
+      .transaction?.effects?.changedObjects ?? [];
+    newPackageId = changed.find(
+      (change) => change.idOperation === "Created" && change.outputState === "PackageWrite",
+    )?.objectId;
   }
-  const updated = { ...config, packageId: published.packageId, originalPackageId };
+  if (!newPackageId) {
+    throw new Error(
+      `upgrade executed (${txDigest}); read the published package id from the explorer and set packageId (calls) and originalPackageId (types) in ${testnetConfigPath}`,
+    );
+  }
+  const updated = { ...config, packageId: newPackageId, originalPackageId };
   const tmp = `${testnetConfigPath}.tmp`;
   await writeFile(tmp, `${JSON.stringify(updated, null, 2)}\n`, "utf8");
   await rename(tmp, testnetConfigPath);
-  console.log(`upgraded to  ${published.packageId}`);
+  console.log(`upgraded to  ${newPackageId}`);
   console.log(`digest       ${txDigest}`);
   console.log(`explorer     https://suiscan.xyz/testnet/tx/${txDigest}`);
 }
