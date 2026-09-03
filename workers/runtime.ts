@@ -90,6 +90,17 @@ class TickSerializer {
 
 /** Run a bounded polling tick until SIGINT/SIGTERM requests a clean stop. */
 export async function runWorker(options: WorkerRuntimeOptions): Promise<void> {
+  // A rejection nobody awaited (an SDK helper resolving coins for a Walrus
+  // write, 2026-09-03 13:25) took the inference worker down, and the process
+  // supervisor stops every worker and the web when one exits. Log it and keep
+  // going: whatever depended on it fails closed on its own awaited path.
+  process.on("unhandledRejection", (reason) => {
+    process.stderr.write(
+      `${options.name}: unhandled rejection: ${
+        reason instanceof Error ? reason.message : String(reason)
+      }\n`,
+    );
+  });
   const controller = new AbortController();
   const stop = (): void => controller.abort();
   process.once("SIGINT", stop);
