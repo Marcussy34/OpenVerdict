@@ -1,6 +1,6 @@
 # OpenVerdict protocol reference for narration
 
-Every statement here is taken from the repository (README, `docs/PRD.md`, `docs/demo/runbook.md`, `docs/CHECKPOINT-2026-08-30.md`, `move/openverdict/sources/jury.move`, `move/openverdict/sources/settlement.move`, `lib/protocol/truthScore.ts`, `lib/verify/run-proof.ts`, `lib/engine/engine.ts`, `lib/gonka/promptSpec.ts`) as of 2026-09-03. Quote it; do not extend it. Numbers that describe timing are the testnet ladder of that date and can change with a deploy; the dossier's timeline is the record for one claim.
+Every statement here is taken from the repository (README, `docs/PRD.md`, `docs/demo/runbook.md`, `docs/CHECKPOINT-2026-08-30.md`, `move/openverdict/sources/jury.move`, `move/openverdict/sources/settlement.move`, `lib/protocol/truthScore.ts`, `lib/verify/run-proof.ts`, `lib/engine/engine.ts`, `lib/gonka/promptSpec.ts`, `lib/gonka/adapter.ts`, `lib/research/firecrawl.ts`, `app/api/fact-checks/route.ts`, `app/api/_lib/guard.ts`, `lib/claim-extraction/handler.ts`, `app/claims/[id]/page.tsx`, `app/fact-check/queue/[id]/page.tsx`, `components/weather/weather-strip.tsx`, `docs/superpowers/specs/2026-09-03-ov-cli-design.md`) as of 2026-09-03. Quote it; do not extend it. Numbers that describe timing are the testnet ladder of that date and can change with a deploy; the dossier's timeline is the record for one claim.
 
 ## The protocol in one paragraph
 
@@ -11,7 +11,7 @@ OpenVerdict is a decentralized adversarial AI jury protocol for factual disputes
 | Pillar | What it provides | Why it is irreplaceable |
 | --- | --- | --- |
 | Gonka (GonkaRouter): the only mind | Every reasoning pass: claim extraction, five independent research runs, each debate turn, each table vote. Three model families behind one gateway, with a request id, devshard id and fingerprint kept for every call. | A jury is only as independent as its minds. Identical models share training blind spots and alignment priors, so five copies of one model debating is one opinion five times. The committee rule mandates three families (DeepSeek, Kimi, MiniMax) with at most two seats per family, so no single architecture or vendor can dictate the quorum. One gateway serving three families makes that rule enforceable and pins each juror's model in a manifest; the request ids are the receipts a verifier re-checks against Gonka's public lookup. |
-| Sui: the only judge | The clock and the court: claims and deadlines as objects, the jury drawn by native randomness under family limits, commit-reveal enforced in Move, evidence roots frozen before any reveal, the immutable certificate and truth score, payout tickets, the demo pool that settles on the certificate, zkLogin seat backing. | Nobody picks the judges (native randomness) and nobody edits the result (Move rules, immutable objects). The verdict is not a number a judge is asked to trust; it is something the chain acts on: it settles the pool and pays the seats. |
+| Sui: the only judge | The clock and the court: claims and deadlines as objects, the jury drawn by native randomness under family limits, commit-reveal enforced in Move, evidence roots frozen before any reveal, the immutable certificate and truth score, payout tickets, the demo pool that settles on the certificate, zkLogin seat staking. | Nobody picks the judges (native randomness) and nobody edits the result (Move rules, immutable objects). The verdict is not a number a judge is asked to trust; it is something the chain acts on: it settles the pool and pays the seats. |
 | Walrus + Seal (Mysten): the only memory | The public record: claim text, every page a juror opened, evidence manifests, sealed and revealed run bundles, debate transcripts, failure records, all content-addressed and hash-pinned on Sui. Seal time-locks each reveal key so sealed bundles open after the deadline without the operator. | "Anyone can recompute" is only true if the bytes are public and cannot be swapped. Walrus gives the bytes an address the on-chain hash commits to; Seal removes the operator from the reveal path. Without this pillar the verification checks have nothing to run on. |
 
 Remove one pillar and the app fails:
@@ -122,11 +122,12 @@ Payment is not tied to the score: seats are paid for valid work, never for agree
 - Escrow is insurance only; it can never cost a seat its vote (four dedicated Move policy tests).
 - Testnet caveat, disclosed: Seal keys and salts are stored in plaintext in the engine's Postgres; encrypt at rest before any mainnet use.
 
-## zkLogin: one account, one seat, never personhood
+## Stake: what stands behind a seat
 
-- Anyone can back a seat with a Google sign-in through Sui zkLogin (Enoki): one social account resolves to one self-custodial Sui address, and the registry backs one jury seat per address. In the draw, no two seats in a committee share an owner or a human hash.
-- It is authentication, not proof of personhood. It says nothing about whether an account belongs to a unique human, and OpenVerdict never claims otherwise. The honest label is Sybil-cost: capturing a five-seat jury costs five distinct identities, and slashing bites a track record that cannot respawn for free.
-- Today the team operates all seven jurors (demo). The decentralization ladder: backers adopt seats (their identity, their bond, their earnings, the team's compute), then self-hosted juror workers with their own GonkaRouter keys, verified by the engine exactly as the team's own runs (run hashes, receipts, re-execution).
+- Anyone can stake on a seat: a browser wallet, an operator key, or a Google sign-in through Sui zkLogin (Enoki), and one account may stake on as many seats as it likes. Stake is what a staker is willing to put behind a juror; zkLogin only makes staking possible for people without a wallet.
+- Every stake resolves to a staker hash. In the draw, no two seats in a committee share an owner or a staker hash, so a single jury spreads across operators and stakers. That is a diversity rule, never an identity claim: it says nothing about who is behind an account, and OpenVerdict never claims otherwise.
+- Stake gives a seat skin in the game, and slashing bites a track record that cannot respawn for free.
+- Today the team operates all seven jurors (demo). The decentralization ladder: stakers adopt seats (their stake, their bond, their earnings, the team's compute), then self-hosted juror workers with their own GonkaRouter keys, verified by the engine exactly as the team's own runs (run hashes, receipts, re-execution).
 - Reading claims, watching juries, checking proofs and submitting a claim need no sign-in, no wallet, no gas.
 
 ## The weather gate and the queue
@@ -137,10 +138,68 @@ Payment is not tied to the score: seats are paid for valid work, never for agree
 - Expiry: a queued submission expires after six hours ("The families did not all answer within six hours. Submit again."). Statuses: QUEUED, LAUNCHED (with the claim id), EXPIRED, CANCELLED (launch error).
 - Why: the Move rules require three families in every committee, so a claim cannot start while a family is down; GonkaRouter serves exactly three models, so a fourth family is impossible.
 
+## The weather gate and the queue, operationally
+
+What the engine does, step by step (`lib/engine/engine.ts`, the weather front door of 2026-09-03):
+
+- The probe. The resolution worker calls `weatherTick` on every tick; it probes only when the stored probe is older than two minutes (`WEATHER_PROBE_INTERVAL_MS` 120000). Each of the three families is probed through GonkaRouter with three parallel research-shaped calls (400 output tokens, `PROBE_CONCURRENCY` 3, one minute per family, `RELAUNCH_PROBE_TIMEOUT_MS` 60000), and a family is ok only when all three lanes answer: a single small call squeezes through a saturated family that then sheds five jurors working at once. The web search row (`research:firecrawl`, shown as "Web search") is a free credit check (`GET /v2/team/credit-usage`, ok when at least `FIRECRAWL_MIN_CREDITS` 50 remain, 15 s timeout). Every row stores ok, latency and a status (the HTTP status as text, `TIMEOUT` or `ERROR`; the research row can carry a detail such as the credit count).
+- Stale and clear. The report is stale when there is no probe or the newest one is older than five minutes (`WEATHER_STALE_MS` 300000). It is clear only when it is not stale and every row is ok. `GET /api/weather` returns `{probedAtMs, stale, clear, families[]}` with `Cache-Control: no-store`.
+- Submit. `factCheckSubmit` validates the request, then reads the weather. Clear or stale (unknown weather never holds a submission): the claim launches at once and the API answers 200 `{claimId}`. Not clear: a queue row is stored with hold reason `WEATHER` and `expiresAt` six hours ahead (`QUEUE_TTL_MS`), and the API answers 202 `{queued: true, queueId, weather}`. Queue ids are `0x` plus 32 random bytes.
+- Launch. `queueTick` first expires past-due rows (EXPIRED). Then, only when the weather is clear and at least ten minutes have passed since the engine's last launch (`QUEUE_LAUNCH_SPACING_MS` 600000), it launches the oldest QUEUED row: LAUNCHED with the claim id. A validation error at launch cancels the row (CANCELLED with `launchError`); any other error records `launchError` and leaves the row QUEUED for the next tick. One launch per tick.
+- Relaunch. A voided attempt relaunches through `relaunchTick` under the same spacing and the same probe cache (a fresh probe at most every two minutes, shared with `weatherTick`), only while every cached row is ok, up to `MAX_VERIFICATION_ATTEMPTS` 3, and gives up after six hours since the void (`RELAUNCH_GIVE_UP_MS`, reason `WEATHER_TIMEOUT`) or when the third attempt voids (`ATTEMPTS_EXHAUSTED`).
+- Why the spacing is ten minutes: round-one research runs from about +70 s to +600 s, so ten minutes keeps two engine-launched juries from researching at the same time; three juries side by side drew a 429 storm from the shared gateway on 2026-09-03 at 01:48. A direct submission on clear weather still launches at once.
+- Why web search is part of the weather: a jury with no web search answers UNSURE on everything; five seats did so on 2026-09-03 at 05:00 on a 402 from the search API.
+
+What a queued submission waits for, in one sentence each: a fresh probe (under five minutes old) in which DeepSeek, MiniMax, Kimi and the web search row are all ok; ten minutes since the engine's last launch, queued or relaunched; its turn, oldest first. It never waits longer than six hours; after that the queue page says "The families did not all answer within six hours. Submit again."
+
+The public surface of the queue: `GET /api/fact-checks/queue/<id>` returns `{queueId, status, statement, createdAt, expiresAt, claimId?, launchError?, weather}` (404 for an unknown id). The queue page `<base>/fact-check/queue/<id>` shows "Queued", "Waiting for clear weather", the sentence "A jury needs all three model families and web search. Yours starts on the first clear probe.", the live weather strip, "Queued at" and the expiry time, polls every 10 s, and moves to the claim page the moment `claimId` appears; EXPIRED shows the six-hour sentence with a link to submit again; CANCELLED shows the launch error. The weather strip (the fact-check page, the queue page, the voided panel on a claim page) shows one chip per row: "healthy" when ok under 30 s of latency, "slow" when ok and slower, "down" when not ok, "no recent probe" when stale, with "probed N s ago" and the legend "A jury needs all three model families and web search."
+
+## Submitting: the public limits and responses
+
+`POST /api/fact-checks` (`app/api/fact-checks/route.ts`), guarded by `app/api/_lib/guard.ts`:
+
+- Public writes must be enabled on the deployment (`OPENVERDICT_PUBLIC_WRITES=enabled`, set on the hosted app); otherwise every public write answers 403 `{error: "writes_disabled", message: "public submissions are disabled"}`.
+- `claim`: required, trimmed, 5 to 1000 characters.
+- `text`: optional, trimmed, up to 20000 characters (submitted evidence text).
+- `urls`: optional, up to 5 entries, each `https://` and at most 2048 characters (the evidence retriever's own boundary).
+- `resolutionCriteria`: optional, up to 2000 characters.
+- Responses: 200 `{claimId}`; 202 `{queued: true, queueId, weather}`; 400 `{error: "validation_error", message}` with the exact rule broken; 403 `writes_disabled`; 429 `{error: "rate_limited", message: "too many submissions, retry later"}`; 503 `engine_not_wired`; 500 `internal_error`.
+- Rate limit: a fixed 60 s window in process memory. A global ceiling of 60 requests per minute across all clients comes first (spoofed headers cannot route around it); behind a trusted proxy (`OPENVERDICT_TRUST_PROXY=1`, set on the hosted app) each client IP also gets 5 per minute. Keys are hashed, never raw IPs. The limiter is best effort and per instance; an edge limiter is the production item. `POST /api/extract-claim` uses the same guard, so extractions count against the same buckets.
+- The POST returns only after the statement and criteria are written to Walrus and `create_claim` has run on Sui (measured about 45 s on claim #16, 2026-08-30; the request's own Walrus writes come before the transaction).
+
+`POST /api/extract-claim` (`lib/claim-extraction/handler.ts`): body `{url}` (http or https, at most 2048 characters) or `{text}` (40 to 20000 characters), exactly one of the two. A GonkaRouter model returns up to three check-worthy claims in source order, each `{claim, reason, quote}` (claim at most 1000 characters, quote at most 300), plus `language`, `claim` (the first candidate), `sourceUrl`, `modelId`, `gonkaRequestId` and `gatewayRequestId`; opinions, predictions, questions and compound claims are rejected by the prompt. Errors: 400 `INVALID_URL` or the validation sentence "Request body must contain exactly one valid HTTP or HTTPS url string or one text string from 40 to 20,000 characters.", 404 `NO_CLAIM_FOUND` ("The source did not yield a valid factual claim."), 502 `FETCH_FAILED` ("The source page could not be fetched safely."), 403 and 429 as above.
+
+## Expected durations (the hosted ladder, 2026-09-03)
+
+`defaultDeadlines` in `lib/engine/engine.ts`, offsets from the claim's creation on Sui:
+
+| Deadline | Offset | Window it closes |
+| --- | --- | --- |
+| Evidence cutoff | +60 s | Submitted sources are fetched and frozen after this |
+| Proposal, challenge | +65 s, +70 s | The optimistic pathway's deadlines (unused by a direct review) |
+| First commit | +600 s | Round one: 10 minutes for the acceptance minute, the research and five commits |
+| First reveal | +720 s | 2 minutes; the reveal opens earlier when all five have committed |
+| Discussion | +1560 s | Up to 14 minutes of debate, ending early when nobody moves; the freeze of the transcript needs a 120 s lead before this deadline |
+| Second commit | +1800 s | 4 minutes: five table-vote runs plus their approve and commit transactions |
+| Second reveal | +1920 s | 2 minutes |
+
+Inside those windows: seats have one minute after selection to accept (`COMMITTEE_ACCEPTANCE_WINDOW_MS`), a seat's own research bound is the commit deadline minus 60 s (`SEAT_COMMIT_MARGIN_MS`), a research call times out after 90 s and is hedged after 25 s, and a debate turn has a 60 s budget (`PER_TURN_BUDGET_MS`).
+
+What to say: a one-round verdict lands about 11 to 12 minutes after launch (the engine's own estimate is about 12 minutes; measured 10.6 minutes on the settled claim "Humans use only ten percent of their brains." on 2026-09-03: first commit at +4.0 min, reveal open at +8.5 min); a two-round verdict about 32 minutes after launch. A queued submission adds the wait for clear weather plus the ten-minute launch spacing, which nobody can predict. The POST itself takes under a minute before the claim id exists.
+
+## What the console shows at the same time
+
+The console is a read-only projection of the same public record the CLI reads (the event stream `GET /api/claims/<id>/events`, Sui objects, Walrus blobs); the CLI's lines and the page's animation come from the same events.
+
+- The claim page `<base>/claims/<id>` (the deliberation canvas). The stage pill at the top centre names the round: "Jury forming", "Round 1 · research & sealed votes", "Round 1 · votes revealing", "Deliberation · jurors argue their case", then the round-two labels and the finalized state; next to it the "Attempt n of 3" pill and a LIVE chip while the stream is connected (SYNCING while it reconnects). During research the jurors show locked pulses (content-free ticks: the canvas knows a search or a page happened, never what, until the reveal); at the reveal the graph blooms into the real searches, pages and citations; at settlement the certificate lands. Any node opens the inspector; after settlement Play replays the run. In a second round the debate dock at the bottom centre shows each turn with the seat's avatar, the exchange badge, stance chips and citation chips, and a convergence divider when nobody moved.
+- A voided attempt on the claim page: a panel with the failure sentence ("Attempt n of 3 voided: Seat k (<model>) failed: ..."), the line "All-or-nothing: no partial verdict is ever finalized. The engine relaunches automatically once all three families and web search answer.", the compact weather strip, "gives up at HH:MM" (the void time plus six hours) until the relaunch appears, and links to the previous and the next attempt. After a give-up the line reads "This verification gave up; submit the claim again to start a fresh one."
+- The queue page `<base>/fact-check/queue/<id>`: described above; it moves to the claim page by itself when the claim launches.
+- The console home `<base>/app` (the board) lists the claims with their state, and the fact-check page carries the weather strip under the input with "If one family is down, your claim queues and starts on the first clear probe."
+
 ## Correlated failure and why three families
 
 - Disclosed limitation: five LLM jurors are correlated even across model families; diversity constraints reduce but cannot remove shared failure modes (PRD section 32.4).
-- The rule in Move (`jury.move`): at most two seats per model, at least three distinct models in every committee (one model per family today, so three families), a skeptic seat and a source-authenticity seat present, no two seats with the same owner or human hash, no juror who created, proposed or challenged the claim.
+- The rule in Move (`jury.move`): at most two seats per model, at least three distinct models in every committee (one model per family today, so three families), a skeptic seat and a source-authenticity seat present, no two seats with the same owner or staker hash, no juror who created, proposed or challenged the claim.
 - The families: DeepSeek (DeepSeek-V4-Flash), Kimi (Kimi-K2.6) and MiniMax (MiniMax-M2.7), all served through GonkaRouter, the only inference host in the code. The served model must equal the manifest model (`X-Gonka-No-Fallback: true`; a mismatch is a provider error, never a vote).
 - The roster today: seven active jurors (three DeepSeek, two MiniMax, two Kimi), so every committee carries at least one Kimi seat.
 
@@ -215,6 +274,6 @@ The protocol does not change: the same Move rules, hashes and checks. What chang
 - Receipt: GonkaRouter's public metadata for a past request (model, devshard, time, outcome, tokens).
 - Weather: the health probe of the three families and web search; clear or not.
 - Queue: submissions held until the weather clears; one launch per ten minutes; six-hour expiry.
-- zkLogin: Google sign-in resolving to a Sui address; one account backs one seat; authentication, not personhood.
+- zkLogin: Google sign-in resolving to a Sui address, so someone without a wallet can stake on a seat; authentication only. Staker hash: the hash a stake resolves to, kept unique per committee by the draw.
 - Payout ticket: a one-time, recipient-bound claim on jury rewards or refunds, minted at settlement.
 - Operator: the team running the engine; holds the run attestor and evidence freezer capabilities in V1.

@@ -17,8 +17,8 @@ const ITEMS = [
     a: "The claim, the drawn jury seats, every commitment and reveal, the round tally and the final resolution certificate are Move objects on Sui. The package ids for testnet live in the repo's release config, and the observer only ever reads them.",
   },
   {
-    q: "Is signing in proof of personhood?",
-    a: "No. zkLogin is authentication: one social account resolves to one Sui address, and the registry backs one jury seat per address. It says nothing about whether an account belongs to a unique human, and OpenVerdict never claims otherwise.",
+    q: "What does staking on a juror do?",
+    a: "Stake is what a staker is willing to put behind a juror, and any account can stake: a browser wallet, an operator key, or a Google sign-in through zkLogin. Staking gives a seat skin in the game, and every stake resolves to a staker hash the committee draw uses for diversity: at most one seat per owner and per staker hash, so a single jury spreads across operators and stakers. zkLogin is authentication only, there so people without a wallet can stake too.",
   },
   {
     q: "Where does the evidence live?",
@@ -34,7 +34,7 @@ const ITEMS = [
   },
   {
     q: "Who pays, and who earns?",
-    a: "Requesters fund a claim's budgets in SUI when it is created; the public demo form is a team-subsidized tier of the same flow. At settlement the committee budget splits across the seats that validly revealed, as one-time payout tickets: commit late, fail the schema or refuse to reveal, and that seat earns nothing. The recorded next step is delegated seat backing: stake SUI behind a seat and share its jury rewards pro rata after fees. That part is documented direction rather than shipped code, and majority-only winner pay is rejected by design, so juries are never paid for herding.",
+    a: "Requesters fund a claim's budgets in SUI when it is created; the public demo form is a team-subsidized tier of the same flow. At settlement the committee budget splits across the seats that validly revealed, as one-time payout tickets: commit late, fail the schema or refuse to reveal, and that seat earns nothing. The recorded next step is delegated seat staking: stake SUI behind a seat and share its jury rewards pro rata after fees. That part is documented direction rather than shipped code, and majority-only winner pay is rejected by design, so juries are never paid for herding.",
   },
   {
     q: "What happens when a juror fails?",

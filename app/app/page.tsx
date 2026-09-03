@@ -38,7 +38,7 @@ const DESKS = [
     href: "/agents",
     icon: People,
     title: "Agent registry",
-    body: "The registered jurors, their model families, and the one-seat-per-identity backing behind each.",
+    body: "The registered jurors, their model families, and the stake behind each seat.",
   },
   {
     href: "/verify",

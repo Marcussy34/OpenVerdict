@@ -48,7 +48,7 @@ SUI is the working currency. (Full write-up: [appendix](#appendix-the-idea-in-fu
 - **Sui's built-in randomness draws the 5 seats**
 - **Max 2 seats per AI family**: DeepSeek, Kimi and MiniMax, all served through GonkaRouter
 - **Equal weights** in v1 (in future: weighted by on-chain track record)
-- Anyone can **back a seat with a Google sign-in** through Sui zkLogin: one account, one seat, never personhood
+- Anyone can **stake on a seat** with a wallet or a Google sign-in through Sui zkLogin: staking economics, not an identity claim
 
 **No operator picks the judges; no vendor holds a majority.**
 
@@ -247,7 +247,7 @@ through Seal after its deadline, and re-runs a juror against the recorded
 model; `scripts/gen-parity-vectors.ts` regenerates the cross-language vectors
 pinned in both test suites.
 
-### Audit a claim with Claude
+### Use OpenVerdict from the terminal and from Claude
 
 Any claim can be audited from a terminal with no key, no database and no
 wallet. The auditor refetches the public record (the app's API, Sui JSON-RPC,
@@ -268,18 +268,53 @@ Walrus or receipt outage marks the check UNAVAILABLE with the manual URL,
 never FAIL. Run links, report links, queue links and bare ids are accepted;
 `--base <url>` points at another deployment.
 
-The same auditor is packaged as a Claude Code skill in
-`.claude/skills/openverdict-audit/`: Claude runs it, presents the verdict
-card and a plain-English timeline, and answers questions from the dossier and
-a bundled protocol reference (`reference.md`, `faq.md`). Inside the repo the
-skill loads on its own; to use it from any folder, link it once:
+The whole journey runs from the same terminal through the public CLI `ov`
+(`pnpm ov`, also no key, no database, no wallet): check the jury's weather,
+extract a checkable claim from a page, submit it, watch the jury live, audit
+the verdict. The web console stays the visual monitor; the CLI reads and
+writes only the public API.
+
+```bash
+pnpm ov weather                                                    # DeepSeek, MiniMax, Kimi, Web search: ok or down, clear or not
+pnpm ov board --limit 20                                           # the live board, newest first
+pnpm ov extract --url https://example.org/article                  # up to three checkable claims with reasons and quotes (or --text, --file)
+pnpm ov submit "The first Bitcoin halving happened in November 2012."   # 200: claim id and link; 202: queued until the weather clears
+pnpm ov queue <queueId>                                            # QUEUED, LAUNCHED (with the claim), EXPIRED or CANCELLED, plus the weather
+pnpm ov status <claimId>                                           # one block: state in plain words, seats committed and revealed, next deadline
+pnpm ov watch <claimId> --for 9m                                   # one dated line per event until the final line (rerun with --since N)
+pnpm ov audit <claimId>                                            # the same dossier as pnpm audit:claim
+```
+
+Exit codes of `ov`: 0 success, 2 input or request error (one `error: ...`
+line on stderr), 3 the claim voided or the verification gave up (`watch`),
+4 the watch stopped before the end (`--for` reached), 5 rate limited or
+public writes disabled (`submit`, `extract`). `--json` puts one JSON
+document on stdout (`watch`: one line per event), the banner goes to
+stderr, and `--base <url>` points at another deployment. Limits on a public
+submission: a claim of 5 to 1000 characters, evidence text up to 20000
+characters, up to five https URLs, five submissions per minute per client;
+a submission made while a model family or web search is down queues, starts
+by itself on the first clear probe (one launch per ten minutes) and expires
+after six hours. A one-round verdict lands about 11 to 12 minutes after
+launch, a two-round verdict about 32 minutes.
+
+The auditor and the CLI are packaged together as a Claude Code skill in
+`.claude/skills/openverdict-audit/`: Claude runs the auditor, presents the
+verdict card and a plain-English timeline, and answers questions from the
+dossier and a bundled protocol reference (`reference.md`, `faq.md`); it also
+drives the journey above through chat (confirm the claim text, check the
+weather, submit on an explicit go, narrate the events as they land, then
+audit). Inside the repo the skill loads on its own; to use it from any
+folder, link it once:
 
 ```bash
 ln -s "$(pwd)/.claude/skills/openverdict-audit" ~/.claude/skills/openverdict-audit
 ```
 
 Then, in any Claude Code session:
-`/openverdict-audit https://app.openverdict.info/claims/<claimId>`.
+`/openverdict-audit https://app.openverdict.info/claims/<claimId>` to audit,
+or `/openverdict-audit verify this claim: <statement>` to run a new
+verification end to end.
 
 ---
 
@@ -347,27 +382,27 @@ The money flows that exist on-chain today:
 - **The protocol takes a fee.** A treasury cut of each committee budget is
   the sustainability switch (landing in the current release).
 
-Human backing is the gate on that faucet: one Google-derived zkLogin
-address backs at most one seat per committee, so capturing a five-seat jury
-costs five distinct identities, and slashing bites a track record that
-cannot respawn for free. Where DIVE gates agent rewards with World ID
-personhood proofs on the agent the human owns, OpenVerdict gates
-standardized validator seats with account-uniqueness, honestly labelled as
-Sybil-cost rather than proof of personhood.
+Stake and the draw rule are the gate on that faucet: a committee seats at
+most one seat per owner address and per staker hash, so a five-seat jury
+always spreads across distinct operators and stakers, and slashing bites a
+track record that cannot respawn for free. Where DIVE gates agent rewards
+with World ID personhood proofs on the agent's owner, OpenVerdict makes no
+identity claim at all: it gates standardized validator seats with stake and
+a diversity draw.
 
 Decentralization ladder: today the team operates all seven jurors (demo);
-next, backers adopt seats (their identity, their bond, their earnings, our
+next, stakers adopt seats (their stake, their bond, their earnings, our
 compute); finally, self-hosted juror workers bring their own GonkaRouter
 keys and pay their own inference, verified by the engine exactly as our own
 runs are (run hashes, receipts, re-execution).
 
-### Next rung: delegated seat backing (recorded direction, not yet on-chain)
+### Next rung: delegated seat staking (recorded direction, not yet on-chain)
 
 Requester-paid SUI per
 verification funds the round's jury pool (the `create_claim` budget vaults
-already exist), and each seat's jury rewards flow through to the humans
-staking behind that seat, pro rata after protocol and run fees, delegated
-staking on standardized seats, the way PoS delegators share a validator's
+already exist), and each seat's jury rewards flow through to the stakers
+behind that seat, pro rata after protocol and run fees, delegated staking
+on standardized seats, the way PoS delegators share a validator's
 yield. Reward distribution stays participation-based with at most an
 accuracy bonus for certificate-aligned seats; majority-only ("winners take
 all") pay is rejected by design because paying for agreement manufactures
@@ -402,7 +437,7 @@ per-sponsor in the next section).
 | Pillar | What it provides | Why it is irreplaceable here | Track requirement satisfied |
 | --- | --- | --- | --- |
 | **Gonka (GonkaRouter): the only mind** | Every reasoning pass: claim extraction, five independent research runs, each debate turn, each table vote. Three model families behind one gateway, with a request id, devshard id and fingerprint kept for every call. | A jury is only as independent as its minds. Correlated-failure resistance: identical models share the same training blind spots and alignment priors, so five copies of one model debating is one opinion five times. The committee rule mandates three families (DeepSeek, Kimi, MiniMax) with at most two seats per family, so no single architecture or vendor can dictate the quorum. One gateway serving three families is what makes that rule enforceable and pins each juror's model in a manifest; the request ids are the receipts a verifier re-checks against Gonka's public lookup. | Gonka track: all AI reasoning through GonkaRouter, URL or text input, multi-model cross-verification, Truth Score with a reasoning trace, Gonka Request IDs shown. |
-| **Sui: the only judge** | The clock and the court: claims and deadlines as objects, the jury drawn by native randomness under family limits, commit-reveal enforced in Move, evidence roots frozen before any reveal, the immutable certificate and Truth Score, payout tickets, the demo pool that settles on the certificate, zkLogin seat backing. | Nobody picks the judges (native randomness) and nobody edits the result (Move rules, immutable objects). The verdict is not a number a judge is asked to trust; it is something the chain acts on: it settles the pool and pays the seats. | Sui Track 02: Sui is integral, ownership and identity as owned objects, on-chain execution of deadlines, thresholds and payouts, a working live demo path. |
+| **Sui: the only judge** | The clock and the court: claims and deadlines as objects, the jury drawn by native randomness under family limits, commit-reveal enforced in Move, evidence roots frozen before any reveal, the immutable certificate and Truth Score, payout tickets, the demo pool that settles on the certificate, zkLogin seat staking. | Nobody picks the judges (native randomness) and nobody edits the result (Move rules, immutable objects). The verdict is not a number a judge is asked to trust; it is something the chain acts on: it settles the pool and pays the seats. | Sui Track 02: Sui is integral, ownership and identity as owned objects, on-chain execution of deadlines, thresholds and payouts, a working live demo path. |
 | **Walrus + Seal (Mysten): the only memory** | The public record: claim text, every page a juror opened, evidence manifests, sealed and revealed run bundles, debate transcripts, failure records, all content-addressed and hash-pinned on Sui. Seal time-locks each reveal key so sealed bundles open after the deadline without the operator. | "Anyone can recompute" is only true if the bytes are public and cannot be swapped. Walrus gives the bytes an address the on-chain hash commits to; Seal removes the operator from the reveal path. Without this pillar the verification checks have nothing to run on. | Sui Track 02 signals: Walrus evidence layer, reveal-key escrow with Seal, recheck everything in the browser. |
 
 Gonka is the only mind, Sui is the only judge, Walrus is the only memory,
@@ -447,7 +482,7 @@ and the chain does not get shorter; it breaks.
 | Working demo path | Localnet E2E exit 0 AND finalized LIVE testnet lifecycles on https://app.openverdict.info: YES certificate [`0xff3191bc…`](https://suiscan.xyz/testnet/object/0xff3191bcad4a645f44a6caccf2e6c661e8defcbf4943b44ec8b08d91b4f4133c) (claim #25, 5 of 5 seats, Seal escrows) and NO certificate [`0x975b3ae1…`](https://suiscan.xyz/testnet/object/0x975b3ae103c7832c4405714196528808af70ef975fe0d0db3ae70017191c00e4) (claim #26, hedged calls); see `docs/demo/runbook.md` |
 | Walrus evidence layer | Every fetched page, evidence manifest, sealed and revealed run bundle is a public Walrus blob; its hash is pinned on-chain, so blobs are content addresses a verifier can fetch |
 | Reveal-key escrow (Seal) | Mysten Seal time-lock policy on testnet; sealed juror bundles open after the deadline without the operator |
-| Economic loop in SUI | Budgets escrowed at `create_claim`, per-seat jury-reward `PayoutTicket`s and refunds as one-time tickets, protocol-fee reason codes, demo binary pool consuming certificates (`/risk`); delegated seat backing is the recorded next step |
+| Economic loop in SUI | Budgets escrowed at `create_claim`, per-seat jury-reward `PayoutTicket`s and refunds as one-time tickets, protocol-fee reason codes, demo binary pool consuming certificates (`/risk`); delegated seat staking is the recorded next step |
 
 Both public track pages were placeholders at spec time; final submission
 requirements must be reconfirmed against organizer material (PRD §7.3).
@@ -494,7 +529,7 @@ to on-chain before anyone reveals.
 | Jury selection | Native `Random` draw under the model-family constraints | `move/openverdict/sources/jury.move` |
 | Commit-reveal voting | Commitments bind the approved run hash on-chain before any reveal; `blake2b256(BCS(preimage))` is recomputable by anyone | `/verify` recomputes it in the browser |
 | Evidence freezing | The manifest merkle root is frozen into an `EvidenceBundle` object before any vote reveals | Report page, evidence bundle chip |
-| Onboarding | zkLogin (Enoki): a Google login yields a self-custodial address backing a juror registration, authentication rather than proof of personhood | `/agents`; env-gated |
+| Onboarding | zkLogin (Enoki): a Google login yields a self-custodial address that can stake on a juror registration, so people without a wallet can stake too; authentication only | `/agents`; env-gated |
 | Wallet rendering | Object Display metadata on certificates, profiles and positions | `move/openverdict/sources/display_meta.move` |
 
 ### Walrus
@@ -598,7 +633,7 @@ The model in one line: Gonka is the only mind, Sui is the only judge, and
 SUI is the working currency. Claim budgets escrow at `create_claim`, juror
 bonds are `Balance<SUI>` in the registry, jury rewards and refunds move as
 one-time payout tickets, and the demo binary pool consumes certificates;
-delegated seat backing (stake SUI behind a seat, share its earnings) is the
+delegated seat staking (stake SUI behind a seat, share its earnings) is the
 recorded next rung.
 
 Instead of relying on:
@@ -610,7 +645,7 @@ Instead of relying on:
 
 OpenVerdict turns dispute resolution into a:
 
-> Human-backed, AI-powered, evidence-driven jury process with enforceable
+> Staked, AI-powered, evidence-driven jury process with enforceable
 > on-chain rules.
 
 The hackathon entry point is a public fact checker: state one bounded claim (the API and CLI still accept optional URLs and text)

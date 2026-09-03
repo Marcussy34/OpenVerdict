@@ -91,9 +91,9 @@ point."
 
 **Money line (the foot of the slide).**
 SAY: "Economically it runs in SUI: requesters escrow a claim budget, seats
-that validly reveal earn payout tickets, and anyone can back a jury seat with
-a Google account. The next step on the roadmap is delegated staking behind
-seats, like backing a validator."
+that validly reveal earn payout tickets, and anyone can stake on a jury seat
+with a Google account. The next step on the roadmap is delegated staking
+behind seats, like staking on a validator."
 
 ## Slide 4 · One-liner (close)
 
@@ -121,7 +121,7 @@ Then: "It is live. Submit a claim and watch the jury think. Thank you."
   Separately, bonded claims can resolve optimistically: no jury at all
   unless someone challenges.
 - **Business model?** Pay-per-verification in SUI is the live flow (the free
-  form is a subsidized tier); delegated seat staking with pro-rata backer
+  form is a subsidized tier); delegated seat staking with pro-rata staker
   yield is the recorded next step (PRD §1.1 item 20). Majority-only rewards
   are rejected by design: paying for agreement manufactures herding.
 - **Isn't the engine centralized?** Execution yes, trust no: the operator can

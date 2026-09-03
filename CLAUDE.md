@@ -34,8 +34,10 @@ pnpm e2e:localnet  # full localnet lifecycle (spawns `sui start`)
   unverifiable citation must never become a vote (fail closed).
 - The observer has NO signer and no mutation endpoints beyond the two guarded
   public POSTs; keep it that way.
-- zkLogin is authentication / one-account-one-seat backing — never describe it
-  as proof of personhood (PRD §14.4).
+- Product copy says stake / staker / staked seat, never backing or human-backed:
+  any account may stake on any number of seats, it is staking economics. The
+  committee draw (one seat per owner and per staker hash) is a diversity rule.
+  zkLogin is authentication, never proof of personhood (PRD §14.4).
 - Move: functions taking `&Random` must be private `entry fun`; draw-and-
   resolve in one call.
 - Icons: iconsax-react in app-level code (not lucide). shadcn/ui + Tailwind

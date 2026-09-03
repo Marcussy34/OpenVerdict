@@ -34,9 +34,9 @@ A claim result, never a juror's vote. It happens when four or more jurors reveal
 
 Inside an attempt: a call that has not answered after 25 s is hedged to the same model, shed or timed-out calls are retried inside the seat window, and every attempt lands in the audit trail. If a seat still fails at a binding step, the whole attempt is voided in public and nothing partial is finalized. The engine relaunches once all three families and web search answer a health probe, at most three attempts, and gives up after six hours of bad weather after a void (`WEATHER_TIMEOUT`) or after three voids (`ATTEMPTS_EXHAUSTED`). New submissions during bad weather are queued and launched one per ten minutes when the weather clears; a queued submission expires after six hours.
 
-## 9. Is zkLogin proof of personhood?
+## 9. What does staking on a seat do?
 
-No. zkLogin is authentication: one Google account resolves to one Sui address, and the registry backs one jury seat per address. It says nothing about whether an account belongs to a unique human, and OpenVerdict never claims otherwise. It is Sybil-cost: capturing a five-seat jury costs five distinct identities. Today the team operates all seven jurors.
+Stake is what a staker is willing to put behind a juror, and any account can stake: a browser wallet, an operator key, or a Google sign-in through Sui zkLogin. It gives the seat skin in the game. Every stake resolves to a staker hash, and the draw seats at most one juror per owner and per staker hash, so a jury spreads across operators and stakers. That is a diversity rule, not an identity claim: zkLogin is authentication only, there so people without a wallet can stake too. Today the team operates all seven jurors.
 
 ## 10. How is the truth score computed?
 
@@ -105,3 +105,27 @@ No, and the project never claims it does. Gonka validates that inference work ha
 ## 26. Why are the jurors paid for valid work and not for being right?
 
 Because paying for agreement manufactures herding, punishes honest UNSURE votes and corrupts UNRESOLVED as an outcome. At settlement the committee budget splits across the seats that validly revealed, as one-time payout tickets; commit late, fail the schema or refuse to reveal, and the seat earns nothing. Weighting seats by a calibration track record (Brier score) is the recorded roadmap, not shipped code.
+
+## 27. What if Gonka is down right now?
+
+Then the claim does not launch. The engine probes DeepSeek, MiniMax, Kimi and the web search provider every two minutes with research-shaped requests (three parallel 400-token calls per family; the search row is a credit check). When any row fails, a new submission is queued instead of started (the API answers 202 with a queue id), and it launches by itself on the first clear probe, one engine launch every ten minutes, or expires after six hours. Nothing is held on unknown weather (no probe in the last five minutes): such a submission launches at once. If a family fails after the launch, the seat fails closed, the attempt is voided in public and relaunched on the next clear probe, up to three attempts. `ov weather` and `GET /api/weather` show the four rows; the console shows them as chips.
+
+## 28. Why did my submission queue, and how long will it wait?
+
+Because the last probe, less than five minutes old, showed at least one of the four rows not ok; the CLI printed which one and its status (429 shedding, TIMEOUT, 402 no search credits). The Move rules require three model families in every committee, and a jury without web search answers UNSURE on everything, so launching into a known-bad window would burn one of the three attempts for nothing. The queue holds the request exactly as submitted and starts it when all four rows answer, oldest first, one launch per ten minutes; it expires after six hours ("The families did not all answer within six hours. Submit again."). Nobody can say how long the weather takes to clear; `ov watch <queueId>` polls every 30 s and follows the claim the moment it launches.
+
+## 29. Why can one seat void the whole attempt?
+
+Because a verification is all or nothing: every step is five for five or void, and a verdict never carries an empty chair. The quorum is four matching reveals of five, and that rule is about agreement, not attendance. If a seat's run fails (`INVALID_SCHEMA`, `CITATION_INVALID`, `TIMEOUT`, `PROVIDER_ERROR`), or a seat misses its commit (`MISSING_COMMIT`) or its reveal (`MISSING_REVEAL`), no vote is invented for it and nothing partial is finalized; the failure record with its research trail stays public on Walrus and on the claim page, and the engine relaunches the whole attempt when the weather clears, up to three attempts. A skipped debate turn is not a binding step: it is recorded and the debate goes on. The void is an engine fact, public on the claim page ("Attempt n of 3 voided: Seat k (<model>) failed: ..."), not a chain state, because the settlement contract has no mid-flight cancel once a claim leaves CREATED.
+
+## 30. How long does a verification take?
+
+Counted from the claim's creation on Sui (testnet ladder, 2026-09-03): the committee is drawn about a minute in and the evidence is frozen right after; seats accept within a minute; the first commit deadline is at +10 minutes and the reveal window closes at +12 minutes, so a one-round verdict lands about 11 to 12 minutes after launch (measured 10.6 minutes on "Humans use only ten percent of their brains."). A split opens a debate of up to 14 minutes that stops early when nobody moves, then a 4-minute table-vote commit window and a 2-minute reveal, so a two-round verdict lands about 32 minutes after launch. The POST itself takes under a minute before the claim id exists. A queued submission adds the wait for clear weather plus the ten-minute launch spacing.
+
+## 31. What are the limits on a public submission?
+
+A claim of 5 to 1000 characters; optional evidence text up to 20000 characters; up to five https URLs of at most 2048 characters each; optional resolution criteria up to 2000 characters. Five submissions per minute per client behind the hosted proxy, plus a global ceiling of 60 per minute; the extractor (`POST /api/extract-claim`, one URL or 40 to 20000 characters of text, up to three candidates) shares those buckets. Public writes can be switched off on a deployment (403 `writes_disabled`). Reading, watching and auditing have no limit of that kind and need no account. The demo tier is free to the requester.
+
+## 32. What does `ov watch` show, and what does it not?
+
+It prints one dated line per public event from the same stream the console reads: the claim created on Sui, the evidence frozen with its root, the five seats drawn with their models, each run approved, each vote committed (k of 5), each phase change, each vote revealed with its outcome and confidence, each debate turn with its stance, the convergence marker, output repairs, and the final line with the result, the score and the certificate. In parallel it polls the claim record every 60 s for a void, a relaunch or a give-up, which the stream may not carry. It does not show a juror's research while it runs (the transcript is sealed until the reveal), it does not show a sealed vote before the reveal, and it never predicts the result: a claim is settled only when the final line lands, and the audit afterwards is what proves the record unchanged.

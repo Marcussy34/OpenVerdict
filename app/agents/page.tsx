@@ -200,15 +200,17 @@ export default function AgentsPage() {
                     <span
                       className={cn(
                         "shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold",
-                        agent.backing?.kind === "ZKLOGIN"
+                        agent.backing?.kind === "ZKLOGIN" ||
+                        agent.backing?.kind === "WALLET"
                           ? "bg-yes/10 text-yes"
                           : agent.backing?.kind === "ALLOWLIST"
                             ? "bg-sea/10 text-primary"
                             : "bg-muted text-muted-foreground",
                       )}
                     >
-                      {agent.backing?.kind === "ZKLOGIN"
-                        ? "Human-backed"
+                      {agent.backing?.kind === "ZKLOGIN" ||
+                      agent.backing?.kind === "WALLET"
+                        ? "Staked"
                         : agent.backing?.kind === "ALLOWLIST"
                           ? "Allowlist"
                           : "Unverified"}

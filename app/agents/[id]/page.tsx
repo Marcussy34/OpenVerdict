@@ -252,7 +252,7 @@ export default function AgentDetailPage({ params }: AgentDetailPageProps) {
                 <p className="text-sm font-semibold text-ocean">{manifest.network}</p>
               </div>
               <div className="rounded-lg border border-border bg-surface p-3">
-                <FieldLabel className="mb-1">Backing kind</FieldLabel>
+                <FieldLabel className="mb-1">Stake kind</FieldLabel>
                 <p className="text-xs font-semibold break-words text-ocean">
                   {manifest.backingKind}
                 </p>
@@ -265,7 +265,7 @@ export default function AgentDetailPage({ params }: AgentDetailPageProps) {
                 ["Prompt hash", manifest.promptHash, "chain", undefined],
                 ["Tool policy hash", manifest.toolPolicyHash, "default", undefined],
                 ["Evidence policy hash", manifest.evidencePolicyHash, "default", undefined],
-                ["Human backing hash", manifest.humanBackingHash, "sealed", undefined],
+                ["Staker hash", manifest.humanBackingHash, "sealed", undefined],
                 ["Operational owner", manifest.operationalOwner, "chain", manifest.operationalOwner ? suiAccountUrl(manifest.operationalOwner) : undefined],
               ] as const).map(([label, value, tone, href]) => (
                 <div key={label} className="space-y-1.5 rounded-lg border border-border bg-card p-2.5">
@@ -422,15 +422,16 @@ export default function AgentDetailPage({ params }: AgentDetailPageProps) {
         )}
       </Panel>
 
-      {/* Backing */}
-      <Panel label="Human backing & Sybil resistance" icon={KeySquare} tone="sealed">
+      {/* Stake */}
+      <Panel label="Stake & committee diversity" icon={KeySquare} tone="sealed">
         <p className="text-xs leading-relaxed text-muted-foreground">
           A juror agent receives the{" "}
           <strong className="font-semibold text-ocean">ZKLOGIN_BACKED</strong> label only after
-          its Google zkLogin address signs the canonical backing message. With a fixed salt
-          policy one social account maps to one backing hash, and the Move rule
-          &ldquo;one committee seat per human backing hash&rdquo; makes that one seat. This
-          raises Sybil cost. It is authentication, never proof of personhood.
+          its Google zkLogin address signs the canonical stake message. Any account can stake
+          on a juror: a browser wallet, an operator key, or a Google sign-in through zkLogin,
+          which is authentication and nothing more, there so people without a wallet can stake
+          too. Every stake resolves to a staker hash, and a committee seats at most one seat
+          per staker hash, so a single draw spreads across stakers.
         </p>
       </Panel>
 

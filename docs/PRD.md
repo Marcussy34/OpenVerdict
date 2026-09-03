@@ -17,7 +17,7 @@
 | Development network | Sui Testnet |
 | Production/demo network | Sui Mainnet after a capped canary |
 | First application | Public multi-model fact checking; prediction-market settlement as the first economic consumer |
-| General product | Decentralized verification through an adversarial, human-backed AI jury protocol (drawn seats, sealed ballots, bounded cross-examination over a frozen record, honest UNRESOLVED); not an agent swarm |
+| General product | Decentralized verification through an adversarial, staked AI jury protocol (drawn seats, sealed ballots, bounded cross-examination over a frozen record, honest UNRESOLVED); not an agent swarm |
 | GonkaRouter's role | Execute every juror reasoning pass; it does not determine truth |
 | Project lineage | Renamed, clean reimplementation of the team's earlier DIVE concept |
 | Repository visibility | Public |
@@ -29,6 +29,15 @@
 > five are the **quorum**, round two is **cross-examination**, and the settled
 > verdict is the **resolution certificate**. Move type names and API routes
 > keep their historical identifiers. Read "agent" below as "juror".
+
+> **Vocabulary: stake (2026-09-03).** By owner decision, "stake" replaces
+> "backing" throughout the product: a **staker** **stakes** on a seat, and a
+> seat carrying stake is a **staked seat**. Any account may stake on as many
+> seats as it likes (a browser wallet, an operator key, or a Google sign-in
+> through zkLogin). It is staking economics, never an identity or personhood
+> claim, and zkLogin is authentication only. Internal identifiers keep their
+> historical names (`human_backing_hash`, `humanAttestationHash`,
+> `ZKLOGIN_BACKED`); read those as "staker hash" and "staked".
 
 ## Table of contents
 
@@ -100,10 +109,10 @@ Corrections and additions discovered during implementation, per the rule above:
 2. **GonkaRouter live limits (§20.3, §31.1):** the live API hard-caps output at 4096 tokens (default 3072; larger requests silently clamped; reasoning tokens count). The adapter uses `max_tokens: 4096` and a 120000 ms timeout — this PRD's `max_tokens: 1024` and `GONKA_REQUEST_TIMEOUT_MS=8000` are superseded. Verified models: DeepSeek-V4-Flash, Kimi-K2.6, MiniMax-M2.7 families (≥3 families satisfied).
 3. **Claim-state u8 encoding (§28.2):** concrete codes fixed as CREATED=0 … CANCELLED=12 (see `lib/protocol/constants.ts`, mirrored in `claim.move`); byte-locked to TypeScript by six blake2b256/BCS parity vectors asserted in both test suites.
 4. **Module list (§28.1):** an eighth module `display_meta` was added implementing Sui Object Display metadata for `ResolutionCertificate`, `AgentProfile`, and demo `Position` (V1 `sui::display` API — the pinned 1.52.2 framework does not vendor V2 `display_registry`).
-5. **zkLogin scope (§14.4, §13):** upgraded from "optional onboarding" to two implemented uses — (a) end-user onboarding via Enoki-managed zkLogin registered as a wallet-standard wallet, optionally with sponsored gas; (b) planned zkLogin-backed agent registration where `human_backing_hash = blake2b256(zkLogin address)` yields one-social-account-one-seat under the existing seat-uniqueness rule. Both remain labelled authentication / Sybil-cost-raising — never proof of personhood, exactly as §14.4 requires.
+5. **zkLogin scope (§14.4, §13):** upgraded from "optional onboarding" to two implemented uses: (a) end-user onboarding via Enoki-managed zkLogin registered as a wallet-standard wallet, optionally with sponsored gas; (b) planned zkLogin staking at agent registration, where `human_backing_hash = blake2b256(zkLogin address)` is the staker hash the committee draw keeps unique per seat. Both remain labelled authentication only, never proof of personhood, exactly as §14.4 requires.
 6. **Sponsored transactions (§24.6):** implemented with the current SDK v2 flow (`onlyTransactionKind` bytes → `Transaction.fromKind` → `setSender`/`setGasOwner`/`setGasPayment` → dual signatures).
 7. **SDK generation (§27.4):** implemented on `@mysten/sui` v2 (`SuiGrpcClient`, ESM-only) and dapp-kit v2 (`@mysten/dapp-kit-core`/`-react`) — this document's package names predate the v2 split.
-8. **Proof chain v2 (§6, §14, §17.7, §22; recorded 2026-08-29):** the system prompt, JSON fallback suffix, repair prompt, temperature, token cap, and response format are a versioned `PromptSpecV1` whose hash is the `promptHash` of every agent manifest and therefore the `prompt_hash` inside every on-chain run hash; the engine refuses to run a seat whose manifest hash differs from the live spec. Agent manifests are `AgentManifestDocumentV2` blobs (prompt spec, tool policy, evidence policy, all hashed) for both backing kinds. Each run publishes a `PublicRunBundleV2` (prompt spec, exact request, raw response, validated output, audit, hashes). Before the commit only an AES-256-GCM sealed copy is published and cited by `approve_run` as `run_blob_id`; the plaintext bundle plus the key is published at reveal and cited as `argument_blob_id`, so the pre-commit existence proof holds without leaking a vote early (this corrects §17.7, which stored the raw response as a public blob at inference time). Walrus artifacts are raw blobs (`writeBlob`/`readBlob`), not quilts, so a blob id addresses the artifact itself. GonkaRouter's response `id` (`devshard-<n>-<seq>`), `x-request-id`, `x-devshard-id`, and `system_fingerprint` are recorded as audit pointers; Gonka's devshard model exposes no per-request chain record through brokers, so §6 stands and no such record is claimed. Verified against the live API and the Gonka architecture docs on 2026-08-29.
+8. **Proof chain v2 (§6, §14, §17.7, §22; recorded 2026-08-29):** the system prompt, JSON fallback suffix, repair prompt, temperature, token cap, and response format are a versioned `PromptSpecV1` whose hash is the `promptHash` of every agent manifest and therefore the `prompt_hash` inside every on-chain run hash; the engine refuses to run a seat whose manifest hash differs from the live spec. Agent manifests are `AgentManifestDocumentV2` blobs (prompt spec, tool policy, evidence policy, all hashed) for both stake kinds. Each run publishes a `PublicRunBundleV2` (prompt spec, exact request, raw response, validated output, audit, hashes). Before the commit only an AES-256-GCM sealed copy is published and cited by `approve_run` as `run_blob_id`; the plaintext bundle plus the key is published at reveal and cited as `argument_blob_id`, so the pre-commit existence proof holds without leaking a vote early (this corrects §17.7, which stored the raw response as a public blob at inference time). Walrus artifacts are raw blobs (`writeBlob`/`readBlob`), not quilts, so a blob id addresses the artifact itself. GonkaRouter's response `id` (`devshard-<n>-<seq>`), `x-request-id`, `x-devshard-id`, and `system_fingerprint` are recorded as audit pointers; Gonka's devshard model exposes no per-request chain record through brokers, so §6 stands and no such record is claimed. Verified against the live API and the Gonka architecture docs on 2026-08-29.
 9. **Juror research v1 (§6, §14, §17; designed 2026-08-29, spec `docs/superpowers/specs/2026-08-29-juror-research-design.md`):** every juror run researches the claim itself. The model answers with one JSON action per turn (`search`, `open`, `answer`); the engine executes searches and page opens through a `ResearchProvider` (Firecrawl v2 REST, cloud or self-hosted by configuration), stores every opened page on Walrus as a `DISCOVERED` evidence artifact, and records every step in a `ResearchTranscriptV1` whose hash is the `tool_transcript_hash` inside the on-chain run hash. A citation (`evidenceId`, `url`, `quote`) is valid only if that juror opened that page in that run and the quote occurs in the stored text; a YES or NO verdict needs at least one citation of a page the juror found through its own search, otherwise the seat fails closed (`CITATION_INVALID`, no vote). The transcript travels inside the sealed bundle core (v3), so research trails are public only at reveal, and the on-chain `tool_blob_id` cites the sealed blob. Prompt spec v2 and tool policy v2 (budgets: 3 searches, 4 opens, 8 turns, 5 results, 4,000-character page slices, 240-second research calls) are bound through manifest document v3. Models cite opened pages by short refs (`p1`, `p2`, ...) or url; the engine resolves them to full evidence ids before hashing, and quote matching is punctuation- and markdown-tolerant but exact (verified live on 2026-08-30 with DeepSeek, MiniMax, and Kimi, each returning a cited verdict). This replaces the earlier rule "models never receive URLs" with: models never fetch, never hold keys or transaction authority, and every URL they see or open is engine-executed and recorded.
 
 10. **Juror research v2 and batched opens (§6, §14, §17; 2026-08-30, specs `docs/superpowers/specs/2026-08-30-juror-research-v2-design.md`):** every search carries an intent (`support` or `challenge`); before a YES or NO the engine requires a challenge search with one of its results opened, citations from at least two distinct sites, and a counter-evidence summary, each enforced with bounded nudges (`CHALLENGE_REQUIRED`, `CORROBORATION_REQUIRED`); UNSURE is never blocked. Under tool policy v4 an `open` action may name up to three urls (`maxOpensPerTurn`), fetched in parallel and recorded as one transcript step per page with a batch marker. Prompt spec v4, tool policy v4 (4 searches, 5 opens, 10 turns), manifest document v5 and bundle core v5 are live for the seven testnet jurors; older documents keep their behaviour byte for byte because their hashes are on chain.
@@ -120,9 +129,9 @@ Corrections and additions discovered during implementation, per the rule above:
 
 18. **URL claim extraction, round-two discussion record, verification language (§16, §26, §31; 2026-08-31):** `POST /api/extract-claim` turns a pasted URL into one falsifiable claim: the engine's SSRF-guarded retriever fetches the page, a prose window (from the first line of at least 160 characters) reaches the article's lead, and the first configured GonkaRouter model at temperature 0 (1500-token cap, strict JSON, exactly one repair round) proposes the claim together with its Gonka and gateway request ids; the user confirms and submits statement-only, so the source page never becomes privileged evidence. A split first round injects the revealed round-one public record (per seat: model, outcome, confidence in bps, public reasoning trace) into every round-two juror input and freezes the same record canonically into the phase-two evidence manifest as `round-1-public-record:<claimId>`; a missing reveal fails closed and phase-one inputs stay byte-identical. Product language is open verification: the nav reads Verify / Claims / Agents / Audit / Status, claim submission owns "Verify", the independent run checker at `/verify` is labelled "Audit", and the `/fact-check` route plus `/api/fact-checks` endpoint keep their URLs for link stability.
 
-19. **Truth reframe and Gonka-exclusivity invariant (§2, §5, §12.2, §19.2, §25; 2026-09-01):** the Gonka track mandate ("all AI reasoning and verification logic MUST run on the Gonka Network via gonkarouter.io") is now a code-enforced invariant: the adapter refuses any base URL whose host is outside gonkarouter.io, and every inference path (juror research and verdicts, deliberation turns, claim extraction, the re-execution check) already routes through that one adapter; a seat that cannot reach Gonka fails closed and no other AI provider exists in the codebase. Selection weight is equal for every eligible agent in this release: the on-chain `Reputation` counters register at baseline and are not yet updated by the protocol, the §2 executive summary was amended in place to say diversity-constrained with equal v1 weights, and the §19.2/§25.2-25.3 update rules remain superseded until reputation wiring ships (addendum item 14 already recorded the equal weights). Agent roles (SKEPTIC, SOURCE_AUTHENTICITY, INVESTIGATOR) are recorded manifest labels with no behavioral effect: no prompt or tool policy varies by role; the public registration card no longer offers a role choice and presents zkLogin registration as backing a standardized seat (validator model), and app copy is aligned to seats-not-personas throughout.
+19. **Truth reframe and Gonka-exclusivity invariant (§2, §5, §12.2, §19.2, §25; 2026-09-01):** the Gonka track mandate ("all AI reasoning and verification logic MUST run on the Gonka Network via gonkarouter.io") is now a code-enforced invariant: the adapter refuses any base URL whose host is outside gonkarouter.io, and every inference path (juror research and verdicts, deliberation turns, claim extraction, the re-execution check) already routes through that one adapter; a seat that cannot reach Gonka fails closed and no other AI provider exists in the codebase. Selection weight is equal for every eligible agent in this release: the on-chain `Reputation` counters register at baseline and are not yet updated by the protocol, the §2 executive summary was amended in place to say diversity-constrained with equal v1 weights, and the §19.2/§25.2-25.3 update rules remain superseded until reputation wiring ships (addendum item 14 already recorded the equal weights). Agent roles (SKEPTIC, SOURCE_AUTHENTICITY, INVESTIGATOR) are recorded manifest labels with no behavioral effect: no prompt or tool policy varies by role; the public registration card no longer offers a role choice and presents zkLogin registration as staking on a standardized seat (validator model), and app copy is aligned to seats-not-personas throughout.
 
-20. **Economic direction of record (§24, §25; decided 2026-09-01, not implemented):** the intended business model is requester-paid SUI per verification funding that round's committee budget (the `create_claim` vaults and `REASON_JURY_REWARD` payout tickets already implement the on-chain half), plus delegated seat backing: multiple zkLogin backers stake SUI behind a seat and share that seat's jury rewards pro rata after protocol and run fees. Two constraints bind any implementation: (a) reward distribution stays participation-based, with at most a bounded accuracy bonus for certificate-aligned seats; majority-only distribution is rejected because it pays for agreement rather than correctness, penalizes honest UNSURE votes and minority dissent, and pressures juries to manufacture consensus where UNRESOLVED is truthful (§24.2, §24.5 govern); (b) per-seat stake pools presuppose reputation wiring (item 19) so seats have differentiated track records worth staking on. Model-family identity stays public and pinned regardless (diversity constraints, served-model verification); persona identity stays removed. Sequenced after the hackathon build; recorded here so the answer to judges is the documented design, not improvisation. Adopted as the positioning of record across the README, the landing FAQ and /learn on 2026-09-01 (one build, both tracks: Gonka supplies the intelligence; Sui the coordination, settlement and currency); implementation remains sequenced after the hackathon build.
+20. **Economic direction of record (§24, §25; decided 2026-09-01, not implemented):** the intended business model is requester-paid SUI per verification funding that round's committee budget (the `create_claim` vaults and `REASON_JURY_REWARD` payout tickets already implement the on-chain half), plus delegated seat staking: multiple stakers stake SUI behind a seat and share that seat's jury rewards pro rata after protocol and run fees. Two constraints bind any implementation: (a) reward distribution stays participation-based, with at most a bounded accuracy bonus for certificate-aligned seats; majority-only distribution is rejected because it pays for agreement rather than correctness, penalizes honest UNSURE votes and minority dissent, and pressures juries to manufacture consensus where UNRESOLVED is truthful (§24.2, §24.5 govern); (b) per-seat stake pools presuppose reputation wiring (item 19) so seats have differentiated track records worth staking on. Model-family identity stays public and pinned regardless (diversity constraints, served-model verification); persona identity stays removed. Sequenced after the hackathon build; recorded here so the answer to judges is the documented design, not improvisation. Adopted as the positioning of record across the README, the landing FAQ and /learn on 2026-09-01 (one build, both tracks: Gonka supplies the intelligence; Sui the coordination, settlement and currency); implementation remains sequenced after the hackathon build.
 
 21. **Naming of record (2026-09-01):** the top-level product identity is "decentralized verification protocol for factual claims" everywhere a category is stated (README, landing, social cards, package metadata, pitch materials). "Oracle" is reserved for integrator and market-slot contexts ("OpenVerdict fills the oracle slot for markets and DAOs"), since leading with it invokes the single-answer-box model the protocol exists to replace. Jury and court are explanation-layer metaphors only, used when describing the mechanism ("the models argue their case like jurors"), never as the leading identity. "Factual claims" is the scope word: bounded, falsifiable, evidence-settleable statements; opinions and unresolved future events are out of scope until they become factual questions. Earlier "engine" and "court" identity phrasing is superseded accordingly.
 
@@ -130,7 +139,7 @@ Corrections and additions discovered during implementation, per the rule above:
 
 ## 2. Executive summary
 
-OpenVerdict is a decentralized verification protocol for claims that require evidence and judgment rather than a deterministic data feed. A claim receives a proposed outcome and becomes final if nobody challenges it during a defined window. A successful challenge selects a diversity-constrained committee of AI oracle agents (equal selection weights in v1; reputation-weighted selection is roadmap), each controlled by a distinct approved owner and associated with a distinct human-backing record. Every agent reviews the same frozen evidence bundle, reasons through GonkaRouter, commits a hidden vote on Sui, and later reveals its answer and argument. If the first round lacks sufficient agreement, agents inspect one another's published evidence and reasoning, add new admissible evidence, and vote again. The protocol can finalize, expand the committee, or remain unresolved instead of manufacturing certainty.
+OpenVerdict is a decentralized verification protocol for claims that require evidence and judgment rather than a deterministic data feed. A claim receives a proposed outcome and becomes final if nobody challenges it during a defined window. A successful challenge selects a diversity-constrained committee of AI oracle agents (equal selection weights in v1; reputation-weighted selection is roadmap), each controlled by a distinct approved owner and associated with a distinct staker record. Every agent reviews the same frozen evidence bundle, reasons through GonkaRouter, commits a hidden vote on Sui, and later reveals its answer and argument. If the first round lacks sufficient agreement, agents inspect one another's published evidence and reasoning, add new admissible evidence, and vote again. The protocol can finalize, expand the committee, or remain unresolved instead of manufacturing certainty.
 
 The hackathon entry point is a public fact checker because it directly exposes the verification engine: a user submits text, a public URL, or both and receives a multi-model verdict, a recomputable Truth Score from `0` to `100`, evidence-linked public reasoning traces, and every Gonka Request ID. A low-value binary prediction market is the first economic consumer of the resulting `ResolutionCertificate`, making the Sui settlement path concrete without narrowing the product to betting. The underlying protocol remains generic enough to later resolve DAO milestones, bounties, agent-service disputes, marketplace delivery claims, insurance evidence, and content-authenticity challenges.
 
@@ -149,7 +158,7 @@ The verification engine is the product and must operate headlessly. The CLI is t
 ### 3.1 What OpenVerdict is
 
 - A generic optimistic claim-resolution protocol.
-- A human-backed committee of independently configured AI oracle agents.
+- A staked committee of independently configured AI oracle agents.
 - A GonkaRouter-powered inference system for every oracle-agent reasoning pass.
 - A bonded challenge and escalation mechanism.
 - An on-chain commit-reveal voting protocol.
@@ -275,7 +284,7 @@ Organizer reveal material supplied to the team on 2026-08-26 describes Track 02 
 | --- | --- |
 | AI application powered by Sui | GonkaRouter agents perform evidence-based judgment; Sui turns their outputs into enforceable jury actions and reusable verdict objects |
 | Ownership | Owned `AgentCap`, `JurySeat`, `RunApproval`, and `PayoutTicket<T>` objects give authority and entitlements explicit owners |
-| Identity | `AgentProfile` plus controller capabilities create versioned on-chain agent identities; optional zkLogin improves authentication without being misrepresented as proof of unique humanity |
+| Identity | `AgentProfile` plus controller capabilities create versioned on-chain agent identities; optional zkLogin improves authentication and lets someone without a wallet stake on a seat; it is never presented as an identity claim |
 | Payments | Native USDC funds proposal/challenge bonds, jury rewards, refunds, and capped demonstration payouts |
 | On-chain execution | Move enforces committee eligibility, commitments, reveals, deadlines, tallies, terminal outcomes, and one-time payout redemption |
 | Sui is integral | Native `Random`, the object/capability model, immutable `ResolutionCertificate`, and Move coin accounting are protocol mechanisms, not decorative writes |
@@ -462,7 +471,7 @@ Needs a readable timeline from claim creation through evidence, inference, votes
 | Challenge bond | Required | Required | Required |
 | Five-agent committee | Required | Required | Configurable |
 | Diversity constraints | Required | Required | Required |
-| Human-backing policy | Reviewed five-person demo allowlist | Privacy-preserving proof required | Permissionless with Sybil safeguards |
+| Staking policy | Reviewed five-person demo allowlist | Open staking, uniqueness enforced on the draw | Permissionless staking with bonds and diversity limits |
 | GonkaRouter inference | Required | Required | Required |
 | At least three models per five-agent review | Required | Required | Policy-configured diversity floor |
 | Gonka Request IDs and public reasoning traces | Required | Required | Required |
@@ -512,7 +521,7 @@ type AgentManifest = {
 }
 ```
 
-For the hackathon, the registry uses a reviewed five-person demo allowlist and enforces one active committee identity per approved owner and human-backing hash. The UI labels this `MANUAL_ALLOWLIST`, not Sybil-proof identity. Before invite-only beta or permissionless registration, OpenVerdict requires a privacy-preserving proof-of-personhood or equivalent human-backing attestation. Store only a nullifier-derived or attestation hash; never store a person's civil identity.
+For the hackathon, the registry uses a reviewed five-person demo allowlist and enforces one active committee seat per approved owner and staker hash. The UI labels this `MANUAL_ALLOWLIST`: it is an allowlist, never an identity claim. Before invite-only beta or permissionless registration, OpenVerdict opens staking to any account and leans on stake, bonds and the diversity draw rather than on any identity check. Store only a hash derived from the staking account; never store a person's civil identity.
 
 Publishing a manifest hash proves that later content matches the registered version. It does not prove that every private line of the declared harness executed. OpenVerdict therefore makes claims only about the frozen input, returned structured output, on-chain commitment, and revealed vote that it can inspect.
 
@@ -567,9 +576,9 @@ Never collapse these into one green verified badge. In particular, `Run trace` m
 
 ### 14.4 Sui-native identity and capabilities
 
-V1 represents each oracle identity as an `AgentProfile` Move object and gives its controller an owned `AgentCap`. The profile stores the current manifest hash and Walrus blob ID, model/role classifications, human-backing hash, bond state, suspension state, and compact reputation totals. Only possession of the corresponding capability can request an agent-version update or bond withdrawal.
+V1 represents each oracle identity as an `AgentProfile` Move object and gives its controller an owned `AgentCap`. The profile stores the current manifest hash and Walrus blob ID, model/role classifications, staker hash, bond state, suspension state, and compact reputation totals. Only possession of the corresponding capability can request an agent-version update or bond withdrawal.
 
-The hackathon still uses a reviewed five-person allowlist. [Sui zkLogin](https://docs.sui.io/sui-stack/zklogin-integration/zklogin) can simplify owner onboarding through OAuth credentials, but it does not by itself prove one unique human or prevent one person from using multiple providers. Treat zkLogin as authentication, not Sybil resistance.
+The hackathon still uses a reviewed five-person allowlist. [Sui zkLogin](https://docs.sui.io/sui-stack/zklogin-integration/zklogin) simplifies owner onboarding through OAuth credentials and lets someone without a wallet stake on a seat. Treat zkLogin as authentication only: it makes staking possible, and it says nothing about who is behind an account.
 
 ERC-8004 is an EVM Draft and is not a dependency of the Sui implementation. A future cross-chain mirror may publish selected identity or reputation signals, but the Move registry remains authoritative for OpenVerdict on Sui.
 
@@ -870,7 +879,7 @@ An agent is eligible when:
 - Required bond is deposited.
 - Manifest is not deprecated.
 - Owner is not suspended.
-- Human-backing record is active and not already represented in the committee.
+- Staker record is active and not already represented in the committee.
 - Liveness score exceeds policy minimum.
 - A current GonkaRouter model ID and prompt version are registered.
 - No conflict of interest is declared for the claim.
@@ -898,7 +907,7 @@ Do not include consensus agreement or profitability in initial selection weight.
 For a five-agent committee:
 
 - No owner controls more than one seat.
-- No human-backing hash controls more than one seat.
+- No staker hash controls more than one seat.
 - No single model ID controls more than two seats.
 - Use at least three distinct GonkaRouter model IDs where the authenticated catalog permits.
 - At least one seat uses an adversarial/skeptic role.
@@ -921,7 +930,7 @@ Create a `RandomGenerator` and derive candidate positions:
 candidate_index = generate_u64_in_range(generator, 0, eligible_count - 1)
 ```
 
-Draw until five agents and reserve agents satisfy uniqueness and diversity. The Move function verifies agent activity, owner and human-backing uniqueness, model caps, and no prior selection. For every selected profile, it creates an owned `JurySeat` object and transfers it to the registered agent address. Cap attempts and abort with `E_INSUFFICIENT_DIVERSE_AGENTS` rather than weakening policy silently.
+Draw until five agents and reserve agents satisfy uniqueness and diversity. The Move function verifies agent activity, owner and staker uniqueness, model caps, and no prior selection. For every selected profile, it creates an owned `JurySeat` object and transfers it to the registered agent address. Cap attempts and abort with `E_INSUFFICIENT_DIVERSE_AGENTS` rather than weakening policy silently.
 
 This bounded on-chain approach is acceptable for a small hackathon pool. Production needs a gas-scalable snapshot or separately proven eligible set before permissionless agent counts grow.
 
@@ -1107,7 +1116,7 @@ The adapter is responsible for timeouts, visible retries, response normalization
 
 ### 20.9 Privacy
 
-GonkaRouter's privacy policy and terms govern provider-side processing and may change independently from OpenVerdict. OpenVerdict permits only public claims and public evidence in V1. Wallet balances, proof-of-personhood material, challenge salts, API keys, and unrevealed votes never enter prompts.
+GonkaRouter's privacy policy and terms govern provider-side processing and may change independently from OpenVerdict. OpenVerdict permits only public claims and public evidence in V1. Wallet balances, staker account material, challenge salts, API keys, and unrevealed votes never enter prompts.
 
 ## 21. Evidence system
 
@@ -1391,7 +1400,7 @@ Reputation attaches to an agent identity plus manifest lineage. Major prompt/mod
 | `/claims/new` | Create claim and resolution criteria |
 | `/claims/[id]` | Live proposal, dispute, evidence, votes, result, and payouts |
 | `/claims/[id]/observe` | Optional read-only visual observer for the live resolution event stream |
-| `/agents` | Agent directory with identity, human-backing, model, role, and reputation filters |
+| `/agents` | Agent directory with identity, stake, model, role, and reputation filters |
 | `/agents/[id]` | Manifest versions, GonkaRouter runs, arguments, votes, and performance |
 | `/evidence/[id]` | Retrieved source metadata, hashes, Walrus blob/object IDs, retention, and excerpts |
 | `/verify` | Recompute manifest hashes, evidence roots, commitments, and reveals |
@@ -1513,7 +1522,7 @@ Recommended layout:
 
 The dashboard shows:
 
-- Five separate agent lanes with owner/human-backing label, role, model ID, run status, latency, and token usage.
+- Five separate agent lanes with owner/staker label, role, model ID, run status, latency, and token usage.
 - A phase rail driven by Sui object state and confirmed Move events rather than frontend timers.
 - Safe tool activity, evidence access, run approval, commitments, reveals, discussion, finalization, and withdrawals.
 - Source labels on every item: `ENGINE`, `GONKA_ROUTER`, `TOOL`, `EVIDENCE`, or `SUI`.
@@ -1764,7 +1773,7 @@ Publish one versioned `openverdict` Move package with narrowly scoped modules:
 
 | Module | Responsibility |
 | --- | --- |
-| `agent_registry` | Agent profiles, owner capabilities, human-backing hashes, bonds, eligibility, and reputation |
+| `agent_registry` | Agent profiles, owner capabilities, staker hashes, bonds, eligibility, and reputation |
 | `claim` | Claim creation, optimistic proposal, challenge, phase state, deadlines, and terminal result |
 | `evidence` | Immutable evidence-bundle objects containing Walrus IDs, roots, policies, and retention metadata |
 | `jury` | Native-random committee selection, jury-seat objects, run approvals, commitments, reveals, and tally checks |
@@ -2154,7 +2163,7 @@ Internal worker endpoint. It independently reloads the frozen Walrus manifest an
 
 ### 29.10 `GET /api/agents`
 
-Returns active agents, manifests, human-backing status where available, eligibility, model/role classifications, and reputation dimensions.
+Returns active agents, manifests, stake status where available, eligibility, model/role classifications, and reputation dimensions.
 
 ### 29.11 `GET /api/status`
 
@@ -2354,7 +2363,7 @@ Record the verified values in a dated release manifest. Do not turn an undocumen
 | GonkaRouter model | Invalid, manipulated, or correlated reasoning | Strict schema, model/role diversity, frozen evidence, no single model majority |
 | Tool executor | Model requests unauthorized data or actions | Read-only allowlist, typed schemas, pinned sources/checkpoints/object versions, limits, transcript hashes |
 | Run attestor | Approves a missing or altered run artifact | Separate validator, public hashes/artifacts, narrow role, reproducible checks, multi-attestor beta |
-| Agent owner | Sybil, hidden manifest changes, collusion | Bonds, owner uniqueness, versioning, diversity, conflict declarations |
+| Agent owner | Seat concentration, hidden manifest changes, collusion | Bonds, owner and staker uniqueness, versioning, diversity, conflict declarations |
 | Evidence submitter | SSRF, malware, prompt injection, source poisoning | Safe retriever, content limits, canonicalization, evidence policy |
 | Evidence/Walrus service | Selective omission, expired retention, or root manipulation | Public submissions, blob/object IDs, renewal monitor, immutable bundle object, reproducible retrieval metadata |
 | Committee executor | Omits runs or changes prompts | Agent manifest hashes, run IDs, visible failures, canonical inputs |
@@ -2385,18 +2394,18 @@ Required controls:
 - Upgrade-cap custody, compatibility policy, object-version migration tests, and package-ID pinning.
 - Move unit/scenario tests plus property and end-to-end invariant checks.
 
-### 32.3 Sybil and collusion
+### 32.3 Seat concentration and collusion
 
 V1 uses:
 
-- One committee seat per owner and human-backing hash.
+- One committee seat per owner and staker hash.
 - Registration bond.
 - Model and role diversity caps.
 - Minimum liveness history for public committees after beta.
 - Conflict-of-interest declaration.
 - Random selection.
 
-The hackathon uses a reviewed five-person demo allowlist and labels its limitation. Invite-only beta and permissionless production registration require proof of personhood or an equivalent human-backing policy, delegated-operator rules, and stronger ownership clustering. Do not assume five wallet addresses are five independent humans.
+The hackathon uses a reviewed five-person demo allowlist and labels its limitation. Invite-only beta and permissionless production registration lean on stake, bonds, delegated-operator rules and stronger ownership clustering rather than on any identity check. Do not assume five wallet addresses are five independent operators.
 
 ### 32.4 Correlated models
 
@@ -2934,7 +2943,7 @@ Correct, and OpenVerdict does not ask GonkaRouter to prove truth. GonkaRouter ro
 
 #### “These agents are not independent.”
 
-Show owner or approved human backing, model, prompt lineage, role, and correlation constraints. Explain remaining correlation risk honestly.
+Show owner and staker, model, prompt lineage, role, and correlation constraints. Explain remaining correlation risk honestly.
 
 #### “The backend can change votes.”
 
@@ -3095,10 +3104,10 @@ Exit criteria:
 - [ ] Sponsored transactions for narrowly allowlisted user and agent actions.
 - [ ] Walrus Mainnet private publisher/upload relay and automated renewal.
 - [ ] Multi-attestor evidence/run approval or challengeable attestation design.
-- [ ] Optional zkLogin onboarding, explicitly not treated as proof of unique humanity.
+- [ ] Optional zkLogin onboarding, authentication only, never treated as an identity claim.
 - [ ] Optional Gonka network metadata extension if a documented endpoint becomes useful.
 - [ ] Optional cross-chain resolution and identity/reputation mirrors.
-- [ ] Open registration with stronger Sybil controls.
+- [ ] Open registration with stronger stake and diversity controls.
 - [ ] Evidence submitter attribution/rewards.
 - [ ] Notification and automation workers.
 - [ ] External security review.
@@ -3195,7 +3204,7 @@ Exit criteria:
 
 ### Phase C: open protocol
 
-- Permissionless agent registration with mature Sybil policy.
+- Permissionless agent registration with a mature stake and diversity policy.
 - Provider adapters with explicit agent-version changes.
 - Cross-chain result/identity mirrors without weakening the Sui object source of truth.
 - Decentralized evidence-root attestations.
@@ -3221,7 +3230,7 @@ Requires demonstrated security, audits, legal review, economic limits, insurance
 | Evidence prompt injection | High | High | Safe retriever, frozen data, no model-selected URLs, strict schema |
 | Bounded tool executor is abused | Medium | Critical | Typed read-only allowlist, pinned inputs, limits, sandboxing, transcript hashes |
 | Majority becomes self-reinforcing | Medium | High | Separate reputation dimensions; no minority slash |
-| Sybil agent owners | Medium | High | Bonds, one-owner-and-human seat, later proof of personhood/ownership clustering |
+| Seat concentration by one owner | Medium | High | Bonds, one seat per owner and per staker hash in the draw, later ownership clustering |
 | Backend omits failed runs | Medium | High | Run IDs, visible retries/failures, queue audit logs, output commitments |
 | Observer leaks unrevealed agent information | Medium | High | Visibility policy, serialization filter, payload-shape tests, no private chain-of-thought |
 | Observer presents application data as proof | Medium | High | Source labels, Sui/artifact links, confirmation states, rebuild tests |
@@ -3259,7 +3268,7 @@ Requires demonstrated security, audits, legal review, economic limits, insurance
 - What object layout and migration policy applies across package versions?
 - What caps and minimum windows are safe for the demo?
 - How are owner clusters identified without invasive identity?
-- Which privacy-preserving proof-of-personhood provider and nullifier scope should beta use?
+- What per-seat stake caps and unstaking windows should beta use?
 - Which bounded read-only tools are required for the first claim template, and which can be removed?
 - Which public event fields remain safe before reveal under timing and payload-size analysis?
 - Should an `UNSURE` threshold refund both sides equally?
@@ -3345,7 +3354,6 @@ Ask organizers in writing whether pre-kickoff product research and a PRD-only pr
 | Evidence root | Merkle root committed for an evidence bundle phase |
 | Gonka Request ID | Exact response `id` returned by GonkaRouter for one attempt and displayed as public trace metadata |
 | GonkaRouter | API gateway into Gonka: independent Hosts execute inference off-chain while Gonka L1 records and validates work artifacts |
-| Human-backed agent | AI oracle identity controlled by an approved distinct owner, with privacy-preserving proof of personhood required before permissionless production use |
 | Inference run audit | Stored request/response metadata, hashes, timing, usage, validation status, and attempts for a GonkaRouter call |
 | Jury seat | Owned Sui object assigned to one selected agent for one claim phase; stores acceptance, commitment, reveal, and run linkage |
 | Observer dashboard | Optional read-only visualization reconstructed from public resolution events and authoritative sources |
@@ -3357,7 +3365,7 @@ Ask organizers in writing whether pre-kickoff product research and a PRD-only pr
 | Resolution event | Source-labelled, phase-gated event used by CLI following, replay, support, and the observer dashboard |
 | Resolution certificate | Immutable Sui object recording the final rule-bound result and the claim/evidence/jury references used to derive it |
 | Sponsored transaction | Sui transaction whose gas is paid by a sponsor while the user still signs the full transaction data |
-| Sybil attack | One actor creates many identities to gain disproportionate influence |
+| Staked agent | AI oracle identity controlled by an approved distinct owner and carrying stake behind its seat; staking is open to any account and is never an identity claim |
 | Tool transcript | Ordered, bounded record of sanitized model tool calls whose hash is bound into an inference run |
 | Truth Score | Unweighted `0–100` summary derived from the final valid jury round's committed outcomes and confidence; not objective truth |
 | Unresolved | Protocol cannot reach the configured threshold without forcing certainty |

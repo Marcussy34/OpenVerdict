@@ -18,8 +18,8 @@ const ROWS = [
   },
   {
     Mark: SeatMark,
-    title: "One identity, one seat",
-    body: "zkLogin is authentication, not proof of personhood: one social account resolves to one address, and the registry backs one jury seat per address.",
+    title: "Seats spread across stakers",
+    body: "Any account can stake on a juror, and a committee seats at most one juror per owner and per staker hash, so a single draw spreads across operators and stakers.",
   },
   {
     Mark: RecomputeMark,

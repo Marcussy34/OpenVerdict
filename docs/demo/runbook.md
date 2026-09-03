@@ -340,6 +340,97 @@ against the recorded model, or opened through Seal after the deadline.
    ("Humans use only ten percent of their brains.", NO, truth score 2.00,
    5 of 5 seats, certificate
    `0x42954c917d0b7e34cb4634091a5ece1921a89a931f4872f690971b62fdcee706`).
+8. Verify a claim end to end through Claude (demo flow B in the skill's
+   `SKILL.md`; the same journey without Claude is `pnpm ov weather`,
+   `pnpm ov submit "<claim>"`, `pnpm ov watch <id>`, `pnpm ov audit <id>`).
+   Before the slot: `pnpm ov weather` (or ask Claude "is the jury
+   healthy?"); run this flow on stage only when it says clear, otherwise
+   go straight to step 7 on the rehearsal claim. Have a fresh statement
+   ready that was not submitted in the last hour (the engine has no
+   duplicate check, but a duplicate on the board reads badly), and keep the
+   rehearsal claim id from step 7 at hand. Open a second Claude Code
+   session or the same one; the skill loads as in step 7. Spoken flow,
+   with the clock counted from the moment the claim exists on Sui:
+   - T minus 1 min. Say: "First, is the jury available?" Type
+     `/openverdict-audit is the jury healthy?` Claude runs `ov weather`
+     (about 5 s) and reads the four rows: DeepSeek, MiniMax, Kimi, Web
+     search, then clear or not clear, then how old the probe is. Say:
+     "Three model families on Gonka and the web search provider, each
+     probed with a research-shaped request in the last few minutes. Clear.
+     If it were not, the claim would queue instead of burning an attempt."
+   - T minus 30 s. Paste the statement: `verify this claim: <statement>`
+     (or paste an article URL: Claude runs `ov extract` in 10 to 30 s and
+     lists up to three candidates with reasons and quotes; pick one by
+     number). Claude repeats the exact wording and asks for a go. Say
+     "go". The POST takes under a minute: the statement goes to Walrus,
+     then `create_claim` runs on Sui. Claude prints the claim link.
+   - T+0. Open `https://app.openverdict.info/claims/<claimId>` on the
+     audience screen. Say: "The console on the other screen shows the same
+     events live; Claude reads the same public stream." Claude starts
+     `ov watch <id> --for 9m` and narrates each line as it lands.
+   - T+1 to T+2 min. The lines "5 seats drawn: <models>" and "evidence
+     frozen, root 0x..." land. Say: "Sui's own randomness drew five seats
+     from three model families, at most two per model. The evidence is
+     frozen on Sui before anyone reasons. Each juror now researches alone
+     through our engine, for and against the claim, with quotes from at
+     least two sites; the console shows only content-free pulses until the
+     reveal."
+   - T+4 to T+10 min. "juror n run approved" and "juror n committed (k of
+     5)" land one seat at a time. Say: "As each juror finishes, its run
+     hash lands on Sui and it seals its vote as a hash. Five sealed votes,
+     and nobody, including us, can read any of them." If this stretch is
+     too long for the slot, hand the audience the console and run step 7
+     on the rehearsal claim in the same session ("let us look at a claim
+     that settled earlier today"); come back when Claude's next watch call
+     reports the reveal.
+   - T+9 to T+12 min. "COMMIT_1 to REVEAL_1", then "juror n revealed
+     <outcome> <bps> bps (k of 5)". Say: "The votes open together and Sui
+     recomputes every commitment before accepting it. Four matching
+     reveals settle it; a split would go to a public debate over the
+     frozen record and a sealed table vote; a jury still split ends
+     UNRESOLVED. Claude only reports what landed; it never guesses the
+     verdict." Claude's watch call ends at nine minutes with exit 4 and
+     "run again with --since N"; it calls again by itself, so expect one
+     short pause here.
+   - T+11 to T+12 min (one-round verdict). "final: <result>, score X.XX,
+     certificate 0x..." lands. Say: "Final. Claude now runs the auditor
+     with no key and no database: it refetches the record from Sui, Walrus
+     and GonkaRouter and recomputes every hash." Claude runs `run.sh`
+     (about ten seconds) and presents the card, the timeline, the proves
+     and does-not line, then "Ask me anything about this verdict." Hand
+     the questions to the judges; three model answers for this flow (what
+     if Gonka is down right now; why did it queue; why can a seat void the
+     whole attempt) are under "Demo flow B" in the skill, next to the
+     three audit answers from step 7.
+   - If round one splits: the discussion opens on the fifth reveal and
+     runs up to 14 minutes, stopping early when nobody moves; the table
+     vote follows (4 minutes to commit, 2 to reveal), so the verdict lands
+     about 32 minutes after launch. The console's debate dock shows the
+     turns as they stream. Unless the slot has 25 more minutes, switch to
+     the rehearsal claim for the audit and let the live claim finish on the
+     other screen.
+   - If a seat fails closed: Claude reads "attempt n voided: <reason>
+     (<model>, phase p); relaunch pending" (the watch polls the claim
+     record every 60 s, so up to a minute after the failure). Say:
+     "All or nothing: a seat failed, so no vote is invented and nothing
+     partial is finalized. The void is public on the claim page with the
+     seat, the model and the reason; the engine relaunches on the next
+     clear probe as attempt n of 3." Switch to the rehearsal claim for the
+     audit; the voided claim can be audited too (its card explains the
+     void).
+   - If `ov weather` was not clear and you submitted anyway: Claude prints
+     the queue link and `ov watch <queueId>` polls every 30 s. Say: "A
+     jury needs all three families and web search; the claim starts by
+     itself on the first clear probe, one launch every ten minutes, and
+     expires after six hours." Do not wait on stage; run step 7.
+   Timings to plan with: weather 5 s, extract 10 to 30 s, submit under a
+   minute, committee and freeze by minute two, commits from about minute
+   four, reveal about minute eight to ten, one-round certificate about
+   minute 11 to 12 (measured 10.6 min on the rehearsal claim), audit about
+   ten seconds plus the write-up. Budget 15 minutes for the live one-round
+   path with the audit, or 4 minutes for the weather, the submission and
+   the first two minutes of events followed by step 7 on the rehearsal
+   claim.
 
 ## Preserved demo claim (filled as completed)
 

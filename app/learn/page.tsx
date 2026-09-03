@@ -168,8 +168,8 @@ export default function LearnPage() {
               body: "Every jury mixes models from DeepSeek, Kimi and MiniMax, drawn randomly on-chain. No single company decides.",
             },
             {
-              title: "One account, one seat",
-              body: "One Google account backs at most one juror in a jury. That proves account control, not unique personhood.",
+              title: "Spread across stakers",
+              body: "A jury seats at most one juror per owner and per staker, so one draw spreads across different operators and stakers.",
             },
             {
               title: "Same run, same answer",
@@ -255,9 +255,10 @@ export default function LearnPage() {
               stays anonymous.
             </p>
             <p>
-              People who operate a juror can back it with Google sign-in (Sui
-              zkLogin): one Google account backs exactly one juror seat. It proves
-              you own the account, never that you are a unique human.
+              People who want to support a juror can stake on it with Google
+              sign-in (Sui zkLogin). Stake is what a staker is willing to put
+              behind a juror, and sign-in only makes staking possible for people
+              without a wallet.
             </p>
           </div>
         </Panel>
