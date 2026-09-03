@@ -40,8 +40,11 @@ function loadDotEnv(): Record<string, string> {
 async function findUpgradeCap(
   client: ReturnType<typeof createFallbackClient>,
   owner: string,
-  originalPackageId: string,
+  packageIds: string[],
 ): Promise<string> {
+  // After the first upgrade the cap's `package` field points at the latest
+  // package, not the original one, so either id identifies our cap.
+  const wanted = new Set(packageIds.map((id) => id.toLowerCase()));
   let cursor: string | null = null;
   do {
     const page: {
@@ -57,14 +60,14 @@ async function findUpgradeCap(
     });
     for (const object of page.objects) {
       const pkg = object.json?.package;
-      if (typeof pkg === "string" && pkg.toLowerCase() === originalPackageId.toLowerCase()) {
+      if (typeof pkg === "string" && wanted.has(pkg.toLowerCase())) {
         return object.objectId;
       }
     }
     cursor = page.cursor;
     if (!page.hasNextPage) break;
   } while (cursor !== null);
-  throw new Error(`no UpgradeCap for ${originalPackageId} owned by ${owner}`);
+  throw new Error(`no UpgradeCap for ${packageIds.join(" or ")} owned by ${owner}`);
 }
 
 async function main(): Promise<void> {
@@ -92,7 +95,7 @@ async function main(): Promise<void> {
     suiRpcUrl: String(config.suiRpcUrl ?? ""),
     suiRpcFallbackUrl: String(config.suiRpcFallbackUrl ?? ""),
   });
-  const upgradeCapId = await findUpgradeCap(client, address, originalPackageId);
+  const upgradeCapId = await findUpgradeCap(client, address, [currentPackageId, originalPackageId]);
   console.log(`operator     ${address}`);
   console.log(`current pkg  ${currentPackageId}`);
   console.log(`original pkg ${originalPackageId}`);

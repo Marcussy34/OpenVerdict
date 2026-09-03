@@ -185,6 +185,14 @@ module openverdict::jury {
         acceptance_deadline_ms: u64,
     }
 
+    /// Where each seat's jury reward goes, resolved once at selection time.
+    /// Committees created before the upgrade carry no such field and pay owners.
+    public struct CommitteePayoutsKey has copy, drop, store {}
+    public struct CommitteePayouts has store {
+        selected: vector<address>,
+        reserves: vector<address>,
+    }
+
     public struct CommitteeSelected has copy, drop {
         claim_id: ID,
         committee_id: ID,
@@ -274,7 +282,7 @@ module openverdict::jury {
         };
         assert!(reserves.length() == RESERVE_COUNT, E_INSUFFICIENT_DIVERSE_AGENTS);
 
-        create_first_round(claim, selected, reserves, clock, ctx);
+        create_first_round(registry, claim, selected, reserves, clock, ctx);
     }
 
     /// Accept one offered seat before its commit deadline.
@@ -348,6 +356,17 @@ module openverdict::jury {
         policy.reserve_human_hashes.remove(reserve_index);
         policy.reserve_model_hashes.remove(reserve_index);
         policy.reserve_role_hashes.remove(reserve_index);
+
+        // The reserve brings its own payout recipient into the seat it takes.
+        if (df::exists_<CommitteePayoutsKey>(&committee.id, CommitteePayoutsKey {})) {
+            let payouts = df::borrow_mut<CommitteePayoutsKey, CommitteePayouts>(
+                &mut committee.id,
+                CommitteePayoutsKey {},
+            );
+            *vector::borrow_mut(&mut payouts.selected, seat_index) =
+                payouts.reserves[reserve_index];
+            payouts.reserves.remove(reserve_index);
+        };
 
         let seat = new_seat(
             claim::claim_id(claim),
@@ -820,6 +839,22 @@ module openverdict::jury {
         committee.agent_owners[index]
     }
 
+    /// Who this seat's jury reward belongs to: the recorded staker, or the
+    /// owner for committees drawn before staked seats existed.
+    public(package) fun payout_recipient_for_expected_index(
+        committee: &Committee,
+        index: u64,
+    ): address {
+        if (df::exists_<CommitteePayoutsKey>(&committee.id, CommitteePayoutsKey {})) {
+            let payouts = df::borrow<CommitteePayoutsKey, CommitteePayouts>(
+                &committee.id,
+                CommitteePayoutsKey {},
+            );
+            if (index < payouts.selected.length()) return payouts.selected[index];
+        };
+        committee.agent_owners[index]
+    }
+
     public(package) fun create_resolution_certificate(
         claim_id: ID,
         package_version: u64,
@@ -848,6 +883,7 @@ module openverdict::jury {
     }
 
     fun create_first_round<T>(
+        registry: &Registry,
         claim: &mut Claim<T>,
         selected: vector<EligibilityRecord>,
         reserves: vector<EligibilityRecord>,
@@ -898,6 +934,8 @@ module openverdict::jury {
         let mut reserve_human_hashes = vector[];
         let mut reserve_model_hashes = vector[];
         let mut reserve_role_hashes = vector[];
+        let mut selected_payouts = vector[];
+        let mut reserve_payouts = vector[];
 
         let mut i = 0;
         while (i < selected.length()) {
@@ -906,6 +944,10 @@ module openverdict::jury {
             let profile_id = agent_registry::eligibility_profile_id(&record);
             committee.agent_profile_ids.push_back(profile_id);
             committee.agent_owners.push_back(owner);
+            // A staked seat pays its staker; every other seat pays its owner.
+            selected_payouts.push_back(
+                agent_registry::payout_recipient(registry, profile_id, owner),
+            );
             selected_human_hashes.push_back(*agent_registry::eligibility_human_hash(&record));
             selected_model_hashes.push_back(*agent_registry::eligibility_model_hash(&record));
             selected_role_hashes.push_back(*agent_registry::eligibility_role_hash(&record));
@@ -929,13 +971,23 @@ module openverdict::jury {
         i = 0;
         while (i < reserves.length()) {
             let record = reserves[i];
-            committee.reserve_profile_ids.push_back(agent_registry::eligibility_profile_id(&record));
-            committee.reserve_owners.push_back(agent_registry::eligibility_owner(&record));
+            let reserve_owner = agent_registry::eligibility_owner(&record);
+            let reserve_profile_id = agent_registry::eligibility_profile_id(&record);
+            committee.reserve_profile_ids.push_back(reserve_profile_id);
+            committee.reserve_owners.push_back(reserve_owner);
+            reserve_payouts.push_back(
+                agent_registry::payout_recipient(registry, reserve_profile_id, reserve_owner),
+            );
             reserve_human_hashes.push_back(*agent_registry::eligibility_human_hash(&record));
             reserve_model_hashes.push_back(*agent_registry::eligibility_model_hash(&record));
             reserve_role_hashes.push_back(*agent_registry::eligibility_role_hash(&record));
             i = i + 1;
         };
+        df::add(
+            &mut committee.id,
+            CommitteePayoutsKey {},
+            CommitteePayouts { selected: selected_payouts, reserves: reserve_payouts },
+        );
         df::add(
             &mut committee.id,
             CommitteePolicyKey {},
@@ -1101,8 +1153,9 @@ module openverdict::jury {
             return false
         };
         if (contains_profile(selected, agent_registry::eligibility_profile_id(candidate))) return false;
+        // One seat per operational key, two per model. Stakers are uncapped:
+        // an address is free and a staker cannot influence a vote.
         if (contains_owner(selected, agent_registry::eligibility_owner(candidate))) return false;
-        if (contains_human_hash(selected, agent_registry::eligibility_human_hash(candidate))) return false;
         count_model(selected, agent_registry::eligibility_model_hash(candidate)) < 2 &&
             count_role(selected, agent_registry::eligibility_role_hash(candidate)) < 3
     }
@@ -1129,8 +1182,6 @@ module openverdict::jury {
             contains_profile(reserves, agent_registry::eligibility_profile_id(candidate))) return false;
         if (contains_owner(selected, agent_registry::eligibility_owner(candidate)) ||
             contains_owner(reserves, agent_registry::eligibility_owner(candidate))) return false;
-        if (contains_human_hash(selected, agent_registry::eligibility_human_hash(candidate)) ||
-            contains_human_hash(reserves, agent_registry::eligibility_human_hash(candidate))) return false;
         let role = agent_registry::eligibility_role_hash(candidate);
         let skeptic = agent_registry::skeptic_role_hash();
         let source = agent_registry::source_authenticity_role_hash();
@@ -1164,14 +1215,12 @@ module openverdict::jury {
         seat_index: u64,
         reserve_index: u64,
     ): bool {
-        let mut humans = policy.selected_human_hashes;
         let mut models = policy.selected_model_hashes;
         let mut roles = policy.selected_role_hashes;
-        *vector::borrow_mut(&mut humans, seat_index) = policy.reserve_human_hashes[reserve_index];
         *vector::borrow_mut(&mut models, seat_index) = policy.reserve_model_hashes[reserve_index];
         *vector::borrow_mut(&mut roles, seat_index) = policy.reserve_role_hashes[reserve_index];
-        all_unique_hashes(&humans) &&
-            model_caps_valid(&models) &&
+        // Staker hashes are no longer a constraint, only models and roles are.
+        model_caps_valid(&models) &&
             distinct_hash_count(&models) >= 3 &&
             vector::contains(&roles, &agent_registry::skeptic_role_hash()) &&
             vector::contains(&roles, &agent_registry::source_authenticity_role_hash())
@@ -1190,15 +1239,6 @@ module openverdict::jury {
         let mut i = 0;
         while (i < records.length()) {
             if (agent_registry::eligibility_owner(&records[i]) == owner) return true;
-            i = i + 1;
-        };
-        false
-    }
-
-    fun contains_human_hash(records: &vector<EligibilityRecord>, hash: &vector<u8>): bool {
-        let mut i = 0;
-        while (i < records.length()) {
-            if (agent_registry::eligibility_human_hash(&records[i]) == hash) return true;
             i = i + 1;
         };
         false
@@ -1236,19 +1276,6 @@ module openverdict::jury {
             i = i + 1;
         };
         abort E_INSUFFICIENT_DIVERSE_AGENTS
-    }
-
-    fun all_unique_hashes(values: &vector<vector<u8>>): bool {
-        let mut i = 0;
-        while (i < values.length()) {
-            let mut j = i + 1;
-            while (j < values.length()) {
-                if (values[i] == values[j]) return false;
-                j = j + 1;
-            };
-            i = i + 1;
-        };
-        true
     }
 
     fun model_caps_valid(models: &vector<vector<u8>>): bool {
@@ -1462,8 +1489,31 @@ module openverdict::jury {
     }
 
     #[test_only]
+    /// Route the given seats and reserves to explicit payout recipients.
+    public(package) fun set_committee_payouts_for_testing(
+        committee: &mut Committee,
+        selected: vector<address>,
+        reserves: vector<address>,
+    ) {
+        df::add(
+            &mut committee.id,
+            CommitteePayoutsKey {},
+            CommitteePayouts { selected, reserves },
+        );
+    }
+
+    #[test_only]
     public(package) fun destroy_committee_for_testing(committee: Committee) {
         let mut committee = committee;
+        let payouts = df::remove_if_exists<CommitteePayoutsKey, CommitteePayouts>(
+            &mut committee.id,
+            CommitteePayoutsKey {},
+        );
+        if (payouts.is_some()) {
+            let CommitteePayouts { selected: _, reserves: _ } = payouts.destroy_some();
+        } else {
+            payouts.destroy_none();
+        };
         let CommitteePolicy {
             selected_human_hashes: _,
             selected_model_hashes: _,
@@ -1504,6 +1554,32 @@ module openverdict::jury {
             80,
             10,
         )
+    }
+
+    #[test_only]
+    /// The same seven seats as add_diverse_selection_records, but sharing four
+    /// staker hashes: staking no longer constrains the draw.
+    fun add_repeated_staker_hash_records(registry: &mut Registry) {
+        let profiles = vector[@0x101, @0x102, @0x103, @0x104, @0x105, @0x106, @0x107];
+        let owners = vector[@0xA1, @0xA2, @0xA3, @0xA4, @0xA5, @0xA6, @0xA7];
+        let models = vector[11u8, 11, 12, 12, 13, 13, 14];
+        let stakers = vector[1u8, 1, 2, 2, 3, 3, 4];
+        let skeptic = agent_registry::skeptic_role_hash();
+        let source = agent_registry::source_authenticity_role_hash();
+        let mut i = 0;
+        while (i < profiles.length()) {
+            let staker_byte = stakers[i];
+            let model_byte = models[i];
+            agent_registry::add_eligibility_for_testing(
+                registry,
+                object::id_from_address(profiles[i]),
+                owners[i],
+                vector::tabulate!(32, |_| staker_byte),
+                vector::tabulate!(32, |_| model_byte),
+                if (i % 2 == 0) skeptic else source,
+            );
+            i = i + 1;
+        };
     }
 
     #[test_only]
@@ -1607,6 +1683,60 @@ module openverdict::jury {
         let committee = test_scenario::take_shared<Committee>(&scenario);
         assert!(committee.agent_profile_ids.length() == COMMITTEE_SIZE);
         assert!(committee.reserve_profile_ids.length() == RESERVE_COUNT);
+        test_scenario::return_shared(committee);
+        claim::destroy_claim_for_testing(claim);
+        agent_registry::destroy_registry_for_testing(registry);
+        clock::destroy_for_testing(clock);
+        scenario.end();
+    }
+
+    #[test]
+    fun native_random_selection_accepts_repeated_staker_hashes() {
+        use sui::coin;
+        use sui::test_scenario;
+
+        let mut scenario = test_scenario::begin(@0x0);
+        random::create_for_testing(scenario.ctx());
+        test_scenario::next_tx(&mut scenario, @0x0);
+        let mut randomness = test_scenario::take_shared<Random>(&scenario);
+        random::update_randomness_state_for_testing(
+            &mut randomness,
+            0,
+            vector::tabulate!(32, |i| i as u8),
+            scenario.ctx(),
+        );
+        test_scenario::return_shared(randomness);
+
+        test_scenario::next_tx(&mut scenario, @0xCAFE);
+        let mut registry = agent_registry::new_registry_for_testing(scenario.ctx());
+        add_repeated_staker_hash_records(&mut registry);
+        let clock = clock::create_for_testing(scenario.ctx());
+        let budget = coin::mint_for_testing<JuryTestCoin>(100, scenario.ctx());
+        let mut claim = claim::new_claim_for_testing(
+            &registry,
+            budget,
+            selection_params(),
+            &clock,
+            scenario.ctx(),
+        );
+        claim::start_direct_review(&registry, &mut claim, &clock);
+        let randomness = test_scenario::take_shared<Random>(&scenario);
+        select_committee(&registry, &mut claim, &randomness, &clock, scenario.ctx());
+        test_scenario::return_shared(randomness);
+        assert!(claim::state(&claim) == claim::state_commit_1());
+
+        test_scenario::next_tx(&mut scenario, @0xCAFE);
+        let committee = test_scenario::take_shared<Committee>(&scenario);
+        assert!(committee.agent_profile_ids.length() == COMMITTEE_SIZE);
+        assert!(committee.reserve_profile_ids.length() == RESERVE_COUNT);
+        // No seat is staked here, so every reward still belongs to its owner.
+        let mut i = 0;
+        while (i < COMMITTEE_SIZE) {
+            assert!(
+                payout_recipient_for_expected_index(&committee, i) == committee.agent_owners[i],
+            );
+            i = i + 1;
+        };
         test_scenario::return_shared(committee);
         claim::destroy_claim_for_testing(claim);
         agent_registry::destroy_registry_for_testing(registry);

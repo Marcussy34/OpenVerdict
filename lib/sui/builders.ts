@@ -14,6 +14,16 @@ export interface RegisterAgentTransactionInput {
   humanBackingHash: Uint8Array;
 }
 
+export interface RegisterStakedAgentTransactionInput {
+  stakeMist: Amount;
+  manifestHash: Uint8Array;
+  manifestBlobId: string;
+  modelHash: Uint8Array;
+  roleHash: Uint8Array;
+  stakerHash: Uint8Array;
+  operationalOwner: string;
+}
+
 export interface UpdateAgentManifestTransactionInput {
   agentProfileId: string;
   agentCapId: string;
@@ -176,6 +186,35 @@ export function buildRegisterAgentTransaction(
       bytes(tx, input.modelHash),
       bytes(tx, input.roleHash),
       bytes(tx, input.humanBackingHash),
+      tx.object(manifest.clockObjectId),
+    ],
+  });
+  return tx;
+}
+
+/** Stakes on one juror seat: the sender pays the bond, the slot runs the seat. */
+export function buildRegisterStakedAgentTransaction(
+  manifest: ReleaseManifest,
+  input: RegisterStakedAgentTransactionInput,
+): Transaction {
+  const tx = transactionFor(manifest);
+  tx.moveCall({
+    target: target(manifest, "agent_registry", "register_staked_agent"),
+    arguments: [
+      tx.object(manifest.registryObjectId),
+      // The stake comes from the staker's own coins: the gas coin belongs to
+      // the sponsor and must never be split here.
+      tx.coin({
+        type: "0x2::sui::SUI",
+        balance: toBigInt(input.stakeMist),
+        useGasCoin: false,
+      }),
+      bytes(tx, input.manifestHash),
+      bytes(tx, input.manifestBlobId),
+      bytes(tx, input.modelHash),
+      bytes(tx, input.roleHash),
+      bytes(tx, input.stakerHash),
+      tx.pure.address(input.operationalOwner),
       tx.object(manifest.clockObjectId),
     ],
   });

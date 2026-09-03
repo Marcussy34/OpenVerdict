@@ -842,6 +842,116 @@ module openverdict::jury_tests {
     }
 
     #[test]
+    fun reserve_replacement_carries_its_payout_recipient_into_the_seat() {
+        let mut scenario = test_scenario::begin(OWNER);
+        let registry = agent_registry::new_registry_for_testing(scenario.ctx());
+        let clock = clock::create_for_testing(scenario.ctx());
+        let params = claim::new_claim_params(
+            claim::claim_mode_direct_review(),
+            10,
+            20,
+            30,
+            40,
+            50,
+            60,
+            70,
+            10,
+            80,
+            10,
+        );
+        let mut claim = claim::new_claim_for_testing(
+            &registry,
+            coin::mint_for_testing<jury::JuryTestCoin>(100, scenario.ctx()),
+            params,
+            &clock,
+            scenario.ctx(),
+        );
+        claim::start_direct_review(&registry, &mut claim, &clock);
+        let profiles = vector[
+            object::id_from_address(@0x101),
+            object::id_from_address(@0x102),
+            object::id_from_address(@0x103),
+            object::id_from_address(@0x104),
+            object::id_from_address(@0x105),
+        ];
+        let owners = vector[OWNER, @0xA2, @0xA3, @0xA4, @0xA5];
+        let mut committee = jury::new_committee_for_testing(
+            claim::claim_id(&claim),
+            profiles,
+            owners,
+            false,
+            scenario.ctx(),
+        );
+        // Seat one and reserve one are staked seats; the rest pay their owners.
+        jury::set_committee_payouts_for_testing(
+            &mut committee,
+            vector[@0x57A6E, @0xA2, @0xA3, @0xA4, @0xA5],
+            vector[@0x57A6F, @0xA7],
+        );
+        let seat = jury::new_seat_for_testing(
+            claim::claim_id(&claim),
+            jury::committee_id(&committee),
+            profiles[0],
+            OWNER,
+            1,
+            vector[],
+            false,
+            30,
+            40,
+            scenario.ctx(),
+        );
+        let declined_id = jury::jury_seat_id(&seat);
+        let mut tally = jury::new_tally_for_testing(
+            claim::claim_id(&claim),
+            jury::committee_id(&committee),
+            1,
+            vector[],
+            vector[
+                declined_id,
+                object::id_from_address(@0x202),
+                object::id_from_address(@0x203),
+                object::id_from_address(@0x204),
+                object::id_from_address(@0x205),
+            ],
+            scenario.ctx(),
+        );
+        claim::link_committee(&mut claim, jury::committee_id(&committee), jury::tally_id(&tally));
+        let cap = agent_registry::new_agent_cap_for_testing(profiles[0], scenario.ctx());
+        jury::decline_jury_seat(seat, &cap, &clock);
+        agent_registry::destroy_agent_cap_for_testing(cap);
+        assert!(jury::payout_recipient_for_expected_index(&committee, 0) == @0x57A6E);
+
+        test_scenario::next_tx(&mut scenario, OWNER);
+        let declined = test_scenario::take_from_sender<jury::JurySeat>(&scenario);
+        jury::replace_declined_seat(
+            &claim,
+            &mut committee,
+            &mut tally,
+            declined,
+            0,
+            &clock,
+            scenario.ctx(),
+        );
+        // The seat now belongs to the reserve, and so does its reward.
+        assert!(jury::owner_for_expected_index(&committee, 0) == @0xA6);
+        assert!(jury::payout_recipient_for_expected_index(&committee, 0) == @0x57A6F);
+        let mut i = 1;
+        while (i < 5) {
+            assert!(
+                jury::payout_recipient_for_expected_index(&committee, i)
+                    == jury::owner_for_expected_index(&committee, i),
+            );
+            i = i + 1;
+        };
+        assert!(claim::destroy_claim_for_testing(claim) == 100);
+        jury::destroy_tally_for_testing(tally);
+        jury::destroy_committee_for_testing(committee);
+        agent_registry::destroy_registry_for_testing(registry);
+        clock::destroy_for_testing(clock);
+        scenario.end();
+    }
+
+    #[test]
     fun committee_lock_is_one_way() {
         let mut scenario = test_scenario::begin(OWNER);
         let registry = agent_registry::new_registry_for_testing(scenario.ctx());

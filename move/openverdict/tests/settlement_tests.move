@@ -18,6 +18,7 @@ module openverdict::settlement_tests {
     const AGENT_4: address = @0xA4;
     const AGENT_5: address = @0xA5;
     const TREASURY: address = @0x7EA5;
+    const STAKER: address = @0x57A6E;
     const E_UNEXPECTED_SUCCESS: u64 = 99;
 
     public struct TestCoin has drop {}
@@ -81,6 +82,22 @@ module openverdict::settlement_tests {
         agent_registry::EvidenceCap,
         Clock,
     ) {
+        finalize_four_of_five_with_payouts(registry, scenario, vector[])
+    }
+
+    /// Empty `payouts` leaves the committee without the payout field, exactly
+    /// like committees drawn before staked seats existed.
+    fun finalize_four_of_five_with_payouts(
+        registry: &agent_registry::Registry,
+        scenario: &mut test_scenario::Scenario,
+        payouts: vector<address>,
+    ): (
+        claim::Claim<TestCoin>,
+        jury::Committee,
+        jury::RoundTally,
+        agent_registry::EvidenceCap,
+        Clock,
+    ) {
         let evidence_cap = agent_registry::new_evidence_cap_for_testing(scenario.ctx());
         let mut clock = clock::create_for_testing(scenario.ctx());
         let budget = coin::mint_for_testing<TestCoin>(100, scenario.ctx());
@@ -92,13 +109,16 @@ module openverdict::settlement_tests {
             scenario.ctx(),
         );
         claim::start_direct_review(registry, &mut claim, &clock);
-        let committee = jury::new_committee_for_testing(
+        let mut committee = jury::new_committee_for_testing(
             claim::claim_id(&claim),
             profiles(),
             owners(),
             true,
             scenario.ctx(),
         );
+        if (!payouts.is_empty()) {
+            jury::set_committee_payouts_for_testing(&mut committee, payouts, vector[@0xA6, @0xA7]);
+        };
         let mut tally = jury::new_tally_for_testing(
             claim::claim_id(&claim),
             jury::committee_id(&committee),
@@ -169,6 +189,47 @@ module openverdict::settlement_tests {
         assert!(settlement::ticket_amount(&refund) == 20);
         assert!(settlement::ticket_reason(&refund) == settlement::reason_creator_refund());
         test_scenario::return_to_sender(&scenario, refund);
+
+        assert!(claim::destroy_claim_for_testing(claim) == 100);
+        jury::destroy_tally_for_testing(tally);
+        jury::destroy_committee_for_testing(committee);
+        agent_registry::destroy_evidence_cap_for_testing(evidence_cap);
+        agent_registry::destroy_registry_for_testing(registry);
+        clock::destroy_for_testing(clock);
+        scenario.end();
+    }
+
+    #[test]
+    fun staked_seat_reward_goes_to_the_staker_and_other_seats_to_their_owners() {
+        let mut scenario = test_scenario::begin(TREASURY);
+        let registry = agent_registry::new_registry_for_testing(scenario.ctx());
+        test_scenario::next_tx(&mut scenario, CREATOR);
+        let (claim, committee, tally, evidence_cap, clock) = finalize_four_of_five_with_payouts(
+            &registry,
+            &mut scenario,
+            vector[STAKER, AGENT_2, AGENT_3, AGENT_4, AGENT_5],
+        );
+        // AGENT_1 runs seat one, but the staker posted its bond.
+        assert!(jury::owner_for_expected_index(&committee, 0) == AGENT_1);
+
+        test_scenario::next_tx(&mut scenario, STAKER);
+        let staked = test_scenario::take_from_sender<settlement::PayoutTicket<TestCoin>>(&scenario);
+        assert!(settlement::ticket_amount(&staked) == 19);
+        assert!(settlement::ticket_reason(&staked) == settlement::reason_jury_reward());
+        test_scenario::return_to_sender(&scenario, staked);
+        test_scenario::next_tx(&mut scenario, AGENT_1);
+        assert!(!test_scenario::has_most_recent_for_sender<settlement::PayoutTicket<TestCoin>>(&scenario));
+
+        let payout_owners = owners();
+        let mut i = 1;
+        while (i < 4) {
+            test_scenario::next_tx(&mut scenario, payout_owners[i]);
+            let ticket = test_scenario::take_from_sender<settlement::PayoutTicket<TestCoin>>(&scenario);
+            assert!(settlement::ticket_amount(&ticket) == 19);
+            assert!(settlement::ticket_reason(&ticket) == settlement::reason_jury_reward());
+            test_scenario::return_to_sender(&scenario, ticket);
+            i = i + 1;
+        };
 
         assert!(claim::destroy_claim_for_testing(claim) == 100);
         jury::destroy_tally_for_testing(tally);

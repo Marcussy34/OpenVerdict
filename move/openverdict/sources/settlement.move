@@ -261,9 +261,11 @@ module openverdict::settlement {
         let mut i = 0;
         while (i < expected.length()) {
             if (reward > 0 && vector::contains(revealed, &expected[i])) {
+                // A staked seat's reward belongs to its staker, not to the
+                // operational key that runs it.
                 create_ticket<T>(
                     claim::claim_id(claim),
-                    jury::owner_for_expected_index(committee, i),
+                    jury::payout_recipient_for_expected_index(committee, i),
                     reward,
                     REASON_JURY_REWARD,
                     ctx,

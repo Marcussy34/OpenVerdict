@@ -24,11 +24,19 @@ module openverdict::agent_registry {
     const E_AGENT_NOT_FOUND: u64 = 11;
     const E_INVALID_WEIGHT: u64 = 12;
     const E_INVALID_PROTOCOL_FEE: u64 = 13;
+    const E_STAKE_TOO_SMALL: u64 = 14;
+    const E_NOT_STAKER: u64 = 15;
+    const E_POSITION_MISMATCH: u64 = 16;
+    const E_UNSTAKE_EXISTS: u64 = 17;
+    const E_UNSTAKE_MISSING: u64 = 18;
+    const E_UNSTAKE_NOT_READY: u64 = 19;
 
     const PROTOCOL_VERSION: u64 = 1;
     const DEFAULT_PROTOCOL_FEE_BPS: u64 = 500;
     const MAX_PROTOCOL_FEE_BPS: u64 = 2_000;
     const MIN_AGENT_BOND: u64 = 1;
+    /// Real money on a seat: 0.1 SUI is the smallest stake that buys one.
+    const MIN_STAKE_MIST: u64 = 100_000_000;
     const MAX_ELIGIBLE_AGENTS: u64 = 32;
     const MAX_SELECTION_WEIGHT: u64 = 1_000_000;
     const WITHDRAWAL_DELAY_MS: u64 = 86_400_000;
@@ -106,6 +114,46 @@ module openverdict::agent_registry {
     public struct ManifestVersion has store { value: u64 }
     public struct WithdrawalRequest has store { amount: u64, available_at_ms: u64 }
 
+    /// Owned by the staker; the only way to unstake.
+    public struct StakePosition has key, store {
+        id: UID,
+        agent_profile_id: ID,
+        staker: address,
+        amount: u64,
+    }
+
+    /// Dynamic field on AgentProfile: who staked on this seat and how much.
+    public struct StakeKey has copy, drop, store {}
+    public struct StakeRecord has store { staker: address, amount: u64 }
+
+    /// Dynamic field on Registry keyed by profile id: where jury rewards go.
+    public struct PayoutRecipientKey has copy, drop, store { agent_profile_id: ID }
+
+    /// Dynamic field on AgentProfile while an unstake matures.
+    public struct UnstakeKey has copy, drop, store {}
+    public struct UnstakeRequest has store { amount: u64, available_at_ms: u64 }
+
+    /// Discovery event for a seat that was bought with a real stake.
+    public struct AgentStaked has copy, drop {
+        agent_profile_id: ID,
+        staker: address,
+        operational_owner: address,
+        amount: u64,
+    }
+
+    public struct UnstakeRequested has copy, drop {
+        agent_profile_id: ID,
+        staker: address,
+        amount: u64,
+        available_at_ms: u64,
+    }
+
+    public struct Unstaked has copy, drop {
+        agent_profile_id: ID,
+        staker: address,
+        amount: u64,
+    }
+
     /// Package initialization creates operational caps and the shared registry.
     fun init(ctx: &mut TxContext) {
         let publisher = ctx.sender();
@@ -175,6 +223,140 @@ module openverdict::agent_registry {
         transfer::transfer(AgentCap { id: object::new(ctx), agent_profile_id }, owner);
         event::emit(AgentRegistered { agent_profile_id, owner, manifest_hash: profile.manifest_hash });
         transfer::share_object(profile);
+    }
+
+    /// Stake on one standardized seat: the stake becomes the seat's bond, the
+    /// sender becomes its payout recipient, and the operational owner runs it
+    /// and receives the AgentCap. Same manifest checks as register_agent.
+    public entry fun register_staked_agent(
+        registry: &mut Registry,
+        stake: Coin<SUI>,
+        manifest_hash: vector<u8>,
+        manifest_blob_id: vector<u8>,
+        model_hash: vector<u8>,
+        role_hash: vector<u8>,
+        staker_hash: vector<u8>,
+        operational_owner: address,
+        _clock: &Clock,
+        ctx: &mut TxContext,
+    ) {
+        assert_not_paused(registry);
+        assert_manifest_fields(
+            &manifest_hash,
+            &manifest_blob_id,
+            &model_hash,
+            &role_hash,
+            &staker_hash,
+        );
+        let amount = coin::value(&stake);
+        assert!(amount >= MIN_STAKE_MIST, E_STAKE_TOO_SMALL);
+        assert!(registry.eligible_agents.length() < MAX_ELIGIBLE_AGENTS, E_REGISTRY_FULL);
+
+        let staker = ctx.sender();
+        let mut profile = AgentProfile {
+            id: object::new(ctx),
+            owner: operational_owner,
+            manifest_hash,
+            manifest_blob_id,
+            // Historical field name: this is the staker hash.
+            human_backing_hash: staker_hash,
+            model_hash,
+            role_hash,
+            bond: coin::into_balance(stake),
+            active: true,
+            reputation: initial_reputation(),
+        };
+        let agent_profile_id = object::id(&profile);
+        df::add(&mut profile.id, ManifestVersionKey {}, ManifestVersion { value: 1 });
+        df::add(&mut profile.id, StakeKey {}, StakeRecord { staker, amount });
+
+        registry.eligible_agents.push_back(EligibilityRecord {
+            agent_profile_id,
+            owner: operational_owner,
+            human_backing_hash: profile.human_backing_hash,
+            model_hash: profile.model_hash,
+            role_hash: profile.role_hash,
+            weight: 10_000,
+            active: true,
+        });
+        // The seat's jury rewards belong to the staker, not to the key that runs it.
+        df::add(&mut registry.id, PayoutRecipientKey { agent_profile_id }, staker);
+
+        transfer::transfer(
+            AgentCap { id: object::new(ctx), agent_profile_id },
+            operational_owner,
+        );
+        transfer::transfer(
+            StakePosition { id: object::new(ctx), agent_profile_id, staker, amount },
+            staker,
+        );
+        // Same event shape as register_agent so existing indexers keep working.
+        event::emit(AgentRegistered {
+            agent_profile_id,
+            owner: operational_owner,
+            manifest_hash: profile.manifest_hash,
+        });
+        event::emit(AgentStaked { agent_profile_id, staker, operational_owner, amount });
+        transfer::share_object(profile);
+    }
+
+    /// Staker only. Deactivates the seat (profile and registry record, like
+    /// deprecate_agent) and starts the 24 h withdrawal of the whole bond.
+    public entry fun request_unstake(
+        registry: &mut Registry,
+        profile: &mut AgentProfile,
+        position: &StakePosition,
+        clock: &Clock,
+        ctx: &mut TxContext,
+    ) {
+        assert_not_paused(registry);
+        assert!(position.staker == ctx.sender(), E_NOT_STAKER);
+        let profile_id = object::id(profile);
+        assert!(position.agent_profile_id == profile_id, E_POSITION_MISMATCH);
+        assert!(!df::exists_<UnstakeKey>(&profile.id, UnstakeKey {}), E_UNSTAKE_EXISTS);
+
+        profile.active = false;
+        let (found, index) = find_record_index(&registry.eligible_agents, profile_id);
+        assert!(found, E_AGENT_NOT_FOUND);
+        vector::borrow_mut(&mut registry.eligible_agents, index).active = false;
+
+        let amount = balance::value(&profile.bond);
+        let now = clock::timestamp_ms(clock);
+        assert!(now <= 0xffffffffffffffff - WITHDRAWAL_DELAY_MS, E_INVALID_BOND);
+        let available_at_ms = now + WITHDRAWAL_DELAY_MS;
+        df::add(&mut profile.id, UnstakeKey {}, UnstakeRequest { amount, available_at_ms });
+        event::emit(UnstakeRequested {
+            agent_profile_id: profile_id,
+            staker: position.staker,
+            amount,
+            available_at_ms,
+        });
+    }
+
+    /// Staker only, after the delay. Pays the bond back and consumes the
+    /// position. Pausing never blocks this exit.
+    public entry fun complete_unstake(
+        profile: &mut AgentProfile,
+        position: StakePosition,
+        clock: &Clock,
+        ctx: &mut TxContext,
+    ) {
+        assert!(position.staker == ctx.sender(), E_NOT_STAKER);
+        assert!(position.agent_profile_id == object::id(profile), E_POSITION_MISMATCH);
+        assert!(df::exists_<UnstakeKey>(&profile.id, UnstakeKey {}), E_UNSTAKE_MISSING);
+        let UnstakeRequest { amount, available_at_ms } =
+            df::remove(&mut profile.id, UnstakeKey {});
+        assert!(clock::timestamp_ms(clock) >= available_at_ms, E_UNSTAKE_NOT_READY);
+
+        let StakeRecord { staker: _, amount: _ } = df::remove(&mut profile.id, StakeKey {});
+        let StakePosition { id, agent_profile_id, staker, amount: _ } = position;
+        id.delete();
+        // A slash can have taken part of the bond, so pay what is left.
+        let available = balance::value(&profile.bond);
+        let payout = if (amount < available) amount else available;
+        let withdrawn = balance::split(&mut profile.bond, payout);
+        transfer::public_transfer(coin::from_balance(withdrawn, ctx), staker);
+        event::emit(Unstaked { agent_profile_id, staker, amount: payout });
     }
 
     /// Replace mutable manifest pointers while preserving prior event history.
@@ -356,6 +538,45 @@ module openverdict::agent_registry {
     public fun agent_active(profile: &AgentProfile): bool { profile.active }
     public fun agent_bond_value(profile: &AgentProfile): u64 { balance::value(&profile.bond) }
     public fun cap_agent_profile_id(cap: &AgentCap): ID { cap.agent_profile_id }
+    public fun min_stake_mist(): u64 { MIN_STAKE_MIST }
+    public fun stake_position_profile_id(position: &StakePosition): ID { position.agent_profile_id }
+    public fun stake_position_staker(position: &StakePosition): address { position.staker }
+    public fun stake_position_amount(position: &StakePosition): u64 { position.amount }
+
+    public fun has_unstake_request(profile: &AgentProfile): bool {
+        df::exists_<UnstakeKey>(&profile.id, UnstakeKey {})
+    }
+
+    /// Seats registered before real stake existed keep paying their owner.
+    public fun payout_recipient(
+        registry: &Registry,
+        agent_profile_id: ID,
+        fallback: address,
+    ): address {
+        let key = PayoutRecipientKey { agent_profile_id };
+        if (df::exists_<PayoutRecipientKey>(&registry.id, key)) {
+            *df::borrow<PayoutRecipientKey, address>(&registry.id, key)
+        } else {
+            fallback
+        }
+    }
+
+    public fun profile_staker(profile: &AgentProfile): Option<address> {
+        if (df::exists_<StakeKey>(&profile.id, StakeKey {})) {
+            option::some(df::borrow<StakeKey, StakeRecord>(&profile.id, StakeKey {}).staker)
+        } else {
+            option::none()
+        }
+    }
+
+    /// Zero for a seat that carries no stake record.
+    public fun profile_stake_amount(profile: &AgentProfile): u64 {
+        if (df::exists_<StakeKey>(&profile.id, StakeKey {})) {
+            df::borrow<StakeKey, StakeRecord>(&profile.id, StakeKey {}).amount
+        } else {
+            0
+        }
+    }
 
     public(package) fun assert_not_paused(registry: &Registry) {
         assert!(!registry.paused, E_PAUSED);
@@ -464,6 +685,19 @@ module openverdict::agent_registry {
     }
 
     #[test_only]
+    /// Detach a staked seat's payout routing before a test registry is deleted.
+    public(package) fun remove_payout_recipient_for_testing(
+        registry: &mut Registry,
+        agent_profile_id: ID,
+    ) {
+        let recipient = df::remove_if_exists<PayoutRecipientKey, address>(
+            &mut registry.id,
+            PayoutRecipientKey { agent_profile_id },
+        );
+        recipient.destroy_some();
+    }
+
+    #[test_only]
     public(package) fun destroy_registry_for_testing(registry: Registry) {
         let Registry {
             id,
@@ -555,6 +789,21 @@ module openverdict::agent_registry {
             let WithdrawalRequest { amount: _, available_at_ms: _ } = withdrawal.destroy_some();
         } else {
             withdrawal.destroy_none();
+        };
+        let stake = df::remove_if_exists<StakeKey, StakeRecord>(&mut profile.id, StakeKey {});
+        if (stake.is_some()) {
+            let StakeRecord { staker: _, amount: _ } = stake.destroy_some();
+        } else {
+            stake.destroy_none();
+        };
+        let unstake = df::remove_if_exists<UnstakeKey, UnstakeRequest>(
+            &mut profile.id,
+            UnstakeKey {},
+        );
+        if (unstake.is_some()) {
+            let UnstakeRequest { amount: _, available_at_ms: _ } = unstake.destroy_some();
+        } else {
+            unstake.destroy_none();
         };
         let AgentProfile {
             id,

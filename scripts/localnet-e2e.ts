@@ -4,6 +4,7 @@ import { spawn, type ChildProcess } from "node:child_process";
 import { access, mkdir, open, type FileHandle } from "node:fs/promises";
 import { createConnection } from "node:net";
 import { join } from "node:path";
+import { bcs } from "@mysten/sui/bcs";
 import { Ed25519Keypair } from "@mysten/sui/keypairs/ed25519";
 import { Transaction } from "@mysten/sui/transactions";
 import {
@@ -46,6 +47,7 @@ import {
   SignerRegistry,
   buildCreateDemoPoolTransaction,
   buildRedeemDemoPoolTransaction,
+  buildRegisterStakedAgentTransaction,
   buildSettleDemoPoolTransaction,
   createSuiGateway,
   executeAndWait,
@@ -73,6 +75,10 @@ const localnetSuiConfigDir = join(localnetDir, "sui-config");
 const runtimeManifestPath = join(localnetDir, "release.runtime.json");
 const localnetPorts = [9000, 9123] as const;
 const agentCount = 7;
+// Slot seven runs the sponsored staked seat; slots zero to six run the demo agents.
+const signerSlotCount = agentCount + 1;
+const stakedSeatSlot = agentCount;
+const minStakeMist = 100_000_000n;
 const poolStake = 100_000_000n;
 const evidencePolicyId = "OPENVERDICT_EVIDENCE_POLICY_V1";
 
@@ -113,6 +119,15 @@ interface PoolProof {
   redeemDigest: string;
   payout: bigint;
   fee: bigint;
+}
+
+interface StakedSeatProof {
+  profileId: string;
+  positionId: string;
+  operationalOwner: string;
+  staker: string;
+  stakeDigest: string;
+  unstakeDigest: string;
 }
 
 interface VoteInstruction {
@@ -198,7 +213,7 @@ async function main(): Promise<void> {
         SUI_OPERATOR_SECRET_KEY: operator.getSecretKey(),
         OPENVERDICT_AGENT_SEED: agentSeed,
       },
-      agentCount,
+      signerSlotCount,
     );
     const user = new Ed25519Keypair();
     await step("3. fund and register the jury registry", 180_000, async () => {
@@ -217,7 +232,7 @@ async function main(): Promise<void> {
         ...signerRegistry.listAgentAddresses(),
         user.toSuiAddress(),
       ]);
-      assert.equal(addresses.size, agentCount + 2, "all funded actors must be distinct");
+      assert.equal(addresses.size, signerSlotCount + 2, "all funded actors must be distinct");
     });
     const walrus = createLocalWalrusStore(join(localnetDir, "walrus-local"));
     const agents = await registerAgents(client, manifest, signerRegistry, walrus);
@@ -226,6 +241,19 @@ async function main(): Promise<void> {
     assert.ok(new Set(agents.map((agent) => agent.manifest.humanAttestationHash)).size === agentCount);
     assert.ok(new Set(agents.map((agent) => agent.modelId)).size >= 3);
     logDetail("registered 7 profiles: 5 jurors plus 2 protocol-required reserves");
+
+    // The staked seat is retired inside this step, so the lifecycles below
+    // still draw from exactly the seven demo profiles.
+    const staked = await step("3b. sponsored staked seat", 120_000, async () => {
+      return runStakedSeatProof({
+        client,
+        manifest,
+        operator,
+        user,
+        signers: signerRegistry,
+        walrus,
+      });
+    });
 
     const controller = createFakeController();
     db = createDb();
@@ -332,7 +360,7 @@ async function main(): Promise<void> {
     assert.equal(cliInspection.result?.truthScoreBps, direct.truthScoreBps);
 
     timings.totalMs = Date.now() - totalStartedAt;
-    printSummary({ direct, split, unresolved, pool, timings });
+    printSummary({ direct, split, unresolved, pool, staked, timings });
   } finally {
     if (db && !dbClosed) await closeDb(db).catch(() => undefined);
     if (localnet) await stopLocalnet(localnet);
@@ -706,6 +734,176 @@ async function runJuryAndCommit(
   const commits = await context.engine.votesCommit(input.claimId, input.phase);
   assert.equal(commits.length, 5, `${input.label} must commit five votes`);
   logDetail(`${input.label}: phase ${input.phase} committed 5/5 votes`);
+}
+
+/**
+ * One real staked seat: the user posts the 0.1 SUI bond and the operator pays
+ * the gas, then the user unstakes. The seat is deactivated again here so the
+ * lifecycles keep drawing from the seven demo profiles.
+ */
+async function runStakedSeatProof(input: {
+  client: OpenVerdictSuiClient;
+  manifest: ReleaseManifest;
+  operator: Ed25519Keypair;
+  user: Ed25519Keypair;
+  signers: SignerRegistry;
+  walrus: WalrusStore;
+}): Promise<StakedSeatProof> {
+  const encoder = new TextEncoder();
+  const staker = input.user.toSuiAddress();
+  const operationalOwner = input.signers.getAgentAt(stakedSeatSlot).address;
+  const modelId = required(input.manifest.gonka.models[0], "release manifest model 0");
+  const stakerHash = blake2b256(encoder.encode(`localnet-staker-${staker}`));
+  const built = buildAgentManifestDocument({
+    network: "localnet",
+    backingKind: "WALLET_STAKED",
+    humanBackingHash: toHex(stakerHash),
+    humanVerificationProvider: "sui-wallet-stake",
+    operationalOwner: asHex(operationalOwner),
+    role: "SKEPTIC",
+    modelId,
+    promptSpec: DEFAULT_PROMPT_SPEC_V4,
+    toolPolicy: DEFAULT_TOOL_POLICY_V4,
+    tableVotePromptSpec: TABLE_VOTE_PROMPT_SPEC_V1,
+    evidencePolicyId,
+  });
+  const upload = await input.walrus.put(built.bytes, {
+    identifier: "localnet-staked-seat-manifest-v6.json",
+  });
+
+  const staking = await sponsorAndExecute({
+    client: input.client,
+    tx: buildRegisterStakedAgentTransaction(input.manifest, {
+      stakeMist: minStakeMist,
+      manifestHash: fromHex(built.manifestHash),
+      manifestBlobId: upload.blobId,
+      modelHash: blake2b256(encoder.encode(modelId)),
+      roleHash: blake2b256(encoder.encode("OPENVERDICT_ROLE_SKEPTIC")),
+      stakerHash,
+      operationalOwner,
+    }),
+    senderKeypair: input.user,
+    sponsorKeypair: input.operator,
+    gasBudget: 100_000_000,
+  });
+  const settled = await input.client.core.waitForTransaction({
+    digest: staking.digest,
+    timeout: 60_000,
+    include: { transaction: true, effects: true, objectTypes: true },
+  });
+  if (settled.$kind !== "Transaction") throw new Error("staked registration failed");
+  assert.equal(settled.Transaction.transaction.sender, staker);
+  assert.equal(settled.Transaction.transaction.gasData.owner, input.operator.toSuiAddress());
+  const profileId = createdObjectByType(
+    settled.Transaction.effects.changedObjects,
+    settled.Transaction.objectTypes,
+    `${input.manifest.packageId}::agent_registry::AgentProfile`,
+  );
+  const positionId = createdObjectByType(
+    settled.Transaction.effects.changedObjects,
+    settled.Transaction.objectTypes,
+    `${input.manifest.packageId}::agent_registry::StakePosition`,
+  );
+
+  const owned = await input.client.core.listOwnedObjects({
+    owner: staker,
+    type: `${input.manifest.packageId}::agent_registry::StakePosition`,
+    limit: 10,
+  });
+  assert.deepEqual(
+    owned.objects.map((object) => object.objectId),
+    [positionId],
+    "the staker must own exactly one stake position",
+  );
+
+  const staked = await readEligibilityRecord(input.client, input.manifest, agentCount);
+  assert.equal(staked.active, true, "the staked seat must start active");
+  assert.equal(staked.owner, operationalOwner, "slot seven must own the staked record");
+  assert.equal(staked.profileId, profileId);
+
+  // Jury rewards for the seat must route to the staker, not to the slot.
+  const payout = await input.client.core.getDynamicField({
+    parentId: input.manifest.registryObjectId,
+    name: {
+      type: `${input.manifest.packageId}::agent_registry::PayoutRecipientKey`,
+      bcs: bcs.Address.serialize(profileId).toBytes(),
+    },
+  });
+  assert.equal(bcs.Address.parse(payout.dynamicField.value.bcs), staker);
+  logDetail(`staked seat: ${profileId} staked ${minStakeMist} MIST, payout to ${staker}`);
+
+  const unstaking = await sponsorAndExecute({
+    client: input.client,
+    tx: buildSponsoredUnstakeRequest(input.manifest, profileId, positionId),
+    senderKeypair: input.user,
+    sponsorKeypair: input.operator,
+    gasBudget: 100_000_000,
+  });
+  await input.client.core.waitForTransaction({
+    digest: unstaking.digest,
+    timeout: 60_000,
+    include: { effects: true },
+  });
+  const retired = await readEligibilityRecord(input.client, input.manifest, agentCount);
+  assert.equal(retired.active, false, "unstaking must deactivate the registry record");
+  const fields = await input.client.core.listDynamicFields({ parentId: profileId });
+  assert.ok(
+    fields.dynamicFields.some((field) =>
+      field.name.type.endsWith("::agent_registry::UnstakeKey"),
+    ),
+    "the profile must carry the maturing unstake request",
+  );
+  logDetail("staked seat: unstake requested, the bond returns after the 24 h delay");
+  return {
+    profileId,
+    positionId,
+    operationalOwner,
+    staker,
+    stakeDigest: staking.digest,
+    unstakeDigest: unstaking.digest,
+  };
+}
+
+/** Read one bounded eligibility record straight from the registry object. */
+async function readEligibilityRecord(
+  client: OpenVerdictSuiClient,
+  manifest: ReleaseManifest,
+  index: number,
+): Promise<{ profileId: string; owner: string; active: boolean }> {
+  const { object } = await client.core.getObject({
+    objectId: manifest.registryObjectId,
+    include: { json: true },
+  });
+  const records = (object.json as Record<string, unknown> | undefined)?.eligible_agents;
+  assert.ok(Array.isArray(records), "registry json is missing eligible_agents");
+  assert.equal(records.length, agentCount + 1, "the staked seat must be the eighth record");
+  const raw = records[index] as unknown;
+  assert.ok(isRecord(raw), "eligibility record is not a Move struct");
+  // Transports differ: some wrap struct fields, some inline them.
+  const fields = isRecord(raw.fields) ? raw.fields : raw;
+  return {
+    profileId: required(moveObjectId(fields.agent_profile_id), "record.agent_profile_id"),
+    owner: required(moveObjectId(fields.owner), "record.owner"),
+    active: fields.active === true,
+  };
+}
+
+function buildSponsoredUnstakeRequest(
+  manifest: ReleaseManifest,
+  profileId: string,
+  positionId: string,
+): Transaction {
+  const tx = new Transaction();
+  tx.moveCall({
+    target: `${manifest.packageId}::agent_registry::request_unstake`,
+    arguments: [
+      tx.object(manifest.registryObjectId),
+      tx.object(profileId),
+      tx.object(positionId),
+      tx.object(manifest.clockObjectId),
+    ],
+  });
+  return tx;
 }
 
 async function createAndEnterPool(input: {
@@ -1602,6 +1800,7 @@ function printSummary(input: {
   split: LifecycleResult;
   unresolved: LifecycleResult;
   pool: PoolProof;
+  staked: StakedSeatProof;
   timings: StepTimings;
 }): void {
   process.stdout.write("\n[8. operational proof summary]\n");
@@ -1614,6 +1813,8 @@ function printSummary(input: {
     ["Finalization digests", [input.direct.finalize.digest, input.split.finalize.digest, input.unresolved.finalize.digest].join(", ")],
     ["Truth Score #1", `${input.direct.truthScoreBps} bps (on-chain ${input.direct.onChainTruthScoreBps})`],
     ["Sponsored tx", input.pool.sponsoredDigest],
+    ["Staked seat", `${input.staked.profileId} (${minStakeMist} MIST by ${input.staked.staker})`],
+    ["Stake tx digests", `${input.staked.stakeDigest}, ${input.staked.unstakeDigest}`],
     ["Pool tx digests", `${input.pool.createDigest}, ${input.pool.settleDigest}, ${input.pool.redeemDigest}`],
     ["Pool conservation", `${poolStake} = ${input.pool.payout} payout + ${input.pool.fee} fees`],
     ["Localnet startup", formatDuration(input.timings.localnetStartupMs)],
