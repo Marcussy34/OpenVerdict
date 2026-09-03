@@ -23,7 +23,8 @@
     "test:move": "cd move/openverdict && sui move test",
     "cli": "tsx cli/src/index.ts",
     "e2e:localnet": "tsx scripts/localnet-e2e.ts",
-    "audit:claim": "tsx scripts/audit-claim.ts"
+    "audit:claim": "tsx scripts/audit-claim.ts",
+    "ov": "tsx scripts/ov.ts"
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.5.7",

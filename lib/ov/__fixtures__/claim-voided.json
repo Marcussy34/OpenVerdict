@@ -1,0 +1,98 @@
+{
+ "claimId": "0x5b0b0bca38b770dd9693934eaf489108e41086f7964d9e1bd53b9d5c854b0d42",
+ "mode": 1,
+ "state": 4,
+ "statement": "The Great Wall of China is visible to the naked eye from the Moon.",
+ "resolutionCriteria": "Decide whether the statement is true as written, as of the claim's evidence cutoff. Weigh evidence for and against from primary sources found through your own research; the submitter's material is context only. Answer YES or NO only when credible sources agree; answer UNSURE when they conflict or are insufficient.",
+ "deadlines": {
+  "evidenceCutoffMs": 1788411375108,
+  "proposalDeadlineMs": 1788411380108,
+  "challengeDeadlineMs": 1788411385108,
+  "discussionDeadlineMs": 1788412875108,
+  "firstCommitDeadlineMs": 1788411915108,
+  "firstRevealDeadlineMs": 1788412035108,
+  "secondCommitDeadlineMs": 1788413115108,
+  "secondRevealDeadlineMs": 1788413235108
+ },
+ "committeeId": "0xf8b3d5f403098ceae733cc04382c8b619660272e82ee71bedb6df49e826b905e",
+ "evidenceRoots": [
+  {
+   "phase": 1,
+   "root": "0x558b0cb6ed32e55f40043aa28e8944647bf90999992d1bafdfa31c320e4dc2b1",
+   "bundleId": "0x1ee3b5a544681fb07adfe26cf196b284a47f467ffff4f9dab6690ce853838967"
+  }
+ ],
+ "commitments": [
+  {
+   "jurySeatId": "0x1ba744c91d257052c3aa26ef06a3ef8d1076d86da856eaffc799405b07810f91",
+   "agentProfileId": "0xcaaab8ea057c54326498260ff00471a26197648c58456782c1c42989d2c003e9",
+   "modelId": "MiniMaxAI/MiniMax-M2.7",
+   "committed": true,
+   "revealed": false
+  },
+  {
+   "jurySeatId": "0x61814c7b3625ae169ed6da1a17430cb04cf77e75ab273cecc473ff5cfec28d88",
+   "agentProfileId": "0x4ee8af570a34423592e73d14643c9235b477cb1119e9ec6b8785a7dc8c241d94",
+   "modelId": "deepseek-ai/DeepSeek-V4-Flash-0731",
+   "committed": false,
+   "revealed": false,
+   "failureStatus": "PROVIDER_ERROR"
+  },
+  {
+   "jurySeatId": "0xbb83d7d0c5a0e5c53b585b5a714ea908926052b20ee15d5d9894909148f9b1eb",
+   "agentProfileId": "0x255a8f65ab223b2d95bdb9a6dc0c31f316661c99a8dc0c48d0f1a0a3ea946be9",
+   "modelId": "moonshotai/Kimi-K2.6",
+   "committed": true,
+   "revealed": false
+  },
+  {
+   "jurySeatId": "0xd03c116cb2d21fa33c690e736fd3cb750d1ba12c5fb4f07194b1d8ce699aea49",
+   "agentProfileId": "0xb1131089318dce3e1398557ddf86d9e597d7572ed9f0c7b185f1aa42b187230a",
+   "modelId": "moonshotai/Kimi-K2.6",
+   "committed": false,
+   "revealed": false,
+   "failureStatus": "TIMEOUT"
+  },
+  {
+   "jurySeatId": "0xe2d6ea4a0d3954706c7b4cfffba26a4b766970af1f0a8429c62b33460ee61995",
+   "agentProfileId": "0x5b3a24861fc069cc22687a7cf99adf6d6de0ba2380e39e7806df28f01415da78",
+   "modelId": "deepseek-ai/DeepSeek-V4-Flash-0731",
+   "committed": false,
+   "revealed": false,
+   "failureStatus": "PROVIDER_ERROR"
+  }
+ ],
+ "rounds": [
+  {
+   "phase": 1,
+   "expectedJurySeatIds": [
+    "0xe2d6ea4a0d3954706c7b4cfffba26a4b766970af1f0a8429c62b33460ee61995",
+    "0xbb83d7d0c5a0e5c53b585b5a714ea908926052b20ee15d5d9894909148f9b1eb",
+    "0x1ba744c91d257052c3aa26ef06a3ef8d1076d86da856eaffc799405b07810f91",
+    "0x61814c7b3625ae169ed6da1a17430cb04cf77e75ab273cecc473ff5cfec28d88",
+    "0xd03c116cb2d21fa33c690e736fd3cb750d1ba12c5fb4f07194b1d8ce699aea49"
+   ],
+   "committedJurySeatIds": [
+    "0xbb83d7d0c5a0e5c53b585b5a714ea908926052b20ee15d5d9894909148f9b1eb",
+    "0x1ba744c91d257052c3aa26ef06a3ef8d1076d86da856eaffc799405b07810f91"
+   ],
+   "revealedJurySeatIds": []
+  }
+ ],
+ "attemptChain": {
+  "verificationId": "0x5b0b0bca38b770dd9693934eaf489108e41086f7964d9e1bd53b9d5c854b0d42",
+  "attempt": 1,
+  "maxAttempts": 3,
+  "status": "VOIDED",
+  "void": {
+   "seatId": "0x61814c7b3625ae169ed6da1a17430cb04cf77e75ab273cecc473ff5cfec28d88",
+   "modelId": "deepseek-ai/DeepSeek-V4-Flash-0731",
+   "phase": 1,
+   "reason": "PROVIDER_ERROR",
+   "message": "GonkaRouter provider request failed",
+   "atMs": 1788411814695
+  },
+  "relaunchedAs": "0x5dcbd39b6f8bed0e0dc93f6d979d67e42f621da5630f31a204b94d3e73e7069a",
+  "previousAttempts": []
+ }
+}

@@ -1,0 +1,268 @@
+{
+ "claimId": "0x1d53f02c823ba5ee1c1aa3a22ff862306d2ab22c67247f39746db65f6ea76ff4",
+ "mode": 1,
+ "state": 11,
+ "statement": "Intermittent fasting produces greater long-term weight loss than continuous daily calorie restriction.",
+ "resolutionCriteria": "Decide whether the statement is true as written, as of the claim's evidence cutoff. Weigh evidence for and against from primary sources found through your own research; the submitter's material is context only. Answer YES or NO only when credible sources agree; answer UNSURE when they conflict or are insufficient.",
+ "deadlines": {
+  "evidenceCutoffMs": 1788320353542,
+  "proposalDeadlineMs": 1788320358542,
+  "challengeDeadlineMs": 1788320363542,
+  "discussionDeadlineMs": 1788321583542,
+  "firstCommitDeadlineMs": 1788320743542,
+  "firstRevealDeadlineMs": 1788320863542,
+  "secondCommitDeadlineMs": 1788322033542,
+  "secondRevealDeadlineMs": 1788322153542
+ },
+ "committeeId": "0xd0267ee31744b0aa6ea1b90d04e73375645b7737191fba69b0d4ac3cbbd6bfe8",
+ "evidenceRoots": [
+  {
+   "phase": 1,
+   "root": "0xbcb95ca4830774ec9ef0beadafc3c15c36eeeb535465015867b2c689ef9c3765",
+   "bundleId": "0x2e2d7a31f17ea19db24920237e49d461915f98fc55cfdd11782ca0458ad4676a"
+  },
+  {
+   "phase": 2,
+   "root": "0x75f8e71aa10b1ab9b384b8ae5d93f0a4cbaf7096fa092b2f5495c4f31ceba762",
+   "bundleId": "0xa0752ae8325ef175c3d909646f681038e4d30f72b52042b177a5d927104556d8"
+  }
+ ],
+ "commitments": [
+  {
+   "jurySeatId": "0x2fe6282ae1ed1c32d62b1866856834a78ef3ae0f77fe3b60aedf5fc1a30af34e",
+   "agentProfileId": "0xb1131089318dce3e1398557ddf86d9e597d7572ed9f0c7b185f1aa42b187230a",
+   "modelId": "moonshotai/Kimi-K2.6",
+   "committed": true,
+   "revealed": true,
+   "outcome": 2,
+   "confidenceBps": 9000
+  },
+  {
+   "jurySeatId": "0x470d104b984be82bbdba850cbad66887ac1b33d45508f07060efc7d07a3fed78",
+   "agentProfileId": "0x255a8f65ab223b2d95bdb9a6dc0c31f316661c99a8dc0c48d0f1a0a3ea946be9",
+   "modelId": "moonshotai/Kimi-K2.6",
+   "committed": false,
+   "revealed": false,
+   "failureStatus": "PROVIDER_ERROR"
+  },
+  {
+   "jurySeatId": "0x8cd8ad47506bc36044888364200b727e81cccbe51a4abb96c57d161800a8d295",
+   "agentProfileId": "0xf35a7738fdfebd77f0d7698c7aa63678af6f344711be2bd0990370d0e25ccd61",
+   "modelId": "MiniMaxAI/MiniMax-M2.7",
+   "committed": false,
+   "revealed": false,
+   "failureStatus": "INVALID_SCHEMA"
+  },
+  {
+   "jurySeatId": "0xe7e77796cbf663c139f734ded2e79feda4b16b5062adc221122f17cd6943fe33",
+   "agentProfileId": "0x546e1491c2c1fa1e2e857457b74a99ab137ce35d7a0eb4f1e0e29f61727d8cdd",
+   "modelId": "deepseek-ai/DeepSeek-V4-Flash-0731",
+   "committed": true,
+   "revealed": true,
+   "outcome": 2,
+   "confidenceBps": 8500
+  },
+  {
+   "jurySeatId": "0xfe463d9b8ca2fce9f707e99f37745de7c3cbe7c93743e7aa32a904127bf11544",
+   "agentProfileId": "0x4ee8af570a34423592e73d14643c9235b477cb1119e9ec6b8785a7dc8c241d94",
+   "modelId": "deepseek-ai/DeepSeek-V4-Flash-0731",
+   "committed": true,
+   "revealed": true,
+   "outcome": 2,
+   "confidenceBps": 8500
+  },
+  {
+   "jurySeatId": "0x1998610752c529c4558274e1f50d8370cc0d8d514b641b6c857b4ed970e75d04",
+   "agentProfileId": "0xf35a7738fdfebd77f0d7698c7aa63678af6f344711be2bd0990370d0e25ccd61",
+   "modelId": "MiniMaxAI/MiniMax-M2.7",
+   "committed": true,
+   "revealed": true,
+   "outcome": 2,
+   "confidenceBps": 8500
+  },
+  {
+   "jurySeatId": "0x1d183bf149f16964dc4b0cc632a651f642ca1928edfe292690d774503c22ae50",
+   "agentProfileId": "0x255a8f65ab223b2d95bdb9a6dc0c31f316661c99a8dc0c48d0f1a0a3ea946be9",
+   "modelId": "moonshotai/Kimi-K2.6",
+   "committed": false,
+   "revealed": false,
+   "failureStatus": "TIMEOUT"
+  },
+  {
+   "jurySeatId": "0x1dd9d9fcbbe379ab585c310c3fbb868a358487851e0e43ccdddb11bba3317a03",
+   "agentProfileId": "0x4ee8af570a34423592e73d14643c9235b477cb1119e9ec6b8785a7dc8c241d94",
+   "modelId": "deepseek-ai/DeepSeek-V4-Flash-0731",
+   "committed": true,
+   "revealed": true,
+   "outcome": 2,
+   "confidenceBps": 9000
+  },
+  {
+   "jurySeatId": "0x4ebcb7191549471230cd93692ee55d5f9af67b01d8c92eca67e31204267243f2",
+   "agentProfileId": "0x546e1491c2c1fa1e2e857457b74a99ab137ce35d7a0eb4f1e0e29f61727d8cdd",
+   "modelId": "deepseek-ai/DeepSeek-V4-Flash-0731",
+   "committed": true,
+   "revealed": true,
+   "outcome": 2,
+   "confidenceBps": 9000
+  },
+  {
+   "jurySeatId": "0xcc34e594b96742ecc25952912d616aee69bcf45d4317981ff011e38578abcb66",
+   "agentProfileId": "0xb1131089318dce3e1398557ddf86d9e597d7572ed9f0c7b185f1aa42b187230a",
+   "modelId": "moonshotai/Kimi-K2.6",
+   "committed": true,
+   "revealed": true,
+   "outcome": 3,
+   "confidenceBps": 4500
+  }
+ ],
+ "rounds": [
+  {
+   "phase": 1,
+   "expectedJurySeatIds": [
+    "0x470d104b984be82bbdba850cbad66887ac1b33d45508f07060efc7d07a3fed78",
+    "0x2fe6282ae1ed1c32d62b1866856834a78ef3ae0f77fe3b60aedf5fc1a30af34e",
+    "0x8cd8ad47506bc36044888364200b727e81cccbe51a4abb96c57d161800a8d295",
+    "0xfe463d9b8ca2fce9f707e99f37745de7c3cbe7c93743e7aa32a904127bf11544",
+    "0xe7e77796cbf663c139f734ded2e79feda4b16b5062adc221122f17cd6943fe33"
+   ],
+   "committedJurySeatIds": [
+    "0x2fe6282ae1ed1c32d62b1866856834a78ef3ae0f77fe3b60aedf5fc1a30af34e",
+    "0xfe463d9b8ca2fce9f707e99f37745de7c3cbe7c93743e7aa32a904127bf11544",
+    "0xe7e77796cbf663c139f734ded2e79feda4b16b5062adc221122f17cd6943fe33"
+   ],
+   "revealedJurySeatIds": [
+    "0x2fe6282ae1ed1c32d62b1866856834a78ef3ae0f77fe3b60aedf5fc1a30af34e",
+    "0xe7e77796cbf663c139f734ded2e79feda4b16b5062adc221122f17cd6943fe33",
+    "0xfe463d9b8ca2fce9f707e99f37745de7c3cbe7c93743e7aa32a904127bf11544"
+   ]
+  },
+  {
+   "phase": 2,
+   "expectedJurySeatIds": [
+    "0x1d183bf149f16964dc4b0cc632a651f642ca1928edfe292690d774503c22ae50",
+    "0xcc34e594b96742ecc25952912d616aee69bcf45d4317981ff011e38578abcb66",
+    "0x1998610752c529c4558274e1f50d8370cc0d8d514b641b6c857b4ed970e75d04",
+    "0x1dd9d9fcbbe379ab585c310c3fbb868a358487851e0e43ccdddb11bba3317a03",
+    "0x4ebcb7191549471230cd93692ee55d5f9af67b01d8c92eca67e31204267243f2"
+   ],
+   "committedJurySeatIds": [
+    "0xcc34e594b96742ecc25952912d616aee69bcf45d4317981ff011e38578abcb66",
+    "0x1998610752c529c4558274e1f50d8370cc0d8d514b641b6c857b4ed970e75d04",
+    "0x1dd9d9fcbbe379ab585c310c3fbb868a358487851e0e43ccdddb11bba3317a03",
+    "0x4ebcb7191549471230cd93692ee55d5f9af67b01d8c92eca67e31204267243f2"
+   ],
+   "revealedJurySeatIds": [
+    "0x1998610752c529c4558274e1f50d8370cc0d8d514b641b6c857b4ed970e75d04",
+    "0x1dd9d9fcbbe379ab585c310c3fbb868a358487851e0e43ccdddb11bba3317a03",
+    "0x4ebcb7191549471230cd93692ee55d5f9af67b01d8c92eca67e31204267243f2",
+    "0xcc34e594b96742ecc25952912d616aee69bcf45d4317981ff011e38578abcb66"
+   ]
+  }
+ ],
+ "deliberation": [
+  {
+   "claimId": "0x1d53f02c823ba5ee1c1aa3a22ff862306d2ab22c67247f39746db65f6ea76ff4",
+   "jurySeatId": "0x2fe6282ae1ed1c32d62b1866856834a78ef3ae0f77fe3b60aedf5fc1a30af34e",
+   "agentProfileId": "0xb1131089318dce3e1398557ddf86d9e597d7572ed9f0c7b185f1aa42b187230a",
+   "modelId": "moonshotai/Kimi-K2.6",
+   "ordinal": 0,
+   "exchange": 1,
+   "argument": "I maintain my NO vote. The claim that intermittent fasting produces greater long-term weight loss than continuous daily ",
+   "citations": [
+    "0xfe437130312fd093e396f86829791c4e4602c9d17741329fddecd82491ca8b4f",
+    "0x63871c23f578356a47dc5394a4dc658c08174666916c3ef1acb072e89664b756",
+    "0x5b1d2d0934acf86d3e48b959dbf84d64dd7307b27c54801973dfed6f7dfb7500"
+   ],
+   "status": "SPOKEN",
+   "atMs": 1788320888937
+  },
+  {
+   "claimId": "0x1d53f02c823ba5ee1c1aa3a22ff862306d2ab22c67247f39746db65f6ea76ff4",
+   "jurySeatId": "0xfe463d9b8ca2fce9f707e99f37745de7c3cbe7c93743e7aa32a904127bf11544",
+   "agentProfileId": "0x4ee8af570a34423592e73d14643c9235b477cb1119e9ec6b8785a7dc8c241d94",
+   "modelId": "deepseek-ai/DeepSeek-V4-Flash-0731",
+   "ordinal": 1,
+   "exchange": 1,
+   "argument": "I maintain my NO vote. The claim that intermittent fasting produces greater long-term weight loss than continuous daily ",
+   "citations": [
+    "0xfe437130312fd093e396f86829791c4e4602c9d17741329fddecd82491ca8b4f",
+    "0x63871c23f578356a47dc5394a4dc658c08174666916c3ef1acb072e89664b756",
+    "0x5b1d2d0934acf86d3e48b959dbf84d64dd7307b27c54801973dfed6f7dfb7500"
+   ],
+   "status": "SPOKEN",
+   "atMs": 1788320909749
+  },
+  {
+   "claimId": "0x1d53f02c823ba5ee1c1aa3a22ff862306d2ab22c67247f39746db65f6ea76ff4",
+   "jurySeatId": "0xe7e77796cbf663c139f734ded2e79feda4b16b5062adc221122f17cd6943fe33",
+   "agentProfileId": "0x546e1491c2c1fa1e2e857457b74a99ab137ce35d7a0eb4f1e0e29f61727d8cdd",
+   "modelId": "deepseek-ai/DeepSeek-V4-Flash-0731",
+   "ordinal": 2,
+   "exchange": 1,
+   "argument": "I maintain my NO vote. The claim that intermittent fasting produces greater long-term weight loss than continuous daily ",
+   "citations": [
+    "0xfe437130312fd093e396f86829791c4e4602c9d17741329fddecd82491ca8b4f",
+    "0x63871c23f578356a47dc5394a4dc658c08174666916c3ef1acb072e89664b756",
+    "0x5b1d2d0934acf86d3e48b959dbf84d64dd7307b27c54801973dfed6f7dfb7500"
+   ],
+   "status": "SPOKEN",
+   "atMs": 1788320938130
+  },
+  {
+   "claimId": "0x1d53f02c823ba5ee1c1aa3a22ff862306d2ab22c67247f39746db65f6ea76ff4",
+   "jurySeatId": "0x2fe6282ae1ed1c32d62b1866856834a78ef3ae0f77fe3b60aedf5fc1a30af34e",
+   "agentProfileId": "0xb1131089318dce3e1398557ddf86d9e597d7572ed9f0c7b185f1aa42b187230a",
+   "modelId": "moonshotai/Kimi-K2.6",
+   "ordinal": 3,
+   "exchange": 2,
+   "argument": "I maintain my NO vote. The claim requires intermittent fasting to produce *greater* long-term weight loss than continuou",
+   "citations": [
+    "0xfe437130312fd093e396f86829791c4e4602c9d17741329fddecd82491ca8b4f",
+    "0x63871c23f578356a47dc5394a4dc658c08174666916c3ef1acb072e89664b756",
+    "0x5b1d2d0934acf86d3e48b959dbf84d64dd7307b27c54801973dfed6f7dfb7500"
+   ],
+   "status": "SPOKEN",
+   "atMs": 1788320960860
+  },
+  {
+   "claimId": "0x1d53f02c823ba5ee1c1aa3a22ff862306d2ab22c67247f39746db65f6ea76ff4",
+   "jurySeatId": "0xfe463d9b8ca2fce9f707e99f37745de7c3cbe7c93743e7aa32a904127bf11544",
+   "agentProfileId": "0x4ee8af570a34423592e73d14643c9235b477cb1119e9ec6b8785a7dc8c241d94",
+   "modelId": "deepseek-ai/DeepSeek-V4-Flash-0731",
+   "ordinal": 4,
+   "exchange": 2,
+   "argument": "I maintain my NO vote. The claim asserts that intermittent fasting produces greater long-term weight loss than continuou",
+   "citations": [
+    "0xfe437130312fd093e396f86829791c4e4602c9d17741329fddecd82491ca8b4f",
+    "0x63871c23f578356a47dc5394a4dc658c08174666916c3ef1acb072e89664b756",
+    "0x5b1d2d0934acf86d3e48b959dbf84d64dd7307b27c54801973dfed6f7dfb7500"
+   ],
+   "status": "SPOKEN",
+   "atMs": 1788320982442
+  },
+  {
+   "claimId": "0x1d53f02c823ba5ee1c1aa3a22ff862306d2ab22c67247f39746db65f6ea76ff4",
+   "jurySeatId": "0xe7e77796cbf663c139f734ded2e79feda4b16b5062adc221122f17cd6943fe33",
+   "agentProfileId": "0x546e1491c2c1fa1e2e857457b74a99ab137ce35d7a0eb4f1e0e29f61727d8cdd",
+   "modelId": "deepseek-ai/DeepSeek-V4-Flash-0731",
+   "ordinal": 5,
+   "exchange": 2,
+   "argument": "I maintain my NO vote. The claim asserts that intermittent fasting produces greater long-term weight loss than continuou",
+   "citations": [
+    "0xfe437130312fd093e396f86829791c4e4602c9d17741329fddecd82491ca8b4f",
+    "0x63871c23f578356a47dc5394a4dc658c08174666916c3ef1acb072e89664b756",
+    "0x5b1d2d0934acf86d3e48b959dbf84d64dd7307b27c54801973dfed6f7dfb7500"
+   ],
+   "status": "SPOKEN",
+   "atMs": 1788320991381
+  }
+ ],
+ "result": {
+  "claimId": "0x1d53f02c823ba5ee1c1aa3a22ff862306d2ab22c67247f39746db65f6ea76ff4",
+  "result": "UNRESOLVED",
+  "truthScoreBps": 2125,
+  "certificateId": "0xcd94ea5b9180b5d39c632fbc874c5b231f8e9f0a149fb42ff29d2ad6c1c25ed2",
+  "digest": "GhN9h1mt1Hw2TZTX5yr3x4gvtrVBGiwyUYP4xETQroqv"
+ }
+}

@@ -1,0 +1,125 @@
+{
+ "claimId": "0x273220b56d87edea0a6db35f85c0fc8f36591461ee6be6962e86bb4586ee4ac6",
+ "mode": 1,
+ "state": 10,
+ "statement": "Humans use only ten percent of their brains.",
+ "resolutionCriteria": "Decide whether the statement is true as written, as of the claim's evidence cutoff. Weigh evidence for and against from primary sources found through your own research; the submitter's material is context only. Answer YES or NO only when credible sources agree; answer UNSURE when they conflict or are insufficient.",
+ "deadlines": {
+  "evidenceCutoffMs": 1788405501694,
+  "proposalDeadlineMs": 1788405506694,
+  "challengeDeadlineMs": 1788405511694,
+  "discussionDeadlineMs": 1788407001694,
+  "firstCommitDeadlineMs": 1788406041694,
+  "firstRevealDeadlineMs": 1788406161694,
+  "secondCommitDeadlineMs": 1788407241694,
+  "secondRevealDeadlineMs": 1788407361694
+ },
+ "committeeId": "0xcb8560e363f87e690ef55e1a7d4d49c039cc0efe8b43179e1b49e36dfcfe39b6",
+ "evidenceRoots": [
+  {
+   "phase": 1,
+   "root": "0x532792caa77893b49cd95d19703da9f50c7053a8cc3a67c86f9a9d0723501740",
+   "bundleId": "0xad34aa81f48e0ca2756cbf7db7785b9097152f61229ef9ee7251d582608f2805"
+  }
+ ],
+ "commitments": [
+  {
+   "jurySeatId": "0x44525825d2e75c4ed4c15943d116244a1db53a1cc1fa9854b076d854e5664637",
+   "agentProfileId": "0x546e1491c2c1fa1e2e857457b74a99ab137ce35d7a0eb4f1e0e29f61727d8cdd",
+   "modelId": "deepseek-ai/DeepSeek-V4-Flash-0731",
+   "committed": true,
+   "revealed": true,
+   "outcome": 2,
+   "confidenceBps": 9500
+  },
+  {
+   "jurySeatId": "0x6a5ec662f4084b5693fd19273271f91e794985282786da8332ba4ead180a70db",
+   "agentProfileId": "0x255a8f65ab223b2d95bdb9a6dc0c31f316661c99a8dc0c48d0f1a0a3ea946be9",
+   "modelId": "moonshotai/Kimi-K2.6",
+   "committed": true,
+   "revealed": true,
+   "outcome": 2,
+   "confidenceBps": 10000
+  },
+  {
+   "jurySeatId": "0x844861bc4ea48bab36c411d3719b7b27f94807860c549dc303dfe92984629e2f",
+   "agentProfileId": "0xcaaab8ea057c54326498260ff00471a26197648c58456782c1c42989d2c003e9",
+   "modelId": "MiniMaxAI/MiniMax-M2.7",
+   "committed": true,
+   "revealed": true,
+   "outcome": 2,
+   "confidenceBps": 10000
+  },
+  {
+   "jurySeatId": "0xc5e4acc5e19353e155e238f09cd14b050f2067e67fccde2bb4b3a3a0388887d3",
+   "agentProfileId": "0x4ee8af570a34423592e73d14643c9235b477cb1119e9ec6b8785a7dc8c241d94",
+   "modelId": "deepseek-ai/DeepSeek-V4-Flash-0731",
+   "committed": true,
+   "revealed": true,
+   "outcome": 2,
+   "confidenceBps": 9500
+  },
+  {
+   "jurySeatId": "0xdef6df1f3f959dcb8a8c2179d4f1c275a8f1c5428284a09f3c9f55f0a950e01c",
+   "agentProfileId": "0xf35a7738fdfebd77f0d7698c7aa63678af6f344711be2bd0990370d0e25ccd61",
+   "modelId": "MiniMaxAI/MiniMax-M2.7",
+   "committed": true,
+   "revealed": true,
+   "outcome": 2,
+   "confidenceBps": 10000
+  }
+ ],
+ "rounds": [
+  {
+   "phase": 1,
+   "expectedJurySeatIds": [
+    "0xc5e4acc5e19353e155e238f09cd14b050f2067e67fccde2bb4b3a3a0388887d3",
+    "0x44525825d2e75c4ed4c15943d116244a1db53a1cc1fa9854b076d854e5664637",
+    "0xdef6df1f3f959dcb8a8c2179d4f1c275a8f1c5428284a09f3c9f55f0a950e01c",
+    "0x844861bc4ea48bab36c411d3719b7b27f94807860c549dc303dfe92984629e2f",
+    "0x6a5ec662f4084b5693fd19273271f91e794985282786da8332ba4ead180a70db"
+   ],
+   "committedJurySeatIds": [
+    "0xc5e4acc5e19353e155e238f09cd14b050f2067e67fccde2bb4b3a3a0388887d3",
+    "0x44525825d2e75c4ed4c15943d116244a1db53a1cc1fa9854b076d854e5664637",
+    "0xdef6df1f3f959dcb8a8c2179d4f1c275a8f1c5428284a09f3c9f55f0a950e01c",
+    "0x844861bc4ea48bab36c411d3719b7b27f94807860c549dc303dfe92984629e2f",
+    "0x6a5ec662f4084b5693fd19273271f91e794985282786da8332ba4ead180a70db"
+   ],
+   "revealedJurySeatIds": [
+    "0x44525825d2e75c4ed4c15943d116244a1db53a1cc1fa9854b076d854e5664637",
+    "0x6a5ec662f4084b5693fd19273271f91e794985282786da8332ba4ead180a70db",
+    "0x844861bc4ea48bab36c411d3719b7b27f94807860c549dc303dfe92984629e2f",
+    "0xc5e4acc5e19353e155e238f09cd14b050f2067e67fccde2bb4b3a3a0388887d3",
+    "0xdef6df1f3f959dcb8a8c2179d4f1c275a8f1c5428284a09f3c9f55f0a950e01c"
+   ]
+  }
+ ],
+ "attemptChain": {
+  "verificationId": "0xf0db704361a53a81a63b860ffa5ae15869c9ba5b8423bf8f55e078922a3d93c1",
+  "attempt": 3,
+  "maxAttempts": 3,
+  "status": "SETTLED",
+  "previousAttempts": [
+   {
+    "claimId": "0xf0db704361a53a81a63b860ffa5ae15869c9ba5b8423bf8f55e078922a3d93c1",
+    "attempt": 1,
+    "status": "VOIDED",
+    "voidReason": "PROVIDER_ERROR"
+   },
+   {
+    "claimId": "0xc508d9dbe1580985afbc1a6ee74551cc527857226c04cd7b424ed21ed2e8c5ba",
+    "attempt": 2,
+    "status": "VOIDED",
+    "voidReason": "CITATION_INVALID"
+   }
+  ]
+ },
+ "result": {
+  "claimId": "0x273220b56d87edea0a6db35f85c0fc8f36591461ee6be6962e86bb4586ee4ac6",
+  "result": "NO",
+  "truthScoreBps": 200,
+  "certificateId": "0x42954c917d0b7e34cb4634091a5ece1921a89a931f4872f690971b62fdcee706",
+  "digest": "572tT7FGmL6FG3ZEzf2DkorPzaStVymnvxNVMgF2bkXi"
+ }
+}
