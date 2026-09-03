@@ -42,3 +42,4 @@ artifacts/
 output/
 tools/
 move/openverdict_seal/build/
+move/openverdict/Pub.localnet.toml

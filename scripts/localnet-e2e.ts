@@ -7,6 +7,7 @@ import { join } from "node:path";
 import { Ed25519Keypair } from "@mysten/sui/keypairs/ed25519";
 import { Transaction } from "@mysten/sui/transactions";
 import {
+  COMMITTEE_ACCEPTANCE_WINDOW_MS,
   buildAgentManifestDocument,
   createEngine,
   type ClaimInspection,
@@ -639,8 +640,11 @@ async function runJuryAndCommit(
   logDetail(`${input.label}: phase ${input.phase} recorded 5 on-chain run approvals`);
 
   if (input.phase === 1) {
-    const acceptanceDeadline =
-      input.selectedAt + Math.floor((input.commitDeadlineMs - input.selectedAt) / 2);
+    // jury.move acceptance_deadline: one minute after selection, capped at the commit deadline.
+    const acceptanceDeadline = Math.min(
+      input.commitDeadlineMs,
+      input.selectedAt + COMMITTEE_ACCEPTANCE_WINDOW_MS,
+    );
     await waitUntil(acceptanceDeadline + 750, `${input.label} committee lock`);
   }
   assert.ok(

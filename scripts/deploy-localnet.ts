@@ -216,13 +216,17 @@ async function runSuiPublish(clientConfigPath: string): Promise<unknown> {
   const packageDirectory = join(repositoryRoot, "move/openverdict");
   const lockPath = join(packageDirectory, "Move.lock");
   const originalLock = await readFile(lockPath);
+  // A regenesis localnet has a fresh chain id every run, so it can never be
+  // a pinned environment in Move.toml; test-publish builds against the
+  // testnet pins with ephemeral dependency addresses instead.
   const args = [
     "client",
     "--client.config",
     clientConfigPath,
-    "publish",
+    "test-publish",
+    "--build-env",
+    "testnet",
     "--json",
-    "--verify-deps",
     "--gas-budget",
     "2000000000",
   ];
@@ -235,6 +239,9 @@ async function runSuiPublish(clientConfigPath: string): Promise<unknown> {
   } finally {
     // Publishing records environment metadata; source-controlled Move.lock stays immutable.
     await writeFile(lockPath, originalLock);
+    // test-publish also writes an ephemeral publication file pinned to this
+    // regenesis chain id; the next localnet has another id and refuses it.
+    await rm(join(packageDirectory, "Pub.localnet.toml"), { force: true });
   }
   if (result.code !== 0) {
     throw new Error(
