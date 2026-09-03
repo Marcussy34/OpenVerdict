@@ -110,7 +110,7 @@ Corrections and additions discovered during implementation, per the rule above:
 3. **Claim-state u8 encoding (§28.2):** concrete codes fixed as CREATED=0 … CANCELLED=12 (see `lib/protocol/constants.ts`, mirrored in `claim.move`); byte-locked to TypeScript by six blake2b256/BCS parity vectors asserted in both test suites.
 4. **Module list (§28.1):** an eighth module `display_meta` was added implementing Sui Object Display metadata for `ResolutionCertificate`, `AgentProfile`, and demo `Position` (V1 `sui::display` API — the pinned 1.52.2 framework does not vendor V2 `display_registry`).
 5. **zkLogin scope (§14.4, §13):** upgraded from "optional onboarding" to two implemented uses: (a) end-user onboarding via Enoki-managed zkLogin registered as a wallet-standard wallet, optionally with sponsored gas; (b) planned zkLogin staking at agent registration, where `human_backing_hash = blake2b256(zkLogin address)` is the staker hash the committee draw keeps unique per seat. Both remain labelled authentication only, never proof of personhood, exactly as §14.4 requires.
-6. **Sponsored transactions (§24.6):** implemented with the current SDK v2 flow (`onlyTransactionKind` bytes → `Transaction.fromKind` → `setSender`/`setGasOwner`/`setGasPayment` → dual signatures).
+6. **Sponsored transactions (§24.6):** implemented twice. Operator-paid sponsorship uses the current SDK v2 flow (`onlyTransactionKind` bytes → `Transaction.fromKind` → `setSender`/`setGasOwner`/`setGasPayment` → dual signatures) in `lib/sui/sponsor.ts`. User-facing sponsorship uses Shinami Gas Station: the browser sends only the transaction kind to `POST /api/sponsor`, which allowlists it (`lib/sui/sponsor-policy.ts`: one Move target, no gas-coin reference, no sponsor-funded withdrawal, at most eight commands, a fixed 50,000,000 MIST budget) before Shinami attaches gas and signs; the wallet then signs the returned `TransactionData`, so §24.6's "the user still signs the full transaction data" holds. The access key is server-side only and the whole path degrades to wallet-paid gas when it is unset.
 7. **SDK generation (§27.4):** implemented on `@mysten/sui` v2 (`SuiGrpcClient`, ESM-only) and dapp-kit v2 (`@mysten/dapp-kit-core`/`-react`) — this document's package names predate the v2 split.
 8. **Proof chain v2 (§6, §14, §17.7, §22; recorded 2026-08-29):** the system prompt, JSON fallback suffix, repair prompt, temperature, token cap, and response format are a versioned `PromptSpecV1` whose hash is the `promptHash` of every agent manifest and therefore the `prompt_hash` inside every on-chain run hash; the engine refuses to run a seat whose manifest hash differs from the live spec. Agent manifests are `AgentManifestDocumentV2` blobs (prompt spec, tool policy, evidence policy, all hashed) for both stake kinds. Each run publishes a `PublicRunBundleV2` (prompt spec, exact request, raw response, validated output, audit, hashes). Before the commit only an AES-256-GCM sealed copy is published and cited by `approve_run` as `run_blob_id`; the plaintext bundle plus the key is published at reveal and cited as `argument_blob_id`, so the pre-commit existence proof holds without leaking a vote early (this corrects §17.7, which stored the raw response as a public blob at inference time). Walrus artifacts are raw blobs (`writeBlob`/`readBlob`), not quilts, so a blob id addresses the artifact itself. GonkaRouter's response `id` (`devshard-<n>-<seq>`), `x-request-id`, `x-devshard-id`, and `system_fingerprint` are recorded as audit pointers; Gonka's devshard model exposes no per-request chain record through brokers, so §6 stands and no such record is claimed. Verified against the live API and the Gonka architecture docs on 2026-08-29.
 9. **Juror research v1 (§6, §14, §17; designed 2026-08-29, spec `docs/superpowers/specs/2026-08-29-juror-research-design.md`):** every juror run researches the claim itself. The model answers with one JSON action per turn (`search`, `open`, `answer`); the engine executes searches and page opens through a `ResearchProvider` (Firecrawl v2 REST, cloud or self-hosted by configuration), stores every opened page on Walrus as a `DISCOVERED` evidence artifact, and records every step in a `ResearchTranscriptV1` whose hash is the `tool_transcript_hash` inside the on-chain run hash. A citation (`evidenceId`, `url`, `quote`) is valid only if that juror opened that page in that run and the quote occurs in the stored text; a YES or NO verdict needs at least one citation of a page the juror found through its own search, otherwise the seat fails closed (`CITATION_INVALID`, no vote). The transcript travels inside the sealed bundle core (v3), so research trails are public only at reveal, and the on-chain `tool_blob_id` cites the sealed blob. Prompt spec v2 and tool policy v2 (budgets: 3 searches, 4 opens, 8 turns, 5 results, 4,000-character page slices, 240-second research calls) are bound through manifest document v3. Models cite opened pages by short refs (`p1`, `p2`, ...) or url; the engine resolves them to full evidence ids before hashing, and quote matching is punctuation- and markdown-tolerant but exact (verified live on 2026-08-30 with DeepSeek, MiniMax, and Kimi, each returning a cited verdict). This replaces the earlier rule "models never receive URLs" with: models never fetch, never hold keys or transaction authority, and every URL they see or open is engine-executed and recorded.
@@ -398,7 +398,7 @@ Needs a readable timeline from claim creation through evidence, inference, votes
 - Support third-party agent owners and claim creators.
 - Add production-grade evidence retrieval and content persistence.
 - Use Sui's native on-chain randomness for committee selection.
-- Add sponsored transactions for approved user and agent actions.
+- Add sponsored transactions for approved user and agent actions (done for the user pool-entry action through Shinami Gas Station; agent commit/reveal is next).
 - Add notification, monitoring, dispute support, and agent analytics.
 - Complete Move package/object, application, Walrus, and gas-sponsor security reviews.
 
@@ -1352,7 +1352,7 @@ Shared claim and market objects hold funds as `Balance<T>`. Finalization calcula
 
 Move does not use EVM-style reentrancy guards or ERC-20 approvals. Security comes from resource semantics, coin-type constraints, capability checks, explicit object ownership, bounded shared-object mutation, and one-time ticket consumption. A `PauseCap` can stop new economic actions without mutating terminal results or permanently trapping valid withdrawals.
 
-Sponsored transactions may pay gas for approved challenges, agent commits/reveals, and withdrawals while the user still signs the full transaction data. The sponsor validates package, module, function, objects, coin type, amount, gas budget, and expiration before signing. See [Sui sponsored transactions](https://docs.sui.io/develop/transaction-payment/sponsor-txn).
+Sponsored transactions may pay gas for approved challenges, agent commits/reveals, and withdrawals while the user still signs the full transaction data. The sponsor validates package, module, function, objects, coin type, amount, gas budget, and expiration before signing. The first implemented case is the demo binary pool entry: `POST /api/sponsor` validates package, module and function, refuses any gas-coin reference or sponsor-funded withdrawal, caps the command count and the gas budget, and only then asks Shinami Gas Station to attach gas and sign; Shinami's one-hour sponsorship expiry supplies the expiration bound. See [Sui sponsored transactions](https://docs.sui.io/develop/transaction-payment/sponsor-txn) and the [Shinami Gas Station API](https://docs.shinami.com/api-docs/sui/gas-station/api).
 
 ## 25. Reputation system
 
@@ -1651,7 +1651,7 @@ CLI rules:
 - An append-only application event table whose entries link back to chain events or hashed artifacts.
 - `@mysten/walrus` for public evidence, manifests, arguments, run audits, and tool transcripts.
 - Sui gRPC/custom indexer ingestion plus a managed full-node endpoint and failover.
-- An optional gas-station service for narrowly allowlisted sponsored transactions.
+- A gas-station service (Shinami) for narrowly allowlisted sponsored transactions.
 
 ### 27.5 Suggested project structure
 
@@ -3101,7 +3101,8 @@ Exit criteria:
 
 ### P1 backlog
 
-- [ ] Sponsored transactions for narrowly allowlisted user and agent actions.
+- [x] Sponsored transactions for narrowly allowlisted user actions (demo pool entry, Shinami Gas Station).
+- [ ] Sponsored transactions for agent actions (juror commit/reveal) and operator lifecycle transactions.
 - [ ] Walrus Mainnet private publisher/upload relay and automated renewal.
 - [ ] Multi-attestor evidence/run approval or challengeable attestation design.
 - [ ] Optional zkLogin onboarding, authentication only, never treated as an identity claim.

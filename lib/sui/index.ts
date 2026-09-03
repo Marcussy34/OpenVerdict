@@ -7,5 +7,7 @@ export * from "./gateway";
 export * from "./gateway-types";
 export * from "./manifest";
 export * from "./retention-epoch";
+export * from "./shinami";
 export * from "./signers";
 export * from "./sponsor";
+export * from "./sponsor-policy";

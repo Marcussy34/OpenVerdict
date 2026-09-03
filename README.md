@@ -549,6 +549,36 @@ to on-chain before anyone reveals.
 | Operator-independent opening | After the reveal deadline anyone recovers the key from the threshold key servers and opens the sealed bundle; the operator is not needed | `/verify` performs the recovery live; the Seal panel links every key server object |
 | Safety stance | Escrow is insurance only; it can never cost a seat its vote | 4 dedicated Move policy tests |
 
+### Shinami (Gas Station)
+
+| Used for | How | Check it |
+| --- | --- | --- |
+| Gas for wallet-signed pool entries | The browser builds the transaction kind, the server allowlists it and Shinami attaches gas and signs; the user's wallet signs the bytes Shinami returned, so the user still approves the full transaction | `app/api/sponsor/route.ts`; a sponsored deposit shows "Gas paid by OpenVerdict (Shinami Gas Station)" with its digest |
+| Google sign-in without SUI | A zkLogin address created by a Google login holds no SUI, so without sponsorship it cannot act at all; with it, the first on-chain action costs the user nothing | `/claims/<id>` market panel after continuing with Google |
+| Fund health | `gas_getFund` reports fund name, network, balance and in-flight reservations, with no key in the output | `pnpm sponsor:check`; a live sponsored testnet transaction: [9ToB29r3…](https://suiscan.xyz/testnet/tx/9ToB29r3WWJv7odpai4HkTMjjccmu3aCndrxEAoViGjw) (sender the operator, gas owner Shinami's fund) |
+
+The access key never reaches the browser: Shinami's Gas Station refuses CORS
+requests by design, and a leaked key drains the fund. It stays in
+`SHINAMI_GAS_ACCESS_KEY` on the server, and `POST /api/sponsor` is the only door
+to it, behind the same two guards as every public write (`OPENVERDICT_PUBLIC_WRITES`
+plus rate limiting). That route is a positive allowlist, not a blocklist: it
+decodes the submitted kind, refuses anything over eight commands, refuses every
+Move call except `demo_binary_pool::enter` in the deployed package (plus the four
+`0x2::coin` helpers the Sui SDK emits to assemble the stake), refuses any
+reference to the gas coin, refuses any funds withdrawal that names the sponsor
+instead of the sender, and caps the gas budget at 50,000,000 MIST server-side.
+A rejected kind never reaches Shinami, so a rejection costs the fund nothing.
+
+Configure it with `SHINAMI_GAS_ACCESS_KEY` (and optionally `SHINAMI_GAS_ENDPOINT`
+for a non-US region), then run `pnpm sponsor:check` to print the fund line, or
+`pnpm sponsor:check --send` to sponsor one real operator transaction and see the
+gas owner on Suiscan. With the key unset the app degrades quietly: the route
+answers 503 and the deposit falls back to wallet-paid gas, labelled as such.
+
+Next rungs of the same ladder: sponsored juror commit and reveal, so a seat never
+misses a deadline for want of gas, and sponsored operator lifecycle transactions
+so the operator key stops being a gas wallet.
+
 ---
 
 ## ❓ Judge defence (short form)

@@ -6,9 +6,12 @@ import {
   useCurrentNetwork,
   useDAppKit,
 } from "@mysten/dapp-kit-react";
+import type { ClientWithCoreApi } from "@mysten/sui/client";
 import { Transaction } from "@mysten/sui/transactions";
+import { fromBase64, toBase64 } from "@mysten/sui/utils";
 import {
   ExportSquare,
+  Flash,
   InfoCircle,
   MoneyRecive,
   Refresh,
@@ -108,9 +111,20 @@ function explorerUrl(template: string | undefined, digest: string) {
   }
 }
 
+/** Who paid the gas for the deposit that just landed. */
+type GasPayer = "sponsor" | "wallet";
+
+type Sponsorship = { txBytes: string; sponsorSignature: string };
+
+/** The server refused to sponsor these bytes: falling back would not help. */
+class SponsorRejectedError extends Error {
+  override readonly name = "SponsorRejectedError";
+}
+
 function friendlyTransactionError(error: unknown) {
   const message = error instanceof Error ? error.message : "";
 
+  if (error instanceof SponsorRejectedError) return error.message;
   if (/reject|cancel|denied/i.test(message)) {
     return "Signature request canceled. No deposit was submitted.";
   }
@@ -119,6 +133,81 @@ function friendlyTransactionError(error: unknown) {
   }
 
   return "Deposit failed. Check the pool state and your wallet balance, then try again.";
+}
+
+/** The pool entry itself, built identically for both gas paths. */
+function buildEntryTransaction(
+  deployment: PoolDeployment,
+  amount: string,
+  outcome: 1 | 2,
+  options: { sender?: string; useGasCoin: boolean },
+): Transaction {
+  const transaction = new Transaction();
+  // A sponsored kind is resolved against the sender before it leaves the browser.
+  if (options.sender) transaction.setSender(options.sender);
+  const stake = transaction.coin({
+    balance: BigInt(amount),
+    type: deployment.coinType,
+    useGasCoin: options.useGasCoin,
+  });
+
+  transaction.moveCall({
+    target: `${deployment.packageId}::demo_binary_pool::enter`,
+    typeArguments: [deployment.coinType],
+    arguments: [
+      transaction.object(deployment.registryObjectId),
+      transaction.object(deployment.demoPoolObjectId),
+      stake,
+      transaction.pure.u8(outcome),
+      transaction.object(deployment.clockObjectId),
+    ],
+  });
+
+  return transaction;
+}
+
+/**
+ * Ask the server to pay the gas. `null` means "not sponsored right now": the
+ * wallet pays instead, which every answer except an outright rejection allows
+ * (sponsorship off, writes disabled, rate limited, gas station down).
+ */
+async function requestSponsorship(
+  transactionKind: string,
+  sender: string,
+): Promise<Sponsorship | null> {
+  const response = await fetch("/api/sponsor", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ transactionKind, sender }),
+  });
+
+  if (response.ok) return (await response.json()) as Sponsorship;
+  if (response.status === 400) {
+    throw new SponsorRejectedError(
+      "This deposit could not be sponsored. Check the amount, then try again.",
+    );
+  }
+  return null;
+}
+
+/** Execute bytes the gas station already signed, adding the wallet signature. */
+async function executeSponsored(
+  client: ClientWithCoreApi,
+  signed: { bytes: string; signature: string },
+  sponsorSignature: string,
+): Promise<string> {
+  const result = await client.core.executeTransaction({
+    transaction: fromBase64(signed.bytes),
+    signatures: [signed.signature, sponsorSignature],
+    include: { effects: true },
+  });
+  if (result.$kind === "FailedTransaction") {
+    throw new Error(
+      result.FailedTransaction.status.error?.message ??
+        "The transaction failed on-chain.",
+    );
+  }
+  return result.Transaction.digest;
 }
 
 export function PositionPanel() {
@@ -139,6 +228,7 @@ export function PositionPanel() {
   const [digestResult, setDigestResult] = useState<{
     key: string;
     digest: string;
+    payer: GasPayer;
   } | null>(null);
 
   useEffect(() => {
@@ -178,8 +268,8 @@ export function PositionPanel() {
     statusResult?.key === connectionKey && statusResult.state === "ready"
       ? statusResult.status
       : null;
-  const digest =
-    digestResult?.key === connectionKey ? digestResult.digest : null;
+  const deposit = digestResult?.key === connectionKey ? digestResult : null;
+  const digest = deposit?.digest ?? null;
   const submitError =
     submitErrorResult?.key === connectionKey
       ? submitErrorResult.message
@@ -187,9 +277,14 @@ export function PositionPanel() {
 
   const deployment = resolveDeployment(poolStatus, network);
 
+  /**
+   * Sponsored first, wallet gas second. The sponsored path never touches the
+   * gas coin (it belongs to the gas station fund), so the wallet path rebuilds
+   * the entry to let the stake come out of the gas coin again as before.
+   */
   async function submitDeposit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!deployment || !connectionKey) return;
+    if (!deployment || !connectionKey || !account) return;
 
     const validationError = validateAmount(amount);
     if (validationError) {
@@ -203,33 +298,46 @@ export function PositionPanel() {
     setSubmitting(true);
 
     try {
-      const transaction = new Transaction();
-      const stake = transaction.coin({
-        balance: BigInt(amount),
-        type: deployment.coinType,
+      const sender = account.address;
+      const sponsorable = buildEntryTransaction(deployment, amount, outcome, {
+        sender,
+        useGasCoin: false,
       });
-
-      transaction.moveCall({
-        target: `${deployment.packageId}::demo_binary_pool::enter`,
-        typeArguments: [deployment.coinType],
-        arguments: [
-          transaction.object(deployment.registryObjectId),
-          transaction.object(deployment.demoPoolObjectId),
-          stake,
-          transaction.pure.u8(outcome),
-          transaction.object(deployment.clockObjectId),
-        ],
+      const kind = await sponsorable.build({
+        client: dAppKit.getClient(),
+        onlyTransactionKind: true,
       });
+      const sponsorship = await requestSponsorship(toBase64(kind), sender);
 
-      const result = await dAppKit.signAndExecuteTransaction({ transaction });
-      if (result.$kind === "FailedTransaction") {
-        throw new Error(
-          result.FailedTransaction.status.error?.message ??
-            "The transaction failed on-chain.",
+      let digest: string;
+      let payer: GasPayer;
+      if (sponsorship) {
+        // The wallet signs exactly the bytes the gas station assembled.
+        const signed = await dAppKit.signTransaction({
+          transaction: sponsorship.txBytes,
+        });
+        digest = await executeSponsored(
+          dAppKit.getClient(),
+          signed,
+          sponsorship.sponsorSignature,
         );
+        payer = "sponsor";
+      } else {
+        const transaction = buildEntryTransaction(deployment, amount, outcome, {
+          useGasCoin: true,
+        });
+        const result = await dAppKit.signAndExecuteTransaction({ transaction });
+        if (result.$kind === "FailedTransaction") {
+          throw new Error(
+            result.FailedTransaction.status.error?.message ??
+              "The transaction failed on-chain.",
+          );
+        }
+        digest = result.Transaction.digest;
+        payer = "wallet";
       }
 
-      setDigestResult({ key: connectionKey, digest: result.Transaction.digest });
+      setDigestResult({ key: connectionKey, digest, payer });
       setAmount("");
     } catch (error) {
       setSubmitErrorResult({
@@ -436,6 +544,12 @@ export function PositionPanel() {
                   />
                   Deposit submitted
                 </div>
+                <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                  <Flash size="14" variant="Bold" aria-hidden="true" />
+                  {deposit?.payer === "sponsor"
+                    ? "Gas paid by OpenVerdict (Shinami Gas Station)"
+                    : "Gas paid by your wallet"}
+                </p>
                 <HashChip value={digest} label="digest" tone="chain" full />
                 {transactionUrl && (
                   <a
