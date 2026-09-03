@@ -247,7 +247,7 @@ export class RealSuiGateway implements SuiGateway {
     const operator = this.#signers.getOperator();
     const runAttestorCapId = await this.findOwnedObject(
       operator.toSuiAddress(),
-      `${this.#manifest.packageId}::agent_registry::RunAttestorCap`,
+      `${typePackageId(this.#manifest)}::agent_registry::RunAttestorCap`,
     );
     const result = await executeAndWait(
       this.#client,
