@@ -16,9 +16,16 @@ import {
   type FinalizeReport,
 } from "../lib/engine";
 import {
-  DEFAULT_PROMPT_SPEC_V2,
-  DEFAULT_TOOL_POLICY_V2,
+  DEFAULT_PROMPT_SPEC_V4,
+  DEFAULT_TOOL_POLICY_V4,
+  DELIBERATION_PROMPT_SPEC_V1,
+  DELIBERATION_PROMPT_SPEC_V2,
+  DELIBERATION_PROMPT_SPEC_V3,
+  TABLE_VOTE_PROMPT_SPEC_V1,
   createFakeGonkaAdapter,
+  hashCanonicalJson,
+  tableVotePromptSpecHash,
+  type GonkaCompletionResult,
   type GonkaRouterAdapter,
 } from "../lib/gonka";
 import {
@@ -33,6 +40,7 @@ import {
   type OracleInferenceInput,
   type OracleInferenceOutput,
 } from "../lib/protocol";
+import type { ResearchProvider } from "../lib/research";
 import { closeDb, createDb, type DbHandle } from "../lib/storage";
 import {
   SignerRegistry,
@@ -140,6 +148,8 @@ let activeStep = "initialization";
 
 async function main(): Promise<void> {
   const totalStartedAt = Date.now();
+  const previousFreezeLead = process.env.OPENVERDICT_EVIDENCE_FREEZE_LEAD_MS;
+  process.env.OPENVERDICT_EVIDENCE_FREEZE_LEAD_MS = "0";
   let localnet: RunningLocalnet | undefined;
   let db: DbHandle | undefined;
   let dbClosed = false;
@@ -230,6 +240,7 @@ async function main(): Promise<void> {
       db,
       walrus,
       gonka: controller.adapter,
+      research: createLocalnetResearchProvider(),
       suiGateway: engineGateway,
       initialAgents: agents.map<EngineAgentConfig>((agent) => ({
         manifest: agent.manifest,
@@ -325,6 +336,11 @@ async function main(): Promise<void> {
   } finally {
     if (db && !dbClosed) await closeDb(db).catch(() => undefined);
     if (localnet) await stopLocalnet(localnet);
+    if (previousFreezeLead === undefined) {
+      delete process.env.OPENVERDICT_EVIDENCE_FREEZE_LEAD_MS;
+    } else {
+      process.env.OPENVERDICT_EVIDENCE_FREEZE_LEAD_MS = previousFreezeLead;
+    }
   }
 }
 
@@ -369,7 +385,8 @@ export function rebaseDeadlinesForLocalLifecycle(gateway: SuiGateway): SuiGatewa
             challengeDeadlineMs: now + 45_000,
             firstCommitDeadlineMs: now + 80_000,
             firstRevealDeadlineMs: now + 100_000,
-            discussionDeadlineMs: now + 125_000,
+            // Leave one full 60 s deliberation budget after the first commit deadline.
+            discussionDeadlineMs: now + 160_000,
             secondCommitDeadlineMs: now + 170_000,
             secondRevealDeadlineMs: now + 190_000,
           });
@@ -413,12 +430,15 @@ async function registerAgents(
       operationalOwner: asHex(owner),
       role,
       modelId,
-      promptSpec: DEFAULT_PROMPT_SPEC_V2,
-      toolPolicy: DEFAULT_TOOL_POLICY_V2,
+      promptSpec: DEFAULT_PROMPT_SPEC_V4,
+      toolPolicy: DEFAULT_TOOL_POLICY_V4,
+      tableVotePromptSpec: TABLE_VOTE_PROMPT_SPEC_V1,
       evidencePolicyId,
     });
+    assert.ok(built.tableVotePromptHash, "manifest v6 requires a table vote prompt hash");
+    const tableVotePromptHash = built.tableVotePromptHash;
     const manifestUpload = await walrus.put(built.bytes, {
-      identifier: `localnet-agent-${index}-manifest-v3.json`,
+      identifier: `localnet-agent-${index}-manifest-v6.json`,
     });
     const result = await gateway.registerAgent({
       agentIndex: index,
@@ -442,10 +462,11 @@ async function registerAgents(
         owner: asHex(owner),
         humanAttestationHash: toHex(humanHash),
         humanVerificationProvider: "localnet-demo-allowlist",
-        version: "3",
+        version: built.document.version,
         manifestBlobId: manifestUpload.blobId,
         manifestHash: built.manifestHash,
         promptHash: built.promptHash,
+        tableVotePromptHash,
         modelId,
         providerId: "gonkarouter",
         toolPolicyHash: built.toolPolicyHash,
@@ -532,21 +553,24 @@ async function runLifecycle(
   logDetail(`${options.label}: phase 1 revealed 5/5 votes`);
 
   if (options.phaseTwo) {
-    await waitForOnChainDeadline(
-      context.client,
-      inspection.deadlines.firstRevealDeadlineMs,
-      `${options.label} discussion`,
-    );
     await context.engine.advance(claimId);
     const discussion = await context.engine.inspect(claimId);
     assert.equal(discussion.state, CLAIM_STATE.DISCUSSION);
-    logDetail(`${options.label}: entered DISCUSSION after 3-2 split`);
+    logDetail(`${options.label}: entered DISCUSSION on the fifth reveal (before the reveal deadline)`);
     await context.engine.evidenceFreeze(claimId, 2);
-    await waitForOnChainDeadline(
-      context.client,
-      inspection.deadlines.discussionDeadlineMs,
-      `${options.label} round 2 selection`,
+    const frozenDiscussion = await context.engine.inspect(claimId);
+    assert.ok(
+      frozenDiscussion.evidenceRoots.some((root) => root.phase === 2),
+      `${options.label} must freeze phase-two evidence`,
     );
+    const deliberationTurns = frozenDiscussion.deliberation ?? [];
+    if (frozenDiscussion.deliberation !== undefined) {
+      assert.ok(
+        deliberationTurns.some((turn) => turn.status === "SPOKEN"),
+        `${options.label} must record at least one spoken deliberation turn`,
+      );
+    }
+    logDetail(`${options.label}: froze ${deliberationTurns.length} deliberation turns`);
     const secondSelectionStarted = Date.now();
     await context.engine.advance(claimId);
     const phaseTwoInspection = await context.engine.inspect(claimId);
@@ -558,6 +582,9 @@ async function runLifecycle(
       [...secondProfiles].sort(),
       [...profileIds].sort(),
       `${options.label} must reuse committee profiles`,
+    );
+    logDetail(
+      `${options.label}: round two opened on the frozen transcript (before the discussion deadline)`,
     );
     await runJuryAndCommit(context, {
       label: options.label,
@@ -636,8 +663,33 @@ async function runJuryAndCommit(
     report.runs.every((run) => run.status === "SCHEMA_VALID"),
     `${input.label} fake runs must all validate`,
   );
-  await assertFiveRunApprovals(context.client, context.manifest, context.agents);
-  logDetail(`${input.label}: phase ${input.phase} recorded 5 on-chain run approvals`);
+  if (input.phase === 2) {
+    const expectedPromptHash = tableVotePromptSpecHash();
+    const proofs = await Promise.all(
+      report.runs.map((run) => context.engine.runProof(input.claimId, run.runId)),
+    );
+    for (const proof of proofs) {
+      assert.equal(
+        proof.promptHash,
+        expectedPromptHash,
+        `${input.label} phase-two run must bind the table vote prompt`,
+      );
+    }
+  }
+  if (input.phase === 1) {
+    await assertRunApprovalCount(context.client, context.manifest, context.agents, 5);
+    logDetail(`${input.label}: phase ${input.phase} recorded 5 on-chain run approvals`);
+  } else {
+    // Phase two has no acceptance floor: a table-vote seat commits the moment
+    // its run is approved (commit_vote consumes the RunApproval), so none is
+    // outstanding and the five newest seats are already committed.
+    await assertRunApprovalCount(context.client, context.manifest, context.agents, 0);
+    const committed = (await context.engine.inspect(input.claimId)).commitments
+      .slice(-5)
+      .filter((seat) => seat.committed);
+    assert.equal(committed.length, 5, `${input.label} phase-two seats must commit on approval`);
+    logDetail(`${input.label}: phase 2 seats committed on approval (no approval outstanding)`);
+  }
 
   if (input.phase === 1) {
     // jury.move acceptance_deadline: one minute after selection, capped at the commit deadline.
@@ -792,6 +844,185 @@ function buildSponsoredPoolEntry(
   return tx;
 }
 
+/** V4 fake research needs both sides and two independent citation sites. */
+function createLocalnetResearchProvider(): ResearchProvider {
+  const pages = new Map([
+    [
+      "https://support-evidence.test/localnet-record",
+      {
+        title: "Localnet support record",
+        text: "The localnet support record confirms the claim for deterministic end-to-end testing.",
+      },
+    ],
+    [
+      "https://challenge-evidence.test/localnet-record",
+      {
+        title: "Localnet challenge record",
+        text: "The localnet challenge record supplies contrary evidence for deterministic end-to-end testing.",
+      },
+    ],
+  ]);
+  return {
+    name: "fake",
+    mode: "fake",
+    async probe() {
+      return { ok: true, latencyMs: 0, status: "200" };
+    },
+    async search(query) {
+      const challenge = query.startsWith("challenge:");
+      const url = challenge
+        ? "https://challenge-evidence.test/localnet-record"
+        : "https://support-evidence.test/localnet-record";
+      const page = required(pages.get(url), `localnet research page ${url}`);
+      return [{ rank: 1, url, title: page.title, snippet: page.text }];
+    },
+    async open(url) {
+      const page = required(pages.get(url), `localnet research page ${url}`);
+      return {
+        url,
+        finalUrl: url,
+        title: page.title,
+        markdown: page.text,
+        fetchedAtMs: 0,
+        statusCode: 200,
+      };
+    },
+  };
+}
+
+type CompletionRequest = Parameters<GonkaRouterAdapter["complete"]>[0];
+
+function buildLocalnetResearchContent(
+  request: CompletionRequest,
+  vote: VoteInstruction,
+): string {
+  const turn = request.messages.filter((message) => message.role === "assistant").length;
+  if (turn === 0) {
+    return JSON.stringify({
+      action: "search",
+      query: `support: ${request.input.claim.statement}`,
+      intent: "support",
+    });
+  }
+  if (turn === 1) {
+    return JSON.stringify({ action: "open", url: lastSearchUrl(request), from: 0 });
+  }
+  if (turn === 2) {
+    return JSON.stringify({
+      action: "search",
+      query: `challenge: ${request.input.claim.statement}`,
+      intent: "challenge",
+    });
+  }
+  if (turn === 3) {
+    return JSON.stringify({ action: "open", url: lastSearchUrl(request), from: 0 });
+  }
+
+  const opened = request.messages.flatMap((message) => {
+    if (message.role !== "user") return [];
+    const payload = parseJsonRecord(message.content);
+    if (
+      payload?.tool !== "open" ||
+      typeof payload.evidenceId !== "string" ||
+      typeof payload.url !== "string" ||
+      typeof payload.text !== "string"
+    ) {
+      return [];
+    }
+    return [{
+      evidenceId: payload.evidenceId,
+      url: payload.url,
+      quote: payload.text.replace(/\s+/g, " ").trim(),
+    }];
+  });
+  assert.equal(opened.length, 2, "v4 fake research must open support and challenge pages");
+  const support = required(opened[0], "support research page");
+  const challenge = required(opened[1], "challenge research page");
+  const decisiveEvidence = vote.outcome === "YES"
+    ? [support.evidenceId]
+    : vote.outcome === "NO"
+      ? [challenge.evidenceId]
+      : [support.evidenceId, challenge.evidenceId];
+  const assessment = vote.outcome === "YES"
+    ? "SUPPORTS"
+    : vote.outcome === "NO"
+      ? "CONTRADICTS"
+      : "MIXED";
+  return JSON.stringify({
+    action: "answer",
+    output: {
+      outcome: vote.outcome,
+      confidenceBps: vote.confidenceBps,
+      evidenceFor: [support.evidenceId],
+      evidenceAgainst: [challenge.evidenceId],
+      unsupportedClaims: [],
+      decisiveEvidence,
+      reasoning: `The deterministic two-sided record supports a ${vote.outcome} vote.`,
+      publicReasoningTrace: [{
+        check: "Compare the support and challenge records.",
+        evidenceIds: [support.evidenceId, challenge.evidenceId],
+        assessment,
+        finding: `The scripted localnet verdict is ${vote.outcome}.`,
+      }],
+      citations: [support, challenge],
+      counterEvidenceSummary:
+        "The contrary record was considered and weighed against the scripted verdict.",
+    },
+  });
+}
+
+function lastSearchUrl(request: CompletionRequest): string {
+  const content = request.messages.findLast((message) => message.role === "user")?.content;
+  const payload = content === undefined ? undefined : parseJsonRecord(content);
+  const result = Array.isArray(payload?.results) ? payload.results[0] : undefined;
+  if (!isRecord(result) || typeof result.url !== "string") {
+    throw new Error("v4 fake research requires a prior search result URL");
+  }
+  return result.url;
+}
+
+function rewriteFakeCompletion(
+  completion: Extract<GonkaCompletionResult, { ok: true }>,
+  content: string,
+): void {
+  const response = completionResponseWithContent(completion.response, content);
+  const outputValue: unknown = JSON.parse(content);
+  completion.content = content;
+  completion.response = response;
+  completion.attempt.response = response;
+  completion.attempt.audit.outputHash = hashCanonicalJson(outputValue);
+}
+
+function completionResponseWithContent(response: unknown, content: string): unknown {
+  if (!isRecord(response) || !Array.isArray(response.choices)) {
+    throw new Error("fake completion response omitted choices");
+  }
+  const [firstChoice, ...remainingChoices] = response.choices;
+  if (!isRecord(firstChoice) || !isRecord(firstChoice.message)) {
+    throw new Error("fake completion response omitted its first message");
+  }
+  return {
+    ...response,
+    choices: [
+      { ...firstChoice, message: { ...firstChoice.message, content } },
+      ...remainingChoices,
+    ],
+  };
+}
+
+function parseJsonRecord(content: string): Record<string, unknown> | undefined {
+  try {
+    const value: unknown = JSON.parse(content);
+    return isRecord(value) ? value : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 function createFakeController(): FakeController {
   const plans = new Map<string, Map<string, VoteInstruction[]>>();
   const cursors = new Map<string, number>();
@@ -803,6 +1034,7 @@ function createFakeController(): FakeController {
       claim: Pick<OracleInferenceInput["claim"], "statement" | "resolutionCriteria">;
     },
     manifest: AgentManifest,
+    consumeFixture = true,
   ): GonkaRouterAdapter => {
     const queue = plans.get(input.claim.statement)?.get(manifest.agentProfileId);
     if (!queue) {
@@ -810,17 +1042,36 @@ function createFakeController(): FakeController {
     }
     const key = `${input.claim.statement}:${manifest.agentProfileId}`;
     const cursor = cursors.get(key) ?? 0;
-    const vote = queue[cursor];
-    if (!vote) throw new Error(`fixture queue exhausted for ${manifest.agentProfileId}`);
-    cursors.set(key, cursor + 1);
+    const fixtureIndex = consumeFixture ? cursor : cursor - 1;
+    const vote = queue[fixtureIndex];
+    if (!vote) {
+      const reason = consumeFixture ? "fixture queue exhausted" : "no consumed fixture";
+      throw new Error(`${reason} for ${manifest.agentProfileId}`);
+    }
+    if (consumeFixture) cursors.set(key, cursor + 1);
     return createFakeGonkaAdapter([
       {
         agentProfileId: manifest.agentProfileId,
         outcome: vote.outcome,
         confidenceBps: vote.confidenceBps,
-        gonkaRequestId: `msg_e2e_${toHex(blake2b256(new TextEncoder().encode(key))).slice(2, 18)}_${cursor + 1}`,
+        gonkaRequestId: `msg_e2e_${toHex(blake2b256(new TextEncoder().encode(key))).slice(2, 18)}_${fixtureIndex + 1}`,
+        actions: [],
       },
     ]);
+  };
+
+  const latestVoteFor = (
+    input: Pick<OracleInferenceInput, "runId"> & {
+      claim: Pick<OracleInferenceInput["claim"], "statement" | "resolutionCriteria">;
+    },
+    manifest: AgentManifest,
+  ): VoteInstruction => {
+    const queue = plans.get(input.claim.statement)?.get(manifest.agentProfileId);
+    const key = `${input.claim.statement}:${manifest.agentProfileId}`;
+    const cursor = cursors.get(key) ?? 0;
+    const vote = queue?.[cursor - 1];
+    if (!vote) throw new Error(`no consumed fixture for ${manifest.agentProfileId}`);
+    return vote;
   };
 
   return {
@@ -848,12 +1099,35 @@ function createFakeController(): FakeController {
         return adapterFor(input, manifest).run(input, manifest);
       },
       async complete(request) {
+        const systemPrompt = request.messages[0]?.content;
+        const requestKind = systemPrompt === TABLE_VOTE_PROMPT_SPEC_V1.systemPrompt
+          ? "TABLE_VOTE"
+          : systemPrompt === DELIBERATION_PROMPT_SPEC_V1.systemPrompt ||
+              systemPrompt === DELIBERATION_PROMPT_SPEC_V2.systemPrompt ||
+              systemPrompt === DELIBERATION_PROMPT_SPEC_V3.systemPrompt
+            ? "DELIBERATION"
+            : "RESEARCH";
         let adapter = completionAdapters.get(request.attempts);
         if (!adapter) {
-          adapter = adapterFor(request.input, request.manifest);
+          // Debate turns reuse the revealed round-one vote without consuming round two.
+          adapter = adapterFor(
+            request.input,
+            request.manifest,
+            requestKind !== "DELIBERATION",
+          );
           completionAdapters.set(request.attempts, adapter);
         }
-        return adapter.complete(request);
+        const completion = await adapter.complete(request);
+        if (requestKind === "RESEARCH" && completion.ok) {
+          rewriteFakeCompletion(
+            completion,
+            buildLocalnetResearchContent(
+              request,
+              latestVoteFor(request.input, request.manifest),
+            ),
+          );
+        }
+        return completion;
       },
       probeModels: utility.probeModels,
       normalizeResponse: utility.normalizeResponse,
@@ -877,10 +1151,11 @@ function assertCommitteeDiversity(
   }
 }
 
-async function assertFiveRunApprovals(
+async function assertRunApprovalCount(
   client: OpenVerdictSuiClient,
   manifest: ReleaseManifest,
   agents: RegisteredAgent[],
+  expected: number,
 ): Promise<void> {
   const type = `${manifest.packageId}::jury::RunApproval`;
   const counts = await Promise.all(
@@ -893,7 +1168,7 @@ async function assertFiveRunApprovals(
       return page.objects.length;
     }),
   );
-  assert.equal(counts.reduce((sum, count) => sum + count, 0), 5);
+  assert.equal(counts.reduce((sum, count) => sum + count, 0), expected);
 }
 
 function recomputeTruthScore(inspection: ClaimInspection): number {

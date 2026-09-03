@@ -2009,6 +2009,53 @@ cwd resets between Bash calls; foreground sleep is blocked (poll loops or
 detached scripts); Codex jobs can stall silently (watch the rollout
 mtime, relaunch with --fresh).
 
+## 3ai. AFTERNOON 2026-09-03: TWO-ROUND PATH PROVEN ON LOCALNET (read 3ah then this)
+
+OWNER: still on the pitch deck; "let's just wait and see". Interrupt only
+for a split, a settlement, a give-up, or a decision.
+
+WEATHER 13:55 to 14:40: closed (DeepSeek 429 throughout, MiniMax and
+Kimi flickering). Nothing live; Great Wall 0x5dcbd39b attempt 3 still
+pending relaunch; the seeder waits for a clear probe. The board watcher
+(scratchpad/board-watch.sh) had a silent Python f-string error since its
+restart; fixed 14:34, it prints weather and live-board changes again.
+
+E2E GAP CLOSED (Codex job task-mtl4a59r-cragi9, reviewed and re-run by
+me; scripts/localnet-e2e.ts only, no production code): the localnet
+harness now runs all three lifecycles on the upgraded package. Direct
+review 101 s, split vote 191 s, unresolved two-round 191 s, whole run
+about 510 s. The split lifecycles prove the new gates the way production
+uses them: discussion opens on the fifth reveal (before the reveal
+deadline), the debate transcript freezes as phase-two evidence with
+spoken turns, round two opens on the frozen transcript (before the
+discussion deadline), five table votes bind tableVotePromptSpecHash(),
+commit, reveal, finalize (YES for 4 of 5, UNRESOLVED for 2 of 5). No
+engine or Move bug found. Harness changes: jurors register v6 manifests
+(V4 research spec and tool policy plus TABLE_VOTE_PROMPT_SPEC_V1, like
+publish-agent-manifests.ts); the fake controller routes research,
+debate turns and table votes by system prompt (debate turns reuse the
+round-one vote instead of consuming the round-two fixture); a two-site
+fake research provider (support and challenge pages) so the V4 policy
+validates; harness ladder discussion deadline +160 s and
+OPENVERDICT_EVIDENCE_FREEZE_LEAD_MS=0 inside the harness process so one
+full 60 s turn budget fits. Learned the hard way: after the phase-two
+jury run there are ZERO RunApproval objects outstanding, because phase
+two has no acceptance floor and every table-vote seat commits the moment
+its run is approved (commit_vote consumes the approval); the harness
+asserts exactly that (assertRunApprovalCount 5 in phase one, 0 plus five
+committed seats in phase two).
+
+KNOWN, LEFT ALONE BEFORE THE DEMO: both the inference worker and the
+evidence worker run the public debate when a claim enters DISCUSSION
+(evidenceFreeze(2) calls runDeliberation; the in-process dedup does not
+span processes). Each turn is called twice on Gonka; the first persisted
+turn wins (turn_id = claimId:ordinal, ON CONFLICT DO NOTHING) so the
+transcript stays consistent, and at temperature 0 the duplicate acts as
+a redundant retry. Cost only. Fix when a deploy window is free: the
+inference worker freezes right after the debate, the evidence worker
+keeps only a late fallback inside the freeze lead (where the engine skips
+unspoken turns without a model call).
+
 ## 4. Planned next (owner-approved direction)
 
 - Attestation (docs/superpowers/specs/2026-08-30-attested-inference-design.md):
