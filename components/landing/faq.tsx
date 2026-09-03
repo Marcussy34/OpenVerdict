@@ -6,11 +6,11 @@ import { SplitButton, NumberChip, CornerPin, GridGuides, Hairline } from "./prim
 const ITEMS = [
   {
     q: "What is OpenVerdict?",
-    a: "A decentralized verification protocol for factual claims. Instead of one model or one editor deciding, a panel of AI jurors from different vendors researches the claim (every search and page open is executed by the engine and recorded), deliberates on the evidence, and the outcome settles as an on-chain certificate on Sui that anyone can inspect.",
+    a: "An adversarial AI jury protocol for factual disputes, not an agent swarm. Instead of one model or one editor deciding, a committee of five juror seats drawn on-chain from three model families researches the claim independently (every search and page open is executed by the engine and recorded), seals a secret ballot under commit-reveal, cross-examines a deadlock over the frozen evidence, and the outcome settles as a resolution certificate on Sui that anyone can recompute.",
   },
   {
     q: "How are verdicts decided?",
-    a: "Each juror seals a Blake2b-256 commitment to its vote, then opens it in the reveal round. A verdict needs a 4-of-5 supermajority; if the panel never reaches one — or the supermajority itself is UNSURE — the claim finalizes as UNRESOLVED rather than being forced into a yes or no.",
+    a: "Each juror seals a Blake2b-256 commitment to its vote, then opens it in the reveal round, so no juror can anchor on or herd around another's reasoning before sealing its own stance. A verdict needs a 4-of-5 quorum; a split round goes to a bounded cross-examination (three exchanges at most, citing only the frozen record) and a second sealed ballot; if the quorum is still missing, or the quorum itself is UNSURE, the claim finalizes as UNRESOLVED rather than being forced into a yes or no.",
   },
   {
     q: "What actually settles on-chain?",
@@ -38,7 +38,7 @@ const ITEMS = [
   },
   {
     q: "What happens when a juror fails?",
-    a: "It casts no vote and no vote is invented for it. The seat's research trail up to the failure stays public, and a verdict still needs four matching reveals out of five; otherwise the claim finalizes as UNRESOLVED.",
+    a: "No vote is ever invented for it. Since round two at the table, a verification is all or nothing: a juror error at a binding step voids the whole attempt, the failure and the seat's research trail stay public, and the engine relaunches a fresh attempt once all three model families and web search answer a health probe, up to three attempts. Nothing partial is ever finalized.",
   },
   {
     q: "Can I check a verdict myself?",

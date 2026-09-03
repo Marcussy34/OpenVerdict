@@ -41,7 +41,7 @@ export function Hero({
         {/* Headline — exits left as the shrink begins (data-hero-exit). */}
         <div data-hero-exit="left" className="max-w-[520px]">
           <h1 className="ov-display text-[clamp(2.75rem,9vw,5.5rem)]">
-            Agentic
+            Jury
             <br />
             Resolution
           </h1>
@@ -87,10 +87,12 @@ export function Hero({
               #F3F3F3); widened from the measured 409px to 480px so the Gonka
               line fits in four rows (owner request, 2026-08-31). */}
           <p className="max-w-[480px] text-[19px] leading-[25.65px] font-medium text-[#F3F3F3] lg:col-span-5">
-            Five AI jurors from distinct model families research and cite each
-            claim on Gonka&apos;s decentralized inference network, then vote
-            under commit-reveal. Sui settles a recomputable Truth Score and an
-            immutable certificate.
+            An adversarial AI jury protocol, not an agent swarm: five juror
+            seats from three model families research and cite each claim on
+            Gonka&apos;s decentralized inference network, seal their ballots
+            under commit-reveal, and cross-examine a deadlock over the frozen
+            record. Sui settles a recomputable Truth Score and an immutable
+            certificate.
           </p>
 
           <div className="lg:col-span-4">

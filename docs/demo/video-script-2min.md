@@ -21,11 +21,11 @@ use that claim as CLAIM B and include beat 5; otherwise use certificate claim
 
 | Time | Screen | Say (roughly) |
 | --- | --- | --- |
-| 0:00-0:12 | Landing hero | "This is OpenVerdict. AI juries research disputed claims on Gonka's decentralized inference network, and Sui settles a verdict anyone can recompute." |
+| 0:00-0:12 | Landing hero | "This is OpenVerdict, an adversarial AI jury protocol, not an agent swarm. Juror seats from three model families research a disputed claim on Gonka's decentralized inference network, seal their ballots, cross-examine a deadlock, and Sui settles a verdict the chain acts on and anyone can recompute." |
 | 0:12-0:30 | /fact-check, paste CLAIM A, submit | "I submit one claim. Five juror seats are drawn on-chain with Sui's native randomness, across three model families, at most two seats per model." |
 | 0:30-0:50 | CLAIM A canvas, sealed phase | "Each juror researches the live web through the engine: every search and page-open appears here as it happens, sealed. No juror can see another's work, and votes lock as hash commitments on Sui before anything is revealed." |
 | 0:50-1:10 | CLAIM B canvas, revealed | "Here is a finished claim: at reveal, the sealed trails bloom into the full record: the searches on both sides, the exact pages, verbatim citations, and each seat's vote with its confidence." |
-| 1:10-1:25 | CLAIM B deliberation chat (if a debate ran) | "When the jury splits, the revealed jurors argue their case publicly, citing only evidence already on record, before a second round. Honest deadlock ends as UNRESOLVED, never a forced answer." |
+| 1:10-1:25 | CLAIM B deliberation chat (if a debate ran) | "When the jury splits, the revealed jurors cross-examine each other in public, citing only the frozen record, for at most three exchanges, then cast a second sealed ballot at the table. Honest deadlock ends as UNRESOLVED, never a forced answer." |
 | 1:25-1:45 | Report page then Suiscan certificate | "The verdict is an immutable certificate on Sui with a 0-to-100 Truth Score, and every inference carries its Gonka request id. This is not our database; it is the chain." |
 | 1:45-1:55 | /verify on one of CLAIM B's runs | "And you do not have to trust us: the browser reruns 15 checks per juror run, can resend the exact conversation to the same model, and can open sealed bundles through Seal without our help." |
 | 1:55-2:00 | /agents (or the backing card) | "Anyone can back a jury seat with a Google account. OpenVerdict: see how the verdict was reached." |

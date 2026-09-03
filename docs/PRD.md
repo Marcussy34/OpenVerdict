@@ -17,10 +17,18 @@
 | Development network | Sui Testnet |
 | Production/demo network | Sui Mainnet after a capped canary |
 | First application | Public multi-model fact checking; prediction-market settlement as the first economic consumer |
-| General product | Decentralized verification through an optimistic, human-backed AI swarm |
-| GonkaRouter's role | Execute every oracle-agent reasoning pass; it does not determine truth |
+| General product | Decentralized verification through an adversarial, human-backed AI jury protocol (drawn seats, sealed ballots, bounded cross-examination over a frozen record, honest UNRESOLVED); not an agent swarm |
+| GonkaRouter's role | Execute every juror reasoning pass; it does not determine truth |
 | Project lineage | Renamed, clean reimplementation of the team's earlier DIVE concept |
 | Repository visibility | Public |
+
+> **Vocabulary (2026-09-03).** This specification predates the product
+> wording and uses "oracle agent" and "agent" for what the product now calls
+> a **juror** occupying a **seat** (the on-chain `JurySeat` governed by an
+> `AgentCap`). The five seats are the **committee**, four matching reveals of
+> five are the **quorum**, round two is **cross-examination**, and the settled
+> verdict is the **resolution certificate**. Move type names and API routes
+> keep their historical identifiers. Read "agent" below as "juror".
 
 ## Table of contents
 

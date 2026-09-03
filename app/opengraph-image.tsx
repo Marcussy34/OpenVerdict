@@ -68,7 +68,7 @@ export default function Image() {
             color: "#8fb4ff",
           }}
         >
-          GonkaRouter AI juries · settled on Sui · evidence on Walrus
+          Adversarial AI jury protocol · Gonka jurors · settled on Sui · evidence on Walrus
         </div>
       </div>
     ),

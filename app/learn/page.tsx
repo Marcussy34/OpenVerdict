@@ -49,7 +49,7 @@ export default function LearnPage() {
       <PageHeader
         eyebrow="Get started"
         title="How OpenVerdict works"
-        description="Submit a claim. Five independent AI jurors research it, vote in secret, and publish every step so anyone can check the answer."
+        description="Submit a claim. An adversarial AI jury protocol, not an agent swarm: five juror seats from three model families research it independently, vote in secret, cross-examine a deadlock over the frozen evidence, and publish every step so anyone can check the answer."
         icon={Judge}
         badges={<ExperimentalTag />}
       />
@@ -87,7 +87,10 @@ export default function LearnPage() {
           </p>
           <p>
             Votes are locked in secret first and only opened together, so no juror
-            can copy another. The verdict and its{" "}
+            can copy or herd around another. If the panel splits, the jurors
+            cross-examine each other in public over the frozen evidence (three
+            exchanges at most, nothing new invented) and vote once more in
+            secret; an honest deadlock ends as UNRESOLVED. The verdict and its{" "}
             <strong className="font-semibold text-ocean">Truth Score</strong> are
             then stamped on the Sui blockchain, where nobody can quietly edit them.
           </p>

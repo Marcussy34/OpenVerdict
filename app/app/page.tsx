@@ -114,7 +114,7 @@ export default function AppHomePage() {
         </p>
         <h1 className="ov-display text-4xl text-ocean md:text-5xl">OpenVerdict</h1>
         <p className="text-base text-muted-foreground">
-          AI juries on Sui. Every verdict public, auditable, replayable.
+          An adversarial AI jury protocol on Sui. Every verdict public, auditable, replayable.
         </p>
         <div className="flex justify-center pt-1">
           <Link href="/fact-check" className="ov-btn">

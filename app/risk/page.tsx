@@ -37,7 +37,7 @@ export default function RiskPage() {
       <PageHeader
         eyebrow="Before you deploy capital"
         title="Risk disclosure"
-        description="OpenVerdict is an experimental decentralized oracle and AI jury protocol. Understand the technical and economic risks first."
+        description="OpenVerdict is an experimental decentralized adversarial AI jury protocol. Understand the technical and economic risks first."
         icon={Warning2}
         badges={<ExperimentalTag />}
       />

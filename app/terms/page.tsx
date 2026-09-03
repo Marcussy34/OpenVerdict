@@ -11,7 +11,7 @@ const SECTIONS = [
   {
     index: "01",
     title: "Nature of the protocol",
-    body: "OpenVerdict provides an autonomous AI jury coordination protocol on the Sui network. Outputs, Truth Scores and Resolution Certificates represent deterministic aggregations of AI model inferences. They do not constitute absolute truth, legal testimony or financial advice.",
+    body: "OpenVerdict provides an adversarial AI jury protocol on the Sui network. Outputs, Truth Scores and Resolution Certificates represent deterministic aggregations of AI model inferences. They do not constitute absolute truth, legal testimony or financial advice.",
   },
   {
     index: "02",
