@@ -3,10 +3,10 @@
 import { useState, type FormEvent } from "react";
 import { useCurrentAccount, useDAppKit } from "@mysten/dapp-kit-react";
 import {
-  Profile2User,
   Refresh,
   ShieldTick,
   TickCircle,
+  Wallet,
   Warning2,
 } from "@/components/icons";
 import { WalletConnectButton } from "@/components/wallet/connect-button";
@@ -15,13 +15,22 @@ import { Panel, FieldLabel } from "@/components/viz/panel";
 import { HashChip } from "@/components/viz/hash-chip";
 import { MetaTag } from "@/components/viz/page-header";
 import { Input } from "@/components/ui/input";
-import type { ZkBackedRegistrationResult } from "@/lib/engine/contract";
+import type {
+  StakedAgentBackingKind,
+  ZkBackedRegistrationResult,
+} from "@/lib/engine/contract";
 import { buildZkLoginBackingMessage } from "@/lib/engine/zklogin";
 
 /** Recorded manifest label, required by the API. It has no behavioral effect:
  * every juror runs the same protocol prompts and tools, so the card offers no
- * role choice and registration reads as backing a standardized seat. */
-const BACKED_SEAT_ROLE = "INVESTIGATOR";
+ * role choice and a stake buys a standardized seat. */
+const STAKED_SEAT_ROLE = "INVESTIGATOR";
+
+/** Human-readable name for each stake kind the server can return. */
+const STAKE_KIND_LABELS: Record<StakedAgentBackingKind, string> = {
+  WALLET_STAKED: "Wallet stake",
+  ZKLOGIN_BACKED: "Google sign-in stake",
+};
 
 type RegistrationPhase = "idle" | "checking" | "signing" | "registering";
 type OpenVerdictNetwork = "localnet" | "testnet" | "mainnet";
@@ -75,7 +84,7 @@ function ZkLoginRegistrationForm({
       const statusBody = await readJsonObject(statusResponse);
       if (statusResponse.status === 503) {
         setEngineOffline(true);
-        setError("The registration engine is offline. Try again after it is configured.");
+        setError("The staking engine is offline. Try again after it is configured.");
         return;
       }
       if (!statusResponse.ok || !isOpenVerdictNetwork(statusBody.network)) {
@@ -83,6 +92,7 @@ function ZkLoginRegistrationForm({
       }
 
       setPhase("signing");
+      // The wallet signs this exact text, no transaction and no gas.
       const message = buildZkLoginBackingMessage(
         account.address,
         statusBody.network,
@@ -94,10 +104,10 @@ function ZkLoginRegistrationForm({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          zkLoginAddress: account.address,
+          address: account.address,
           signature: signed.signature,
           modelId: selectedModel,
-          role: BACKED_SEAT_ROLE,
+          role: STAKED_SEAT_ROLE,
         }),
       });
       const responseBody = await readJsonObject(response);
@@ -112,7 +122,7 @@ function ZkLoginRegistrationForm({
         );
       }
       if (!isRegistrationResult(responseBody)) {
-        throw new Error("The registration service returned an invalid response.");
+        throw new Error("The staking service returned an invalid response.");
       }
 
       setResult(responseBody);
@@ -128,26 +138,28 @@ function ZkLoginRegistrationForm({
 
   return (
     <Panel
-      label="Back a jury seat"
+      label="Stake on a juror seat"
       icon={ShieldTick}
       tone="sealed"
-      action={<MetaTag tone="sealed">ZKLOGIN_BACKED</MetaTag>}
+      action={<MetaTag tone="sealed">Any Sui account</MetaTag>}
     >
       <div className="mb-4 space-y-1">
         <h2 className="text-base font-semibold text-ocean">
-          Back a jury seat with your Google account
+          Stake on a juror seat
         </h2>
         <p className="text-xs leading-relaxed text-muted-foreground">
-          One Google account, one seat — authentication, not proof of personhood.
-          Seats are standardized: the protocol pins every juror’s model, prompts
-          and tools, so backing records who stands behind a seat, never a persona.
+          Connect any Sui wallet, or continue with Google (zkLogin), and sign one
+          message. No transaction, no gas. OpenVerdict registers the seat and
+          records your staker hash, blake2b-256 of your address. Seats are
+          standardized: the protocol pins every juror&apos;s model, prompts and
+          tools.
         </p>
       </div>
       <div>
         {!account ? (
           <div className="flex flex-col items-start gap-4 rounded-xl border border-dashed border-border bg-surface p-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex max-w-2xl items-start gap-3">
-              <Profile2User
+              <Wallet
                 size="20"
                 variant="Bold"
                 className="mt-0.5 shrink-0 text-primary"
@@ -155,11 +167,11 @@ function ZkLoginRegistrationForm({
               />
               <div className="space-y-1">
                 <p className="text-sm font-semibold text-ocean">
-                  Connect with Google to continue
+                  Connect an account to stake
                 </p>
                 <p className="text-sm leading-relaxed text-muted-foreground">
-                  Choose the Google zkLogin option. The social address signs once;
-                  OpenVerdict stores only its backing hash.
+                  Any Sui wallet works, and so does the Google option. The account
+                  signs once; OpenVerdict stores only its staker hash.
                 </p>
               </div>
             </div>
@@ -172,8 +184,8 @@ function ZkLoginRegistrationForm({
           >
             <div className="flex items-center gap-2 text-yes">
               <TickCircle size="19" variant="Bold" aria-hidden="true" />
-              <p className="font-semibold">Seat backed</p>
-              <MetaTag tone="yes">{result.backingKind}</MetaTag>
+              <p className="font-semibold">Seat staked</p>
+              <MetaTag tone="yes">{STAKE_KIND_LABELS[result.backingKind]}</MetaTag>
             </div>
             <dl className="grid gap-3 text-xs sm:grid-cols-2">
               <div className="space-y-1">
@@ -192,9 +204,19 @@ function ZkLoginRegistrationForm({
                   <HashChip value={result.digest} tone="chain" full />
                 </dd>
               </div>
+              <div className="space-y-1">
+                <dt>
+                  <FieldLabel>Staker hash</FieldLabel>
+                </dt>
+                <dd>
+                  <HashChip value={result.humanBackingHash} tone="sealed" full />
+                </dd>
+              </div>
             </dl>
             <p className="text-xs text-muted-foreground">
-              One Google account, one seat — authentication, not proof of personhood.
+              You may stake on as many seats as you like. A committee draws at
+              most one seat per staker hash and one per owner, so a single
+              account never fills a jury.
             </p>
             <Button
               type="button"
@@ -202,7 +224,7 @@ function ZkLoginRegistrationForm({
               className="min-h-[44px]"
               onClick={() => setResult(null)}
             >
-              Back another seat
+              Stake on another seat
             </Button>
           </div>
         ) : (
@@ -239,7 +261,7 @@ function ZkLoginRegistrationForm({
                 <div className="flex items-center gap-2 text-destructive">
                   <Warning2 size="18" variant="Bold" aria-hidden="true" />
                   <p className="text-sm font-semibold">
-                    {engineOffline ? "Registration service offline" : "Registration failed"}
+                    {engineOffline ? "Staking service offline" : "Staking failed"}
                   </p>
                 </div>
                 <p className="text-sm text-muted-foreground">{error}</p>
@@ -260,9 +282,9 @@ function ZkLoginRegistrationForm({
 
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <p className="max-w-2xl text-xs leading-relaxed text-muted-foreground">
-                The server verifies a zkLogin personal-message signature, then the
-                existing Sui rule prevents the same backing hash from taking two
-                seats in one committee.
+                The server verifies your personal-message signature, then the Sui
+                draw rule keeps one staker hash from taking two seats in the same
+                committee.
               </p>
               <Button
                 type="submit"
@@ -283,8 +305,8 @@ function ZkLoginRegistrationForm({
                   : phase === "signing"
                     ? "Awaiting signature…"
                     : phase === "registering"
-                      ? "Backing…"
-                      : "Sign and back a seat"}
+                      ? "Staking…"
+                      : "Sign and stake"}
               </Button>
             </div>
           </form>
@@ -315,22 +337,23 @@ function isRegistrationResult(
   return (
     typeof value.agentProfileId === "string" &&
     typeof value.humanBackingHash === "string" &&
-    value.backingKind === "ZKLOGIN_BACKED" &&
+    typeof value.backingKind === "string" &&
+    value.backingKind in STAKE_KIND_LABELS &&
     typeof value.digest === "string"
   );
 }
 
 function registrationErrorMessage(status: number): string {
-  if (status === 403) return "Public agent registration is disabled.";
-  if (status === 429) return "Too many registration attempts. Wait a minute and try again.";
-  if (status === 503) return "The registration service is temporarily unavailable.";
-  return "The seat could not be backed. Check the model ID and Google account, then retry.";
+  if (status === 403) return "Public seat staking is disabled.";
+  if (status === 429) return "Too many staking attempts. Wait a minute and try again.";
+  if (status === 503) return "The staking service is temporarily unavailable.";
+  return "The seat could not be staked. Check the model ID and your account, then retry.";
 }
 
 function friendlyRegistrationError(error: unknown): string {
   const message = error instanceof Error ? error.message : "";
   if (/reject|cancel|denied/i.test(message)) {
-    return "Signature request canceled. No seat was backed.";
+    return "Signature request canceled. No seat was staked.";
   }
-  return message || "The seat could not be backed. Try again.";
+  return message || "The seat could not be staked. Try again.";
 }

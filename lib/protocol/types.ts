@@ -238,7 +238,11 @@ export type PromptSpecV1 = {
   responseFormat: "json_object";
 };
 
-export type AgentBackingKind = "TESTNET_DEMO_ALLOWLIST" | "ZKLOGIN_BACKED";
+/** How a seat was staked. WALLET_STAKED covers every non-zkLogin wallet. */
+export type AgentBackingKind =
+  | "TESTNET_DEMO_ALLOWLIST"
+  | "ZKLOGIN_BACKED"
+  | "WALLET_STAKED";
 
 export type AgentManifestDocumentV2 = {
   version: "2";

@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PGlite } from "@electric-sql/pglite";
 import { Ed25519Keypair } from "@mysten/sui/keypairs/ed25519";
+import { getZkLoginSignature } from "@mysten/sui/zklogin";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   DELIBERATION_PROMPT_SPEC_V3,
@@ -2516,6 +2517,10 @@ describe("agent backing status", () => {
       kind: "ZKLOGIN",
       label: "zklogin:enoki",
     });
+    expect(agentBackingStatus("sui-wallet-personal-message")).toEqual({
+      kind: "WALLET",
+      label: "sui-wallet-personal-message",
+    });
     expect(agentBackingStatus("demo-allowlist")).toEqual({
       kind: "ALLOWLIST",
       label: "demo-allowlist",
@@ -2527,17 +2532,17 @@ describe("agent backing status", () => {
   });
 });
 
-describe("zkLogin-backed agent registration", () => {
-  const zkLoginAddress = `0x${"ab".repeat(32)}`;
-  const signature = "c2lnbmF0dXJl";
+describe("wallet-signed seat staking", () => {
+  const stakerAddress = `0x${"ab".repeat(32)}`;
+  const signature = zkLoginSchemeSignature();
 
-  it("builds the exact v1 canonical backing message", () => {
+  it("builds the exact v1 canonical stake message", () => {
     expect(
       new TextDecoder().decode(
-        buildZkLoginBackingMessage(zkLoginAddress, "testnet"),
+        buildZkLoginBackingMessage(stakerAddress, "testnet"),
       ),
     ).toBe(
-      `OpenVerdict agent backing v1\naddress: ${zkLoginAddress}\nnetwork: testnet`,
+      `OpenVerdict agent stake v1\naddress: ${stakerAddress}\nnetwork: testnet`,
     );
   });
 
@@ -2545,17 +2550,17 @@ describe("zkLogin-backed agent registration", () => {
     const setup = await registrationSetup({ verifierResult: true });
 
     const result = await setup.engine.registerZkBackedAgent({
-      zkLoginAddress,
+      zkLoginAddress: stakerAddress,
       signature,
       modelId: "model-b",
       role: "INVESTIGATOR",
     });
 
-    const expectedBackingHash = toHex(blake2b256(fromHex(zkLoginAddress)));
+    const expectedBackingHash = toHex(blake2b256(fromHex(stakerAddress)));
     expect(setup.verify).toHaveBeenCalledOnce();
     expect(setup.verify).toHaveBeenCalledWith({
-      zkLoginAddress,
-      message: buildZkLoginBackingMessage(zkLoginAddress, "localnet"),
+      zkLoginAddress: stakerAddress,
+      message: buildZkLoginBackingMessage(stakerAddress, "localnet"),
       signature,
     });
     expect(result).toEqual({
@@ -2619,6 +2624,138 @@ describe("zkLogin-backed agent registration", () => {
     ).resolves.toBeNull();
   });
 
+  it("registers a browser wallet signature as a WALLET_STAKED seat", async () => {
+    // No injected verifier: the engine's own verifier checks the real Ed25519
+    // signature locally, which is the whole point of the wallet path.
+    const setup = await registrationSetup({
+      verifierResult: true,
+      realVerifier: true,
+    });
+    const wallet = Ed25519Keypair.fromSecretKey(
+      blake2b256(new TextEncoder().encode("wallet-staker")),
+    );
+    const address = wallet.toSuiAddress();
+    const signed = await wallet.signPersonalMessage(
+      buildZkLoginBackingMessage(address, "localnet"),
+    );
+
+    const result = await setup.engine.registerZkBackedAgent({
+      zkLoginAddress: address,
+      signature: signed.signature,
+      modelId: "model-b",
+      role: "INVESTIGATOR",
+    });
+
+    expect(result).toMatchObject({
+      backingKind: "WALLET_STAKED",
+      humanBackingHash: toHex(blake2b256(fromHex(address))),
+    });
+    const saved = await createRepository(setup.db).getAgentManifest(
+      result.agentProfileId,
+    );
+    expect(saved?.manifest.humanVerificationProvider).toBe(
+      "sui-wallet-personal-message",
+    );
+    if (!saved) throw new Error("expected the registered manifest");
+    expect(
+      parseAgentManifestDocument(
+        await setup.walrus.get(saved.manifest.manifestBlobId),
+      ),
+    ).toMatchObject({ backingKind: "WALLET_STAKED" });
+  });
+
+  it("rejects a wallet signature over the wrong message", async () => {
+    const setup = await registrationSetup({
+      verifierResult: true,
+      realVerifier: true,
+    });
+    const wallet = Ed25519Keypair.fromSecretKey(
+      blake2b256(new TextEncoder().encode("wrong-message-staker")),
+    );
+    const signed = await wallet.signPersonalMessage(
+      buildZkLoginBackingMessage(wallet.toSuiAddress(), "mainnet"),
+    );
+
+    await expect(
+      setup.engine.registerZkBackedAgent({
+        zkLoginAddress: wallet.toSuiAddress(),
+        signature: signed.signature,
+        modelId: "model-b",
+        role: "INVESTIGATOR",
+      }),
+    ).rejects.toThrow("signature is invalid for the stake message");
+    expect(setup.gateway.registrations).toHaveLength(0);
+  });
+
+  it("rejects a wallet signature from another account", async () => {
+    const setup = await registrationSetup({
+      verifierResult: true,
+      realVerifier: true,
+    });
+    const wallet = Ed25519Keypair.fromSecretKey(
+      blake2b256(new TextEncoder().encode("impersonating-staker")),
+    );
+    const signed = await wallet.signPersonalMessage(
+      buildZkLoginBackingMessage(stakerAddress, "localnet"),
+    );
+
+    await expect(
+      setup.engine.registerZkBackedAgent({
+        zkLoginAddress: stakerAddress,
+        signature: signed.signature,
+        modelId: "model-b",
+        role: "INVESTIGATOR",
+      }),
+    ).rejects.toThrow("signature is invalid for the stake message");
+    expect(setup.gateway.registrations).toHaveLength(0);
+  });
+
+  it("still needs the GraphQL client for a zkLogin signature", async () => {
+    const setup = await registrationSetup({
+      verifierResult: true,
+      realVerifier: true,
+    });
+
+    await expect(
+      setup.engine.registerZkBackedAgent({
+        zkLoginAddress: stakerAddress,
+        signature,
+        modelId: "model-b",
+        role: "INVESTIGATOR",
+      }),
+    ).rejects.toThrow("signature verification is temporarily unavailable");
+    expect(setup.gateway.registrations).toHaveLength(0);
+  });
+
+  it("lets one account stake on two seats", async () => {
+    const setup = await registrationSetup({ verifierResult: true });
+    const request = {
+      zkLoginAddress: stakerAddress,
+      signature,
+      modelId: "model-a",
+      role: "SOURCE_AUTHENTICITY",
+    } as const;
+
+    const first = await setup.engine.registerZkBackedAgent(request);
+    const second = await setup.engine.registerZkBackedAgent(request);
+
+    // Same staker hash, two seats, two deterministic operational slots: the
+    // Move draw rule then seats at most one of them per committee.
+    expect(second.humanBackingHash).toBe(first.humanBackingHash);
+    expect(second.agentProfileId).not.toBe(first.agentProfileId);
+    expect(setup.gateway.registrations.map((entry) => entry.agentIndex)).toEqual([
+      1, 2,
+    ]);
+    const saved = await createRepository(setup.db).listAgentManifests();
+    const staked = saved.filter(
+      (agent) =>
+        agent.active &&
+        agent.manifest.humanAttestationHash === first.humanBackingHash,
+    );
+    expect(staked).toHaveLength(2);
+    expect(new Set(staked.map((agent) => agent.manifest.owner)).size).toBe(2);
+  });
+
   it("fails closed when the release manifest overrides the evidence policy id", async () => {
     // A document label always hashes to the default policy id, so a manifest
     // that points at a different policy must be rejected before any upload.
@@ -2629,7 +2766,7 @@ describe("zkLogin-backed agent registration", () => {
 
     await expect(
       setup.engine.registerZkBackedAgent({
-        zkLoginAddress,
+        zkLoginAddress: stakerAddress,
         signature,
         modelId: "model-b",
         role: "INVESTIGATOR",
@@ -2638,35 +2775,18 @@ describe("zkLogin-backed agent registration", () => {
     expect(setup.gateway.registrations).toHaveLength(0);
   });
 
-  it("rejects a bad zkLogin signature before registration", async () => {
+  it("rejects a bad signature before registration", async () => {
     const setup = await registrationSetup({ verifierResult: false });
 
     await expect(
       setup.engine.registerZkBackedAgent({
-        zkLoginAddress,
+        zkLoginAddress: stakerAddress,
         signature,
         modelId: "model-a",
         role: "SKEPTIC",
       }),
-    ).rejects.toThrow("zkLogin signature is invalid");
+    ).rejects.toThrow("signature is invalid for the stake message");
     expect(setup.gateway.registrations).toHaveLength(0);
-  });
-
-  it("rejects an active duplicate human backing", async () => {
-    const setup = await registrationSetup({ verifierResult: true });
-    const request = {
-      zkLoginAddress,
-      signature,
-      modelId: "model-a",
-      role: "SOURCE_AUTHENTICITY",
-    } as const;
-
-    await setup.engine.registerZkBackedAgent(request);
-
-    await expect(setup.engine.registerZkBackedAgent(request)).rejects.toThrow(
-      "one social account can back only one active jury seat",
-    );
-    expect(setup.gateway.registrations).toHaveLength(1);
   });
 
   it("rejects model and role values outside the manifest policy", async () => {
@@ -2674,7 +2794,7 @@ describe("zkLogin-backed agent registration", () => {
 
     await expect(
       setup.engine.registerZkBackedAgent({
-        zkLoginAddress,
+        zkLoginAddress: stakerAddress,
         signature,
         modelId: "unknown-model",
         role: "SKEPTIC",
@@ -2682,7 +2802,7 @@ describe("zkLogin-backed agent registration", () => {
     ).rejects.toThrow(EngineValidationError);
     await expect(
       setup.engine.registerZkBackedAgent({
-        zkLoginAddress,
+        zkLoginAddress: stakerAddress,
         signature,
         modelId: "model-a",
         role: "ANALYST",
@@ -2714,7 +2834,7 @@ describe("zkLogin-backed agent registration", () => {
 
     await expect(
       setup.engine.registerZkBackedAgent({
-        zkLoginAddress,
+        zkLoginAddress: stakerAddress,
         signature,
         modelId: "model-a",
         role: "SKEPTIC",
@@ -2723,6 +2843,28 @@ describe("zkLogin-backed agent registration", () => {
     expect(setup.gateway.registrations).toHaveLength(0);
   });
 });
+
+/**
+ * A signature the SDK parses as the ZkLogin scheme. The proof is meaningless:
+ * only the scheme flag matters, because the injected verifier stands in for the
+ * GraphQL check that a real zkLogin signature needs.
+ */
+function zkLoginSchemeSignature(): string {
+  const issClaim = `"iss":"https://accounts.google.com",`;
+  return getZkLoginSignature({
+    inputs: {
+      proofPoints: { a: ["1"], b: [["1"]], c: ["1"] },
+      issBase64Details: {
+        value: Buffer.from(issClaim).toString("base64"),
+        indexMod4: 0,
+      },
+      headerBase64: "header",
+      addressSeed: "1",
+    },
+    maxEpoch: 10,
+    userSignature: new Uint8Array([1, 2, 3]),
+  });
+}
 
 class RecordingFakeSuiGateway extends FakeSuiGateway {
   readonly registrations: Parameters<FakeSuiGateway["registerAgent"]>[0][] = [];
@@ -2741,6 +2883,8 @@ async function registrationSetup(options: {
   initialAgentCount?: number;
   /** Overrides the release manifest's evidence policy id (fail-closed test). */
   evidencePolicyId?: `0x${string}`;
+  /** Uses the engine's own verifier so real signatures are checked offline. */
+  realVerifier?: boolean;
 }) {
   const directory = await mkdtemp(join(tmpdir(), "openverdict-registration-"));
   const manifest: ReleaseManifest = options.evidencePolicyId
@@ -2784,7 +2928,7 @@ async function registrationSetup(options: {
     initialAgents: agents
       .slice(0, initialAgentCount)
       .map((agent, index) => toEngineAgent(agent, index)),
-    zkLoginVerifier: { verify },
+    ...(options.realVerifier ? {} : { zkLoginVerifier: { verify } }),
     now: () => Date.parse("2026-08-27T00:00:00.000Z"),
     sleep: async () => undefined,
   });

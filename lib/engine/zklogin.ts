@@ -7,6 +7,7 @@ export const ZKLOGIN_AGENT_ROLES = [
 export type ZkLoginAgentRole = (typeof ZKLOGIN_AGENT_ROLES)[number];
 
 export type ZkLoginVerificationInput = {
+  /** The staking account's address (zkLogin or any Sui wallet). */
   zkLoginAddress: string;
   message: Uint8Array;
   signature: string;
@@ -17,11 +18,11 @@ export interface ZkLoginVerifier {
   verify(input: ZkLoginVerificationInput): Promise<boolean>;
 }
 
-/** Bytes authorized by the social-login wallet for one network deployment. */
+/** Bytes the staking account signs for one network deployment. */
 export const buildZkLoginBackingMessage = (
   zkLoginAddress: string,
   network: "localnet" | "testnet" | "mainnet",
 ): Uint8Array =>
   new TextEncoder().encode(
-    `OpenVerdict agent backing v1\naddress: ${zkLoginAddress}\nnetwork: ${network}`,
+    `OpenVerdict agent stake v1\naddress: ${zkLoginAddress}\nnetwork: ${network}`,
   );

@@ -1,4 +1,5 @@
 import type {
+  AgentBackingKind,
   AgentManifestDocument,
   GatewayResponseMeta,
   HexString,
@@ -351,11 +352,11 @@ export type EngineStatus = {
  * Off-chain signal from AgentManifest.humanVerificationProvider, written by
  * the engine at registration time. It is currently reliable because the engine
  * controls every registration path. Move stores only a caller-supplied opaque
- * human_backing_hash and does not verify this kind, so a future unmapped path
- * fails closed to UNKNOWN.
+ * human_backing_hash (the staker hash) and does not verify this kind, so a
+ * future unmapped path fails closed to UNKNOWN.
  */
 export type AgentBackingStatus = {
-  kind: "ZKLOGIN" | "ALLOWLIST" | "UNKNOWN";
+  kind: "ZKLOGIN" | "WALLET" | "ALLOWLIST" | "UNKNOWN";
   label?: string;
 };
 
@@ -391,16 +392,16 @@ export type AgentDirectoryEntry = {
 // ---------------------------------------------------------------------------
 
 /**
- * zkLogin-backed agent registration (plan T7b): the OWNER identity is a
- * zkLogin (social-login) address; under one OAuth aud with a fixed salt
- * service, one social account = one address = one backing hash, and the Move
- * rule "one committee seat per human_backing_hash" makes it one seat.
- * Authentication + Sybil-cost raise only. NEVER proof of personhood.
+ * Wallet-signed stake on a juror seat: the staking account signs the canonical
+ * stake message, and the engine records blake2b-256 of its address as the
+ * staker hash. Any account may stake on as many seats as it likes; the Move
+ * draw rule "at most one committee seat per staker hash" is a committee
+ * diversity rule, never an identity claim. Staking economics only.
  */
 export type ZkBackedRegistrationRequest = {
-  /** The zkLogin address that owns/backs this agent. */
+  /** The staking account's address (zkLogin or any wallet). */
   zkLoginAddress: string;
-  /** Base64 zkLogin signature over the canonical backing message. */
+  /** Base64 personal-message signature over the canonical stake message. */
   signature: string;
   /** Model id from the release manifest catalog. */
   modelId: string;
@@ -408,10 +409,16 @@ export type ZkBackedRegistrationRequest = {
   role: string;
 };
 
+/** Stake kinds a signed registration can produce; the demo allowlist is seeded. */
+export type StakedAgentBackingKind = Exclude<
+  AgentBackingKind,
+  "TESTNET_DEMO_ALLOWLIST"
+>;
+
 export type ZkBackedRegistrationResult = {
   agentProfileId: string;
   humanBackingHash: `0x${string}`;
-  backingKind: "ZKLOGIN_BACKED";
+  backingKind: StakedAgentBackingKind;
   digest: string;
 };
 
@@ -469,7 +476,7 @@ export interface Engine {
     req: FactCheckRequest,
     relaunch?: VerificationRelaunchContext,
   ): Promise<{ claimId: string }>;
-  /** Verify the zkLogin signature, derive the backing hash, register on-chain. */
+  /** Verify the stake signature, derive the staker hash, register on-chain. */
   registerZkBackedAgent(
     req: ZkBackedRegistrationRequest,
   ): Promise<ZkBackedRegistrationResult>;

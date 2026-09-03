@@ -8,13 +8,19 @@ import { EngineNotWiredError, getServerEngine } from "@/lib/engine/server";
 import { rateLimitPublic, requirePublicWritesEnabled } from "../../_lib/guard";
 
 const FIELD_LIMITS = {
+  address: 66,
   zkLoginAddress: 66,
   signature: 16_384,
   modelId: 128,
   role: 32,
 } as const;
 
-/** POST /api/agents/register: authenticate zkLogin backing and register an agent. */
+/**
+ * POST /api/agents/register: verify a stake signature and register the seat.
+ * The staking account's address arrives as `address` or, for older clients, as
+ * `zkLoginAddress`; `address` wins when a caller sends both. Any Sui wallet
+ * signature is accepted, zkLogin included.
+ */
 export async function POST(req: Request) {
   try {
     const disabled = requirePublicWritesEnabled();
@@ -33,13 +39,11 @@ export async function POST(req: Request) {
     }
 
     const payload = body as Record<string, unknown>;
-    const zkLoginAddress = boundedField(
-      payload,
-      "zkLoginAddress",
-      FIELD_LIMITS.zkLoginAddress,
-    );
+    const zkLoginAddress =
+      boundedField(payload, "address", FIELD_LIMITS.address) ??
+      boundedField(payload, "zkLoginAddress", FIELD_LIMITS.zkLoginAddress);
     if (!zkLoginAddress) {
-      return validationResponse("zkLoginAddress is required and must be at most 66 characters");
+      return validationResponse("address is required and must be at most 66 characters");
     }
     const signature = boundedField(
       payload,
@@ -58,7 +62,7 @@ export async function POST(req: Request) {
       return validationResponse("role is required and must be at most 32 characters");
     }
 
-    // Pick only the four public registration fields; ignore all caller extras.
+    // Pick only the four public stake fields; ignore all caller extras.
     const registration: ZkBackedRegistrationRequest = {
       zkLoginAddress,
       signature,
@@ -81,8 +85,9 @@ export async function POST(req: Request) {
     ) {
       return NextResponse.json(
         {
+          // The code stays as it is: clients may already switch on it.
           error: "zklogin_verification_unavailable",
-          message: "Social-login signature verification is temporarily unavailable",
+          message: "Signature verification is temporarily unavailable",
         },
         { status: 503 },
       );
@@ -92,7 +97,7 @@ export async function POST(req: Request) {
       (error as Error)?.name === "EngineValidationError"
     ) {
       return validationResponse(
-        error instanceof Error ? error.message : "Invalid registration request",
+        error instanceof Error ? error.message : "Invalid stake request",
       );
     }
     const message = error instanceof Error ? error.message : "Internal server error";

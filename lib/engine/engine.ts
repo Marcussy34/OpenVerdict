@@ -1,5 +1,8 @@
 import { randomBytes, randomUUID } from "node:crypto";
-import { parseSerializedSignature } from "@mysten/sui/cryptography";
+import {
+  parseSerializedSignature,
+  type SignatureScheme,
+} from "@mysten/sui/cryptography";
 import { SuiGraphQLClient } from "@mysten/sui/graphql";
 import { isValidPersonalMessageSignature } from "@mysten/sui/verify";
 import {
@@ -138,6 +141,7 @@ import type {
   ResolutionEventSource,
   ResolutionEventVisibility,
   RunProofResult,
+  StakedAgentBackingKind,
   TxResult,
   WeatherFamily,
   WeatherReport,
@@ -177,6 +181,8 @@ const SUI_ADDRESS_PATTERN = /^0x[0-9a-f]{64}$/;
 const MAX_ZKLOGIN_SIGNATURE_LENGTH = 16_384;
 const MAX_FACT_CHECK_TEXT_LENGTH = 20_000;
 const ZKLOGIN_VERIFICATION_PROVIDER = "zklogin:enoki";
+/** Every non-zkLogin wallet stakes by signing a personal message. */
+const WALLET_VERIFICATION_PROVIDER = "sui-wallet-personal-message";
 const DEMO_ALLOWLIST_VERIFICATION_PROVIDER = "demo-allowlist";
 // move/openverdict/sources/settlement.move defines REASON_JURY_REWARD as 2.
 const JURY_REWARD_REASON = 2;
@@ -227,6 +233,8 @@ export function agentBackingStatus(
   switch (humanVerificationProvider) {
     case ZKLOGIN_VERIFICATION_PROVIDER:
       return { kind: "ZKLOGIN", label: humanVerificationProvider };
+    case WALLET_VERIFICATION_PROVIDER:
+      return { kind: "WALLET", label: humanVerificationProvider };
     // Two historical spellings: the engine's registration path writes
     // "demo-allowlist", the testnet seed documents carry the longer form.
     case DEMO_ALLOWLIST_VERIFICATION_PROVIDER:
@@ -952,17 +960,20 @@ class OpenVerdictEngine implements Engine {
       });
     } catch (error) {
       throw new ZkLoginVerificationError(
-        "zkLogin signature verification is temporarily unavailable",
+        "signature verification is temporarily unavailable",
         { cause: error },
       );
     }
     if (!verified) {
-      throw new EngineValidationError("zkLogin signature is invalid for the backing message");
+      throw new EngineValidationError("signature is invalid for the stake message");
     }
 
+    // The staker hash is blake2b-256 of the staking address; the address and
+    // its signature are used for authentication and deliberately not stored.
     const humanBackingHash = toHex(blake2b256(fromHex(req.zkLoginAddress)));
+    const backingKind = stakeBackingKind(req.signature);
     return this.withRegistrationLock(() =>
-      this.registerVerifiedZkBackedAgent(req, humanBackingHash),
+      this.registerVerifiedZkBackedAgent(req, humanBackingHash, backingKind),
     );
   }
 
@@ -3970,20 +3981,15 @@ class OpenVerdictEngine implements Engine {
   private async registerVerifiedZkBackedAgent(
     req: ValidatedZkBackedRegistrationRequest,
     humanBackingHash: `0x${string}`,
+    backingKind: StakedAgentBackingKind,
   ): Promise<ZkBackedRegistrationResult> {
+    const verificationProvider =
+      backingKind === "ZKLOGIN_BACKED"
+        ? ZKLOGIN_VERIFICATION_PROVIDER
+        : WALLET_VERIFICATION_PROVIDER;
+    // One account may stake on several seats, so nothing here rejects a repeat
+    // staker hash: the Move draw rule seats at most one of them per committee.
     const agents = await this.#repository.listAgentManifests();
-    if (
-      agents.some(
-        (agent) =>
-          agent.active &&
-          agent.manifest.humanAttestationHash.toLowerCase() ===
-            humanBackingHash,
-      )
-    ) {
-      throw new EngineValidationError(
-        "an active agent already uses this backing; one social account can back only one active jury seat",
-      );
-    }
 
     // Demo signers are a fixed deterministic pool. Never reuse a slot whose
     // operational address already appears in a persisted agent manifest.
@@ -3999,13 +4005,13 @@ class OpenVerdictEngine implements Engine {
       );
     }
 
-    // Persist only the pseudonymous backing hash; the social address and its
+    // Persist only the pseudonymous staker hash; the staking address and its
     // signature are used for authentication and deliberately not stored.
     const built = buildAgentManifestDocument({
       network: this.#manifest.network,
-      backingKind: "ZKLOGIN_BACKED",
+      backingKind,
       humanBackingHash,
-      humanVerificationProvider: ZKLOGIN_VERIFICATION_PROVIDER,
+      humanVerificationProvider: verificationProvider,
       operationalOwner: slot.address as `0x${string}`,
       role: req.role,
       modelId: req.modelId,
@@ -4043,7 +4049,7 @@ class OpenVerdictEngine implements Engine {
       agentProfileId: result.agentProfileId as `0x${string}`,
       owner: result.owner as `0x${string}`,
       humanAttestationHash: humanBackingHash,
-      humanVerificationProvider: ZKLOGIN_VERIFICATION_PROVIDER,
+      humanVerificationProvider: verificationProvider,
       version: built.document.version,
       manifestBlobId: manifestUpload.blobId,
       manifestHash: built.manifestHash,
@@ -4071,7 +4077,7 @@ class OpenVerdictEngine implements Engine {
     return {
       agentProfileId: result.agentProfileId,
       humanBackingHash,
-      backingKind: "ZKLOGIN_BACKED",
+      backingKind,
       digest: result.digest,
     };
   }
@@ -5062,7 +5068,7 @@ function validateZkBackedRegistrationRequest(
     !SUI_ADDRESS_PATTERN.test(request.zkLoginAddress)
   ) {
     throw new EngineValidationError(
-      "zkLoginAddress must be a canonical lowercase 32-byte Sui address",
+      "the staking address must be a canonical lowercase 32-byte Sui address",
     );
   }
   if (
@@ -5092,6 +5098,21 @@ function isZkLoginAgentRole(role: string): role is ZkLoginAgentRole {
   return ZKLOGIN_AGENT_ROLES.some((candidate) => candidate === role);
 }
 
+/**
+ * The stake kind follows the signature scheme: a zkLogin signature keeps the
+ * zkLogin kind, every other wallet scheme is a plain wallet stake. Only an
+ * already-verified signature reaches this, so unreadable bytes fail closed.
+ */
+function stakeBackingKind(signature: string): StakedAgentBackingKind {
+  try {
+    return parseSerializedSignature(signature).signatureScheme === "ZkLogin"
+      ? "ZKLOGIN_BACKED"
+      : "WALLET_STAKED";
+  } catch {
+    throw new EngineValidationError("signature scheme could not be read");
+  }
+}
+
 function createDefaultZkLoginVerifier(config: EngineConfig): ZkLoginVerifier {
   const configuredUrl = config.zkLoginGraphqlUrl?.trim();
   const graphqlUrl =
@@ -5119,12 +5140,19 @@ class MystenSdkZkLoginVerifier implements ZkLoginVerifier {
   }
 
   async verify(input: ZkLoginVerificationInput): Promise<boolean> {
+    let scheme: SignatureScheme;
     try {
-      if (parseSerializedSignature(input.signature).signatureScheme !== "ZkLogin") {
-        return false;
-      }
+      scheme = parseSerializedSignature(input.signature).signatureScheme;
     } catch {
       return false;
+    }
+
+    // Only zkLogin needs GraphQL (JWK and epoch lookups). Every other wallet
+    // scheme verifies locally from the signature's own public key.
+    if (scheme !== "ZkLogin") {
+      return isValidPersonalMessageSignature(input.message, input.signature, {
+        address: input.zkLoginAddress,
+      });
     }
 
     if (!this.#client) {

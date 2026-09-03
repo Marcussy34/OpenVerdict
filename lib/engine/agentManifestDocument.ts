@@ -120,7 +120,11 @@ const agentManifestDocumentV2Schema = z
   .object({
     version: z.literal("2"),
     network: z.enum(["localnet", "testnet", "mainnet"]),
-    backingKind: z.enum(["TESTNET_DEMO_ALLOWLIST", "ZKLOGIN_BACKED"]),
+    backingKind: z.enum([
+      "TESTNET_DEMO_ALLOWLIST",
+      "ZKLOGIN_BACKED",
+      "WALLET_STAKED",
+    ]),
     humanBackingHash: hexStringSchema,
     humanVerificationProvider: z.string(),
     operationalOwner: hexStringSchema,
@@ -145,7 +149,11 @@ const agentManifestDocumentV3Schema = z
   .object({
     version: z.literal("3"),
     network: z.enum(["localnet", "testnet", "mainnet"]),
-    backingKind: z.enum(["TESTNET_DEMO_ALLOWLIST", "ZKLOGIN_BACKED"]),
+    backingKind: z.enum([
+      "TESTNET_DEMO_ALLOWLIST",
+      "ZKLOGIN_BACKED",
+      "WALLET_STAKED",
+    ]),
     humanBackingHash: hexStringSchema,
     humanVerificationProvider: z.string(),
     operationalOwner: hexStringSchema,
