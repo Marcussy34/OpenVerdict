@@ -17,6 +17,10 @@ export const releaseManifestSchema = z
     suiRpcFallbackUrl: z.string().url().optional(),
     suiFaucetUrl: z.string().url().optional(),
     packageId: optionalObjectId,
+    // After a package upgrade, Move calls target the new package id while
+    // every object type keeps the address the package was first published
+    // at; that first address lives here. Absent before any upgrade.
+    originalPackageId: optionalObjectId.optional(),
     registryObjectId: optionalObjectId,
     demoPoolObjectId: optionalObjectId.optional().default(""),
     clockObjectId: z.literal("0x6"),

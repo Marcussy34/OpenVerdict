@@ -33,6 +33,8 @@ module openverdict::jury {
     const E_COMMITTEE_NOT_LOCKED: u64 = 18;
     const E_INVALID_RESERVE: u64 = 19;
     const E_DEADLINE_NOT_REACHED: u64 = 20;
+    /// How long offered seats have to accept or decline before the committee can lock.
+    const ACCEPTANCE_WINDOW_MS: u64 = 60_000;
     const E_EVIDENCE_NOT_BOUND: u64 = 21;
     const E_CONSENSUS_REACHED: u64 = 22;
     const E_RETENTION_EXPIRED: u64 = 23;
@@ -595,7 +597,14 @@ module openverdict::jury {
         assert!(claim::state(claim) == claim::state_reveal_1(), E_INVALID_CLAIM_STATE);
         assert!(first_tally.phase == PHASE_ONE && !first_tally.closed, E_INVALID_PHASE);
         claim::assert_active_tally(claim, PHASE_ONE, object::id(first_tally));
-        assert!(clock::timestamp_ms(clock) > claim::first_reveal_deadline_ms(claim), E_DEADLINE_NOT_REACHED);
+        // The debate opens the moment the last reveal lands (or at the
+        // deadline when a seat never reveals); waiting out the window held
+        // split rounds for up to five minutes.
+        assert!(
+            clock::timestamp_ms(clock) > claim::first_reveal_deadline_ms(claim) ||
+                all_seats_revealed(first_tally),
+            E_DEADLINE_NOT_REACHED,
+        );
         assert!(threshold_outcome(first_tally) == 0, E_CONSENSUS_REACHED);
         first_tally.closed = true;
         claim::set_discussion(claim);
@@ -617,8 +626,10 @@ module openverdict::jury {
         claim::assert_evidence_linked(claim, PHASE_TWO);
         assert!(first_tally.phase == PHASE_ONE && first_tally.closed, E_INVALID_PHASE);
         assert!(threshold_outcome(first_tally) == 0, E_CONSENSUS_REACHED);
+        // The phase-two evidence bundle (asserted linked above) carries the
+        // frozen debate transcript, so its presence is the end of the debate:
+        // round two opens right then instead of at the discussion deadline.
         let now = clock::timestamp_ms(clock);
-        assert!(now > claim::discussion_deadline_ms(claim), E_DEADLINE_NOT_REACHED);
         assert!(now <= claim::second_commit_deadline_ms(claim), E_DEADLINE_PASSED);
         let mut tally = RoundTally {
             id: object::new(ctx),
@@ -846,7 +857,11 @@ module openverdict::jury {
         let now = clock::timestamp_ms(clock);
         let commit_deadline = claim::first_commit_deadline_ms(claim);
         assert!(now <= commit_deadline, E_DEADLINE_PASSED);
-        let acceptance_deadline_ms = now + (commit_deadline - now) / 2;
+        // Seats have one minute to accept or decline; the lock, and with it
+        // the commits and the certificate, can follow as soon as the jurors
+        // finish. The window used to run to the midpoint of the commit
+        // window, which held every fast round for minutes.
+        let acceptance_deadline_ms = acceptance_deadline(now, commit_deadline);
 
         let mut committee = Committee {
             id: object::new(ctx),
@@ -1373,6 +1388,20 @@ module openverdict::jury {
             closed: _,
         } = tally;
         id.delete();
+    }
+
+    /// One minute after selection, never past the commit deadline.
+    fun acceptance_deadline(now: u64, commit_deadline: u64): u64 {
+        if (now + ACCEPTANCE_WINDOW_MS < commit_deadline) {
+            now + ACCEPTANCE_WINDOW_MS
+        } else {
+            commit_deadline
+        }
+    }
+
+    #[test_only]
+    public(package) fun acceptance_deadline_for_testing(now: u64, commit_deadline: u64): u64 {
+        acceptance_deadline(now, commit_deadline)
     }
 
     #[test_only]

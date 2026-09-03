@@ -222,14 +222,18 @@ export async function resolveClaim(
       await engine.finalize(claim.claimId);
     } catch (error) {
       if (!(error instanceof EngineStateError)) throw error;
-      // A split first round still waits for its fixed discussion boundary.
-      if (!deadlineReached) return;
+      // A split first round opens the debate now: every seat has revealed
+      // (or the deadline passed), and the chain accepts either.
       await engine.advance(claim.claimId);
     }
     return;
   }
   if (claim.state === CLAIM_STATE.DISCUSSION) {
-    if (!reached(claim.deadlines.discussionDeadlineMs)) return;
+    // Round two opens once the debate transcript is frozen (the phase-two
+    // evidence root), not at the discussion deadline; the deadline is the
+    // fallback when the debate never froze.
+    const debateFrozen = claim.evidenceRoots.some((root) => root.phase === 2);
+    if (!debateFrozen && !reached(claim.deadlines.discussionDeadlineMs)) return;
     try {
       await engine.advance(claim.claimId);
     } catch (error) {

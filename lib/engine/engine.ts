@@ -5181,20 +5181,26 @@ function sleep(milliseconds: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
 
+/** Mirrors jury.move ACCEPTANCE_WINDOW_MS: seats have a minute to accept. */
+export const COMMITTEE_ACCEPTANCE_WINDOW_MS = 60_000;
+
 /**
- * Chain floor for lock_committee: the midpoint between the phase start and
- * the commit deadline (jury.move acceptance_deadline_ms). The database
- * timestamps trail the chain by a few seconds, so this estimate is never
- * early; an unparsable timestamp defers to the worker's final votesCommit.
+ * Chain floor for lock_committee: one minute after selection, never past the
+ * commit deadline (jury.move acceptance_deadline). The database timestamps
+ * trail the chain by a few seconds, so this estimate is never early; an
+ * unparsable timestamp defers to the worker's final votesCommit. Round two
+ * has no floor: the committee is already locked and commit_vote has no time
+ * floor of its own, so table votes commit the moment they are ready.
  */
 function acceptanceFloorMs(
   committee: CommitteeRecord,
   phase: 1 | 2,
   commitDeadlineMs: number,
 ): number {
-  const startMs = Date.parse(phase === 1 ? committee.createdAt : committee.updatedAt);
+  if (phase === 2) return 0;
+  const startMs = Date.parse(committee.createdAt);
   if (!Number.isFinite(startMs) || startMs >= commitDeadlineMs) return commitDeadlineMs;
-  return startMs + Math.floor((commitDeadlineMs - startMs) / 2) + 2_000;
+  return Math.min(commitDeadlineMs, startMs + COMMITTEE_ACCEPTANCE_WINDOW_MS + 2_000);
 }
 
 // V3 adds public stance updates while keeping V2's direct turn duties.

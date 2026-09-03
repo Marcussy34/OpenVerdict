@@ -149,6 +149,56 @@ describe("resolution worker triage", () => {
     expect(allExpectedSeatsRevealed(complete, 1)).toBe(true);
   });
 
+  it("opens the debate as soon as every seat has revealed a split round", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(NOW);
+    const split = claim({
+      state: CLAIM_STATE.REVEAL_1,
+      round: { phase: 1, expected: 5, committed: 5, revealed: 5 },
+    });
+    const engine = resolutionEngine(split);
+    engine.finalize.mockRejectedValueOnce(
+      new EngineStateError("round one has no threshold; advance to discussion"),
+    );
+
+    await resolveClaim(engine, split);
+
+    // The reveal deadline (NOW + 20 s) has not passed; the chain accepts the
+    // early open because all seats revealed.
+    expect(engine.advance).toHaveBeenCalledWith(split.claimId);
+    expect(engine.voidAttempt).not.toHaveBeenCalled();
+  });
+
+  it("opens round two once the debate transcript is frozen, before the discussion deadline", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(NOW);
+    const frozen = claim({
+      state: CLAIM_STATE.DISCUSSION,
+      discussionDeadlineMs: NOW + 300_000,
+      phases: [1, 2],
+    });
+    const engine = resolutionEngine(frozen);
+
+    await resolveClaim(engine, frozen);
+
+    expect(engine.advance).toHaveBeenCalledWith(frozen.claimId);
+  });
+
+  it("keeps the debate open until the deadline while the transcript is not frozen", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(NOW);
+    const open = claim({
+      state: CLAIM_STATE.DISCUSSION,
+      discussionDeadlineMs: NOW + 300_000,
+      phases: [1],
+    });
+    const engine = resolutionEngine(open);
+
+    await resolveClaim(engine, open);
+
+    expect(engine.advance).not.toHaveBeenCalled();
+  });
+
   it("advances a fully committed round before its commit deadline", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(NOW);

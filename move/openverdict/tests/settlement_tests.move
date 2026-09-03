@@ -458,6 +458,162 @@ module openverdict::settlement_tests {
     }
 
     #[test]
+    fun committee_acceptance_window_is_one_minute_capped_at_the_commit_deadline() {
+        assert!(jury::acceptance_deadline_for_testing(1_000, 1_000_000) == 61_000);
+        assert!(jury::acceptance_deadline_for_testing(990_000, 1_000_000) == 1_000_000);
+        assert!(jury::acceptance_deadline_for_testing(940_000, 1_000_000) == 1_000_000);
+    }
+
+    #[test]
+    fun split_round_opens_discussion_and_round_two_as_soon_as_the_record_is_complete() {
+        let mut scenario = test_scenario::begin(CREATOR);
+        let registry = agent_registry::new_registry_for_testing(scenario.ctx());
+        let evidence_cap = agent_registry::new_evidence_cap_for_testing(scenario.ctx());
+        let mut clock = clock::create_for_testing(scenario.ctx());
+        let budget = coin::mint_for_testing<TestCoin>(100, scenario.ctx());
+        let mut claim = claim::new_claim_for_testing(
+            &registry,
+            budget,
+            params(claim::claim_mode_direct_review()),
+            &clock,
+            scenario.ctx(),
+        );
+        claim::start_direct_review(&registry, &mut claim, &clock);
+        let committee = jury::new_committee_for_testing(
+            claim::claim_id(&claim),
+            profiles(),
+            owners(),
+            true,
+            scenario.ctx(),
+        );
+        let mut first_tally = jury::new_tally_for_testing(
+            claim::claim_id(&claim),
+            jury::committee_id(&committee),
+            1,
+            hash(7),
+            seat_ids(),
+            scenario.ctx(),
+        );
+        claim::link_committee(
+            &mut claim,
+            jury::committee_id(&committee),
+            jury::tally_id(&first_tally),
+        );
+        freeze_phase_one(&mut claim, &evidence_cap, &clock, scenario.ctx());
+        let first_expected = *jury::expected_seat_ids(&first_tally);
+        let mut i = 0;
+        while (i < 5) {
+            jury::record_reveal_for_testing(
+                &mut first_tally,
+                first_expected[i],
+                object::id_from_address(if (i == 0) @0x701 else if (i == 1) @0x702 else if (i == 2) @0x703 else if (i == 3) @0x704 else @0x705),
+                if (i < 3) claim::outcome_yes() else claim::outcome_no(),
+                9_000,
+            );
+            i = i + 1;
+        };
+        claim::set_state_for_testing(&mut claim, claim::state_reveal_1());
+        // Every seat revealed at 35, well before the reveal deadline (40):
+        // the debate opens now instead of at the deadline.
+        clock::set_for_testing(&mut clock, 35);
+        jury::open_discussion(&mut claim, &mut first_tally, &clock);
+        assert!(claim::state(&claim) == claim::state_discussion());
+
+        // The frozen debate transcript (phase-two evidence) ends the debate:
+        // round two opens at 42, before the discussion deadline (50).
+        evidence::freeze_evidence(
+            &mut claim,
+            &evidence_cap,
+            2,
+            hash(8),
+            b"phase-two-manifest",
+            object::id_from_address(@0xB202),
+            4,
+            b"policy",
+            100,
+            &clock,
+            scenario.ctx(),
+        );
+        clock::set_for_testing(&mut clock, 42);
+        jury::create_second_round_seats(
+            &mut claim,
+            &committee,
+            &mut first_tally,
+            &clock,
+            scenario.ctx(),
+        );
+        assert!(jury::tally_closed(&first_tally));
+        assert!(claim::state(&claim) == claim::state_commit_2());
+
+        test_scenario::next_tx(&mut scenario, CREATOR);
+        let bundle = test_scenario::take_immutable<evidence::EvidenceBundle>(&scenario);
+        let second_tally = test_scenario::take_shared<jury::RoundTally>(&scenario);
+        test_scenario::return_shared(second_tally);
+        test_scenario::return_immutable(bundle);
+        assert!(claim::destroy_claim_for_testing(claim) == 100);
+        jury::destroy_tally_for_testing(first_tally);
+        jury::destroy_committee_for_testing(committee);
+        agent_registry::destroy_evidence_cap_for_testing(evidence_cap);
+        agent_registry::destroy_registry_for_testing(registry);
+        clock::destroy_for_testing(clock);
+        scenario.end();
+    }
+
+    #[test, expected_failure(abort_code = openverdict::jury::E_DEADLINE_NOT_REACHED)]
+    fun discussion_waits_for_the_deadline_while_a_seat_has_not_revealed() {
+        let mut scenario = test_scenario::begin(CREATOR);
+        let registry = agent_registry::new_registry_for_testing(scenario.ctx());
+        let mut clock = clock::create_for_testing(scenario.ctx());
+        let budget = coin::mint_for_testing<TestCoin>(100, scenario.ctx());
+        let mut claim = claim::new_claim_for_testing(
+            &registry,
+            budget,
+            params(claim::claim_mode_direct_review()),
+            &clock,
+            scenario.ctx(),
+        );
+        claim::start_direct_review(&registry, &mut claim, &clock);
+        let committee = jury::new_committee_for_testing(
+            claim::claim_id(&claim),
+            profiles(),
+            owners(),
+            true,
+            scenario.ctx(),
+        );
+        let mut first_tally = jury::new_tally_for_testing(
+            claim::claim_id(&claim),
+            jury::committee_id(&committee),
+            1,
+            hash(7),
+            seat_ids(),
+            scenario.ctx(),
+        );
+        claim::link_committee(
+            &mut claim,
+            jury::committee_id(&committee),
+            jury::tally_id(&first_tally),
+        );
+        let first_expected = *jury::expected_seat_ids(&first_tally);
+        // Four of five revealed and split: one seat is still out, so the
+        // debate must wait for the reveal deadline.
+        let mut i = 0;
+        while (i < 4) {
+            jury::record_reveal_for_testing(
+                &mut first_tally,
+                first_expected[i],
+                object::id_from_address(if (i == 0) @0x801 else if (i == 1) @0x802 else if (i == 2) @0x803 else @0x804),
+                if (i < 2) claim::outcome_yes() else claim::outcome_no(),
+                9_000,
+            );
+            i = i + 1;
+        };
+        claim::set_state_for_testing(&mut claim, claim::state_reveal_1());
+        clock::set_for_testing(&mut clock, 35);
+        jury::open_discussion(&mut claim, &mut first_tally, &clock);
+        abort 0
+    }
+
+    #[test]
     fun three_two_escalates_to_second_round_and_four_one_finalizes() {
         let mut scenario = test_scenario::begin(CREATOR);
         let registry = agent_registry::new_registry_for_testing(scenario.ctx());

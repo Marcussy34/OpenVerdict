@@ -189,7 +189,7 @@ export class RealSuiGateway implements SuiGateway {
     const operator = this.#signers.getOperator();
     const evidenceCapId = await this.findOwnedObject(
       operator.toSuiAddress(),
-      `${this.#manifest.packageId}::agent_registry::EvidenceCap`,
+      `${typePackageId(this.#manifest)}::agent_registry::EvidenceCap`,
     );
     const result = await executeAndWait(
       this.#client,
@@ -524,7 +524,7 @@ export class RealSuiGateway implements SuiGateway {
 
   private async findAgentCap(owner: string, agentProfileId: string): Promise<string> {
     let cursor: string | null = null;
-    const type = `${this.#manifest.packageId}::agent_registry::AgentCap`;
+    const type = `${typePackageId(this.#manifest)}::agent_registry::AgentCap`;
     do {
       const page: {
         objects: Array<{
@@ -598,6 +598,11 @@ function requiredObjectId(
   const value = result.objectIds?.[name];
   if (!value) throw new Error(`Sui transaction did not create expected ${name} object`);
   return value;
+}
+
+/** Object types keep the first-published address across package upgrades. */
+function typePackageId(manifest: ReleaseManifest): string {
+  return manifest.originalPackageId?.length ? manifest.originalPackageId : manifest.packageId;
 }
 
 function findEvent(
