@@ -1900,6 +1900,53 @@ and relaunches wait while it is down; the strip shows "Web search".
 Once credits are added the weather clears by itself and the queue and
 seeder resume.
 
+## 3ag. MORNING 2026-09-03: FIRECRAWL KEY, PACKAGE UPGRADE, JURY WORDING (read 3af then this)
+
+OWNER (10:10): new Firecrawl key pasted in chat; installed in .env
+(gitignored) and on Railway (restart 503ce8bc 10:17); 1,400 credits
+verified from inside the container. The old key (repo .env before) was
+out of credits. Never print keys.
+
+OWNER: "let's do that" on the timing proposal. SHIPPED:
+- jury.move: acceptance window = selection + 60 s (was the commit-window
+  midpoint); open_discussion also when all seats revealed; round two
+  opens once the phase-two evidence (frozen debate transcript) is linked
+  (the discussion deadline is only the freeze bound). Move tests 76.
+- TS: acceptanceFloorMs mirrors the minute (COMMITTEE_ACCEPTANCE_WINDOW_MS),
+  no phase-two floor; resolution worker advances as soon as the chain
+  allows (worker tests 17). Manifest gained originalPackageId: object
+  types keep the first-published address; gateway type lookups
+  (EvidenceCap, AgentCap, RunAttestorCap) use typePackageId().
+- scripts/upgrade-openverdict-bytecode.ts: authorize_upgrade (COMPATIBLE),
+  tx.upgrade, commit_upgrade with the operator's UpgradeCap
+  (0x2f72f0b4...). Build bytecode with
+  `sui move build --dump-bytecode-as-base64 --build-env testnet --no-tree-shaking`
+  (tree shaking needs a gRPC fetch that fails on this network path).
+- TESTNET UPGRADE DONE: tx Ah4TwG4AoQtJYWrnrAKmwy4yzPbuzPVb6upFbn2GGJXN;
+  calls target 0x15c6e53ce00b814c68eed17a056cce13dc59416418500a0f4dbba73fac530f65,
+  types stay at 0xa9f3c2db... (config/release.testnet.json has both).
+  First canary voided on the RunAttestorCap lookup (fixed df5bc27).
+- E2E localnet: publish via `sui client test-publish --build-env testnet`
+  (the CLI refuses a plain publish on a regenesis chain), the ephemeral
+  Pub.localnet.toml is removed and gitignored; direct-review lifecycle
+  PASSES on the upgraded package. The split-vote lifecycle needs v6
+  manifests in the E2E script (known gap, not attempted further).
+- Research loop: two answer repairs (was one) after a MiniMax seat wrote
+  a sentence into decisiveEvidence and voided canary attempt 2.
+- Copy sweep (owner request): adversarial AI jury protocol wording, never
+  an agent swarm; README headline, lexicon note, cascade explainer,
+  frozen-record rule, correlated-failure paragraph, hallucination FAQ;
+  hero "Jury Resolution" (was "Agentic Resolution"), landing FAQ, learn
+  page, console home, site description, OG image, terms, risk, video
+  script, PRD vocabulary note.
+DEPLOYS: e875156d (10:41, upgraded package), 1955fa94 (10:51, cap fix),
+903dcb05 (11:11, repairs + copy). Latest main a4f3be9.
+
+CANARY "ten percent of the brain": attempt 1 voided (cap lookup), attempt
+2 voided (MiniMax decisiveEvidence string; 3 committed), attempt 3
+pending on weather (Gonka 502 on all three at 11:09). Seeder still paused
+(scratchpad/seeder.pause); remove the file to resume the three seeds.
+
 ## 4. Planned next (owner-approved direction)
 
 - Attestation (docs/superpowers/specs/2026-08-30-attested-inference-design.md):
