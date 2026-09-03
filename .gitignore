@@ -43,3 +43,6 @@ output/
 tools/
 move/openverdict_seal/build/
 move/openverdict/Pub.localnet.toml
+
+# public claim auditor output
+.audit/

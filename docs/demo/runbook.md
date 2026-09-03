@@ -321,6 +321,25 @@ against the recorded model, or opened through Seal after the deadline.
 5. Explorer: open the claim, certificate, and payout objects (Display metadata
    should render names/descriptions).
 6. CLI: `pnpm cli -- claim inspect --claim <id> --verify --json`.
+7. Live audit with Claude (the judges' view, no key, no database): in a
+   Claude Code session run
+   `/openverdict-audit https://app.openverdict.info/claims/<claimId>`.
+   Inside the repo the skill loads from `.claude/skills/openverdict-audit/`;
+   from any other folder link it once, from the repo root:
+   `ln -s "$(pwd)/.claude/skills/openverdict-audit" ~/.claude/skills/openverdict-audit`.
+   The auditor takes about ten seconds on a settled claim (event history,
+   Sui JSON-RPC, Walrus, GonkaRouter receipts; measured 5 to 10 s); the
+   60-second spoken script under "Demo script" in the skill's `SKILL.md`
+   covers the wait and Claude's write-up. Claude then prints
+   the verdict card, an eight-sentence timeline, one line on what the audit
+   proves and does not, and "Ask me anything about this verdict": hand the
+   questions to the judges (model answers for the three likely ones are in
+   the same section). Without Claude, `pnpm audit:claim <link>` prints the
+   same dossier. Use a settled claim; rehearsal claim on the upgraded
+   package: `0x273220b56d87edea0a6db35f85c0fc8f36591461ee6be6962e86bb4586ee4ac6`
+   ("Humans use only ten percent of their brains.", NO, truth score 2.00,
+   5 of 5 seats, certificate
+   `0x42954c917d0b7e34cb4634091a5ece1921a89a931f4872f690971b62fdcee706`).
 
 ## Preserved demo claim (filled as completed)
 

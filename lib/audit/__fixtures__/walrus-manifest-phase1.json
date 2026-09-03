@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "hashAlgorithm": "blake2b-256",
+  "leafEncoding": "bcs::EvidenceLeafV1",
+  "items": [
+    {
+      "evidenceId": "0x1561790553afa0c9945935b5273c0c544d850a6de1ff314aad068570795e1575",
+      "contentHash": "0x8753be8c01ee97e20dc5058a0702edc17d0e65124f08ff77cd54d24c93c573d6",
+      "canonicalHash": "0x8753be8c01ee97e20dc5058a0702edc17d0e65124f08ff77cd54d24c93c573d6",
+      "sourceUrl": "urn:openverdict:claim-statement",
+      "finalUrl": "urn:openverdict:claim-statement",
+      "mimeType": "text/plain",
+      "byteLength": 44,
+      "retrievedAt": 1788405462222,
+      "parserVersion": "utf8-text-v1",
+      "rawWalrusBlobId": "5Wm-E1ZTXcfuIBjKaLhoZqOhUUGJ99RdGlStBEPwkBk",
+      "rawWalrusObjectId": "0xb3f369a32e9f6cf6319435419ef4484be19d3c3a5ae920870bc152d805a23366",
+      "canonicalWalrusBlobId": "5Wm-E1ZTXcfuIBjKaLhoZqOhUUGJ99RdGlStBEPwkBk",
+      "canonicalWalrusObjectId": "0x883ff2b829e307b8983dee8650955a7ba3007e6e1eaf352012b505a26aac847e",
+      "walrusEndEpoch": 519
+    }
+  ]
+}

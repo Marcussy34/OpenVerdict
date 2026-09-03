@@ -1,0 +1,34 @@
+{
+  "data": {
+    "objectId": "0x42954c917d0b7e34cb4634091a5ece1921a89a931f4872f690971b62fdcee706",
+    "version": "1001592406",
+    "digest": "EEoYn4pRi7LmwwzQRx8pD54YtuvoiAN4vZVHdp41RteE",
+    "previousTransaction": "572tT7FGmL6FG3ZEzf2DkorPzaStVymnvxNVMgF2bkXi",
+    "content": {
+      "dataType": "moveObject",
+      "type": "0xa9f3c2dbdfad3ff900b9d2f4df605621d619a9e7575034f508eb5d39263c5bc7::jury::ResolutionCertificate",
+      "hasPublicTransfer": true,
+      "fields": {
+        "claim_id": "0x273220b56d87edea0a6db35f85c0fc8f36591461ee6be6962e86bb4586ee4ac6",
+        "committee_id": "0xcb8560e363f87e690ef55e1a7d4d49c039cc0efe8b43179e1b49e36dfcfe39b6",
+        "evidence_bundle_ids": [
+          "0xad34aa81f48e0ca2756cbf7db7785b9097152f61229ef9ee7251d582608f2805"
+        ],
+        "finalized_at_ms": "1788406045912",
+        "id": {
+          "id": "0x42954c917d0b7e34cb4634091a5ece1921a89a931f4872f690971b62fdcee706"
+        },
+        "package_version": "1",
+        "result": 2,
+        "revealed_vote_ids": [
+          "0x5ef065cd03bdfd9ffcc8181fe48b9bd5e79b306786c16213ca1a935a1b1a79ad",
+          "0xea1afadf2dbc5de23e7829f967fdf68606aa6c79b6ed19939d21c22930b3d291",
+          "0x29b1445ef6fc2be1d0a17764883a2f4b8cdbb6529ad9d7a241862fba51bb878e",
+          "0xb0814a75671e05135461b285078ec1bf81dd90f18423b6a9be9cdb84d5e04a1b",
+          "0xba910db7d273aa154b41bdf2452828a3c1b20877a31e3eb1a845b401e56cc60c"
+        ],
+        "truth_score_bps": 200
+      }
+    }
+  }
+}

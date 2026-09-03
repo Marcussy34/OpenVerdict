@@ -2056,6 +2056,63 @@ inference worker freezes right after the debate, the evidence worker
 keeps only a late fallback inside the freeze lead (where the engine skips
 unspoken turns without a model call).
 
+## 3aj. AUDIT SKILL SHIPPED 2026-09-03 ~18:00 (read 3ai then this)
+
+OWNER (17:05): "how about we install it as a claude skill or mcp ... during
+demo, I can just in a claude instance, invoke the skill, then paste the
+link, ask him to tell me everything". Approved the plan (skill + public
+auditor script, no MCP), "do it comprehensively ... UX is key", skill in
+the repo plus a global symlink, Fable workers instead of Codex (Codex
+usage is limited). Spec: docs/superpowers/specs/2026-09-03-audit-skill-design.md.
+
+SHIPPED (two Fable subagents in parallel, reviewed and re-run by me):
+- scripts/audit-claim.ts + lib/audit/audit-claim.ts (+ 29 tests, trimmed
+  fixtures): `pnpm audit:claim <link|id> [--base] [--json f] [--out f]
+  [--run id] [--quiet]`. Public sources only: the app API (claim, report,
+  agents, events SSE read until claim_finalized or 8 s idle), run proofs,
+  Sui JSON-RPC (publicnode first; fullnode.testnet.sui.io TLS fails from
+  this Mac), GonkaRouter public receipts (req-... ids), the Walrus
+  aggregator. Checks: C1 to C3 per vote (commitment on chain, commitment
+  recomputed from the reveal transaction inputs, reveal matches the
+  report), R1 to R18 per run (the 15 browser checks plus run hash approved
+  on chain, receipt, revealed blob), S1 to S4 (score, certificate object,
+  quorum rule, evidence root agreed across 13 sources and the manifest root
+  recomputed from Walrus), D1 to D3 for two-round claims. Exit 0 pass or
+  unavailable, 1 any FAIL, 2 input or fetch error. Dossier headings fixed
+  by the spec. Settled claim 0x273220b5: 110/110 in 5 to 10 s. Fasting
+  two-round claim: 156 pass, 13 skipped (seats that failed closed, and D3
+  because that round two predates the table vote). Voided claim explains
+  itself; bogus id exits 2.
+- .claude/skills/openverdict-audit/ (SKILL.md, reference.md 220 lines,
+  faq.md 26 questions, run.sh). Global symlink
+  ~/.claude/skills/openverdict-audit -> the repo folder (done on this Mac).
+  run.sh resolves the physical repo (pwd -P) and starts the repo's tsx
+  through node directly: pnpm from outside the repo trips corepack's
+  packageManager pin (11.8.0 vs the nvm shim 11.24.0) and a judge may have
+  no pnpm. The skill runs `--quiet` (verdict card in the terminal, dossier
+  in the scratch file), presents card, eight-sentence timeline, proves /
+  does-not line, "Ask me anything about this verdict.", then answers from
+  the dossier, the JSON (.votes[].checks, .runs[].checks, .claimChecks),
+  reference.md and faq.md. README "Audit a claim with Claude" + runbook
+  step 7.
+- Dry run 1 (fresh `claude -p` session from a folder outside the repo):
+  correct card, timeline naming the real jurors and times, no wrong
+  protocol statement. Dry run 2: two-round claim plus three judge
+  questions (see below).
+- API fix, committed, NOT YET DEPLOYED: GET /api/claims/{id} and /report
+  answer 404 claim_not_found for an unknown id (was 500). Deploy at the
+  next free window with the seeder paused.
+
+VERIFIER PAGE (/verify) TESTED LIVE at 16:40 on the settled claim: vote
+commitment tab EXACT BYTE MATCH with the reveal transaction's values,
+run proof tab 15/15 MATCH, GonkaRouter receipt fetched, Seal escrow
+"Matches the revealed key"; the juror re-run timed out after 120 s
+(Gonka saturation, expected).
+
+BALANCES 16:30: operator 37.8 SUI / 5.0 WAL; jurors 0.52 to 0.56 SUI;
+Firecrawl app key 1,189 credits (plan 1,000/month, concurrency 2; the
+settled run had zero failed searches); Gonka has no balance endpoint.
+
 ## 4. Planned next (owner-approved direction)
 
 - Attestation (docs/superpowers/specs/2026-08-30-attested-inference-design.md):

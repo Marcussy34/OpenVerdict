@@ -247,6 +247,39 @@ through Seal after its deadline, and re-runs a juror against the recorded
 model; `scripts/gen-parity-vectors.ts` regenerates the cross-language vectors
 pinned in both test suites.
 
+### Audit a claim with Claude
+
+Any claim can be audited from a terminal with no key, no database and no
+wallet. The auditor refetches the public record (the app's API, Sui JSON-RPC,
+the Walrus aggregator, GonkaRouter's public receipts), recomputes every vote
+commitment, run hash and truth score, checks the certificate on Sui, and
+writes one Markdown dossier:
+
+```bash
+pnpm install
+pnpm audit:claim https://app.openverdict.info/claims/<claimId>   # dossier on stdout and in .audit/<claimId>.md
+pnpm audit:claim <claimId> --json audit.json --out audit.md      # plus a JSON dump of everything fetched
+```
+
+Exit 0 means every check passed (or a public source was unavailable), 1 means
+at least one check failed, 2 means the input or a fetch failed. A Sui RPC,
+Walrus or receipt outage marks the check UNAVAILABLE with the manual URL,
+never FAIL. Run links, report links, queue links and bare ids are accepted;
+`--base <url>` points at another deployment.
+
+The same auditor is packaged as a Claude Code skill in
+`.claude/skills/openverdict-audit/`: Claude runs it, presents the verdict
+card and a plain-English timeline, and answers questions from the dossier and
+a bundled protocol reference (`reference.md`, `faq.md`). Inside the repo the
+skill loads on its own; to use it from any folder, link it once:
+
+```bash
+ln -s "$(pwd)/.claude/skills/openverdict-audit" ~/.claude/skills/openverdict-audit
+```
+
+Then, in any Claude Code session:
+`/openverdict-audit https://app.openverdict.info/claims/<claimId>`.
+
 ---
 
 ## 🔒 Security posture and honest limitations
