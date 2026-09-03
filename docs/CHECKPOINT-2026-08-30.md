@@ -2235,3 +2235,88 @@ not Codex (Codex usage is limited); zkLogin is authentication only.
 via public RPC), `verify-proof.mts` + `proof-<n>.json` (local verifier),
 `fund-agents.mjs`, `set-eligibility.mjs`. Full transcript of this session:
 `/Users/marcus/.claude/projects/-Users-marcus-Projects/ea697832-244e-426b-a971-ef1e18dba18e.jsonl`.
+
+## 3al. EVENING 2026-09-03 21:30: CLI, STAKE, WALLET STAKING, SHINAMI SHIPPED (read 3ak then this)
+
+OWNER: away for the evening, full delegation, Opus 5 workers at max
+effort instead of Fable workers ("please use opus 5 workers on max effort
+instead of fable workers"). Board: the newest Great Wall chain GAVE UP at
+19:28 local (attempt 2 of 3, WEATHER_TIMEOUT: the relaunch waited six
+hours for clear weather). Nothing live, nothing pending; the seeder is
+armed (paused only during the deploy below). Weather closed all evening
+(429/TIMEOUT on DeepSeek, MiniMax and Kimi in turns; never all three ok).
+
+COMMITS (all pushed, main = origin/main):
+- 2494d18 feat(ov): public CLI. lib/ov (api, banner, render, watch,
+  commands) + scripts/ov.ts (`pnpm ov`) + skill launcher ov.sh; 72 tests on
+  a virtual clock. Reviewed against production: weather, board, status,
+  watch (replays the settled claim and ends on the final line), queue,
+  extract, audit, submit validation. Fixes after review: score prints as
+  bps/100 ("2.00 (200 bps)"), short id prefixes resolve through the board
+  ("ov status 0x273220b5" works; "0xdeadbeef" gets the 66-character hint).
+  No queued submission was created on purpose: a queued claim takes the
+  first clear-weather window ahead of the seeder's contested claim.
+- 7044c54 feat(stake): wallet-signed staking. MystenSdkZkLoginVerifier
+  accepts every standard personal-message scheme locally
+  (isValidPersonalMessageSignature without a client); zkLogin keeps the
+  GraphQL path. New kind WALLET_STAKED (types.ts, both zod enums), kind
+  chosen from the signature scheme, provider "sui-wallet-personal-message"
+  (public kind "WALLET"). The one-account-one-seat refusal is removed (the
+  Move draw rule still seats at most one seat per staker hash per
+  committee). Signed message is now "OpenVerdict agent stake v1\naddress:
+  ...\nnetwork: ...". Route accepts `address` as an alias of zkLoginAddress.
+  Card rewritten. 96 tests across engine + new route test file. Live
+  registry holds 7 of 32 eligible agents (capacity is not a blocker).
+- ce647a4 docs: stake vocabulary sweep (62 edits, 14 files: README, PRD
+  with a vocabulary note, learn/agents/app pages, landing FAQ and
+  opportunity, CLAUDE.md rule, demo scripts, skill SKILL/reference/faq) +
+  the skill journey through ov.sh + README section "Use OpenVerdict from
+  the terminal and from Claude" + runbook step 8. Remaining "backing" hits
+  are identifiers only (backingKind, agent.backing.kind, humanBackingHash).
+- 40fa881 feat(sui): Shinami Gas Station. lib/sui/shinami.ts (plain fetch
+  JSON-RPC, key only in the header), lib/sui/sponsor-policy.ts (positive
+  allowlist: demo_binary_pool::enter in the deployed package plus
+  0x2::coin::{redeem_funds,send_funds,destroy_zero,zero} which the SDK
+  emits for tx.coin({useGasCoin:false}); no GasCoin argument; no
+  FundsWithdrawal from Sponsor; 1 to 8 commands), POST /api/sponsor
+  (public-write guards, 503 sponsor_unavailable without the key, 400
+  sponsor_rejected, 502 sponsor_failed, fixed 50,000,000 MIST budget),
+  sponsorWithGasStationAndExecute + sponsorAndExecuteWithFallback in
+  sponsor.ts, market panel sponsored-first with wallet-gas fallback,
+  `pnpm sponsor:check [--send]`. Two real sponsored testnet transactions:
+  9Q8EaCz7RmgqSchrxM6UXULw8sZTyWvrBH3nTDrZBDcK and
+  9ToB29r3WWJv7odpai4HkTMjjccmu3aCndrxEAoViGjw (sender operator
+  0xff3538d7…, gas owner Shinami fund 0x8e1e504f…, 0.055 SUI in flight,
+  fund 5 SUI). The first `--send` run said "fetch failed" once (transient
+  publicnode hiccup; the script now prints the cause). Note: the demo pool
+  is not deployed on testnet (release manifest demoPoolObjectId ""), so
+  the browser path is complete and tested but dormant there.
+- Dry run 3 (fresh `claude -p`, model fable, from the repo folder): the
+  skill drove the CLI (weather table, plain-words status, one-minute watch
+  that replayed the record and explained why it ended early), made no wrong
+  protocol statement, submitted nothing. Output in scratchpad/dryrun/run3.out.
+
+GATES at 40fa881: pnpm typecheck clean, pnpm lint 0 errors (2 pre-existing
+warnings), pnpm test 61 files / 752 tests green.
+
+DEPLOY 21:35: seeder paused (scratchpad/seeder.pause), nothing live,
+SHINAMI_GAS_ACCESS_KEY set on the Railway app service (--skip-deploys, value
+never printed), `railway up -s app -d` from scratchpad/railway-tree at
+40fa881. Includes the 404 API fix (7205a62). Result recorded below.
+
+LEFTOVERS: double-debate fix (inference worker and evidence worker both
+run the debate; cost only); on-chain Display string "Human-backed AI oracle
+agent" in display_meta.move (needs a Display edit transaction, not done);
+rotate the Shinami key after the demo (it appeared in chat once); the
+demo pool object for testnet if the market panel should be live for judges.
+
+DEPLOY RESULT 21:38: Railway build SUCCESS after ~2 min. Verified live:
+/api/status healthy (sui, db, gonka live, walrus testnet), GET
+/api/claims/0x00…00 answers 404, POST /api/sponsor {} answers 400
+sponsor_rejected (so the Shinami key is configured; 503 would mean not).
+Seeder unpaused and RESTARTED at 21:41 (the old loop had run out of its
+400 cycles at ~20:31; the log is empty because the weather never cleared
+since 13:51): now 2000 cycles, pid in `ps`, first seed "Raising the
+minimum wage reduces overall employment." Board watcher (24 h loop from
+19:43) streams into the lead session. Weather at 21:40: DeepSeek 429,
+MiniMax ok, Kimi TIMEOUT, research ok: still not clear.
