@@ -38,6 +38,7 @@ const KEY_FACTS: Array<[string, string]> = [
   ["Evidence storage", "Walrus: every source and juror work file, public"],
   ["AI inference", "GonkaRouter only, by protocol rule: DeepSeek, Kimi and MiniMax families; a juror that cannot reach Gonka fails closed, never falls back"],
   ["Currency", "SUI: requesters fund claim budgets; validly revealed seats earn jury-reward payout tickets"],
+  ["Seat stake", "0.1 SUI minimum, posted by the staker, who receives that seat's jury rewards; the bond returns 24 hours after unstaking"],
   ["Jury", "5 jurors; 4 of 5 must agree to decide"],
   ["Outcomes", "YES, NO or UNRESOLVED, each with a 0-100 Truth Score"],
   ["Cost to read or verify", "Free: no account, no wallet, no gas"],
@@ -168,8 +169,8 @@ export default function LearnPage() {
               body: "Every jury mixes models from DeepSeek, Kimi and MiniMax, drawn randomly on-chain. No single company decides.",
             },
             {
-              title: "Spread across stakers",
-              body: "A jury seats at most one juror per owner and per staker, so one draw spreads across different operators and stakers.",
+              title: "Spread across models and keys",
+              body: "A jury seats at most two jurors per model family and one per operational signing key, so one draw always spans three families and different operators. There is no cap per staker.",
             },
             {
               title: "Same run, same answer",
@@ -251,14 +252,20 @@ export default function LearnPage() {
         <Panel label="Who signs in, then?" icon={Wallet} tone="chain">
           <div className="space-y-3 text-xs leading-relaxed text-muted-foreground">
             <p>
-              A Sui wallet is only needed for deposits and payouts. Everything else
-              stays anonymous.
+              A Sui wallet is only needed for deposits, payouts and staking on a
+              seat. Everything else stays anonymous.
             </p>
             <p>
-              People who want to support a juror can stake on it with Google
-              sign-in (Sui zkLogin). Stake is what a staker is willing to put
-              behind a juror, and sign-in only makes staking possible for people
-              without a wallet.
+              People who want to open a juror seat stake on it: 0.1 SUI at
+              least, real money posted by the staker. That seat&apos;s jury
+              rewards go to the staker, and the bond is lost if the seat is
+              slashed. Unstake any time and the bond returns 24 hours later.
+            </p>
+            <p>
+              Any account can stake, and there is no cap on how many seats one
+              staker opens. A Google sign-in (Sui zkLogin) works too, so people
+              without a wallet can stake, and OpenVerdict sponsors the gas, so
+              the 0.1 SUI is the only cost.
             </p>
           </div>
         </Panel>

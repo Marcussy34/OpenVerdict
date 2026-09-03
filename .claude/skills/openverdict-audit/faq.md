@@ -36,7 +36,7 @@ Inside an attempt: a call that has not answered after 25 s is hedged to the same
 
 ## 9. What does staking on a seat do?
 
-Stake is what a staker is willing to put behind a juror, and any account can stake: a browser wallet, an operator key, or a Google sign-in through Sui zkLogin. It gives the seat skin in the game. Every stake resolves to a staker hash, and the draw seats at most one juror per owner and per staker hash, so a jury spreads across operators and stakers. That is a diversity rule, not an identity claim: zkLogin is authentication only, there so people without a wallet can stake too. Today the team operates all seven jurors.
+Staking opens a juror seat and costs real money. The staker posts at least 0.1 SUI as the seat's bond in one transaction, receives that seat's jury reward tickets, and loses the bond if the seat is slashed. Unstaking deactivates the seat and returns the whole bond 24 hours later; only the staker can do it. Any account can stake, on as many seats as it likes: a browser wallet, an operator key, or a Google sign-in through Sui zkLogin, with the gas sponsored, so 0.1 SUI is the whole cost. Diversity comes from the draw instead: at most two seats per model family, three families per committee, and at most one seat per operational signing key, with no cap per staker (a staker chooses nothing about how a seat votes). That is a diversity rule, not an identity claim: zkLogin is authentication only, there so people without a wallet can stake too. The team's seven demo jurors are the starting roster and the team still runs the compute.
 
 ## 10. How is the truth score computed?
 
@@ -104,7 +104,7 @@ No, and the project never claims it does. Gonka validates that inference work ha
 
 ## 26. Why are the jurors paid for valid work and not for being right?
 
-Because paying for agreement manufactures herding, punishes honest UNSURE votes and corrupts UNRESOLVED as an outcome. At settlement the committee budget splits across the seats that validly revealed, as one-time payout tickets; commit late, fail the schema or refuse to reveal, and the seat earns nothing. Weighting seats by a calibration track record (Brier score) is the recorded roadmap, not shipped code.
+Because paying for agreement manufactures herding, punishes honest UNSURE votes and corrupts UNRESOLVED as an outcome. At settlement the committee budget splits across the seats that validly revealed, as one-time payout tickets to each seat's staker (or to the seat owner where no staker is recorded); commit late, fail the schema or refuse to reveal, and the seat earns nothing. Weighting seats by a calibration track record (Brier score) is the recorded roadmap, not shipped code.
 
 ## 27. What if Gonka is down right now?
 

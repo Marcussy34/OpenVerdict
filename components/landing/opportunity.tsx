@@ -18,8 +18,8 @@ const ROWS = [
   },
   {
     Mark: SeatMark,
-    title: "Seats spread across stakers",
-    body: "Any account can stake on a juror, and a committee seats at most one juror per owner and per staker hash, so a single draw spreads across operators and stakers.",
+    title: "Seats carry real stake",
+    body: "Any account can open a juror seat by staking at least 0.1 SUI on it, and a committee seats at most two jurors per model family and one per operational signing key, so a single draw spreads across families and operators.",
   },
   {
     Mark: RecomputeMark,

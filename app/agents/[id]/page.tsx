@@ -8,6 +8,11 @@ import { Panel, FieldLabel } from "@/components/viz/panel";
 import { HashChip } from "@/components/viz/hash-chip";
 import { suiObjectUrl, suiAccountUrl, walrusBlobUrl } from "@/lib/web/explorer";
 import { ModelBadge, modelFamily } from "@/components/viz/model-badge";
+import {
+  formatStakeSui,
+  stakeKindLabel,
+  type StakedAgentEntry,
+} from "@/components/agents/stake-line";
 import { cn } from "@/lib/utils";
 import type { AgentDirectoryEntry } from "@/lib/engine/contract";
 import type { AgentManifestDocument } from "@/lib/protocol/types";
@@ -57,7 +62,7 @@ const DIMENSIONS = [
 export default function AgentDetailPage({ params }: AgentDetailPageProps) {
   const { id } = use(params);
 
-  const [agent, setAgent] = useState<AgentDirectoryEntry | null>(null);
+  const [agent, setAgent] = useState<StakedAgentEntry | null>(null);
   const [loading, setLoading] = useState(true);
   const [manifest, setManifest] = useState<ManifestResponse | null>(null);
   const [manifestLoading, setManifestLoading] = useState(true);
@@ -71,7 +76,7 @@ export default function AgentDetailPage({ params }: AgentDetailPageProps) {
         if (ignore) return;
         if (res.ok) {
           const data = await res.json();
-          const found = (data.agents as AgentDirectoryEntry[])?.find(
+          const found = (data.agents as StakedAgentEntry[])?.find(
             (a) =>
               a.agentProfileId.toLowerCase() === id.toLowerCase() ||
               a.agentProfileId.includes(id),
@@ -423,16 +428,50 @@ export default function AgentDetailPage({ params }: AgentDetailPageProps) {
       </Panel>
 
       {/* Stake */}
-      <Panel label="Stake & committee diversity" icon={KeySquare} tone="sealed">
-        <p className="text-xs leading-relaxed text-muted-foreground">
-          A juror agent receives the{" "}
-          <strong className="font-semibold text-ocean">ZKLOGIN_BACKED</strong> label only after
-          its Google zkLogin address signs the canonical stake message. Any account can stake
-          on a juror: a browser wallet, an operator key, or a Google sign-in through zkLogin,
-          which is authentication and nothing more, there so people without a wallet can stake
-          too. Every stake resolves to a staker hash, and a committee seats at most one seat
-          per staker hash, so a single draw spreads across stakers.
-        </p>
+      <Panel
+        label="Stake & committee diversity"
+        icon={KeySquare}
+        tone="sealed"
+        action={<MetaTag tone="sealed">{stakeKindLabel(agent)}</MetaTag>}
+      >
+        <div className="space-y-4">
+          {/* Only staked seats carry these fields; older seats show the note below. */}
+          {agent.stakeMist && agent.staker ? (
+            <div className="grid gap-2 sm:grid-cols-2">
+              <div className="space-y-1.5 rounded-lg border border-border bg-surface p-2.5">
+                <FieldLabel>Stake posted</FieldLabel>
+                <p className="font-mono text-sm font-semibold text-ocean tabular-nums">
+                  {formatStakeSui(agent.stakeMist)} SUI
+                </p>
+              </div>
+              <div className="space-y-1.5 rounded-lg border border-border bg-surface p-2.5">
+                <FieldLabel>Staker</FieldLabel>
+                <HashChip
+                  value={agent.staker}
+                  tone="sealed"
+                  head={12}
+                  tail={10}
+                  href={suiAccountUrl(agent.staker)}
+                />
+              </div>
+            </div>
+          ) : (
+            <p className="text-xs leading-relaxed text-muted-foreground">
+              No staker is recorded for this seat, so its bond was posted by the
+              operator and its jury rewards go to the owner address above.
+            </p>
+          )}
+          <p className="text-xs leading-relaxed text-muted-foreground">
+            A staker posts at least 0.1 SUI to open a seat, receives that
+            seat&apos;s jury rewards, and loses the bond if the seat is slashed.
+            Unstaking deactivates the seat and returns the bond 24 hours later.
+            Any account can stake: a browser wallet, an operator key, or a Google
+            sign-in through zkLogin, which is authentication and nothing more,
+            there so people without a wallet can stake too. A committee draws at
+            most two seats per model family and one per operational signing key.
+            There is no cap per staker.
+          </p>
+        </div>
       </Panel>
 
       {/* Runs */}

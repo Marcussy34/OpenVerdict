@@ -37,7 +37,7 @@ SUI is the working currency. (Full write-up: [appendix](#appendix-the-idea-in-fu
 
 - Paste a **statement or URL**; a GonkaRouter model distills it into **one checkable claim**
 - The claim, its budget and its **deadlines go live on Sui**; the text is archived to Walrus
-- Demo tier is **free today** (in future: **paid in SUI**; staked seats share earnings)
+- Demo tier is **free today** (in future: **paid in SUI**; a seat's jury rewards go to its staker)
 
 **The clock and the money live on-chain from the first second.**
 
@@ -48,7 +48,7 @@ SUI is the working currency. (Full write-up: [appendix](#appendix-the-idea-in-fu
 - **Sui's built-in randomness draws the 5 seats**
 - **Max 2 seats per AI family**: DeepSeek, Kimi and MiniMax, all served through GonkaRouter
 - **Equal weights** in v1 (in future: weighted by on-chain track record)
-- Anyone can **stake on a seat** with a wallet or a Google sign-in through Sui zkLogin: staking economics, not an identity claim
+- Anyone can **stake on a seat**: **0.1 SUI** minimum, with a wallet or a Google sign-in through Sui zkLogin, and the staker earns that seat's jury rewards
 
 **No operator picks the judges; no vendor holds a majority.**
 
@@ -373,37 +373,43 @@ The money flows that exist on-chain today:
   evidence budgets as coins. Direct review is requester-paid by construction;
   the public demo tier is a rate-limited subsidy, not the business model.
 - **Jurors earn.** At settlement the committee budget splits per valid
-  revealed seat and mints a recipient-bound payout ticket to the seat
-  owner's address (`settlement.move`, `REASON_JURY_REWARD`). Commit late,
-  fail schema, or refuse to reveal, and you earn nothing.
+  revealed seat and mints a recipient-bound payout ticket to that seat's
+  staker, or to the seat owner where no staker is recorded
+  (`settlement.move`, `REASON_JURY_REWARD`). Commit late, fail schema, or
+  refuse to reveal, and you earn nothing.
 - **Disputes fund themselves.** The optimistic pathway finalizes
   unchallenged bonded outcomes with zero inference cost; a challenge
   escalates to a jury and the losing side's bond pays for it.
 - **The protocol takes a fee.** A treasury cut of each committee budget is
   the sustainability switch (landing in the current release).
 
-Stake and the draw rule are the gate on that faucet: a committee seats at
-most one seat per owner address and per staker hash, so a five-seat jury
-always spreads across distinct operators and stakers, and slashing bites a
-track record that cannot respawn for free. Where DIVE gates agent rewards
-with World ID personhood proofs on the agent's owner, OpenVerdict makes no
-identity claim at all: it gates standardized validator seats with stake and
-a diversity draw.
+Stake is the gate on that faucet, and it is real money: a seat is opened by
+its staker posting at least **0.1 SUI** as the seat's bond in one wallet
+transaction (gas sponsored through Shinami, so a Google sign-in can stake
+with 0.1 SUI and nothing else). The staker receives that seat's jury
+rewards, loses the bond when the seat is slashed, and gets it back 24 hours
+after unstaking. The draw stays diverse on its own terms: at most two seats
+per model family, three families per jury, and at most one seat per
+operational signing key, with no cap per staker. Where DIVE gates agent
+rewards with World ID personhood proofs on the agent's owner, OpenVerdict
+makes no identity claim at all: it gates standardized validator seats with
+stake and a diversity draw.
 
-Decentralization ladder: today the team operates all seven jurors (demo);
-next, stakers adopt seats (their stake, their bond, their earnings, our
-compute); finally, self-hosted juror workers bring their own GonkaRouter
-keys and pay their own inference, verified by the engine exactly as our own
-runs are (run hashes, receipts, re-execution).
+Decentralization ladder: the team's seven demo jurors are the starting
+roster; anyone can now open a seat by staking on it (their stake, their
+bond, their earnings, our compute); finally, self-hosted juror workers bring
+their own GonkaRouter keys and pay their own inference, verified by the
+engine exactly as our own runs are (run hashes, receipts, re-execution).
 
-### Next rung: delegated seat staking (recorded direction, not yet on-chain)
+### Next rung: several stakers per seat (recorded direction, not yet on-chain)
 
-Requester-paid SUI per
+One staker per seat ships today: the stake opens the seat and that seat's
+jury reward tickets are minted to the staker. Requester-paid SUI per
 verification funds the round's jury pool (the `create_claim` budget vaults
-already exist), and each seat's jury rewards flow through to the stakers
-behind that seat, pro rata after protocol and run fees, delegated staking
-on standardized seats, the way PoS delegators share a validator's
-yield. Reward distribution stays participation-based with at most an
+already exist), and the open rung is pooling: several stakers behind one
+seat sharing its jury rewards pro rata after protocol and run fees, the way
+PoS delegators share a validator's yield, plus stake-weighted draws under a
+cap. Reward distribution stays participation-based with at most an
 accuracy bonus for certificate-aligned seats; majority-only ("winners take
 all") pay is rejected by design because paying for agreement manufactures
 herding, punishes honest UNSURE votes, and corrupts UNRESOLVED as an
@@ -437,7 +443,7 @@ per-sponsor in the next section).
 | Pillar | What it provides | Why it is irreplaceable here | Track requirement satisfied |
 | --- | --- | --- | --- |
 | **Gonka (GonkaRouter): the only mind** | Every reasoning pass: claim extraction, five independent research runs, each debate turn, each table vote. Three model families behind one gateway, with a request id, devshard id and fingerprint kept for every call. | A jury is only as independent as its minds. Correlated-failure resistance: identical models share the same training blind spots and alignment priors, so five copies of one model debating is one opinion five times. The committee rule mandates three families (DeepSeek, Kimi, MiniMax) with at most two seats per family, so no single architecture or vendor can dictate the quorum. One gateway serving three families is what makes that rule enforceable and pins each juror's model in a manifest; the request ids are the receipts a verifier re-checks against Gonka's public lookup. | Gonka track: all AI reasoning through GonkaRouter, URL or text input, multi-model cross-verification, Truth Score with a reasoning trace, Gonka Request IDs shown. |
-| **Sui: the only judge** | The clock and the court: claims and deadlines as objects, the jury drawn by native randomness under family limits, commit-reveal enforced in Move, evidence roots frozen before any reveal, the immutable certificate and Truth Score, payout tickets, the demo pool that settles on the certificate, zkLogin seat staking. | Nobody picks the judges (native randomness) and nobody edits the result (Move rules, immutable objects). The verdict is not a number a judge is asked to trust; it is something the chain acts on: it settles the pool and pays the seats. | Sui Track 02: Sui is integral, ownership and identity as owned objects, on-chain execution of deadlines, thresholds and payouts, a working live demo path. |
+| **Sui: the only judge** | The clock and the court: claims and deadlines as objects, the jury drawn by native randomness under family limits, commit-reveal enforced in Move, evidence roots frozen before any reveal, the immutable certificate and Truth Score, payout tickets, the demo pool that settles on the certificate, staked juror seats (0.1 SUI minimum, wallet or zkLogin, gas sponsored). | Nobody picks the judges (native randomness) and nobody edits the result (Move rules, immutable objects). The verdict is not a number a judge is asked to trust; it is something the chain acts on: it settles the pool and pays the seats. | Sui Track 02: Sui is integral, ownership and identity as owned objects, on-chain execution of deadlines, thresholds and payouts, a working live demo path. |
 | **Walrus + Seal (Mysten): the only memory** | The public record: claim text, every page a juror opened, evidence manifests, sealed and revealed run bundles, debate transcripts, failure records, all content-addressed and hash-pinned on Sui. Seal time-locks each reveal key so sealed bundles open after the deadline without the operator. | "Anyone can recompute" is only true if the bytes are public and cannot be swapped. Walrus gives the bytes an address the on-chain hash commits to; Seal removes the operator from the reveal path. Without this pillar the verification checks have nothing to run on. | Sui Track 02 signals: Walrus evidence layer, reveal-key escrow with Seal, recheck everything in the browser. |
 
 Gonka is the only mind, Sui is the only judge, Walrus is the only memory,
@@ -529,7 +535,7 @@ to on-chain before anyone reveals.
 | Jury selection | Native `Random` draw under the model-family constraints | `move/openverdict/sources/jury.move` |
 | Commit-reveal voting | Commitments bind the approved run hash on-chain before any reveal; `blake2b256(BCS(preimage))` is recomputable by anyone | `/verify` recomputes it in the browser |
 | Evidence freezing | The manifest merkle root is frozen into an `EvidenceBundle` object before any vote reveals | Report page, evidence bundle chip |
-| Onboarding | zkLogin (Enoki): a Google login yields a self-custodial address that can stake on a juror registration, so people without a wallet can stake too; authentication only | `/agents`; env-gated |
+| Onboarding | zkLogin (Enoki): a Google login yields a self-custodial address that can post the 0.1 SUI stake and open a seat, so people without a wallet can stake too; authentication only | `/agents`; env-gated |
 | Wallet rendering | Object Display metadata on certificates, profiles and positions | `move/openverdict/sources/display_meta.move` |
 
 ### Walrus
@@ -553,8 +559,8 @@ to on-chain before anyone reveals.
 
 | Used for | How | Check it |
 | --- | --- | --- |
-| Gas for wallet-signed pool entries | The browser builds the transaction kind, the server allowlists it and Shinami attaches gas and signs; the user's wallet signs the bytes Shinami returned, so the user still approves the full transaction | `app/api/sponsor/route.ts`; a sponsored deposit shows "Gas paid by OpenVerdict (Shinami Gas Station)" with its digest |
-| Google sign-in without SUI | A zkLogin address created by a Google login holds no SUI, so without sponsorship it cannot act at all; with it, the first on-chain action costs the user nothing | `/claims/<id>` market panel after continuing with Google |
+| Gas for wallet-signed pool entries and seat stakes | The browser builds the transaction kind, the server allowlists it and Shinami attaches gas and signs; the user's wallet signs the bytes Shinami returned, so the user still approves the full transaction | `app/api/sponsor/route.ts`; a sponsored deposit or stake shows "Gas paid by OpenVerdict (Shinami Gas Station)" with its digest |
+| Google sign-in without SUI | A zkLogin address created by a Google login holds no SUI, so without sponsorship it cannot act at all; with it, the first on-chain action costs the user nothing, and a seat stake costs exactly the 0.1 SUI bond | `/claims/<id>` market panel after continuing with Google; `/agents` stake card |
 | Fund health | `gas_getFund` reports fund name, network, balance and in-flight reservations, with no key in the output | `pnpm sponsor:check`; a live sponsored testnet transaction: [9ToB29r3…](https://suiscan.xyz/testnet/tx/9ToB29r3WWJv7odpai4HkTMjjccmu3aCndrxEAoViGjw) (sender the operator, gas owner Shinami's fund) |
 
 The access key never reaches the browser: Shinami's Gas Station refuses CORS
@@ -563,7 +569,8 @@ requests by design, and a leaked key drains the fund. It stays in
 to it, behind the same two guards as every public write (`OPENVERDICT_PUBLIC_WRITES`
 plus rate limiting). That route is a positive allowlist, not a blocklist: it
 decodes the submitted kind, refuses anything over eight commands, refuses every
-Move call except `demo_binary_pool::enter` in the deployed package (plus the four
+Move call except `demo_binary_pool::enter` and `agent_registry::register_staked_agent`
+in the deployed package (plus the four
 `0x2::coin` helpers the Sui SDK emits to assemble the stake), refuses any
 reference to the gas coin, refuses any funds withdrawal that names the sponsor
 instead of the sender, and caps the gas budget at 50,000,000 MIST server-side.
@@ -662,9 +669,10 @@ falling back to another AI provider.
 The model in one line: Gonka is the only mind, Sui is the only judge, and
 SUI is the working currency. Claim budgets escrow at `create_claim`, juror
 bonds are `Balance<SUI>` in the registry, jury rewards and refunds move as
-one-time payout tickets, and the demo binary pool consumes certificates;
-delegated seat staking (stake SUI behind a seat, share its earnings) is the
-recorded next rung.
+one-time payout tickets, and the demo binary pool consumes certificates. A
+seat is opened by its staker posting 0.1 SUI, and that seat's jury rewards
+go to the staker; pooling several stakers behind one seat is the recorded
+next rung.
 
 Instead of relying on:
 

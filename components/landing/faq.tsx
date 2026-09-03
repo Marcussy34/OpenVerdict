@@ -18,7 +18,7 @@ const ITEMS = [
   },
   {
     q: "What does staking on a juror do?",
-    a: "Stake is what a staker is willing to put behind a juror, and any account can stake: a browser wallet, an operator key, or a Google sign-in through zkLogin. Staking gives a seat skin in the game, and every stake resolves to a staker hash the committee draw uses for diversity: at most one seat per owner and per staker hash, so a single jury spreads across operators and stakers. zkLogin is authentication only, there so people without a wallet can stake too.",
+    a: "Staking opens a juror seat and costs real money: the staker posts at least 0.1 SUI as that seat's bond, receives the seat's jury rewards, and loses the bond if the seat is slashed. Unstaking deactivates the seat and returns the bond 24 hours later. Any account can stake, on as many seats as it likes: a browser wallet, an operator key, or a Google sign-in through zkLogin, and OpenVerdict sponsors the gas. The draw caps diversity instead: at most two seats per model family and one per operational signing key, with no cap per staker. zkLogin is authentication only, there so people without a wallet can stake too.",
   },
   {
     q: "Where does the evidence live?",
@@ -34,7 +34,7 @@ const ITEMS = [
   },
   {
     q: "Who pays, and who earns?",
-    a: "Requesters fund a claim's budgets in SUI when it is created; the public demo form is a team-subsidized tier of the same flow. At settlement the committee budget splits across the seats that validly revealed, as one-time payout tickets: commit late, fail the schema or refuse to reveal, and that seat earns nothing. The recorded next step is delegated seat staking: stake SUI behind a seat and share its jury rewards pro rata after fees. That part is documented direction rather than shipped code, and majority-only winner pay is rejected by design, so juries are never paid for herding.",
+    a: "Requesters fund a claim's budgets in SUI when it is created; the public demo form is a team-subsidized tier of the same flow. At settlement the committee budget splits across the seats that validly revealed, as one-time payout tickets: commit late, fail the schema or refuse to reveal, and that seat earns nothing. A seat's tickets go to whoever staked on it, so opening a seat with 0.1 SUI is how anyone earns from jury work. Pooling several stakers behind one seat with pro-rata payouts is documented direction rather than shipped code, and majority-only winner pay is rejected by design, so juries are never paid for herding.",
   },
   {
     q: "What happens when a juror fails?",

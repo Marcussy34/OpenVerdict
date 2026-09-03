@@ -124,10 +124,13 @@ Payment is not tied to the score: seats are paid for valid work, never for agree
 
 ## Stake: what stands behind a seat
 
-- Anyone can stake on a seat: a browser wallet, an operator key, or a Google sign-in through Sui zkLogin (Enoki), and one account may stake on as many seats as it likes. Stake is what a staker is willing to put behind a juror; zkLogin only makes staking possible for people without a wallet.
-- Every stake resolves to a staker hash. In the draw, no two seats in a committee share an owner or a staker hash, so a single jury spreads across operators and stakers. That is a diversity rule, never an identity claim: it says nothing about who is behind an account, and OpenVerdict never claims otherwise.
-- Stake gives a seat skin in the game, and slashing bites a track record that cannot respawn for free.
-- Today the team operates all seven jurors (demo). The decentralization ladder: stakers adopt seats (their stake, their bond, their earnings, the team's compute), then self-hosted juror workers with their own GonkaRouter keys, verified by the engine exactly as the team's own runs (run hashes, receipts, re-execution).
+- A seat is opened by its staker in one transaction that posts the bond: at least 0.1 SUI (`MIN_STAKE_MIST` 100,000,000 in `agent_registry`), real money, not a signature. The transaction also names the operational signing key that runs the seat.
+- The staker is recorded as the seat's payout recipient, so that seat's jury reward tickets (`REASON_JURY_REWARD`) are minted to the staker, and the bond is what slashing takes.
+- Only the staker can unstake. `request_unstake` deactivates the seat at once, `complete_unstake` returns the whole bond after the 24 hour delay, and a pause never blocks that exit.
+- Anyone can stake, on as many seats as they like: a browser wallet, an operator key, or a Google sign-in through Sui zkLogin (Enoki). The gas is sponsored through Shinami, so 0.1 SUI is the whole cost, and zkLogin only makes staking possible for people without a wallet.
+- Diversity lives in the draw, not in the staker: at most two seats per model family, three families per committee, at most one seat per operational signing key, and no cap per staker. A staker chooses nothing about how a seat votes (model, prompts, tools and evidence are all pinned), so capping stakers protected nothing. Never read a staker hash as an identity claim: it says nothing about who is behind an account, and OpenVerdict never claims otherwise.
+- Seats registered before real stake shipped carry no staker record; their bond was posted by the operator and their rewards go to the seat owner.
+- The team's seven demo jurors are the starting roster. The decentralization ladder: stakers open seats (their stake, their bond, their earnings, the team's compute), then self-hosted juror workers with their own GonkaRouter keys, verified by the engine exactly as the team's own runs (run hashes, receipts, re-execution).
 - Reading claims, watching juries, checking proofs and submitting a claim need no sign-in, no wallet, no gas.
 
 ## The weather gate and the queue
@@ -199,7 +202,7 @@ The console is a read-only projection of the same public record the CLI reads (t
 ## Correlated failure and why three families
 
 - Disclosed limitation: five LLM jurors are correlated even across model families; diversity constraints reduce but cannot remove shared failure modes (PRD section 32.4).
-- The rule in Move (`jury.move`): at most two seats per model, at least three distinct models in every committee (one model per family today, so three families), a skeptic seat and a source-authenticity seat present, no two seats with the same owner or staker hash, no juror who created, proposed or challenged the claim.
+- The rule in Move (`jury.move`): at most two seats per model, at least three distinct models in every committee (one model per family today, so three families), a skeptic seat and a source-authenticity seat present, no two seats with the same owner (one operational signing key, one seat), no juror who created, proposed or challenged the claim. There is no staker cap.
 - The families: DeepSeek (DeepSeek-V4-Flash), Kimi (Kimi-K2.6) and MiniMax (MiniMax-M2.7), all served through GonkaRouter, the only inference host in the code. The served model must equal the manifest model (`X-Gonka-No-Fallback: true`; a mismatch is a provider error, never a vote).
 - The roster today: seven active jurors (three DeepSeek, two MiniMax, two Kimi), so every committee carries at least one Kimi seat.
 
@@ -274,6 +277,6 @@ The protocol does not change: the same Move rules, hashes and checks. What chang
 - Receipt: GonkaRouter's public metadata for a past request (model, devshard, time, outcome, tokens).
 - Weather: the health probe of the three families and web search; clear or not.
 - Queue: submissions held until the weather clears; one launch per ten minutes; six-hour expiry.
-- zkLogin: Google sign-in resolving to a Sui address, so someone without a wallet can stake on a seat; authentication only. Staker hash: the hash a stake resolves to, kept unique per committee by the draw.
+- zkLogin: Google sign-in resolving to a Sui address, so someone without a wallet can stake on a seat; authentication only. Staker: the account that posted a seat's bond, holds its `StakePosition`, receives its jury rewards and alone can unstake. Staker hash: blake2b-256 of that address, recorded on the profile, never an identity claim.
 - Payout ticket: a one-time, recipient-bound claim on jury rewards or refunds, minted at settlement.
 - Operator: the team running the engine; holds the run attestor and evidence freezer capabilities in V1.

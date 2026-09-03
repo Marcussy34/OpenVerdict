@@ -137,9 +137,11 @@ Corrections and additions discovered during implementation, per the rule above:
 
 22. **Round two at the table and all-or-nothing attempts (§6, §14, §17, §22, §23, §26, §31; 2026-09-02):** every verification attempt is now all-or-nothing: any seat failing a binding step (a research or table-vote run with no valid output, a missing commit, a missing reveal) voids the whole attempt, and a voided attempt relaunches automatically once the three model families answer a health probe, up to two relaunches (three attempts total); if the probe keeps failing for six hours the verification gives up. A voided attempt lapses on-chain without a certificate, because the settlement contract has no mid-flight cancel once a claim leaves the CREATED state. When round one splits, the five jurors debate in public for up to three exchanges, each turn a citation-backed argument and a non-binding stance, and the debate stops early once a full exchange passes with nobody changing their stance ("nobody moved"). Round two itself is no longer a second research pass: it is one sealed table vote per juror over what is already on the table (the round-one record, the debate transcript, the juror's own round-one output), with no tools and no new research; manifest v6 pins the table-vote prompt and run bundle v6 carries the sealed vote, and the verifier marks the five research-only checks (challenge search, both sides opened, citation sites, counter-evidence summary, opens per turn) not applicable for a table vote. Four matching table votes settle the claim; otherwise the claim ends UNRESOLVED with the truth score, which stays the end state this release (escalation to a second jury is roadmap, not implemented). The hosted ladder is now evidence cutoff +60 s, first commit +450 s, first reveal +570 s, discussion +1410 s, second commit +1650 s, second reveal +1770 s: a one-round verdict stays about 10 minutes after submission, and a claim that reaches the table settles (or resolves UNRESOLVED) about 29.5 minutes after submission.
 
+23. **Real stake on juror seats (§14, §19.3, §24, §32.3; 2026-09-04, spec `docs/superpowers/specs/2026-09-04-real-stake-design.md`):** a seat is now opened by its staker in one wallet transaction that posts the bond (`agent_registry::register_staked_agent`, `MIN_STAKE_MIST` 100,000,000 = 0.1 SUI) and names the operational signing key that will run it. The staker is recorded as the seat's payout recipient, so that seat's `REASON_JURY_REWARD` tickets are minted to the staker, and the staker alone can unstake: `request_unstake` deactivates the seat, `complete_unstake` returns the whole bond after the existing 24 hour delay and is never blocked by a pause. Gas is sponsored through Shinami (the sponsor allowlist gains this one target), so a Google sign-in can stake with 0.1 SUI and nothing else. The draw drops the staker-hash uniqueness check entirely: the caps are two seats per model family (three families per committee) and one seat per operational signing key, with no cap per staker, because a staker chooses nothing about how a seat votes (model, prompts, tools and evidence are all pinned) while the old rule forced at least seven distinct staker addresses to exist and cost the operator inference money for free seats. The old signed-message registration (operator pays the bond, nothing at risk) is gated behind `OPENVERDICT_FREE_SEATS=enabled` and off by default. Everything is additive: existing seats and committees keep today's behaviour, and payout routing falls back to the seat owner wherever no staker is recorded. This supersedes item 5's staker-uniqueness clause and every remaining staker-uniqueness statement in this document.
+
 ## 2. Executive summary
 
-OpenVerdict is a decentralized verification protocol for claims that require evidence and judgment rather than a deterministic data feed. A claim receives a proposed outcome and becomes final if nobody challenges it during a defined window. A successful challenge selects a diversity-constrained committee of AI oracle agents (equal selection weights in v1; reputation-weighted selection is roadmap), each controlled by a distinct approved owner and associated with a distinct staker record. Every agent reviews the same frozen evidence bundle, reasons through GonkaRouter, commits a hidden vote on Sui, and later reveals its answer and argument. If the first round lacks sufficient agreement, agents inspect one another's published evidence and reasoning, add new admissible evidence, and vote again. The protocol can finalize, expand the committee, or remain unresolved instead of manufacturing certainty.
+OpenVerdict is a decentralized verification protocol for claims that require evidence and judgment rather than a deterministic data feed. A claim receives a proposed outcome and becomes final if nobody challenges it during a defined window. A successful challenge selects a diversity-constrained committee of AI oracle agents (equal selection weights in v1; reputation-weighted selection is roadmap), each controlled by a distinct operational signing key and carrying a staked bond. Every agent reviews the same frozen evidence bundle, reasons through GonkaRouter, commits a hidden vote on Sui, and later reveals its answer and argument. If the first round lacks sufficient agreement, agents inspect one another's published evidence and reasoning, add new admissible evidence, and vote again. The protocol can finalize, expand the committee, or remain unresolved instead of manufacturing certainty.
 
 The hackathon entry point is a public fact checker because it directly exposes the verification engine: a user submits text, a public URL, or both and receives a multi-model verdict, a recomputable Truth Score from `0` to `100`, evidence-linked public reasoning traces, and every Gonka Request ID. A low-value binary prediction market is the first economic consumer of the resulting `ResolutionCertificate`, making the Sui settlement path concrete without narrowing the product to betting. The underlying protocol remains generic enough to later resolve DAO milestones, bounties, agent-service disputes, marketplace delivery claims, insurance evidence, and content-authenticity challenges.
 
@@ -521,7 +523,7 @@ type AgentManifest = {
 }
 ```
 
-For the hackathon, the registry uses a reviewed five-person demo allowlist and enforces one active committee seat per approved owner and staker hash. The UI labels this `MANUAL_ALLOWLIST`: it is an allowlist, never an identity claim. Before invite-only beta or permissionless registration, OpenVerdict opens staking to any account and leans on stake, bonds and the diversity draw rather than on any identity check. Store only a hash derived from the staking account; never store a person's civil identity.
+Registration is open: any account opens a seat by posting the minimum stake (0.1 SUI) in one transaction, and the draw enforces at most two seats per model family and one seat per operational signing key, with no cap per staker. The seeded demo roster keeps its `MANUAL_ALLOWLIST` label: it is an allowlist, never an identity claim. OpenVerdict leans on stake, bonds and the diversity draw rather than on any identity check. Store only a hash derived from the staking account; never store a person's civil identity.
 
 Publishing a manifest hash proves that later content matches the registered version. It does not prove that every private line of the declared harness executed. OpenVerdict therefore makes claims only about the frozen input, returned structured output, on-chain commitment, and revealed vote that it can inspect.
 
@@ -578,7 +580,7 @@ Never collapse these into one green verified badge. In particular, `Run trace` m
 
 V1 represents each oracle identity as an `AgentProfile` Move object and gives its controller an owned `AgentCap`. The profile stores the current manifest hash and Walrus blob ID, model/role classifications, staker hash, bond state, suspension state, and compact reputation totals. Only possession of the corresponding capability can request an agent-version update or bond withdrawal.
 
-The hackathon still uses a reviewed five-person allowlist. [Sui zkLogin](https://docs.sui.io/sui-stack/zklogin-integration/zklogin) simplifies owner onboarding through OAuth credentials and lets someone without a wallet stake on a seat. Treat zkLogin as authentication only: it makes staking possible, and it says nothing about who is behind an account.
+A staked seat records its staker as the payout recipient, so that seat's `REASON_JURY_REWARD` tickets are minted to the staker rather than to the operational owner; the staker alone can unstake, which deactivates the seat and returns the whole bond after the 24 hour delay. The seeded demo roster predates this and keeps the fallback (payouts to the seat owner). [Sui zkLogin](https://docs.sui.io/sui-stack/zklogin-integration/zklogin) simplifies owner onboarding through OAuth credentials and lets someone without a wallet stake on a seat, with the gas sponsored. Treat zkLogin as authentication only: it makes staking possible, and it says nothing about who is behind an account.
 
 ERC-8004 is an EVM Draft and is not a dependency of the Sui implementation. A future cross-chain mirror may publish selected identity or reputation signals, but the Move registry remains authoritative for OpenVerdict on Sui.
 
@@ -879,7 +881,7 @@ An agent is eligible when:
 - Required bond is deposited.
 - Manifest is not deprecated.
 - Owner is not suspended.
-- Staker record is active and not already represented in the committee.
+- The seat's bond is at least the minimum stake (a staker may already hold other seats in the same committee).
 - Liveness score exceeds policy minimum.
 - A current GonkaRouter model ID and prompt version are registered.
 - No conflict of interest is declared for the claim.
@@ -906,8 +908,8 @@ Do not include consensus agreement or profitability in initial selection weight.
 
 For a five-agent committee:
 
-- No owner controls more than one seat.
-- No staker hash controls more than one seat.
+- No owner controls more than one seat (one seat per operational signing key).
+- No cap per staker: a staker may hold several seats in one committee, because a staker cannot influence how a seat votes.
 - No single model ID controls more than two seats.
 - Use at least three distinct GonkaRouter model IDs where the authenticated catalog permits.
 - At least one seat uses an adversarial/skeptic role.
@@ -2398,14 +2400,14 @@ Required controls:
 
 V1 uses:
 
-- One committee seat per owner and staker hash.
-- Registration bond.
-- Model and role diversity caps.
+- One committee seat per operational signing key.
+- At most two seats per model family, three families per committee.
+- A registration bond of at least 0.1 SUI, posted by the staker and lost on slashing.
 - Minimum liveness history for public committees after beta.
 - Conflict-of-interest declaration.
 - Random selection.
 
-The hackathon uses a reviewed five-person demo allowlist and labels its limitation. Invite-only beta and permissionless production registration lean on stake, bonds, delegated-operator rules and stronger ownership clustering rather than on any identity check. Do not assume five wallet addresses are five independent operators.
+There is no cap per staker, on purpose: a staker chooses nothing about how its seat votes (the model, the prompts, the tools and the evidence are all pinned), so capping stakers protected nothing while forcing at least seven distinct staker addresses to exist. Concentration is bounded by the model and key caps and by the cost of each bond. Production registration leans on stake, bonds, delegated-operator rules and stronger ownership clustering rather than on any identity check. Do not assume five wallet addresses are five independent operators.
 
 ### 32.4 Correlated models
 
@@ -3231,7 +3233,7 @@ Requires demonstrated security, audits, legal review, economic limits, insurance
 | Evidence prompt injection | High | High | Safe retriever, frozen data, no model-selected URLs, strict schema |
 | Bounded tool executor is abused | Medium | Critical | Typed read-only allowlist, pinned inputs, limits, sandboxing, transcript hashes |
 | Majority becomes self-reinforcing | Medium | High | Separate reputation dimensions; no minority slash |
-| Seat concentration by one owner | Medium | High | Bonds, one seat per owner and per staker hash in the draw, later ownership clustering |
+| Seat concentration by one owner | Medium | High | Bonds of at least 0.1 SUI each, one seat per operational signing key and at most two per model family in the draw, later ownership clustering |
 | Backend omits failed runs | Medium | High | Run IDs, visible retries/failures, queue audit logs, output commitments |
 | Observer leaks unrevealed agent information | Medium | High | Visibility policy, serialization filter, payload-shape tests, no private chain-of-thought |
 | Observer presents application data as proof | Medium | High | Source labels, Sui/artifact links, confirmation states, rebuild tests |
@@ -3366,7 +3368,8 @@ Ask organizers in writing whether pre-kickoff product research and a PRD-only pr
 | Resolution event | Source-labelled, phase-gated event used by CLI following, replay, support, and the observer dashboard |
 | Resolution certificate | Immutable Sui object recording the final rule-bound result and the claim/evidence/jury references used to derive it |
 | Sponsored transaction | Sui transaction whose gas is paid by a sponsor while the user still signs the full transaction data |
-| Staked agent | AI oracle identity controlled by an approved distinct owner and carrying stake behind its seat; staking is open to any account and is never an identity claim |
+| Staked agent | AI oracle identity whose seat carries a bond of at least 0.1 SUI posted by its staker, who receives the seat's jury rewards and loses the bond on slashing; staking is open to any account, uncapped per staker, and is never an identity claim |
+| Staker | Account that posted a seat's bond; holds the `StakePosition`, receives that seat's jury reward tickets, and is the only account that can unstake |
 | Tool transcript | Ordered, bounded record of sanitized model tool calls whose hash is bound into an inference run |
 | Truth Score | Unweighted `0–100` summary derived from the final valid jury round's committed outcomes and confidence; not objective truth |
 | Unresolved | Protocol cannot reach the configured threshold without forcing certainty |

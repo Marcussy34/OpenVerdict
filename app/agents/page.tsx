@@ -4,10 +4,14 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { JurorAvatar } from "@/components/agents/avatar";
-import { ZkLoginRegistrationCard } from "@/components/agents/zklogin-registration-card";
+import { StakeSeatCard } from "@/components/agents/stake-seat-card";
+import {
+  stakeKindLabel,
+  stakeSentence,
+  type StakedAgentEntry,
+} from "@/components/agents/stake-line";
 import { modelFamily } from "@/components/viz/model-badge";
 import { cn } from "@/lib/utils";
-import type { AgentDirectoryEntry } from "@/lib/engine/contract";
 import type { JurorFamily } from "@/lib/viz/deliberation-graph";
 import { Warning2, Refresh, ArrowRight2 } from "@/components/icons";
 
@@ -30,7 +34,7 @@ function earnedSui(earnedMist: string | undefined): string {
 }
 
 export default function AgentsPage() {
-  const [agents, setAgents] = useState<AgentDirectoryEntry[]>([]);
+  const [agents, setAgents] = useState<StakedAgentEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [engineOffline, setEngineOffline] = useState(false);
   const [familyFilter, setFamilyFilter] = useState<string>("ALL");
@@ -167,6 +171,7 @@ export default function AgentsPage() {
           <ul className="ov-edge divide-y divide-border overflow-hidden rounded-2xl border border-border bg-card">
             {filteredAgents.map((agent, index) => {
               const fam = modelFamily(agent.modelId);
+              const staked = stakeSentence(agent);
               return (
                 <li key={agent.agentProfileId}>
                   <Link
@@ -196,6 +201,12 @@ export default function AgentsPage() {
                           {earnedSui(agent.earnedMist)}
                         </p>
                       )}
+                      {/* Real stake, so who posted it and how much is the headline. */}
+                      {staked && (
+                        <p className="mt-0.5 truncate font-mono text-[11px] text-muted-foreground">
+                          {staked}
+                        </p>
+                      )}
                     </div>
                     <span
                       className={cn(
@@ -208,12 +219,7 @@ export default function AgentsPage() {
                             : "bg-muted text-muted-foreground",
                       )}
                     >
-                      {agent.backing?.kind === "ZKLOGIN" ||
-                      agent.backing?.kind === "WALLET"
-                        ? "Staked"
-                        : agent.backing?.kind === "ALLOWLIST"
-                          ? "Allowlist"
-                          : "Unverified"}
+                      {stakeKindLabel(agent)}
                     </span>
                     <ArrowRight2 size="14" className="shrink-0 text-muted-foreground" />
                   </Link>
@@ -226,7 +232,7 @@ export default function AgentsPage() {
 
       {/* Operator onboarding stays: it is the one action this page offers. */}
       <div className="mx-auto w-full max-w-3xl">
-        <ZkLoginRegistrationCard onRegistered={loadAgents} />
+        <StakeSeatCard onStaked={loadAgents} />
       </div>
     </div>
   );
