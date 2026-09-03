@@ -2113,6 +2113,95 @@ BALANCES 16:30: operator 37.8 SUI / 5.0 WAL; jurors 0.52 to 0.56 SUI;
 Firecrawl app key 1,189 credits (plan 1,000/month, concurrency 2; the
 settled run had zero failed searches); Gonka has no balance endpoint.
 
+## 3ak. RESUME MAP 2026-09-03 20:30 (pre-compaction: read 3aj then THIS and continue as if nothing happened)
+
+OWNER STATE: leaving for the evening, full delegation ("i will leave it to
+you"). Interrupt only for a split, a settlement, a give-up, or a decision.
+Weather closed all afternoon (DeepSeek/MiniMax/Kimi saturated), nothing
+live, Great Wall attempt 3 pending relaunch, seeder armed (scratchpad/
+seeder.sh), board watcher restarted 19:43 for 24 h (board-watch.log).
+
+DECISIONS TAKEN TONIGHT (owner's words honoured):
+1. "Backing" becomes "stake": stakers stake on jurors; "stake on a seat",
+   "staked seat", "staker" replace back/backing/backer everywhere in the
+   product, README, PRD, learn page, agents pages, registration card,
+   landing FAQ/opportunity, skill reference/faq/SKILL, CLAUDE.md line.
+   "Human", "human-backed", "personhood", "one account one seat" wording is
+   REMOVED as a whole: any account (wallet, operator key, Google sign-in
+   via zkLogin) can stake on as many seats as it likes; it is staking
+   economics. Internal identifiers stay (humanBackingHash /
+   humanAttestationHash / human_backing_hash in Move: a package upgrade
+   for no user-visible gain) with a comment "staker hash". The Move draw
+   rule (jury.move contains_owner / contains_human_hash: a committee seats
+   at most one seat per owner and per staker hash, plus two per model)
+   stays and is described as a diversity rule, never an identity claim.
+2. Wallet-signed staking: POST /api/agents/register today rejects any
+   signature that is not zkLogin (MystenSdkZkLoginVerifier in
+   lib/engine/engine.ts ~5095 checks parseSerializedSignature scheme).
+   Accept standard wallet personal-message signatures too
+   (isValidPersonalMessageSignature without GraphQL for non-zkLogin), add
+   AgentBackingKind "WALLET_STAKED" (lib/protocol/types.ts; document
+   hashed, new kind is fine for new registrations), registration card
+   (components/agents/zklogin-registration-card.tsx uses dapp-kit
+   signPersonalMessage already; browser wallets are connectable through
+   components/wallet/providers.tsx + connect-button.tsx) offers "connect a
+   wallet" next to Google. Tests.
+3. Shinami: Gas Station YES (key in .env SHINAMI_GAS_ACCESS_KEY, fund
+   "OpenVerdict" Sui testnet 5 SUI, verified with gas_getFund; the key
+   appeared in chat once: rotate after the demo). Wire it into the
+   sponsored user-transaction path (lib/sui/sponsor.ts sponsorAndExecute:
+   build TransactionKind bytes with onlyTransactionKind, POST
+   https://api.us1.shinami.com/sui/gas/v1 gas_sponsorTransactionBlock
+   {transactionBytes, sender} with header X-Api-Key, sender signs the
+   returned txBytes, execute with both signatures; sponsored txs must not
+   touch tx.gas; operator sponsor stays the fallback when the key is
+   missing or Shinami fails); add the Railway variable at the deploy.
+   Node Service NOT available on the owner's plan: skip, publicnode stays
+   the JSON-RPC fallback. Invisible Wallets: no. README + PRD get a
+   Shinami paragraph: Gas Station for user transactions now, sponsored
+   juror and operator transactions as the next rung of the ladder.
+4. `ov` public CLI + skill journey: spec docs/superpowers/specs/
+   2026-09-03-ov-cli-design.md (contract). Worker ov-cli (Fable subagent,
+   resumed after a usage-limit pause at 20:11) is finishing lib/ov/
+   (api.ts, banner.ts, render.ts, commands.ts, watch.ts exist; tests,
+   scripts/ov.ts entry, package.json "ov" script and the skill launcher
+   ov.sh were still missing at 20:11; tsc had two small errors then). The
+   skill half is DONE on disk (SKILL.md, reference.md, faq.md extended;
+   README section "Use OpenVerdict from the terminal and from Claude";
+   runbook step 8), uncommitted. After the CLI lands: review, gates,
+   production runs (ov weather / board / status / watch on the settled
+   claim / queue 0x0 / extract / audit; at most ONE ov submit, Eiffel
+   Tower claim, 202 expected), fresh-session dry run of the journey,
+   commit, push. LSP diagnostics in this session are unreliable (they
+   report missing exports that tsc does not); trust `pnpm typecheck`.
+5. API fix committed, NOT deployed: 404 for unknown claim ids (7205a62).
+   Deploy everything at the next free window (no live or pending attempt;
+   touch scratchpad/seeder.pause first; railway up from
+   scratchpad/railway-tree at a detached origin/main) and set
+   SHINAMI_GAS_ACCESS_KEY on Railway then.
+
+TREE AT 20:30: committed main = origin/main = 1bf2d01 (audit --list).
+Uncommitted on disk: .claude/skills/openverdict-audit/{SKILL,reference,
+faq}.md (journey sections), README.md, docs/demo/runbook.md,
+package.json ("ov" script added by the worker), lib/ov/** (in progress),
+docs/superpowers/specs/2026-09-03-ov-cli-design.md, this checkpoint.
+Owner's untracked docs/demo/deck/ stays untouched.
+
+ORDER OF WORK AFTER COMPACTION: (a) let ov-cli finish, review, gates,
+production runs, dry run, commit; (b) stake reframing sweep (one Fable
+worker, copy only, list of files above; also the skill texts and
+docs/PRD.md vocabulary note); (c) wallet-signed staking (one Fable
+worker, engine verifier + protocol type + route + card + tests);
+(d) Shinami gas station in sponsor.ts with tests and a README/PRD
+paragraph; (e) checkpoint + memory; (f) deploy at a free window.
+
+RULES: reply starts "Mr. Marcus,"; no em dashes; commit trailer
+"Claude-Session: https://claude.ai/code/session_01R2J39mTnN6iJRQ98n4eDho",
+never Co-Authored-By; never print keys (Shinami, Firecrawl, Gonka, Sui
+operator); cwd resets between Bash calls; foreground sleep is limited
+(use until-loops, Monitor, or detached nohup scripts); Fable subagents,
+not Codex (Codex usage is limited); zkLogin is authentication only.
+
 ## 4. Planned next (owner-approved direction)
 
 - Attestation (docs/superpowers/specs/2026-08-30-attested-inference-design.md):
