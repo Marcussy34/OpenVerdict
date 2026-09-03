@@ -75,6 +75,8 @@ const DEFAULT_TIMEOUT_MS = 120_000;
 // answer in 10 to 50 s.
 const DEFAULT_RESEARCH_TIMEOUT_MS = 90_000;
 const DEFAULT_HEDGE_AFTER_MS = 25_000;
+/** Parallel probes per family in a weather check (see probeModels). */
+const PROBE_CONCURRENCY = 3;
 const MIN_HEDGE_REMAINING_MS = 5_000;
 const HEDGE_ABANDONED_MESSAGE =
   "abandoned: the hedged request answered first";
@@ -1156,58 +1158,77 @@ export function createGonkaAdapterWithDependencies(
     return standaloneAudit(response, now);
   }
 
-  /** Weather checks bypass juror audits because they are availability signals only. */
+  /**
+   * Weather checks bypass juror audits because they are availability signals
+   * only. Each family is probed with PROBE_CONCURRENCY parallel research-shaped
+   * calls: a single small call squeezes through a saturated family that then
+   * answers "too many concurrent requests" to five jurors working at once
+   * (DeepSeek, 2026-09-03 12:30), so a family is clear only when all of its
+   * parallel probes answer.
+   */
   async function probeModels(
     modelIds: readonly string[],
     probeTimeoutMs: number,
   ): Promise<GonkaWeatherProbe[]> {
+    const probeOnce = async (
+      modelId: string,
+      lane: number,
+    ): Promise<GonkaWeatherProbe> => {
+      const startedAtMs = now();
+      try {
+        const result = await client.chat.completions.create(
+          {
+            model: modelId,
+            // A fresh nonce per probe and lane: the gateway caches identical
+            // temperature-0 requests, and a cached answer says nothing
+            // about whether the model answers right now.
+            messages: [
+              {
+                role: "user",
+                content: `Probe ${startedAtMs}-${lane}. In about 150 words, explain why the sky looks blue, then end with the JSON object {"ok":true} on its own line.`,
+              },
+            ],
+            max_tokens: 400,
+            temperature: 0,
+          },
+          { timeout: probeTimeoutMs },
+        ).withResponse();
+        const content = result.data.choices[0]?.message.content;
+        return {
+          modelId,
+          ok:
+            result.response.status === 200 &&
+            typeof content === "string" &&
+            content.trim().length > 0,
+          latencyMs: Math.max(0, now() - startedAtMs),
+          status: result.response.status,
+        };
+      } catch (error) {
+        const errorStatus = getGonkaErrorStatus(error);
+        const status: GonkaWeatherProbe["status"] = isGonkaTimeoutError(error)
+          ? "TIMEOUT"
+          : errorStatus ?? "ERROR";
+        return {
+          modelId,
+          ok: false,
+          latencyMs: Math.max(0, now() - startedAtMs),
+          status,
+        };
+      }
+    };
     return Promise.all(
       modelIds.map(async (modelId) => {
-        const startedAtMs = now();
-        try {
-          const result = await client.chat.completions.create(
-            {
-              model: modelId,
-              // A fresh nonce per probe: the gateway caches identical
-              // temperature-0 requests, and a cached answer says nothing
-              // about whether the model answers right now.
-              // A research-shaped probe: a family that answers eight tokens
-              // in two seconds can still time out on a real turn (the night
-              // of 2026-09-03: probes clear, seats voided). Asking for a short
-              // structured paragraph makes "clear" mean "can do real work".
-              messages: [
-                {
-                  role: "user",
-                  content: `Probe ${startedAtMs}. In about 150 words, explain why the sky looks blue, then end with the JSON object {"ok":true} on its own line.`,
-                },
-              ],
-              max_tokens: 400,
-              temperature: 0,
-            },
-            { timeout: probeTimeoutMs },
-          ).withResponse();
-          const content = result.data.choices[0]?.message.content;
-          return {
-            modelId,
-            ok:
-              result.response.status === 200 &&
-              typeof content === "string" &&
-              content.trim().length > 0,
-            latencyMs: Math.max(0, now() - startedAtMs),
-            status: result.response.status,
-          };
-        } catch (error) {
-          const errorStatus = getGonkaErrorStatus(error);
-          const status: GonkaWeatherProbe["status"] = isGonkaTimeoutError(error)
-            ? "TIMEOUT"
-            : errorStatus ?? "ERROR";
-          return {
-            modelId,
-            ok: false,
-            latencyMs: Math.max(0, now() - startedAtMs),
-            status,
-          };
-        }
+        const lanes = await Promise.all(
+          Array.from({ length: PROBE_CONCURRENCY }, (_, lane) => probeOnce(modelId, lane)),
+        );
+        // The slowest lane sets the latency; the first failing lane sets the status.
+        const failed = lanes.find((lane) => !lane.ok);
+        return {
+          modelId,
+          ok: failed === undefined,
+          latencyMs: Math.max(...lanes.map((lane) => lane.latencyMs)),
+          status: failed?.status ?? 200,
+        };
       }),
     );
   }
