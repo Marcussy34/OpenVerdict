@@ -342,6 +342,40 @@ export interface AgentManifestRecord {
   updatedAt: string;
 }
 
+/** A stake reservation lives from prepare until the confirm reads the chain. */
+export type StakeReservationStatus = "PENDING" | "CONFIRMED" | "EXPIRED";
+
+/**
+ * One reserved operational slot, held while a staker signs and executes the
+ * stake transaction. PENDING reservations that have not expired keep their
+ * slot out of the free pool so two stakers never share one signing key.
+ */
+export interface StakeReservationRecord {
+  reservationId: string;
+  stakerAddress: string;
+  slotIndex: number;
+  operationalOwner: string;
+  modelId: string;
+  role: string;
+  manifestHash: string;
+  manifestBlobId: string;
+  documentVersion: string;
+  promptHash: string;
+  toolPolicyHash: string;
+  tableVotePromptHash?: string;
+  evidencePolicyHash: string;
+  stakerHash: string;
+  status: StakeReservationStatus;
+  createdAt: string;
+  expiresAt: string;
+  /** Set once the stake transaction is confirmed. */
+  digest?: string;
+  agentProfileId?: string;
+  /** Confirmed bond in MIST, and how the seat's gas float ended up. */
+  stakeMist?: string;
+  gasFloat?: "funded" | "skipped" | "failed";
+}
+
 export interface PayoutTicketRecord {
   payoutTicketId: string;
   claimId: string;

@@ -62,6 +62,7 @@ import {
   type GatewayBindEvidenceInput,
   type FakeSuiAgent,
   type ReleaseManifest,
+  type StakeRegistrationRead,
 } from "../sui";
 import { createLocalWalrusStore, type WalrusStore } from "../walrus";
 import {
@@ -78,18 +79,26 @@ import {
   RELAUNCH_GIVE_UP_MS,
   WEATHER_PROBE_INTERVAL_MS,
   WEATHER_STALE_MS,
+  MIN_STAKE_MIST,
+  SEAT_GAS_FLOAT_MIST,
+  SEAT_GAS_FLOAT_MIN_MIST,
+  STAKE_RESERVATION_TTL_MS,
   agentBackingStatus,
   buildZkLoginBackingMessage,
   createEngine,
   debateConvergedAfterExchange,
   defaultDeadlines,
   deliberationTurnInstructions,
+  ChainReadError,
+  EngineCapacityError,
   EngineNoEvidenceError,
   EngineStateError,
   EngineValidationError,
+  StakeReservationNotFoundError,
   validateTableVote,
   type EngineAgentConfig,
 } from "./index";
+import type { Engine } from "./contract";
 import { isDead } from "../../workers/resolution-worker";
 
 const databases: PGlite[] = [];
@@ -2844,6 +2853,385 @@ describe("wallet-signed seat staking", () => {
   });
 });
 
+describe("real stake on a juror seat", () => {
+  const stakerAddress = `0x${"ab".repeat(32)}`;
+  const otherAddress = `0x${"ef".repeat(32)}`;
+  const digest = "HvtKY9RwuE7NC4gLauLFPY3h5qepEy8R7aZHnc4gJu6G";
+
+  /** What the chain says once the staker's transaction settles. */
+  function chainRegistration(
+    preparation: Awaited<ReturnType<Engine["prepareStake"]>>,
+    overrides: Partial<StakeRegistrationRead> = {},
+  ): StakeRegistrationRead {
+    return {
+      sender: stakerAddress,
+      agentProfileId: fakeId("staked-profile"),
+      agentCapId: fakeId("staked-cap"),
+      operationalOwner: preparation.args.operationalOwner,
+      amountMist: "100000000",
+      manifestHash: preparation.args.manifestHash,
+      ...overrides,
+    };
+  }
+
+  it("reserves a free slot and publishes the seat manifest to Walrus", async () => {
+    const setup = await registrationSetup({ verifierResult: true });
+
+    const preparation = await setup.engine.prepareStake({
+      stakerAddress,
+      modelId: "model-b",
+      role: "INVESTIGATOR",
+    });
+
+    expect(preparation.minStakeMist).toBe("100000000");
+    expect(preparation.target).toEqual({
+      packageId: `0x${"11".repeat(32)}`,
+      registryObjectId: `0x${"22".repeat(32)}`,
+      clockObjectId: "0x6",
+    });
+    // Slot 0 already owns the seeded seat, so the reservation takes slot 1.
+    expect(preparation.args.operationalOwner).toBe(
+      setup.signers.getAgentAt(1).address,
+    );
+    expect(preparation.args.stakerHash).toBe(
+      toHex(blake2b256(fromHex(stakerAddress))),
+    );
+    expect(preparation.args.modelHash).toBe(
+      toHex(blake2b256(new TextEncoder().encode("model-b"))),
+    );
+    expect(preparation.args.roleHash).toBe(
+      toHex(blake2b256(new TextEncoder().encode("OPENVERDICT_ROLE_INVESTIGATOR"))),
+    );
+    expect(Date.parse(preparation.expiresAt) - setup.now()).toBe(
+      STAKE_RESERVATION_TTL_MS,
+    );
+    expect(
+      parseAgentManifestDocument(
+        await setup.walrus.get(preparation.args.manifestBlobId),
+      ),
+    ).toMatchObject({
+      backingKind: "WALLET_STAKED",
+      humanVerificationProvider: "sui-wallet-stake",
+      operationalOwner: preparation.args.operationalOwner,
+      modelId: "model-b",
+      role: "INVESTIGATOR",
+    });
+    // Preparing puts nothing on chain: only the staker's own wallet can.
+    expect(setup.gateway.registrations).toHaveLength(0);
+  });
+
+  it("holds a reserved slot against the next preparation", async () => {
+    const setup = await registrationSetup({ verifierResult: true });
+    const request = {
+      stakerAddress,
+      modelId: "model-a",
+      role: "SKEPTIC" as const,
+    };
+
+    const first = await setup.engine.prepareStake(request);
+    const second = await setup.engine.prepareStake(request);
+
+    expect(second.args.operationalOwner).not.toBe(first.args.operationalOwner);
+    expect(second.reservationId).not.toBe(first.reservationId);
+    await expect(
+      setup.engine.prepareStake(request),
+    ).rejects.toThrow(EngineCapacityError);
+  });
+
+  it("returns an expired reservation's slot to the pool", async () => {
+    const setup = await registrationSetup({
+      verifierResult: true,
+      signerCount: 2,
+    });
+    const request = {
+      stakerAddress,
+      modelId: "model-a",
+      role: "SKEPTIC" as const,
+    };
+    const first = await setup.engine.prepareStake(request);
+
+    setup.setNow(setup.now() + STAKE_RESERVATION_TTL_MS + 1);
+    const second = await setup.engine.prepareStake(request);
+
+    expect(second.args.operationalOwner).toBe(first.args.operationalOwner);
+  });
+
+  it("rejects a model, a role or an address outside the policy", async () => {
+    const setup = await registrationSetup({ verifierResult: true });
+
+    await expect(
+      setup.engine.prepareStake({
+        stakerAddress,
+        modelId: "unknown-model",
+        role: "SKEPTIC",
+      }),
+    ).rejects.toThrow("modelId must be present in the release manifest catalog");
+    await expect(
+      setup.engine.prepareStake({
+        stakerAddress,
+        modelId: "model-a",
+        role: "ANALYST",
+      }),
+    ).rejects.toThrow(EngineValidationError);
+    await expect(
+      setup.engine.prepareStake({
+        stakerAddress: "0xabc",
+        modelId: "model-a",
+        role: "SKEPTIC",
+      }),
+    ).rejects.toThrow("canonical lowercase 32-byte Sui address");
+  });
+
+  it("confirms a settled stake, records the staker and funds the seat", async () => {
+    const setup = await registrationSetup({ verifierResult: true });
+    const preparation = await setup.engine.prepareStake({
+      stakerAddress,
+      modelId: "model-b",
+      role: "INVESTIGATOR",
+    });
+    const registration = chainRegistration(preparation);
+    setup.gateway.stakeRegistrations.set(digest, registration);
+
+    const confirmation = await setup.engine.confirmStake({
+      reservationId: preparation.reservationId,
+      digest,
+    });
+
+    expect(confirmation).toEqual({
+      agentProfileId: registration.agentProfileId,
+      staker: stakerAddress,
+      stakeMist: "100000000",
+      digest,
+      backingKind: "WALLET_STAKED",
+      operationalOwner: preparation.args.operationalOwner,
+      gasFloat: "funded",
+    });
+    expect(setup.gateway.fundings).toEqual([
+      {
+        address: preparation.args.operationalOwner,
+        amountMist: SEAT_GAS_FLOAT_MIST.toString(),
+        minBalanceMist: SEAT_GAS_FLOAT_MIN_MIST.toString(),
+      },
+    ]);
+
+    const repository = createRepository(setup.db);
+    const saved = await repository.getAgentManifest(registration.agentProfileId);
+    expect(saved?.manifest).toMatchObject({
+      owner: preparation.args.operationalOwner,
+      humanAttestationHash: preparation.args.stakerHash,
+      humanVerificationProvider: "sui-wallet-stake",
+      manifestHash: preparation.args.manifestHash,
+      manifestBlobId: preparation.args.manifestBlobId,
+      modelId: "model-b",
+      stakerAddress,
+      stakeMist: "100000000",
+    });
+    expect(saved?.agentCapId).toBe(registration.agentCapId);
+    expect(saved?.role).toBe("INVESTIGATOR");
+    await expect(
+      repository.getStakeReservation(preparation.reservationId),
+    ).resolves.toMatchObject({ status: "CONFIRMED", digest, gasFloat: "funded" });
+
+    const listed = await setup.engine.listAgents();
+    expect(
+      listed.find((agent) => agent.agentProfileId === registration.agentProfileId),
+    ).toMatchObject({
+      staker: stakerAddress,
+      stakeMist: "100000000",
+      backing: { kind: "WALLET", label: "sui-wallet-stake" },
+    });
+  });
+
+  it("skips the gas float when the seat already holds one", async () => {
+    const setup = await registrationSetup({ verifierResult: true });
+    const preparation = await setup.engine.prepareStake({
+      stakerAddress,
+      modelId: "model-a",
+      role: "SKEPTIC",
+    });
+    setup.gateway.stakeRegistrations.set(digest, chainRegistration(preparation));
+    setup.gateway.balancesMist.set(
+      preparation.args.operationalOwner,
+      SEAT_GAS_FLOAT_MIN_MIST.toString(),
+    );
+
+    await expect(
+      setup.engine.confirmStake({
+        reservationId: preparation.reservationId,
+        digest,
+      }),
+    ).resolves.toMatchObject({ gasFloat: "skipped" });
+  });
+
+  it("never fails a paid stake because the gas float could not be sent", async () => {
+    const setup = await registrationSetup({ verifierResult: true });
+    const preparation = await setup.engine.prepareStake({
+      stakerAddress,
+      modelId: "model-a",
+      role: "SKEPTIC",
+    });
+    setup.gateway.stakeRegistrations.set(digest, chainRegistration(preparation));
+    setup.gateway.fundAddressError = new Error("operator has no gas");
+
+    const confirmation = await setup.engine.confirmStake({
+      reservationId: preparation.reservationId,
+      digest,
+    });
+
+    expect(confirmation.gasFloat).toBe("failed");
+    await expect(
+      createRepository(setup.db).getAgentManifest(confirmation.agentProfileId),
+    ).resolves.toBeDefined();
+  });
+
+  it("replays a confirmed reservation without writing again", async () => {
+    const setup = await registrationSetup({ verifierResult: true });
+    const preparation = await setup.engine.prepareStake({
+      stakerAddress,
+      modelId: "model-a",
+      role: "SKEPTIC",
+    });
+    setup.gateway.stakeRegistrations.set(digest, chainRegistration(preparation));
+    const first = await setup.engine.confirmStake({
+      reservationId: preparation.reservationId,
+      digest,
+    });
+
+    const replay = await setup.engine.confirmStake({
+      reservationId: preparation.reservationId,
+      digest,
+    });
+
+    expect(replay).toEqual(first);
+    // The replay reads nothing from the chain and moves no gas a second time.
+    expect(setup.gateway.fundings).toHaveLength(1);
+  });
+
+  it("rejects a transaction that does not match the reservation", async () => {
+    const setup = await registrationSetup({ verifierResult: true });
+    const preparation = await setup.engine.prepareStake({
+      stakerAddress,
+      modelId: "model-a",
+      role: "SKEPTIC",
+    });
+
+    setup.gateway.stakeRegistrations.set(
+      digest,
+      chainRegistration(preparation, { sender: otherAddress }),
+    );
+    await expect(
+      setup.engine.confirmStake({ reservationId: preparation.reservationId, digest }),
+    ).rejects.toThrow("sent by a different account");
+
+    setup.gateway.stakeRegistrations.set(
+      digest,
+      chainRegistration(preparation, { operationalOwner: otherAddress }),
+    );
+    await expect(
+      setup.engine.confirmStake({ reservationId: preparation.reservationId, digest }),
+    ).rejects.toThrow("different operational owner");
+
+    setup.gateway.stakeRegistrations.set(
+      digest,
+      chainRegistration(preparation, { manifestHash: `0x${"99".repeat(32)}` }),
+    );
+    await expect(
+      setup.engine.confirmStake({ reservationId: preparation.reservationId, digest }),
+    ).rejects.toThrow("different manifest hash");
+
+    setup.gateway.stakeRegistrations.set(
+      digest,
+      chainRegistration(preparation, {
+        amountMist: (MIN_STAKE_MIST - 1n).toString(),
+      }),
+    );
+    await expect(
+      setup.engine.confirmStake({ reservationId: preparation.reservationId, digest }),
+    ).rejects.toThrow("below the 100000000 MIST minimum");
+
+    await expect(
+      createRepository(setup.db).getStakeReservation(preparation.reservationId),
+    ).resolves.toMatchObject({ status: "PENDING" });
+  });
+
+  it("reports an unknown reservation and an expired one as not found", async () => {
+    const setup = await registrationSetup({ verifierResult: true });
+    const preparation = await setup.engine.prepareStake({
+      stakerAddress,
+      modelId: "model-a",
+      role: "SKEPTIC",
+    });
+    setup.gateway.stakeRegistrations.set(digest, chainRegistration(preparation));
+
+    await expect(
+      setup.engine.confirmStake({ reservationId: "no-such-reservation", digest }),
+    ).rejects.toThrow(StakeReservationNotFoundError);
+
+    setup.setNow(setup.now() + STAKE_RESERVATION_TTL_MS + 1);
+    await expect(
+      setup.engine.confirmStake({ reservationId: preparation.reservationId, digest }),
+    ).rejects.toThrow(StakeReservationNotFoundError);
+    await expect(
+      createRepository(setup.db).getStakeReservation(preparation.reservationId),
+    ).resolves.toMatchObject({ status: "EXPIRED" });
+  });
+
+  it("reports an unreadable transaction as a chain read failure", async () => {
+    const setup = await registrationSetup({ verifierResult: true });
+    const preparation = await setup.engine.prepareStake({
+      stakerAddress,
+      modelId: "model-a",
+      role: "SKEPTIC",
+    });
+
+    await expect(
+      setup.engine.confirmStake({ reservationId: preparation.reservationId, digest }),
+    ).rejects.toThrow(ChainReadError);
+  });
+
+  it("routes a staked seat's jury rewards to its staker", async () => {
+    const setup = await registrationSetup({ verifierResult: true });
+    const preparation = await setup.engine.prepareStake({
+      stakerAddress,
+      modelId: "model-a",
+      role: "SKEPTIC",
+    });
+    const registration = chainRegistration(preparation);
+    setup.gateway.stakeRegistrations.set(digest, registration);
+    await setup.engine.confirmStake({
+      reservationId: preparation.reservationId,
+      digest,
+    });
+    const repository = createRepository(setup.db);
+    // REASON_JURY_REWARD is 2 in settlement.move; the operational key never
+    // receives the seat's rewards, its staker does.
+    await repository.savePayoutTicket({
+      payoutTicketId: fakeId("ticket:staker"),
+      claimId: fakeId("claim:staked"),
+      recipient: stakerAddress,
+      amount: "7000",
+      coinType: "0x2::sui::SUI",
+      reason: 2,
+      consumed: false,
+      createdTransactionDigest: digest,
+      createdAt: "2026-08-27T00:00:00.000Z",
+      updatedAt: "2026-08-27T00:00:00.000Z",
+    });
+
+    const listed = await setup.engine.listAgents();
+
+    expect(
+      listed.find((agent) => agent.agentProfileId === registration.agentProfileId)
+        ?.earnedMist,
+    ).toBe("7000");
+    // The seeded seat has no staker, so its own owner still collects.
+    expect(
+      listed.find((agent) => agent.agentProfileId !== registration.agentProfileId)
+        ?.earnedMist,
+    ).toBe("0");
+  });
+});
+
 /**
  * A signature the SDK parses as the ZkLogin scheme. The proof is meaningless:
  * only the scheme flag matters, because the injected verifier stands in for the
@@ -2917,6 +3305,7 @@ async function registrationSetup(options: {
   const verify = vi.fn(async () => options.verifierResult);
   const initialAgentCount = options.initialAgentCount ?? 1;
   const walrus = createLocalWalrusStore(join(directory, "walrus"));
+  let nowMs = Date.parse("2026-08-27T00:00:00.000Z");
   const engine = await createEngine({
     network: "localnet",
     manifestPath,
@@ -2929,10 +3318,21 @@ async function registrationSetup(options: {
       .slice(0, initialAgentCount)
       .map((agent, index) => toEngineAgent(agent, index)),
     ...(options.realVerifier ? {} : { zkLoginVerifier: { verify } }),
-    now: () => Date.parse("2026-08-27T00:00:00.000Z"),
+    now: () => nowMs,
     sleep: async () => undefined,
   });
-  return { engine, db, gateway, verify, walrus };
+  return {
+    engine,
+    db,
+    gateway,
+    verify,
+    walrus,
+    signers,
+    now: () => nowMs,
+    setNow: (value: number) => {
+      nowMs = value;
+    },
+  };
 }
 
 function testSignerRegistry(count: number): SignerRegistry {

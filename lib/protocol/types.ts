@@ -80,6 +80,10 @@ export type AgentManifest = {
   publicKey: string;
   registeredAtMs: number;
   registeredCheckpoint: number;
+  /** Account that posted the seat's bond and receives its jury rewards. */
+  stakerAddress?: HexString;
+  /** Decimal-string MIST the staker posted as the seat's bond. */
+  stakeMist?: string;
 };
 
 export type InferenceRunStatus =

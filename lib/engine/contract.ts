@@ -378,11 +378,16 @@ export type AgentDirectoryEntry = {
   /** Engine-recorded off-chain backing signal. See AgentBackingStatus. */
   backing: AgentBackingStatus;
   trackRecord: AgentTrackRecord;
+  /** Account that posted this seat's bond; absent on seats the operator posted. */
+  staker?: string;
+  /** Decimal-string MIST the staker posted as the bond. */
+  stakeMist?: string;
   /**
    * Decimal-string BigInt sum of u64 mist in payout_tickets for reason 2
-   * (settlement.move REASON_JURY_REWARD) whose recipient matches this owner
-   * case-insensitively. Tickets count when awarded on chain, whether withdrawn
-   * or not, so this is lifetime jury rewards and not a live wallet balance.
+   * (settlement.move REASON_JURY_REWARD) whose recipient matches this seat's
+   * owner or its staker, case-insensitively. Tickets count when awarded on
+   * chain, whether withdrawn or not, so this is lifetime jury rewards and not
+   * a live wallet balance.
    */
   earnedMist: string;
 };
@@ -420,6 +425,59 @@ export type ZkBackedRegistrationResult = {
   humanBackingHash: `0x${string}`;
   backingKind: StakedAgentBackingKind;
   digest: string;
+};
+
+/**
+ * Real stake, step one. The engine reserves a signing slot, writes the seat's
+ * manifest document to Walrus, and hands back everything the staker's wallet
+ * needs to build the one transaction that posts the bond. The reservation
+ * expires, so an abandoned prepare returns its slot to the pool.
+ */
+export type StakePreparationRequest = {
+  /** Canonical lowercase 32-byte Sui address of the staking account. */
+  stakerAddress: string;
+  /** Model id from the release manifest catalog. */
+  modelId: string;
+  /** Role label, e.g. SKEPTIC / SOURCE_AUTHENTICITY / INVESTIGATOR. */
+  role: string;
+};
+
+export type StakePreparation = {
+  reservationId: string;
+  expiresAt: string;
+  target: {
+    packageId: string;
+    registryObjectId: string;
+    clockObjectId: string;
+  };
+  /** register_staked_agent arguments, in the order the entry function takes them. */
+  args: {
+    manifestHash: HexString;
+    manifestBlobId: string;
+    modelHash: HexString;
+    roleHash: HexString;
+    stakerHash: HexString;
+    operationalOwner: HexString;
+  };
+  /** Decimal MIST the bond must reach; agent_registry MIN_STAKE_MIST. */
+  minStakeMist: string;
+};
+
+export type StakeConfirmationRequest = {
+  reservationId: string;
+  digest: string;
+};
+
+/** Real stake, step two: the settled transaction, read back and recorded. */
+export type StakeConfirmation = {
+  agentProfileId: string;
+  staker: string;
+  stakeMist: string;
+  digest: string;
+  backingKind: "WALLET_STAKED";
+  operationalOwner: string;
+  /** Whether the seat's signing key got its gas float; never fails the confirm. */
+  gasFloat: "funded" | "skipped" | "failed";
 };
 
 /** One model family's latest health probe (public "weather"). */
@@ -480,6 +538,10 @@ export interface Engine {
   registerZkBackedAgent(
     req: ZkBackedRegistrationRequest,
   ): Promise<ZkBackedRegistrationResult>;
+  /** Reserve a signing slot and publish the seat's manifest for a real stake. */
+  prepareStake(req: StakePreparationRequest): Promise<StakePreparation>;
+  /** Read the staker's settled transaction, bind the slot, record the seat. */
+  confirmStake(req: StakeConfirmationRequest): Promise<StakeConfirmation>;
   claimCreate(req: ClaimCreateRequest): Promise<{ claimId: string; digest: string }>;
   propose(claimId: string, outcome: VoteOutcome): Promise<TxResult>;
   challenge(claimId: string, reason: ChallengeReason): Promise<TxResult>;

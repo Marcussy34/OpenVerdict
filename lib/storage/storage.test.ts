@@ -10,6 +10,7 @@ import {
   type GonkaWeatherRecord,
   type InferenceRunRecord,
   type RunProofRecord,
+  type StakeReservationRecord,
   type VerificationAttemptRecord,
 } from "./index";
 
@@ -461,4 +462,86 @@ describe("weather and submission queue", () => {
       repository.listFactCheckQueueItems("QUEUED"),
     ).resolves.toEqual([second]);
   });
+
+  it("round trips stake reservations and upserts them by reservation id", async () => {
+    const repository = await testRepository();
+    const reservation = stakeReservation();
+
+    await repository.saveStakeReservation(reservation);
+    await expect(
+      repository.getStakeReservation(reservation.reservationId),
+    ).resolves.toEqual(reservation);
+
+    const confirmed: StakeReservationRecord = {
+      ...reservation,
+      status: "CONFIRMED",
+      digest: "digest-1",
+      agentProfileId: `0x${"33".repeat(32)}`,
+      stakeMist: "100000000",
+      gasFloat: "funded",
+    };
+    await repository.saveStakeReservation(confirmed);
+    await expect(
+      repository.getStakeReservation(reservation.reservationId),
+    ).resolves.toEqual(confirmed);
+    await expect(
+      repository.getStakeReservation("missing-reservation"),
+    ).resolves.toBeUndefined();
+  });
+
+  it("lists only pending reservations that have not expired, oldest first", async () => {
+    const repository = await testRepository();
+    const live = stakeReservation({
+      reservationId: "reservation-live",
+      createdAt: "2026-09-04T00:01:00.000Z",
+      expiresAt: "2026-09-04T00:16:00.000Z",
+    });
+    const older = stakeReservation({
+      reservationId: "reservation-older",
+      createdAt: "2026-09-04T00:00:00.000Z",
+      expiresAt: "2026-09-04T00:15:00.000Z",
+    });
+    const stale = stakeReservation({
+      reservationId: "reservation-stale",
+      createdAt: "2026-09-03T00:00:00.000Z",
+      expiresAt: "2026-09-03T00:15:00.000Z",
+    });
+    const confirmed = stakeReservation({
+      reservationId: "reservation-confirmed",
+      status: "CONFIRMED",
+      expiresAt: "2026-09-04T00:20:00.000Z",
+    });
+
+    for (const record of [live, older, stale, confirmed]) {
+      await repository.saveStakeReservation(record);
+    }
+
+    await expect(
+      repository.listPendingStakeReservations("2026-09-04T00:05:00.000Z"),
+    ).resolves.toEqual([older, live]);
+  });
 });
+
+function stakeReservation(
+  overrides: Partial<StakeReservationRecord> = {},
+): StakeReservationRecord {
+  return {
+    reservationId: "reservation-1",
+    stakerAddress: `0x${"ab".repeat(32)}`,
+    slotIndex: 7,
+    operationalOwner: `0x${"cd".repeat(32)}`,
+    modelId: "model-a",
+    role: "SKEPTIC",
+    manifestHash: `0x${"11".repeat(32)}`,
+    manifestBlobId: "blob-1",
+    documentVersion: "6",
+    promptHash: `0x${"22".repeat(32)}`,
+    toolPolicyHash: `0x${"44".repeat(32)}`,
+    evidencePolicyHash: `0x${"55".repeat(32)}`,
+    stakerHash: `0x${"66".repeat(32)}`,
+    status: "PENDING",
+    createdAt: "2026-09-04T00:00:00.000Z",
+    expiresAt: "2026-09-04T00:15:00.000Z",
+    ...overrides,
+  };
+}

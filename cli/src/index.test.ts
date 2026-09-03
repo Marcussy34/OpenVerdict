@@ -203,6 +203,13 @@ function fakeEngine(): Engine {
       backingKind: "ZKLOGIN_BACKED",
       digest: "digest-register",
     }),
+    // Staking runs through the web app and pnpm stake:seat, never the CLI.
+    prepareStake: async () => {
+      throw new Error("fake engine: prepareStake is not implemented");
+    },
+    confirmStake: async () => {
+      throw new Error("fake engine: confirmStake is not implemented");
+    },
     claimCreate: async () => ({ claimId: "0xclaim", digest: "digest-create" }),
     propose: async () => ({ digest: "digest-propose" }),
     challenge: async () => ({ digest: "digest-challenge" }),

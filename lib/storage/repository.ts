@@ -22,6 +22,7 @@ import type {
   RoundTallyRecord,
   RunApprovalRecord,
   RunProofRecord,
+  StakeReservationRecord,
   VerificationAttemptRecord,
   VerificationAttemptStatus,
   VotePackageRecord,
@@ -814,6 +815,53 @@ export class Repository {
       [agentProfileId],
     );
     return records[0];
+  }
+
+  async saveStakeReservation(record: StakeReservationRecord): Promise<void> {
+    await saveRecord(this.db, "stake_reservations", ["reservation_id"], {
+      reservation_id: record.reservationId,
+      staker_address: record.stakerAddress,
+      slot_index: record.slotIndex,
+      operational_owner: record.operationalOwner,
+      model_id: record.modelId,
+      role: record.role,
+      manifest_hash: record.manifestHash,
+      manifest_blob_id: record.manifestBlobId,
+      document_version: record.documentVersion,
+      prompt_hash: record.promptHash,
+      tool_policy_hash: record.toolPolicyHash,
+      table_vote_prompt_hash: record.tableVotePromptHash,
+      evidence_policy_hash: record.evidencePolicyHash,
+      staker_hash: record.stakerHash,
+      status: record.status,
+      created_at: record.createdAt,
+      expires_at: record.expiresAt,
+      digest: record.digest,
+      agent_profile_id: record.agentProfileId,
+      record_json: json(record),
+    });
+  }
+
+  async getStakeReservation(
+    reservationId: string,
+  ): Promise<StakeReservationRecord | undefined> {
+    return getRecord<StakeReservationRecord>(
+      this.db,
+      "stake_reservations",
+      "reservation_id = $1",
+      [reservationId],
+    );
+  }
+
+  /** Live holds only: an expired reservation frees its slot again. */
+  async listPendingStakeReservations(
+    nowIso: string,
+  ): Promise<StakeReservationRecord[]> {
+    return listRecords<StakeReservationRecord>(
+      this.db,
+      "SELECT record_json FROM stake_reservations WHERE status = 'PENDING' AND expires_at > $1 ORDER BY created_at",
+      [nowIso],
+    );
   }
 
   async savePayoutTicket(record: PayoutTicketRecord): Promise<void> {

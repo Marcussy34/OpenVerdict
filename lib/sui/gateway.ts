@@ -1,4 +1,7 @@
+import { Transaction } from "@mysten/sui/transactions";
+import { fromBase64 } from "@mysten/sui/utils";
 import type { TxResult } from "../engine/contract";
+import { toHex } from "../protocol/hash";
 import {
   buildAcceptJurySeatTransaction,
   buildAdvancePhaseTransaction,
@@ -39,9 +42,12 @@ import type {
   GatewayBindEvidenceInput,
   GatewayCommitVoteInput,
   GatewayCreateClaimInput,
+  GatewayFundAddressInput,
+  GatewayFundAddressResult,
   GatewayRevealVoteInput,
   RevealVoteResult,
   RunApprovalResult,
+  StakeRegistrationRead,
   SuiAgentIdentity,
   SuiGateway,
   SuiGatewayHealth,
@@ -112,6 +118,117 @@ export class RealSuiGateway implements SuiGateway {
     const event = findEvent(result.moveEvents, "AgentManifestUpdated");
     const version = integerValue(event?.json?.version);
     return { ...txResult(result), ...(version === undefined ? {} : { version }) };
+  }
+
+  /**
+   * Read one staked registration back from its digest. Binding happens here,
+   * exactly the way registerAgent binds after it executes: the staker signs
+   * and pays, so the engine only ever sees the settled transaction, and it
+   * still needs the slot bound before it can sign this seat's votes.
+   */
+  async readStakeRegistration(digest: string): Promise<StakeRegistrationRead> {
+    const settled = await this.#client.core.waitForTransaction({
+      digest,
+      include: { effects: true, events: true, objectTypes: true },
+    });
+    if (settled.$kind === "FailedTransaction") {
+      throw new Error(`stake transaction ${digest} failed on chain`);
+    }
+    const value = settled.Transaction;
+    const events = (value.events ?? []).map((event) => ({
+      packageId: event.packageId,
+      module: event.module,
+      eventType: event.eventType,
+      sender: event.sender,
+      json: event.json,
+    }));
+    const staked = findEvent(events, "AgentStaked");
+    if (!staked) {
+      throw new Error(`stake transaction ${digest} emitted no AgentStaked event`);
+    }
+    const registered = findEvent(events, "AgentRegistered");
+    if (!registered) {
+      throw new Error(
+        `stake transaction ${digest} emitted no AgentRegistered event`,
+      );
+    }
+    const agentProfileId =
+      optionalId(staked.json?.agent_profile_id) ??
+      optionalId(staked.json?.agentProfileId);
+    const operationalOwner =
+      optionalId(staked.json?.operational_owner) ??
+      optionalId(staked.json?.operationalOwner);
+    const amountMist = decimalString(staked.json?.amount);
+    // The AgentStaked event names the staker; the envelope sender is the same
+    // account, because gas sponsorship only replaces the gas owner.
+    const sender =
+      optionalId(staked.json?.staker) ?? staked.sender ?? registered.sender;
+    const manifestHash =
+      byteVectorHex(registered.json?.manifest_hash) ??
+      byteVectorHex(registered.json?.manifestHash);
+    if (!agentProfileId || !operationalOwner || amountMist === undefined) {
+      throw new Error(`AgentStaked in ${digest} is missing required fields`);
+    }
+    if (!sender || !manifestHash) {
+      throw new Error(`AgentRegistered in ${digest} is missing required fields`);
+    }
+    const agentCapId = createdObjectOfType(value, "AgentCap");
+    if (!agentCapId) {
+      throw new Error(`stake transaction ${digest} created no AgentCap`);
+    }
+    // A slot whose key this process does not hold is not an error here: the
+    // seat still exists on chain, and agentForProfile re-binds on demand.
+    try {
+      this.#signers.bindAgentProfile({
+        agentProfileId,
+        agentCapId,
+        owner: operationalOwner,
+      });
+    } catch (error) {
+      if (!(error instanceof SignerRegistryError)) throw error;
+    }
+    return {
+      sender,
+      agentProfileId,
+      agentCapId,
+      operationalOwner,
+      amountMist,
+      manifestHash,
+    };
+  }
+
+  /**
+   * Send a fixed SUI float from the operator to a staked seat's signing key so
+   * it can pay for its own commits and reveals. Skips when the seat already
+   * holds `minBalanceMist`.
+   */
+  async fundAddress(
+    input: GatewayFundAddressInput,
+  ): Promise<GatewayFundAddressResult> {
+    const operator = this.#signers.getOperator();
+    const { balance } = await this.#client.core.getBalance({
+      owner: input.address,
+      coinType: "0x2::sui::SUI",
+    });
+    const balanceMist = String(balance.balance);
+    if (
+      input.minBalanceMist !== undefined &&
+      BigInt(balanceMist) >= BigInt(input.minBalanceMist)
+    ) {
+      return { funded: false, balanceMist };
+    }
+    const amount = BigInt(input.amountMist);
+    if (amount <= 0n) throw new RangeError("fundAddress amount must be positive");
+    // Built here rather than in builders.ts: this is a plain SUI transfer with
+    // no OpenVerdict move call, so it belongs to the gateway, not the package.
+    const result = await executeAndWait(this.#client, operator, () => {
+      const tx = new Transaction();
+      const [coin] = tx.splitCoins(tx.gas, [tx.pure.u64(amount)]);
+      if (!coin) throw new Error("split did not produce a gas float coin");
+      tx.transferObjects([coin], tx.pure.address(input.address));
+      return tx;
+    });
+    return { funded: true, balanceMist, digest: result.digest };
   }
 
   async createClaim(input: GatewayCreateClaimInput): Promise<ClaimCreationResult> {
@@ -614,6 +731,48 @@ function findEvent(
 
 function eventHasName(event: ExecutedMoveEvent, name: string): boolean {
   return event.eventType.split("::").at(-1)?.split("<", 1)[0] === name;
+}
+
+/** The first object this transaction created whose type ends in `structName`. */
+function createdObjectOfType(
+  value: {
+    effects?: { changedObjects: Array<{ objectId: string; idOperation: string }> } | undefined;
+    objectTypes?: Record<string, string> | undefined;
+  },
+  structName: string,
+): string | undefined {
+  const objectTypes = value.objectTypes ?? {};
+  for (const object of value.effects?.changedObjects ?? []) {
+    if (object.idOperation !== "Created") continue;
+    const type = objectTypes[object.objectId];
+    if (type && type.split("::").at(-1)?.split("<", 1)[0] === structName) {
+      return object.objectId;
+    }
+  }
+  return undefined;
+}
+
+/**
+ * A Move `vector<u8>` as 0x-hex. Transports disagree on the JSON shape: gRPC
+ * sends base64, JSON-RPC an array of byte numbers, and either may already have
+ * hex, so all three are accepted and anything else fails closed.
+ */
+function byteVectorHex(value: unknown): `0x${string}` | undefined {
+  if (Array.isArray(value)) {
+    if (!value.every((byte) => Number.isInteger(byte) && byte >= 0 && byte <= 255)) {
+      return undefined;
+    }
+    return toHex(Uint8Array.from(value as number[]));
+  }
+  if (typeof value !== "string" || value.length === 0) return undefined;
+  if (/^0x[0-9a-fA-F]+$/.test(value)) {
+    return value.toLowerCase() as `0x${string}`;
+  }
+  try {
+    return toHex(fromBase64(value));
+  } catch {
+    return undefined;
+  }
 }
 
 function idVector(value: unknown): string[] {

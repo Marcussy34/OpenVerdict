@@ -10,9 +10,12 @@ import type {
   GatewayBindEvidenceInput,
   GatewayCommitVoteInput,
   GatewayCreateClaimInput,
+  GatewayFundAddressInput,
+  GatewayFundAddressResult,
   GatewayRevealVoteInput,
   RevealVoteResult,
   RunApprovalResult,
+  StakeRegistrationRead,
   SuiAgentIdentity,
   SuiGateway,
   SuiGatewayHealth,
@@ -72,6 +75,40 @@ export class FakeSuiGateway implements SuiGateway {
     agent.roleHash = input.roleHash;
     agent.version = (agent.version ?? 1) + 1;
     return { ...this.tx("update_agent_manifest"), version: agent.version };
+  }
+
+  /**
+   * Scripted staked registrations, keyed by digest. Engine tests push what the
+   * chain would have said before they call confirmStake.
+   */
+  readonly stakeRegistrations = new Map<string, StakeRegistrationRead>();
+  /** Every fundAddress call, plus the balance each address reports. */
+  readonly fundings: GatewayFundAddressInput[] = [];
+  balancesMist = new Map<string, string>();
+  /** Set to make the next fundAddress throw, the way a broken operator would. */
+  fundAddressError: Error | undefined;
+
+  async readStakeRegistration(digest: string): Promise<StakeRegistrationRead> {
+    const registration = this.stakeRegistrations.get(digest);
+    if (!registration) {
+      throw new Error(`fake chain has no stake transaction ${digest}`);
+    }
+    return registration;
+  }
+
+  async fundAddress(
+    input: GatewayFundAddressInput,
+  ): Promise<GatewayFundAddressResult> {
+    this.fundings.push(input);
+    if (this.fundAddressError) throw this.fundAddressError;
+    const balanceMist = this.balancesMist.get(input.address) ?? "0";
+    if (
+      input.minBalanceMist !== undefined &&
+      BigInt(balanceMist) >= BigInt(input.minBalanceMist)
+    ) {
+      return { funded: false, balanceMist };
+    }
+    return { funded: true, balanceMist, ...this.tx("fund_address") };
   }
 
   async createClaim(input: GatewayCreateClaimInput) {

@@ -45,6 +45,8 @@ async function postStake(body: unknown) {
 beforeEach(() => {
   serverMocks.getServerEngine.mockReset();
   vi.stubEnv("OPENVERDICT_PUBLIC_WRITES", "enabled");
+  // The operator posts the bond on this path, so it is opt-in per deployment.
+  vi.stubEnv("OPENVERDICT_FREE_SEATS", "enabled");
 });
 
 afterEach(() => {
@@ -120,6 +122,26 @@ describe("agent stake route", () => {
     await expect(response.json()).resolves.toMatchObject({
       error: "validation_error",
     });
+  });
+
+  it("answers 403 free_seats_disabled when the flag is off", async () => {
+    vi.stubEnv("OPENVERDICT_FREE_SEATS", "");
+    const engine = engineFixture();
+    serverMocks.getServerEngine.mockResolvedValue(engine);
+
+    const response = await postStake({
+      address: STAKER_ADDRESS,
+      signature: "c2lnbmF0dXJl",
+      modelId: "model-a",
+      role: "INVESTIGATOR",
+    });
+
+    expect(response.status).toBe(403);
+    await expect(response.json()).resolves.toEqual({
+      error: "free_seats_disabled",
+      message: "stake on a seat through /agents",
+    });
+    expect(engine.registerZkBackedAgent).not.toHaveBeenCalled();
   });
 
   it("reports an unavailable verifier as 503 without changing the error code", async () => {

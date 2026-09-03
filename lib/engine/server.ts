@@ -52,6 +52,30 @@ export class EngineNotWiredError extends Error {
   }
 }
 
+/** Slots 0 to 6 belong to the demo agents, so a smaller pool would unseat them. */
+export const MIN_AGENT_SLOTS = 7;
+export const DEFAULT_AGENT_SLOTS = 16;
+
+/**
+ * How many operational signing slots the engine derives from the seed. Every
+ * slot address is a pure function of the seed and its index, so growing the
+ * pool never moves an existing seat: a restarted engine still finds a staked
+ * seat's owner among the derived slots and re-binds it by address.
+ */
+export function readAgentSlots(
+  env: Record<string, string | undefined> = process.env,
+): number {
+  const raw = env.OPENVERDICT_AGENT_SLOTS?.trim();
+  if (!raw) return DEFAULT_AGENT_SLOTS;
+  const slots = Number(raw);
+  if (!Number.isInteger(slots) || slots < MIN_AGENT_SLOTS) {
+    throw new EngineNotWiredError(
+      `OPENVERDICT_AGENT_SLOTS must be an integer of at least ${MIN_AGENT_SLOTS}`,
+    );
+  }
+  return slots;
+}
+
 /** Build one process-wide engine shared by Next.js API routes and workers. */
 export async function getServerEngine(): Promise<Engine> {
   singleton ??= buildServerEngine().catch((error: unknown) => {
@@ -112,7 +136,7 @@ async function buildServerEngine(): Promise<Engine> {
     throw new Error("FIRECRAWL_API_KEY is required for live juror research");
   }
 
-  const signers = SignerRegistry.fromEnv(process.env, 7);
+  const signers = SignerRegistry.fromEnv(process.env, readAgentSlots(process.env));
   const suiClient = createSuiClients(manifest);
   const sealEscrow = manifest.seal
     ? createSealEscrowService({

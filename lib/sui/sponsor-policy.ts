@@ -6,16 +6,28 @@ import { normalizeSuiAddress } from "@mysten/sui/utils";
  *
  * The gas belongs to the OpenVerdict Shinami fund, so an unchecked kind is a
  * drain: anyone could post any programmable transaction and have us fund it.
- * The allowlist is therefore positive, not a blocklist. Only the demo binary
- * pool entry (plus the coin plumbing the Sui SDK emits to build the stake coin)
- * may appear, and nothing may touch the sponsor's money.
+ * The allowlist is therefore positive, not a blocklist. Only the two app
+ * targets below (plus the coin plumbing the Sui SDK emits to build the stake
+ * coin) may appear, and nothing may touch the sponsor's money.
  */
 
-/** One entry plus its coin plumbing resolves well inside this bound. */
+/** One app call plus its coin plumbing resolves well inside this bound. */
 export const MAX_SPONSORED_COMMANDS = 8;
 
-const POOL_MODULE = "demo_binary_pool";
-const POOL_FUNCTION = "enter";
+/**
+ * The move calls the fund pays for, both in the deployed package: entering the
+ * demo binary pool, and staking on a juror seat. A Google sign-in user can then
+ * stake 0.1 SUI with no gas of their own.
+ */
+const APP_TARGETS: ReadonlyArray<{ module: string; function: string }> = [
+  { module: "demo_binary_pool", function: "enter" },
+  { module: "agent_registry", function: "register_staked_agent" },
+];
+
+const APP_TARGET_LABEL = APP_TARGETS.map(
+  (entry) => `${entry.module}::${entry.function}`,
+).join(" or ");
+
 const SUI_FRAMEWORK = normalizeSuiAddress("0x2");
 
 /**
@@ -83,7 +95,7 @@ export function validateSponsoredKind(
   }
 
   const target = normalizeSuiAddress(packageId);
-  let poolEntries = 0;
+  let appCalls = 0;
   for (const command of commands) {
     switch (command.$kind) {
       case "SplitCoins":
@@ -95,10 +107,11 @@ export function validateSponsoredKind(
         const callPackage = normalizeSuiAddress(call.package);
         if (
           callPackage === target &&
-          call.module === POOL_MODULE &&
-          call.function === POOL_FUNCTION
+          APP_TARGETS.some(
+            (entry) => entry.module === call.module && entry.function === call.function,
+          )
         ) {
-          poolEntries += 1;
+          appCalls += 1;
           break;
         }
         if (
@@ -117,8 +130,8 @@ export function validateSponsoredKind(
     }
   }
 
-  if (poolEntries === 0) {
-    return reject(`transaction kind does not call ${POOL_MODULE}::${POOL_FUNCTION}`);
+  if (appCalls === 0) {
+    return reject(`transaction kind does not call ${APP_TARGET_LABEL}`);
   }
   return { ok: true };
 }

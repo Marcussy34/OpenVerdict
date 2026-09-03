@@ -166,6 +166,77 @@ describe("validateSponsoredKind", () => {
     expect(validateSponsoredKind(kind, policy())).toEqual({ ok: true });
   });
 
+  it("accepts a staked seat registration paid for from an owned coin", async () => {
+    const tx = new Transaction();
+    const [stake] = tx.splitCoins(tx.object(tx.objectRef(coinRef("71"))), [
+      tx.pure.u64(100_000_000n),
+    ]);
+    tx.moveCall({
+      target: `${PACKAGE_ID}::agent_registry::register_staked_agent`,
+      arguments: [
+        tx.object(tx.sharedObjectRef({ objectId: REGISTRY_ID, initialSharedVersion: 1, mutable: true })),
+        stake!,
+        tx.pure.vector("u8", [1, 2, 3]),
+        tx.pure.vector("u8", [4, 5, 6]),
+        tx.pure.vector("u8", [7, 8, 9]),
+        tx.pure.vector("u8", [10, 11, 12]),
+        tx.pure.vector("u8", [13, 14, 15]),
+        tx.pure.address(SENDER),
+        tx.object(tx.sharedObjectRef({ objectId: CLOCK_ID, initialSharedVersion: 1, mutable: false })),
+      ],
+    });
+
+    expect(validateSponsoredKind(await kindOf(tx), policy())).toEqual({ ok: true });
+  });
+
+  it("accepts the stake with the coin helpers tx.coin emits", async () => {
+    const client = coinClient(
+      [
+        { ...coinRef("72"), balance: "60000000" },
+        { ...coinRef("73"), balance: "60000000" },
+      ],
+      "0",
+    );
+    const tx = new Transaction();
+    const stake = tx.coin({
+      balance: 100_000_000n,
+      type: COIN_TYPE,
+      useGasCoin: false,
+    });
+    tx.moveCall({
+      target: `${PACKAGE_ID}::agent_registry::register_staked_agent`,
+      arguments: [
+        tx.sharedObjectRef({ objectId: REGISTRY_ID, initialSharedVersion: 1, mutable: true }),
+        stake,
+        tx.pure.vector("u8", [1, 2, 3]),
+        tx.pure.vector("u8", [4, 5, 6]),
+        tx.pure.vector("u8", [7, 8, 9]),
+        tx.pure.vector("u8", [10, 11, 12]),
+        tx.pure.vector("u8", [13, 14, 15]),
+        tx.pure.address(SENDER),
+        tx.sharedObjectRef({ objectId: CLOCK_ID, initialSharedVersion: 1, mutable: false }),
+      ],
+    });
+    tx.setSender(SENDER);
+
+    const kind = toBase64(await tx.build({ client, onlyTransactionKind: true }));
+
+    expect(validateSponsoredKind(kind, policy())).toEqual({ ok: true });
+  });
+
+  it("rejects another agent_registry function in our own package", async () => {
+    const tx = new Transaction();
+    tx.moveCall({
+      target: `${PACKAGE_ID}::agent_registry::complete_unstake`,
+      arguments: [tx.object(tx.objectRef(coinRef("74")))],
+    });
+
+    expect(validateSponsoredKind(await kindOf(tx), policy())).toEqual({
+      ok: false,
+      reason: "move call agent_registry::complete_unstake is not sponsorable",
+    });
+  });
+
   it("rejects a move call into another package", async () => {
     const tx = new Transaction();
     tx.moveCall({
@@ -283,13 +354,14 @@ describe("validateSponsoredKind", () => {
     });
   });
 
-  it("rejects coin plumbing with no pool entry at all", async () => {
+  it("rejects coin plumbing with no app target at all", async () => {
     const tx = new Transaction();
     tx.splitCoins(tx.object(tx.objectRef(coinRef("67"))), [tx.pure.u64(1n)]);
 
     expect(validateSponsoredKind(await kindOf(tx), policy())).toEqual({
       ok: false,
-      reason: "transaction kind does not call demo_binary_pool::enter",
+      reason:
+        "transaction kind does not call demo_binary_pool::enter or agent_registry::register_staked_agent",
     });
   });
 

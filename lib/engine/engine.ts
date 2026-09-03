@@ -101,6 +101,7 @@ import {
   type RevealRecord,
   type RoundTallyRecord,
   type RunApprovalRecord,
+  type StakeReservationRecord,
   type VerificationAttemptRecord,
   type VotePackageRecord,
   type RunProofRecord,
@@ -112,6 +113,7 @@ import {
   outcomeLabel,
   toChainRetentionEpoch,
   type ReleaseManifest,
+  type StakeRegistrationRead,
   type SuiGateway,
 } from "../sui";
 import type { SealEscrowService } from "../seal/escrow";
@@ -141,6 +143,10 @@ import type {
   ResolutionEventSource,
   ResolutionEventVisibility,
   RunProofResult,
+  StakeConfirmation,
+  StakeConfirmationRequest,
+  StakePreparation,
+  StakePreparationRequest,
   StakedAgentBackingKind,
   TxResult,
   WeatherFamily,
@@ -150,10 +156,13 @@ import type {
 } from "./contract";
 import type { EngineAgentConfig, EngineConfig } from "./config";
 import {
+  ChainReadError,
   ClaimNotFoundError,
+  EngineCapacityError,
   EngineNoEvidenceError,
   EngineStateError,
   EngineValidationError,
+  StakeReservationNotFoundError,
   ZkLoginVerificationError,
 } from "./errors";
 import {
@@ -183,7 +192,17 @@ const MAX_FACT_CHECK_TEXT_LENGTH = 20_000;
 const ZKLOGIN_VERIFICATION_PROVIDER = "zklogin:enoki";
 /** Every non-zkLogin wallet stakes by signing a personal message. */
 const WALLET_VERIFICATION_PROVIDER = "sui-wallet-personal-message";
+/** A seat whose bond was really posted on chain by its staker. */
+const WALLET_STAKE_VERIFICATION_PROVIDER = "sui-wallet-stake";
 const DEMO_ALLOWLIST_VERIFICATION_PROVIDER = "demo-allowlist";
+/** agent_registry MIN_STAKE_MIST: 0.1 SUI. */
+export const MIN_STAKE_MIST = 100_000_000n;
+/** A prepared slot is held this long before it returns to the free pool. */
+export const STAKE_RESERVATION_TTL_MS = 15 * 60_000;
+/** A staked seat signs its own commits and reveals out of this float. */
+export const SEAT_GAS_FLOAT_MIST = 300_000_000n;
+/** Below this the seat gets topped up on confirm; above it, nothing moves. */
+export const SEAT_GAS_FLOAT_MIN_MIST = 200_000_000n;
 // move/openverdict/sources/settlement.move defines REASON_JURY_REWARD as 2.
 const JURY_REWARD_REASON = 2;
 const CLAIM_STATEMENT_SOURCE_URL = "urn:openverdict:claim-statement";
@@ -234,6 +253,8 @@ export function agentBackingStatus(
     case ZKLOGIN_VERIFICATION_PROVIDER:
       return { kind: "ZKLOGIN", label: humanVerificationProvider };
     case WALLET_VERIFICATION_PROVIDER:
+    // A real stake is still a wallet-owned seat; the label tells them apart.
+    case WALLET_STAKE_VERIFICATION_PROVIDER:
       return { kind: "WALLET", label: humanVerificationProvider };
     // Two historical spellings: the engine's registration path writes
     // "demo-allowlist", the testnet seed documents carry the longer form.
@@ -2364,20 +2385,33 @@ class OpenVerdictEngine implements Engine {
       );
     }
 
-    return agents.map((record) => ({
-      agentProfileId: record.manifest.agentProfileId,
-      owner: record.manifest.owner,
-      modelId: record.manifest.modelId,
-      role: record.role,
-      manifestHash: record.manifest.manifestHash,
-      active: record.active,
-      reputation: record.reputation,
-      backing: agentBackingStatus(record.manifest.humanVerificationProvider),
-      trackRecord: trackRecordFor(trackRecords, record.manifest.agentProfileId),
-      earnedMist: String(
-        earnedMistByOwner.get(record.manifest.owner.toLowerCase()) ?? 0n,
-      ),
-    }));
+    return agents.map((record) => {
+      const staker = record.manifest.stakerAddress;
+      // A staked seat's rewards go to its staker, an older seat's to its owner.
+      // Both are summed, and a set keeps a self-staked seat counted once.
+      const recipients = new Set([record.manifest.owner.toLowerCase()]);
+      if (staker) recipients.add(staker.toLowerCase());
+      let earnedMist = 0n;
+      for (const recipient of recipients) {
+        earnedMist += earnedMistByOwner.get(recipient) ?? 0n;
+      }
+      return {
+        agentProfileId: record.manifest.agentProfileId,
+        owner: record.manifest.owner,
+        modelId: record.manifest.modelId,
+        role: record.role,
+        manifestHash: record.manifest.manifestHash,
+        active: record.active,
+        reputation: record.reputation,
+        backing: agentBackingStatus(record.manifest.humanVerificationProvider),
+        trackRecord: trackRecordFor(trackRecords, record.manifest.agentProfileId),
+        ...(staker === undefined ? {} : { staker }),
+        ...(record.manifest.stakeMist === undefined
+          ? {}
+          : { stakeMist: record.manifest.stakeMist }),
+        earnedMist: String(earnedMist),
+      };
+    });
   }
 
   /** Proof persistence surface consumed by lib/verify/public-run-proof. */
@@ -3989,21 +4023,7 @@ class OpenVerdictEngine implements Engine {
         : WALLET_VERIFICATION_PROVIDER;
     // One account may stake on several seats, so nothing here rejects a repeat
     // staker hash: the Move draw rule seats at most one of them per committee.
-    const agents = await this.#repository.listAgentManifests();
-
-    // Demo signers are a fixed deterministic pool. Never reuse a slot whose
-    // operational address already appears in a persisted agent manifest.
-    const usedOwners = new Set(
-      agents.map((agent) => agent.manifest.owner.toLowerCase()),
-    );
-    const slot = this.#operationalAgentSlots.find(
-      (candidate) => !usedOwners.has(candidate.address.toLowerCase()),
-    );
-    if (!slot) {
-      throw new EngineValidationError(
-        `operational agent signer capacity exhausted (${this.#operationalAgentSlots.length} deterministic slots configured)`,
-      );
-    }
+    const slot = await this.allocateOperationalSlot();
 
     // Persist only the pseudonymous staker hash; the staking address and its
     // signature are used for authentication and deliberately not stored.
@@ -4080,6 +4100,248 @@ class OpenVerdictEngine implements Engine {
       backingKind,
       digest: result.digest,
     };
+  }
+
+  /**
+   * First free operational signing slot. Slots are a fixed deterministic pool,
+   * so a slot is taken while its address owns a persisted seat or while a live
+   * stake reservation still holds it. An expired reservation frees its slot.
+   */
+  private async allocateOperationalSlot(): Promise<{
+    address: string;
+    index: number;
+  }> {
+    const [agents, pending] = await Promise.all([
+      this.#repository.listAgentManifests(),
+      this.#repository.listPendingStakeReservations(this.isoNow()),
+    ]);
+    const usedOwners = new Set([
+      ...agents.map((agent) => agent.manifest.owner.toLowerCase()),
+      ...pending.map((reservation) => reservation.operationalOwner.toLowerCase()),
+    ]);
+    const slot = this.#operationalAgentSlots.find(
+      (candidate) => !usedOwners.has(candidate.address.toLowerCase()),
+    );
+    if (!slot) {
+      throw new EngineCapacityError(
+        `operational agent signer capacity exhausted (${this.#operationalAgentSlots.length} deterministic slots configured)`,
+      );
+    }
+    return slot;
+  }
+
+  /**
+   * Real stake, step one. Validates the seat's model and role, reserves a
+   * signing slot under the registration lock, publishes the seat's manifest
+   * document to Walrus, and returns the register_staked_agent arguments the
+   * staker's wallet signs. Nothing is on chain yet.
+   */
+  async prepareStake(req: StakePreparationRequest): Promise<StakePreparation> {
+    validateStakePreparationRequest(req, this.#manifest);
+    // The staker hash is blake2b-256 of the staking address, exactly as the
+    // signed-message path derives it, so the Move draw rule sees one shape.
+    const stakerHash = toHex(blake2b256(fromHex(req.stakerAddress)));
+    return this.withRegistrationLock(async () => {
+      const slot = await this.allocateOperationalSlot();
+      const built = buildAgentManifestDocument({
+        network: this.#manifest.network,
+        backingKind: "WALLET_STAKED",
+        humanBackingHash: stakerHash,
+        humanVerificationProvider: WALLET_STAKE_VERIFICATION_PROVIDER,
+        operationalOwner: slot.address as `0x${string}`,
+        role: req.role,
+        modelId: req.modelId,
+        promptSpec: this.#gonka.promptSpec(),
+        toolPolicy: this.#gonka.toolPolicy(),
+        // The document carries the human-readable label; verifiers hash it.
+        evidencePolicyId: EVIDENCE_POLICY_V1_LABEL,
+      });
+      // Same fail-closed check the signed-message path runs: a release manifest
+      // that overrides the evidence policy id needs a matching document label.
+      const enginePolicyId = evidencePolicyId(this.#manifest);
+      if (built.document.evidencePolicyHash !== enginePolicyId) {
+        throw new EngineValidationError(
+          `manifest document evidence policy hash ${built.document.evidencePolicyHash} does not match the engine evidence policy id ${enginePolicyId}`,
+        );
+      }
+      const upload = await this.#walrus.put(built.bytes, {
+        identifier: `agent-${stakerHash.slice(2, 18)}.json`,
+      });
+      const nowMs = this.#now();
+      const reservation: StakeReservationRecord = {
+        reservationId: randomUUID(),
+        stakerAddress: req.stakerAddress,
+        slotIndex: slot.index,
+        operationalOwner: slot.address,
+        modelId: req.modelId,
+        role: req.role,
+        manifestHash: built.manifestHash,
+        manifestBlobId: upload.blobId,
+        documentVersion: built.document.version,
+        promptHash: built.promptHash,
+        toolPolicyHash: built.toolPolicyHash,
+        ...(built.tableVotePromptHash === undefined
+          ? {}
+          : { tableVotePromptHash: built.tableVotePromptHash }),
+        evidencePolicyHash: built.document.evidencePolicyHash,
+        stakerHash,
+        status: "PENDING",
+        createdAt: new Date(nowMs).toISOString(),
+        expiresAt: new Date(nowMs + STAKE_RESERVATION_TTL_MS).toISOString(),
+      };
+      await this.#repository.saveStakeReservation(reservation);
+      return {
+        reservationId: reservation.reservationId,
+        expiresAt: reservation.expiresAt,
+        target: {
+          packageId: this.#manifest.packageId,
+          registryObjectId: this.#manifest.registryObjectId,
+          clockObjectId: this.#manifest.clockObjectId,
+        },
+        args: {
+          manifestHash: built.manifestHash,
+          manifestBlobId: upload.blobId,
+          modelHash: toHex(blake2b256(new TextEncoder().encode(req.modelId))),
+          roleHash: toHex(
+            blake2b256(new TextEncoder().encode(`OPENVERDICT_ROLE_${req.role}`)),
+          ),
+          stakerHash,
+          operationalOwner: slot.address as `0x${string}`,
+        },
+        minStakeMist: MIN_STAKE_MIST.toString(),
+      };
+    });
+  }
+
+  /**
+   * Real stake, step two. Reads the staker's settled transaction, checks it
+   * against the reservation, records the seat, and tops its signing key up with
+   * gas. A replayed confirm returns the stored result instead of writing again.
+   */
+  async confirmStake(req: StakeConfirmationRequest): Promise<StakeConfirmation> {
+    validateStakeConfirmationRequest(req);
+    const reservation = await this.#repository.getStakeReservation(
+      req.reservationId,
+    );
+    if (!reservation) {
+      throw new StakeReservationNotFoundError(req.reservationId);
+    }
+    if (reservation.status === "CONFIRMED") {
+      return storedStakeConfirmation(reservation);
+    }
+    if (
+      reservation.status === "EXPIRED" ||
+      Date.parse(reservation.expiresAt) <= this.#now()
+    ) {
+      if (reservation.status !== "EXPIRED") {
+        await this.#repository.saveStakeReservation({
+          ...reservation,
+          status: "EXPIRED",
+        });
+      }
+      throw new StakeReservationNotFoundError(req.reservationId);
+    }
+
+    let registration: StakeRegistrationRead;
+    try {
+      registration = await this.#gateway.readStakeRegistration(req.digest);
+    } catch (error) {
+      throw new ChainReadError(
+        `stake transaction ${req.digest} could not be read from the chain`,
+        { cause: error },
+      );
+    }
+
+    // Everything below is the reservation's own contract with the chain: a
+    // mismatch means this digest belongs to some other transaction.
+    if (!sameAddress(registration.sender, reservation.stakerAddress)) {
+      throw new EngineValidationError(
+        "the stake transaction was sent by a different account than the reservation",
+      );
+    }
+    if (
+      !sameAddress(registration.operationalOwner, reservation.operationalOwner)
+    ) {
+      throw new EngineValidationError(
+        "the stake transaction names a different operational owner than the reservation",
+      );
+    }
+    if (registration.manifestHash !== reservation.manifestHash) {
+      throw new EngineValidationError(
+        "the stake transaction carries a different manifest hash than the reservation",
+      );
+    }
+    if (BigInt(registration.amountMist) < MIN_STAKE_MIST) {
+      throw new EngineValidationError(
+        `the stake of ${registration.amountMist} MIST is below the ${MIN_STAKE_MIST} MIST minimum`,
+      );
+    }
+
+    const timestamp = this.isoNow();
+    const manifest: AgentManifest = {
+      agentProfileId: registration.agentProfileId as `0x${string}`,
+      owner: registration.operationalOwner as `0x${string}`,
+      humanAttestationHash: reservation.stakerHash as `0x${string}`,
+      humanVerificationProvider: WALLET_STAKE_VERIFICATION_PROVIDER,
+      version: reservation.documentVersion,
+      manifestBlobId: reservation.manifestBlobId,
+      manifestHash: reservation.manifestHash as `0x${string}`,
+      promptHash: reservation.promptHash as `0x${string}`,
+      ...(reservation.tableVotePromptHash === undefined
+        ? {}
+        : { tableVotePromptHash: reservation.tableVotePromptHash as `0x${string}` }),
+      modelId: reservation.modelId,
+      providerId: "gonkarouter",
+      toolPolicyHash: reservation.toolPolicyHash as `0x${string}`,
+      evidencePolicyHash: reservation.evidencePolicyHash as `0x${string}`,
+      publicKey: registration.operationalOwner,
+      registeredAtMs: this.#now(),
+      registeredCheckpoint: registration.checkpoint ?? 0,
+      stakerAddress: registration.sender as `0x${string}`,
+      stakeMist: registration.amountMist,
+    };
+    await this.#repository.saveAgentManifest({
+      manifest,
+      role: reservation.role,
+      agentCapId: registration.agentCapId,
+      active: true,
+      reputation: {},
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    });
+
+    // Closed before the gas float moves, so a second confirm racing this one
+    // replays the stored result instead of sending the operator's SUI twice.
+    const confirmed: StakeReservationRecord = {
+      ...reservation,
+      status: "CONFIRMED",
+      digest: req.digest,
+      agentProfileId: registration.agentProfileId,
+      stakeMist: registration.amountMist,
+    };
+    await this.#repository.saveStakeReservation(confirmed);
+
+    // Funding is bookkeeping around a seat that already exists on chain, so a
+    // dead operator key must never turn a paid stake into a failed confirm.
+    let gasFloat: StakeConfirmation["gasFloat"] = "skipped";
+    try {
+      const funding = await this.#gateway.fundAddress({
+        address: registration.operationalOwner,
+        amountMist: SEAT_GAS_FLOAT_MIST.toString(),
+        minBalanceMist: SEAT_GAS_FLOAT_MIN_MIST.toString(),
+      });
+      gasFloat = funding.funded ? "funded" : "skipped";
+    } catch (error) {
+      gasFloat = "failed";
+      process.stderr.write(
+        `stake: gas float for ${registration.operationalOwner} failed: ${
+          error instanceof Error ? error.message : String(error)
+        }\n`,
+      );
+    }
+    const settled: StakeReservationRecord = { ...confirmed, gasFloat };
+    await this.#repository.saveStakeReservation(settled);
+    return storedStakeConfirmation(settled);
   }
 
   private async withRegistrationLock<T>(operation: () => Promise<T>): Promise<T> {
@@ -5096,6 +5358,86 @@ function validateZkBackedRegistrationRequest(
 
 function isZkLoginAgentRole(role: string): role is ZkLoginAgentRole {
   return ZKLOGIN_AGENT_ROLES.some((candidate) => candidate === role);
+}
+
+type ValidatedStakePreparationRequest = StakePreparationRequest & {
+  stakerAddress: `0x${string}`;
+  role: ZkLoginAgentRole;
+};
+
+function validateStakePreparationRequest(
+  request: StakePreparationRequest,
+  manifest: ReleaseManifest,
+): asserts request is ValidatedStakePreparationRequest {
+  if (
+    typeof request.stakerAddress !== "string" ||
+    !SUI_ADDRESS_PATTERN.test(request.stakerAddress)
+  ) {
+    throw new EngineValidationError(
+      "the staking address must be a canonical lowercase 32-byte Sui address",
+    );
+  }
+  if (
+    typeof request.modelId !== "string" ||
+    !manifest.gonka.models.includes(request.modelId)
+  ) {
+    throw new EngineValidationError(
+      "modelId must be present in the release manifest catalog",
+    );
+  }
+  if (typeof request.role !== "string" || !isZkLoginAgentRole(request.role)) {
+    throw new EngineValidationError(
+      `role must be one of ${ZKLOGIN_AGENT_ROLES.join(", ")}`,
+    );
+  }
+}
+
+/** Sui transaction digests are base58; the bound keeps a stray blob out of SQL. */
+const MAX_TRANSACTION_DIGEST_LENGTH = 64;
+const MAX_RESERVATION_ID_LENGTH = 64;
+
+function validateStakeConfirmationRequest(
+  request: StakeConfirmationRequest,
+): void {
+  if (
+    typeof request.reservationId !== "string" ||
+    request.reservationId.length === 0 ||
+    request.reservationId.length > MAX_RESERVATION_ID_LENGTH
+  ) {
+    throw new EngineValidationError("reservationId must be a bounded string");
+  }
+  if (
+    typeof request.digest !== "string" ||
+    !/^[1-9A-HJ-NP-Za-km-z]{32,}$/.test(request.digest) ||
+    request.digest.length > MAX_TRANSACTION_DIGEST_LENGTH
+  ) {
+    throw new EngineValidationError("digest must be a base58 transaction digest");
+  }
+}
+
+/** Sui addresses are compared case-insensitively; nothing else normalizes. */
+function sameAddress(left: string, right: string): boolean {
+  return left.toLowerCase() === right.toLowerCase();
+}
+
+/** The confirmation a CONFIRMED reservation replays, byte for byte. */
+function storedStakeConfirmation(
+  reservation: StakeReservationRecord,
+): StakeConfirmation {
+  if (!reservation.agentProfileId || !reservation.digest) {
+    throw new EngineStateError(
+      `confirmed stake reservation ${reservation.reservationId} has no recorded transaction`,
+    );
+  }
+  return {
+    agentProfileId: reservation.agentProfileId,
+    staker: reservation.stakerAddress,
+    stakeMist: reservation.stakeMist ?? MIN_STAKE_MIST.toString(),
+    digest: reservation.digest,
+    backingKind: "WALLET_STAKED",
+    operationalOwner: reservation.operationalOwner,
+    gasFloat: reservation.gasFloat ?? "skipped",
+  };
 }
 
 /**

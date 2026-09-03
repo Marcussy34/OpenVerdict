@@ -381,6 +381,34 @@ export const agentManifests = pgTable(
   (table) => [primaryKey({ columns: [table.agentProfileId, table.version] })],
 );
 
+/** Slot held for one staker between prepare and confirm. */
+export const stakeReservations = pgTable(
+  "stake_reservations",
+  {
+    reservationId: text("reservation_id").primaryKey(),
+    stakerAddress: text("staker_address").notNull(),
+    slotIndex: integer("slot_index").notNull(),
+    operationalOwner: text("operational_owner").notNull(),
+    modelId: text("model_id").notNull(),
+    role: text("role").notNull(),
+    manifestHash: text("manifest_hash").notNull(),
+    manifestBlobId: text("manifest_blob_id").notNull(),
+    documentVersion: text("document_version").notNull(),
+    promptHash: text("prompt_hash").notNull(),
+    toolPolicyHash: text("tool_policy_hash").notNull(),
+    tableVotePromptHash: text("table_vote_prompt_hash"),
+    evidencePolicyHash: text("evidence_policy_hash").notNull(),
+    stakerHash: text("staker_hash").notNull(),
+    status: text("status").notNull(),
+    createdAt: text("created_at").notNull(),
+    expiresAt: text("expires_at").notNull(),
+    digest: text("digest"),
+    agentProfileId: text("agent_profile_id"),
+    recordJson: jsonb("record_json").notNull(),
+  },
+  (table) => [index("stake_reservations_status_expires_idx").on(table.status, table.expiresAt)],
+);
+
 export const payoutTickets = pgTable("payout_tickets", {
   payoutTicketId: text("payout_ticket_id").primaryKey(),
   claimId: text("claim_id").notNull(),
@@ -415,5 +443,6 @@ export const storageSchema = {
   resolutionCertificates,
   resolutionEvents,
   agentManifests,
+  stakeReservations,
   payoutTickets,
 };

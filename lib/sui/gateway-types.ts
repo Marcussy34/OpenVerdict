@@ -65,6 +65,38 @@ export interface FinalizeChainResult extends TxResult {
 /** Current Sui epoch and its duration (both from the system state object). */
 export type ChainEpochInfo = { currentEpoch: number; epochDurationMs: number };
 
+/**
+ * What one confirmed `agent_registry::register_staked_agent` transaction says,
+ * read back from its AgentStaked and AgentRegistered events plus the AgentCap
+ * it created. `sender` is the staker: the account that posted the bond and
+ * receives the seat's jury rewards.
+ */
+export interface StakeRegistrationRead {
+  sender: string;
+  agentProfileId: string;
+  agentCapId: string;
+  operationalOwner: string;
+  /** Decimal-string MIST posted as the seat's bond. */
+  amountMist: string;
+  manifestHash: `0x${string}`;
+  checkpoint?: number;
+}
+
+export interface GatewayFundAddressInput {
+  address: string;
+  /** Decimal MIST to transfer from the operator. */
+  amountMist: string | number | bigint;
+  /** Skip the transfer when the address already holds at least this much. */
+  minBalanceMist?: string | number | bigint;
+}
+
+export interface GatewayFundAddressResult {
+  funded: boolean;
+  /** The address's SUI balance in MIST as it was read before funding. */
+  balanceMist: string;
+  digest?: string;
+}
+
 export interface SuiGatewayHealth {
   healthy: boolean;
   latestCheckpoint?: number;
@@ -107,6 +139,10 @@ export interface SuiGateway {
   updateAgentManifest(
     input: UpdateAgentManifestTransactionInput & { agentIndex: number },
   ): Promise<TxResult & { version?: number }>;
+  /** Read one staked registration back from the chain; throws when not found. */
+  readStakeRegistration(digest: string): Promise<StakeRegistrationRead>;
+  /** Top a staked seat's signing key up from the operator's own gas. */
+  fundAddress(input: GatewayFundAddressInput): Promise<GatewayFundAddressResult>;
   createClaim(input: GatewayCreateClaimInput): Promise<ClaimCreationResult>;
   startDirectReview(claimId: string): Promise<TxResult>;
   startChallengedReview(claimId: string): Promise<TxResult>;

@@ -61,6 +61,35 @@ async function poolEntryKind(): Promise<string> {
   return toBase64(await tx.build({ onlyTransactionKind: true }));
 }
 
+/** Same shape the stake card sends: split the bond, register the staked seat. */
+async function stakedSeatKind(): Promise<string> {
+  const tx = new Transaction();
+  const [stake] = tx.splitCoins(
+    tx.objectRef({
+      objectId: `0x${"71".repeat(32)}`,
+      version: "9",
+      digest: "11111111111111111111111111111111",
+    }),
+    [tx.pure.u64(100_000_000n)],
+  );
+  tx.moveCall({
+    target: `${PACKAGE_ID}::agent_registry::register_staked_agent`,
+    arguments: [
+      tx.sharedObjectRef({ objectId: `0x${"40".repeat(32)}`, initialSharedVersion: 1, mutable: true }),
+      stake!,
+      tx.pure.vector("u8", [1, 2, 3]),
+      tx.pure.vector("u8", [4, 5, 6]),
+      tx.pure.vector("u8", [7, 8, 9]),
+      tx.pure.vector("u8", [10, 11, 12]),
+      tx.pure.vector("u8", [13, 14, 15]),
+      tx.pure.address(`0x${"cd".repeat(32)}`),
+      tx.sharedObjectRef({ objectId: "0x6", initialSharedVersion: 1, mutable: false }),
+    ],
+  });
+  tx.setSender(SENDER);
+  return toBase64(await tx.build({ onlyTransactionKind: true }));
+}
+
 async function foreignKind(): Promise<string> {
   const tx = new Transaction();
   tx.moveCall({
@@ -133,6 +162,19 @@ describe("sponsor route", () => {
     expect(init.headers["X-Api-Key"]).toBe("route-test-key");
     // Server-side budget cap, never a client-supplied one.
     expect(JSON.parse(init.body).params).toEqual([transactionKind, SENDER, 50_000_000]);
+  });
+
+  it("sponsors a staked seat registration so a stake costs no gas", async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValue(jsonResponse({ jsonrpc: "2.0", id: 1, result: sponsorship }));
+    vi.stubGlobal("fetch", fetchImpl);
+    const transactionKind = await stakedSeatKind();
+
+    const response = await POST(sponsorRequest({ transactionKind, sender: SENDER }));
+
+    expect(response.status).toBe(200);
+    expect(fetchImpl).toHaveBeenCalledOnce();
   });
 
   it("answers 503 when no access key is configured", async () => {

@@ -171,6 +171,16 @@ CREATE TABLE IF NOT EXISTS agent_manifests (
   PRIMARY KEY (agent_profile_id, version)
 );
 
+CREATE TABLE IF NOT EXISTS stake_reservations (
+  reservation_id TEXT PRIMARY KEY, staker_address TEXT NOT NULL, slot_index INTEGER NOT NULL,
+  operational_owner TEXT NOT NULL, model_id TEXT NOT NULL, role TEXT NOT NULL,
+  manifest_hash TEXT NOT NULL, manifest_blob_id TEXT NOT NULL, document_version TEXT NOT NULL,
+  prompt_hash TEXT NOT NULL, tool_policy_hash TEXT NOT NULL, table_vote_prompt_hash TEXT,
+  evidence_policy_hash TEXT NOT NULL, staker_hash TEXT NOT NULL, status TEXT NOT NULL,
+  created_at TEXT NOT NULL, expires_at TEXT NOT NULL, digest TEXT, agent_profile_id TEXT,
+  record_json JSONB NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS payout_tickets (
   payout_ticket_id TEXT PRIMARY KEY, claim_id TEXT NOT NULL, recipient TEXT NOT NULL,
   amount TEXT NOT NULL, coin_type TEXT NOT NULL, reason INTEGER NOT NULL,
@@ -203,6 +213,8 @@ CREATE INDEX IF NOT EXISTS verification_attempts_status_idx ON verification_atte
 CREATE INDEX IF NOT EXISTS fact_check_queue_status_created_idx
   ON fact_check_queue (status, created_at);
 CREATE INDEX IF NOT EXISTS resolution_events_claim_sequence_idx ON resolution_events (claim_id, sequence);
+CREATE INDEX IF NOT EXISTS stake_reservations_status_expires_idx
+  ON stake_reservations (status, expires_at);
 `;
 
 /** Apply the complete idempotent schema in one driver-neutral Postgres batch. */

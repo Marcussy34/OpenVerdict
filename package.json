@@ -25,6 +25,7 @@
     "e2e:localnet": "tsx scripts/localnet-e2e.ts",
     "audit:claim": "tsx scripts/audit-claim.ts",
     "sponsor:check": "tsx scripts/shinami-sponsor-check.ts",
+    "stake:seat": "tsx scripts/stake-seat.ts",
     "ov": "tsx scripts/ov.ts"
   },
   "dependencies": {

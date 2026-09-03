@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type { ZkBackedRegistrationRequest } from "@/lib/engine/contract";
 import {
+  EngineCapacityError,
   EngineValidationError,
   ZkLoginVerificationError,
 } from "@/lib/engine/errors";
@@ -20,11 +21,24 @@ const FIELD_LIMITS = {
  * The staking account's address arrives as `address` or, for older clients, as
  * `zkLoginAddress`; `address` wins when a caller sends both. Any Sui wallet
  * signature is accepted, zkLogin included.
+ *
+ * A signature is not money: the operator posts the bond on this path, so it is
+ * off unless OPENVERDICT_FREE_SEATS=enabled. Real seats come from
+ * /api/agents/stake/prepare plus /confirm, where the staker posts the bond.
  */
 export async function POST(req: Request) {
   try {
     const disabled = requirePublicWritesEnabled();
     if (disabled) return disabled;
+    if (process.env.OPENVERDICT_FREE_SEATS !== "enabled") {
+      return NextResponse.json(
+        {
+          error: "free_seats_disabled",
+          message: "stake on a seat through /agents",
+        },
+        { status: 403 },
+      );
+    }
     const limited = rateLimitPublic(req);
     if (limited) return limited;
 
@@ -91,6 +105,13 @@ export async function POST(req: Request) {
         },
         { status: 503 },
       );
+    }
+    // Same code both stake paths use when every signing slot is taken.
+    if (
+      error instanceof EngineCapacityError ||
+      (error as Error)?.name === "EngineCapacityError"
+    ) {
+      return NextResponse.json({ error: "slots_exhausted" }, { status: 409 });
     }
     if (
       error instanceof EngineValidationError ||
