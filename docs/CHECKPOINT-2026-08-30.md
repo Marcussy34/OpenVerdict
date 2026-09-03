@@ -1947,6 +1947,68 @@ CANARY "ten percent of the brain": attempt 1 voided (cap lookup), attempt
 pending on weather (Gonka 502 on all three at 11:09). Seeder still paused
 (scratchpad/seeder.pause); remove the file to resume the three seeds.
 
+## 3ah. RESUME MAP 2026-09-03 13:55 (pre-compaction: read 3ag then THIS and continue as if nothing happened)
+
+OWNER STATE: working on the pitch deck; said "let's just wait and see"
+and confirmed the goal: ONE FULL TWO-ROUND DEMO CLAIM on the upgraded
+protocol (round one split, debate, table vote, verdict) for demo day.
+None exists yet on the new package (the old package produced red wine
+0x0a9bdd1f and fasting 0x1d53f02c, both UNRESOLVED after a second
+research round). Interrupt the owner only for: a split (the run to
+watch), a settlement, a give-up, or a decision.
+
+PRODUCTION: Railway deploy bf6fb486 (SUCCESS 13:31:27) at 5e30d64.
+main = origin/main = 5e30d64 (tree clean). Package: calls
+0x15c6e53ce00b814c68eed17a056cce13dc59416418500a0f4dbba73fac530f65,
+types 0xa9f3c2db... (config/release.testnet.json packageId +
+originalPackageId). Operator 0xff3538d7...: 37.8 SUI, 5.0 WAL after
+`pnpm tsx scripts/exchange-wal.ts 5` (WAL ran out at 13:25 and crashed
+the inference worker; workers now log unhandled rejections). Firecrawl
+new key (owner, 10:15): about 1,200 credits; weather row
+research:firecrawl. Railway vars: GONKA_RESEARCH_TIMEOUT_MS=90000,
+GONKA_REQUEST_TIMEOUT_MS=240000, GONKA_MAX_RETRIES=1.
+
+TODAY'S SHIPPED CHANGES (all deployed): Move gates (acceptance +60 s,
+early debate open on all reveals, round two on frozen transcript),
+package upgrade (tx Ah4TwG4A...), originalPackageId + typePackageId()
+for EvidenceCap/AgentCap/RunAttestorCap, resolution worker early
+advances, two answer repairs (MAX_ANSWER_REPAIRS), three-lane
+research-shaped weather probe (PROBE_CONCURRENCY 3), worker
+unhandledRejection guard, exchange-wal script, E2E test-publish path,
+jury-protocol wording sweep (README, hero "Jury Resolution", FAQ, learn,
+console, OG, terms, risk, video script, PRD note).
+
+PROVEN ON THE NEW PACKAGE: ten-percent-brain 0x273220b5: NO 2/100, 5 of
+5, certificate 0x42954c91..., 10.6 min (first commit +4.0 min, reveal
+open +8.5 min). Voids today: cap lookup (fixed), MiniMax decisiveEvidence
+string (repairs raised), DeepSeek 429 saturation x4 (probe tightened),
+WAL exhaustion (refilled).
+
+RUNNING (detached nohup, logs in scratchpad): seeder.sh (seeder.log):
+contested claims first: minimum wage, red wine, nuclear safety, fasting,
+then Sui mainnet May 2023, 21 million cap; submits one at a time only
+when nothing is live or pending relaunch and the weather is clear;
+scratchpad/seeder.pause holds it. board-watch.sh (board-watch.log).
+Claim monitor b7iz50ncl (Monitor tool) reports NEW/state/FINAL/OVERDUE.
+Great Wall 0x5dcbd39b attempt 2 VOIDED, attempt 3 pending relaunch.
+
+HOW TO WATCH A RUN: claim JSON at /api/claims/<id> (attemptChain,
+commitments[].committed/revealed, rounds, evidenceRoots phase 2 = debate
+frozen, debateConvergedAfterExchange, result); report at
+/api/claims/<id>/report; weather at /api/weather. Deploy only between
+claims (no live or pending attempt) from scratchpad/railway-tree with
+`railway up -s app -d` at a detached origin/main; pause the seeder first.
+
+OWNER-GATED: pre-demo wipe of claim tables (manifests kept), Kimi
+selection weight, posting the Gonka devrel draft, video and submission.
+
+RULES: reply starts "Mr. Marcus,"; no em dashes; commit trailer
+"Claude-Session: https://claude.ai/code/session_01R2J39mTnN6iJRQ98n4eDho",
+never Co-Authored-By; never print keys (Firecrawl, Gonka, Sui operator);
+cwd resets between Bash calls; foreground sleep is blocked (poll loops or
+detached scripts); Codex jobs can stall silently (watch the rollout
+mtime, relaunch with --fresh).
+
 ## 4. Planned next (owner-approved direction)
 
 - Attestation (docs/superpowers/specs/2026-08-30-attested-inference-design.md):
