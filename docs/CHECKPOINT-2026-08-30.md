@@ -3017,3 +3017,63 @@ a settlement; `railway up -s app -d` from scratchpad/railway-tree at
 detached origin/main; CONFIRM the newest deployment id changed before
 polling (unpause-after-deploy.sh polls the newest); never filter the
 upgrade script's output; never git add owner folders.
+
+## 3at. RESUME MAP 2026-09-04 23:27 (pre-compaction: read 3ar, 3as, then THIS, and continue as if nothing happened)
+
+OWNER RULE (23:22, binding from now on): "run orchestrator rather than
+doing the changes yourself, use opus 5 extra high agents". The lead writes
+briefs, dispatches Opus workers (Agent tool, model opus, "work at maximum
+effort" in the prompt), reviews diffs, runs gates, commits with explicit
+paths, deploys, verifies on production, and only edits code for the
+truly trivial. Everything else stays as in 3as (palette rule, no em
+dashes, "Mr. Marcus," greeting, never commit owner folders, deploy rules).
+
+DEPLOYED SINCE 3as (all live, last deploy bfa91993 at 23:21, HEAD 704795f):
+434af75 Audit page agent path = ONE instruction card (prompt "Read
+<origin>/llms.txt, then audit <claim link> and explain the verdict.",
+placeholder replaced by the reader; no link field, no disclaimer on that
+path; the link field lives under "By hand"); 13e528c main column
+min-h-[72vh] pb-20 so the footer is not up in the face; 704795f the
+"Core checks run client-side" tag removed from the Audit header.
+
+IN FLIGHT (worker fixes-batch, Opus, brief scratchpad/opus-fixes-batch.md;
+edits already in the working tree, UNCOMMITTED): (1) docs-host routing:
+console paths on docs.openverdict.info redirect to the app host
+(lib/web/host-routing.ts redirectForHost; tests adjusted, 38 pass) because
+the header's relative "Claims" link 404ed on the docs host; (2) docs column
+84ch / container 1240px and the hash chain split into a table plus a
+slimmer Mermaid diagram (docs/site/trust-model.md) because the diagram was
+cut off; (3) stake card copy cut to three short sentences (owner: as few
+words as possible); (4) agent cards no longer truncate their record and
+stake lines, section max-w-6xl (owner: all details visible, wider is
+fine); (5) SUI balance under the address in the wallet menu
+(components/wallet/connect-button.tsx, useCurrentClient().core.getBalance,
+formatSui; ONE eslint error left: the React compiler rule against setting
+state synchronously in an effect; the worker fixes it, refreshes on menu
+open, adds a formatSui test). When its report lands: review, gates, commit
+(explicit paths), deploy (confirm the newest deployment id changed before
+polling), verify on production, screenshot paths to the owner.
+
+END-TO-END RUN (owner asked 23:03): queued claim "The EU AI Act entered
+into force on 1 August 2024." queue id
+0x36d52a9ca3da4bf6605b059bc7e7d15a54bea5a8d22e9523d291729e79deb839, link
+https://app.openverdict.info/fact-check/queue/0x36d52a9c..., expires
+2026-09-04T21:04:48Z (05:04 local on the 5th). Weather closed all night
+(DeepSeek 429 on every probe, Kimi 429/TIMEOUT). It launches on the first
+clear probe; the minimum-wage claim's attempt 2 (0xadee0c44...) relaunches
+on the same probe, ten minutes apart (that one is the likely split, i.e.
+the first production V4 debate: READ IT with ov trace before the demo).
+Watchers: `ov watch <queueId> --for 6h --verbose` writes
+scratchpad/watch-euaiact.log (monitor bf3pw882b filters launch/committee/
+votes/debate/certificate lines); board watcher scratchpad/board-watch.sh
+(restarted 21:23) writes board-watch.log (monitor b64wjsym0 prints live:/
+CLEAR/settlement lines). Seeder running (pause file scratchpad/seeder.pause).
+
+LOCAL: `pnpm dev` on :3000 serves the localnet dataset (the two newest
+"split-vote" claims carry V4 debates with 1-based numbers). Chrome tool
+tab groups get auto-removed when empty: call tabs_context_mcp with
+createIfEmpty before navigating; the apex host openverdict.info is not an
+allowed domain for the Chrome tools (app. and docs. hosts are).
+
+NEXT: land fixes-batch; then wait for the run; then final owner summary.
+Leftovers unchanged from 3as.
