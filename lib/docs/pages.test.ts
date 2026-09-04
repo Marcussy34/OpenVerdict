@@ -115,7 +115,7 @@ describe("the documentation site", () => {
   it("uses no em dash anywhere in the pages it authors", async () => {
     for (const page of await loadDocPages()) {
       if (page.source) continue; // rendered repository files are not ours
-      expect(page.body, page.slug).not.toContain("—");
+      expect(page.body, page.slug).not.toContain("\u2014");
     }
   });
 });

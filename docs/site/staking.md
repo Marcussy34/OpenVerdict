@@ -9,6 +9,31 @@ in the eligibility roster, and that seat's jury rewards go to the staker.
 Staking is economics, not identity: any account may stake on as many seats as
 it likes, and nothing about a stake says who is behind the account.
 
+## The stake lifecycle
+
+```mermaid
+flowchart TB
+    A["staker holds SUI"] --> B["POST /api/agents/stake/prepare<br/>engine assigns the debate role<br/>and checks the draw can seat it"]
+    B --> C["POST /api/sponsor<br/>Shinami pays the gas"]
+    C --> D["wallet signs, transaction executes:<br/>agent_registry::register_staked_agent"]
+    D --> E["AgentProfile shared, bond = the stake<br/>StakePosition to the staker<br/>AgentCap to the operational key<br/>PayoutRecipientKey records the staker"]
+    E --> F["POST /api/agents/stake/confirm<br/>engine tops the seat's gas float to 0.3 SUI"]
+    F --> G["eligible for every draw:<br/>weight 10000, active"]
+    G --> H["select_committee snapshots the<br/>payout recipient onto the Committee"]
+    H --> I["the seat researches, commits, reveals"]
+    I --> J["finalize_claim mints a jury reward<br/>PayoutTicket to the STAKER"]
+    J --> K["withdraw_payout consumes the ticket"]
+    K --> G
+    G --> L["request_unstake<br/>staker only"]
+    L --> M["profile and registry record set inactive:<br/>no future draws"]
+    M --> N["wait WITHDRAWAL_DELAY_MS<br/>86400000 ms, 24 hours"]
+    N --> O["complete_unstake<br/>pays min(requested, remaining bond)<br/>never blocked by pause"]
+    I -.->|"a seat drawn before the unstake<br/>still finishes and still pays"| J
+```
+
+The stake lifecycle. Source: `move/openverdict/sources/agent_registry.move:231-360`,
+`jury.move:973-1015`, `settlement.move:240-276`, `lib/engine/engine.ts:4388-4594`.
+
 ## The minimum stake
 
 `MIN_STAKE_MIST` in `agent_registry.move` is `100_000_000`, that is **0.1 SUI**.

@@ -2,7 +2,15 @@ import ReactMarkdown, { type Components } from "react-markdown";
 import rehypeSlug from "rehype-slug";
 import remarkGfm from "remark-gfm";
 
+import { MermaidDiagram } from "@/components/docs/mermaid";
 import { cn } from "@/lib/utils";
+
+/** The text of a fence, whatever nesting react-markdown hands the component. */
+function fenceText(children: React.ReactNode): string {
+  if (typeof children === "string") return children;
+  if (Array.isArray(children)) return children.map(fenceText).join("");
+  return "";
+}
 
 /**
  * The documentation prose renderer.
@@ -74,7 +82,16 @@ function componentsFor(base: string): Components {
     h5: heading(4),
     h6: heading(4),
 
-    p: ({ children }) => <p className="mt-4 first:mt-0">{children}</p>,
+    // A paragraph holding nothing but an image is a figure, so it must not be
+    // wrapped in a <p>: figure is flow content and p only permits phrasing,
+    // which the browser would silently re-nest and React would then fail to
+    // hydrate.
+    p: ({ node, children }) =>
+      isLoneImage(node) ? (
+        <>{children}</>
+      ) : (
+        <p className="mt-4 first:mt-0">{children}</p>
+      ),
 
     a: ({ href, children }) => {
       const target = resolveHref(href, base);
@@ -110,12 +127,17 @@ function componentsFor(base: string): Components {
     li: ({ children }) => <li className="pl-1">{children}</li>,
 
     // Fenced blocks: mono on the recessed surface, scrolling inside their own
-    // box so the page body never scrolls sideways.
-    pre: ({ children }) => (
-      <pre className="ov-scroll mt-5 overflow-x-auto border border-[var(--ov-line)] bg-surface-2 p-4 font-mono text-[13px] leading-[1.6] text-ocean [&_code]:border-0 [&_code]:bg-transparent [&_code]:p-0 [&_code]:text-[13px] [&_code]:break-normal [&_code]:[overflow-wrap:normal]">
-        {children}
-      </pre>
-    ),
+    // box so the page body never scrolls sideways. A ```mermaid fence is a
+    // diagram instead, drawn in the browser from the same source.
+    pre: ({ children }) => {
+      const diagram = mermaidSource(children);
+      if (diagram !== null) return <MermaidDiagram chart={diagram} />;
+      return (
+        <pre className="ov-scroll mt-5 overflow-x-auto border border-[var(--ov-line)] bg-surface-2 p-4 font-mono text-[13px] leading-[1.6] text-ocean [&_code]:border-0 [&_code]:bg-transparent [&_code]:p-0 [&_code]:text-[13px] [&_code]:break-normal [&_code]:[overflow-wrap:normal]">
+          {children}
+        </pre>
+      );
+    },
     // Inline code carries hashes, ids and URLs, so it must break mid-token
     // rather than push the page sideways on a narrow screen.
     code: ({ className, children }) => (
@@ -167,17 +189,55 @@ function componentsFor(base: string): Components {
 
     hr: () => <hr className="my-10 h-px border-0 bg-[var(--ov-line)]" />,
 
-    img: ({ src, alt }) =>
+    // An image is a figure: the alt text doubles as the caption, so a diagram
+    // always says in one line what it shows.
+    img: ({ src, alt, title }) =>
       typeof src === "string" ? (
-        // Documentation images are repository assets, not user uploads.
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={src}
-          alt={alt ?? ""}
-          className="mt-5 max-w-full border border-[var(--ov-line)]"
-        />
+        <figure className="mt-6">
+          <div className="ov-scroll overflow-x-auto border border-[var(--ov-line)] bg-card p-3">
+            {/* Documentation images are repository assets, not user uploads. */}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={src} alt={alt ?? ""} className="mx-auto block max-w-full" />
+          </div>
+          {alt ? (
+            <figcaption className="mt-2 text-[13px] leading-snug text-muted-foreground">
+              {title ?? alt}
+            </figcaption>
+          ) : null}
+        </figure>
       ) : null,
   };
+}
+
+/** The shape of a hast node this file needs, without a direct hast dependency. */
+type SourceNode = { type?: string; tagName?: string; value?: string; children?: SourceNode[] };
+
+/**
+ * True when a paragraph's only content is one image. Read from the source
+ * tree rather than the rendered children, which are already this file's own
+ * components by the time the paragraph sees them.
+ */
+function isLoneImage(node: unknown): boolean {
+  const children = (node as SourceNode | undefined)?.children;
+  if (!Array.isArray(children)) return false;
+  const content = children.filter(
+    (child) => child.type !== "text" || (child.value ?? "").trim() !== "",
+  );
+  const only = content[0];
+  return (
+    content.length === 1 && only?.type === "element" && only.tagName === "img"
+  );
+}
+
+/** The chart source when this fence is ```mermaid, otherwise null. */
+function mermaidSource(children: React.ReactNode): string | null {
+  const only = Array.isArray(children) ? children[0] : children;
+  if (!only || typeof only !== "object" || !("props" in only)) return null;
+  const props = (only as { props?: { className?: unknown; children?: React.ReactNode } })
+    .props;
+  const className = typeof props?.className === "string" ? props.className : "";
+  if (!className.split(/\s+/).includes("language-mermaid")) return null;
+  return fenceText(props?.children).replace(/\n$/, "");
 }
 
 /**

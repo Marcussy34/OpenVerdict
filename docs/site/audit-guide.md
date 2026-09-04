@@ -9,6 +9,98 @@ input is public: Sui JSON-RPC, the Walrus aggregator, GonkaRouter's public
 receipts and the app's own read routes. Pick whichever of the three paths below
 fits the tool in front of you.
 
+## A worked audit, end to end
+
+Everything below is real. This is claim
+`0x273220b56d87edea0a6db35f85c0fc8f36591461ee6be6962e86bb4586ee4ac6` on Sui
+testnet, settled on 2026-09-03.
+
+```bash
+pnpm ov audit 0x273220b56d87edea0a6db35f85c0fc8f36591461ee6be6962e86bb4586ee4ac6 --quiet
+```
+
+**The claim.** The statement was "Humans use only ten percent of their brains."
+It ran in direct-review mode, finished in one round, and settled as NO with a
+Truth Score of 200 basis points, displayed as 2.00.
+
+**The jury.** Five seats, drawn by on-chain randomness inside committee
+`0xcb8560e363f87e690ef55e1a7d4d49c039cc0efe8b43179e1b49e36dfcfe39b6`:
+
+| Model | Seats |
+| --- | --- |
+| `deepseek-ai/DeepSeek-V4-Flash-0731` | 2 |
+| `moonshotai/Kimi-K2.6` | 1 |
+| `MiniMaxAI/MiniMax-M2.7` | 2 |
+
+Three distinct families, at most two seats each, five distinct owners. That is
+the diversity rule holding in practice.
+
+**The evidence.** One phase, root
+`0x532792caa77893b49cd95d19703da9f50c7053a8cc3a67c86f9a9d0723501740`, with the
+manifest on Walrus at blob `T9-7bdVdYwexoURkc5SSDQfJ59KEFqdH3G0SEeSVQnk`.
+Fetch it yourself:
+
+```bash
+curl -s https://aggregator.walrus-testnet.walrus.space/v1/blobs/T9-7bdVdYwexoURkc5SSDQfJ59KEFqdH3G0SEeSVQnk
+```
+
+Recompute the Merkle root over its leaves and you get the root above. That is
+audit check S4.
+
+**One juror run.** The DeepSeek seat's run
+`0x75897c615937984977b4c102b7789c959b1dcbc4a2a37cd3f3f7937c4dbc4411` carries:
+
+| Hash | Value |
+| --- | --- |
+| `promptHash` | `0x7257117d5b4d02b8c8de5e70d62f6856143d7f20225084a111645f3557a40b14` |
+| `inputHash` | `0x3886c106f485bd55a4bab642000c554e4119da328714d1070f45a68a310b9ff8` |
+| `outputHash` | `0xa39c26738b503fd0d2932de3039d5a893fee7a7e54ccc1cb1eea9ad403bcea91` |
+| `toolTranscriptHash` | `0x634016d384a799badc31639fdfc2e706a3b3e7033ba6cfcd69ae28a4889ad307` |
+| `runHash` | `0x5fc502e3e1a5938288b70f1cef286e78214c79ececfd58daa0e6f75357e22afd` |
+
+Its gateway request id is `devshard-70083-36`. The run approval
+`0xf8cd7ad8394eacfd376abaf80baf0e6dae94b044db1a8aa4d44c92e761dce9d5`, in
+transaction `2wp9XAHmN3ngGYcyR2oPZw1KUHVqy8iHSutVEbFjTQuJ`, carries **the same
+run hash**, and it landed before the commitment. That is check R16.
+
+**The commitment.** In transaction
+`9FX7D4njYMFKfzc7qHq2cEUHaZ6tnoLnU7grpt6gWvzo` the seat committed
+`0x4aa39c4875fec9523343ac4f6a2c12d06ce4af14282c8272337b65776cc4d642`, with no
+vote visible anywhere. The reveal followed in
+`FBx1vdQEU3HSTX5eRFdrTmDgt9JbSTkoTuf4Gg1S5uyY`, publishing the outcome, the
+confidence and the salt. Rebuilding the preimage from those inputs plus the
+claim, profile, seat, phase and evidence root reproduces that exact commitment.
+That is check C2, the one no human does by hand.
+
+**The score.** All five jurors voted NO:
+
+| Confidence (bps) | Truth probability (bps) |
+| --- | --- |
+| 9500 | 500 |
+| 10000 | 0 |
+| 10000 | 0 |
+| 9500 | 500 |
+| 10000 | 0 |
+
+```
+sum   = 1000
+count = 5
+score = (1000 + floor(5 / 2)) / 5 = 1002 / 5 = 200
+```
+
+**The certificate.**
+`0x42954c917d0b7e34cb4634091a5ece1921a89a931f4872f690971b62fdcee706` carries
+`result = NO` and `truth_score_bps = 200`, matching the arithmetic above. That
+is checks S1 and S2.
+
+Note that this claim settled under package
+`0x15c6e53ce00b814c68eed17a056cce13dc59416418500a0f4dbba73fac530f65`, an
+earlier upgrade than the current one. Object types keep the original package
+address, so an old claim stays readable after every upgrade.
+
+Read the whole record in the browser at
+[app.openverdict.info/claims/0x2732...4ac6](https://app.openverdict.info/claims/0x273220b56d87edea0a6db35f85c0fc8f36591461ee6be6962e86bb4586ee4ac6).
+
 ## 1. With any agent
 
 `https://app.openverdict.info/llms.txt` is written for a model. It carries the
