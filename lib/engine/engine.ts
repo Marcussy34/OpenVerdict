@@ -170,6 +170,7 @@ import {
   buildAgentManifestDocument,
   parseAgentManifestDocument,
 } from "./agentManifestDocument";
+import { rosterAdmitsDraw, rosterCanSeat } from "./draw-feasibility";
 import {
   buildRunBundleCore,
   buildTableVoteBundleCore,
@@ -4131,6 +4132,33 @@ class OpenVerdictEngine implements Engine {
   }
 
   /**
+   * Refuses a seat that no committee could ever hold. The draw caps live in
+   * jury.move and lib/engine/draw-feasibility.ts mirrors them, so the two must
+   * change together. A roster that already draws a jury has to keep drawing one
+   * with this seat on it, or the staker pays for a seat that never votes. A
+   * roster that cannot draw a jury yet is still growing: every seat added to it
+   * is part of the fix, so nothing is refused there.
+   */
+  private async assertSeatIsDrawable(
+    owner: string,
+    modelId: string,
+    role: string,
+  ): Promise<void> {
+    // Only confirmed seats are in the registry the draw reads.
+    const roster = (await this.#repository.listAgentManifests())
+      .filter((agent) => agent.active)
+      .map((agent) => ({
+        owner: agent.manifest.owner,
+        modelId: agent.manifest.modelId,
+        role: agent.role,
+        active: true,
+      }));
+    if (!rosterAdmitsDraw(roster).ok) return;
+    const seat = rosterCanSeat(roster, { owner, modelId, role, active: true });
+    if (!seat.ok) throw new EngineValidationError(seat.reason);
+  }
+
+  /**
    * Real stake, step one. Validates the seat's model and role, reserves a
    * signing slot under the registration lock, publishes the seat's manifest
    * document to Walrus, and returns the register_staked_agent arguments the
@@ -4143,6 +4171,7 @@ class OpenVerdictEngine implements Engine {
     const stakerHash = toHex(blake2b256(fromHex(req.stakerAddress)));
     return this.withRegistrationLock(async () => {
       const slot = await this.allocateOperationalSlot();
+      await this.assertSeatIsDrawable(slot.address, req.modelId, req.role);
       const built = buildAgentManifestDocument({
         network: this.#manifest.network,
         backingKind: "WALLET_STAKED",

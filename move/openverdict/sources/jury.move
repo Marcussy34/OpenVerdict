@@ -43,7 +43,9 @@ module openverdict::jury {
     const COMMITTEE_SIZE: u64 = 5;
     const RESERVE_COUNT: u64 = 2;
     const REQUIRED_MATCHING: u8 = 4;
-    const MAX_SELECTION_DRAWS: u64 = 64;
+    const MAX_SELECTION_DRAWS: u64 = 160;
+    /// Rejected draws in a row that clear a stalled partial pick and resample.
+    const RESTART_AFTER_STALLS: u64 = 8;
     const MAX_ELIGIBLE_SNAPSHOT: u64 = 32;
     const HASH_LENGTH: u64 = 32;
 
@@ -258,18 +260,34 @@ module openverdict::jury {
         let mut selected = vector[];
         let mut reserves = vector[];
         let mut attempts = 0;
+        // The draw is greedy and never backtracks, so an unlucky prefix can
+        // strand it: a model whose two seats are spent before its role partner
+        // is seated leaves every remaining record capped out. A restart drops
+        // the partial pick and takes a fresh random sample. The caps admit a
+        // valid committee whenever the roster does, so resampling finds one.
+        let mut stalls = 0;
         while (selected.length() < COMMITTEE_SIZE && attempts < MAX_SELECTION_DRAWS) {
             let ticket = random::generate_u64_in_range(&mut generator, 0, total_weight - 1);
             let index = weighted_record_index(records, ticket);
             let candidate = records[index];
             if (!agent_conflicts_with_claim(claim, &candidate) && can_add_selected(&selected, &candidate)) {
                 selected.push_back(candidate);
+                stalls = 0;
+            } else {
+                stalls = stalls + 1;
+                if (stalls == RESTART_AFTER_STALLS) {
+                    selected = vector[];
+                    stalls = 0;
+                };
             };
             attempts = attempts + 1;
         };
         assert!(selected.length() == COMMITTEE_SIZE, E_INSUFFICIENT_DIVERSE_AGENTS);
         assert!(selected_diversity_valid(&selected), E_INSUFFICIENT_DIVERSE_AGENTS);
 
+        // Reserves stall the same way (both must carry different roles), so
+        // the same restart applies; the committee above is already fixed.
+        stalls = 0;
         while (reserves.length() < RESERVE_COUNT && attempts < MAX_SELECTION_DRAWS) {
             let ticket = random::generate_u64_in_range(&mut generator, 0, total_weight - 1);
             let index = weighted_record_index(records, ticket);
@@ -277,6 +295,13 @@ module openverdict::jury {
             if (!agent_conflicts_with_claim(claim, &candidate) &&
                 can_add_reserve(&selected, &reserves, &candidate)) {
                 reserves.push_back(candidate);
+                stalls = 0;
+            } else {
+                stalls = stalls + 1;
+                if (stalls == RESTART_AFTER_STALLS) {
+                    reserves = vector[];
+                    stalls = 0;
+                };
             };
             attempts = attempts + 1;
         };
@@ -1583,6 +1608,35 @@ module openverdict::jury {
     }
 
     #[test_only]
+    /// The 2026-09-04 testnet roster: three sources on one model family, four
+    /// skeptics on two others, plus the staked skeptic on the source family
+    /// that stalled two draws in three before the restart existed.
+    fun add_stalling_selection_records(registry: &mut Registry) {
+        let profiles = vector[@0x301, @0x302, @0x303, @0x304, @0x305, @0x306, @0x307, @0x308];
+        let owners = vector[@0xC1, @0xC2, @0xC3, @0xC4, @0xC5, @0xC6, @0xC7, @0xC8];
+        // 21 is the source family, 22 and 23 the two skeptic-only families.
+        let models = vector[21u8, 21, 21, 22, 22, 23, 23, 21];
+        // Staker hashes repeat: one account may stake on several seats.
+        let stakers = vector[1u8, 1, 2, 2, 3, 3, 4, 4];
+        let skeptic = agent_registry::skeptic_role_hash();
+        let source = agent_registry::source_authenticity_role_hash();
+        let mut i = 0;
+        while (i < profiles.length()) {
+            let staker_byte = stakers[i];
+            let model_byte = models[i];
+            agent_registry::add_eligibility_for_testing(
+                registry,
+                object::id_from_address(profiles[i]),
+                owners[i],
+                vector::tabulate!(32, |_| staker_byte),
+                vector::tabulate!(32, |_| model_byte),
+                if (i < 3) source else skeptic,
+            );
+            i = i + 1;
+        };
+    }
+
+    #[test_only]
     fun add_diverse_selection_records(registry: &mut Registry) {
         let skeptic = agent_registry::skeptic_role_hash();
         let source = agent_registry::source_authenticity_role_hash();
@@ -1739,6 +1793,88 @@ module openverdict::jury {
         };
         test_scenario::return_shared(committee);
         claim::destroy_claim_for_testing(claim);
+        agent_registry::destroy_registry_for_testing(registry);
+        clock::destroy_for_testing(clock);
+        scenario.end();
+    }
+
+    #[test]
+    fun stalled_selection_restarts_and_seats_the_incident_roster() {
+        use sui::coin;
+        use sui::test_scenario;
+
+        let mut scenario = test_scenario::begin(@0x0);
+        random::create_for_testing(scenario.ctx());
+        test_scenario::next_tx(&mut scenario, @0xCAFE);
+        let mut registry = agent_registry::new_registry_for_testing(scenario.ctx());
+        add_stalling_selection_records(&mut registry);
+        let clock = clock::create_for_testing(scenario.ctx());
+
+        // Five randomness states over the roster that aborted on testnet: the
+        // greedy draw alone stranded roughly two draws in three, the restart
+        // has to seat a full committee under every one of them.
+        let mut round = 0;
+        while (round < 5) {
+            test_scenario::next_tx(&mut scenario, @0x0);
+            let mut randomness = test_scenario::take_shared<Random>(&scenario);
+            random::update_randomness_state_for_testing(
+                &mut randomness,
+                round,
+                vector::tabulate!(32, |i| ((i * 5 + round * 31 + 1) % 251) as u8),
+                scenario.ctx(),
+            );
+            test_scenario::return_shared(randomness);
+
+            test_scenario::next_tx(&mut scenario, @0xCAFE);
+            let budget = coin::mint_for_testing<JuryTestCoin>(100, scenario.ctx());
+            let mut claim = claim::new_claim_for_testing(
+                &registry,
+                budget,
+                selection_params(),
+                &clock,
+                scenario.ctx(),
+            );
+            claim::start_direct_review(&registry, &mut claim, &clock);
+            let randomness = test_scenario::take_shared<Random>(&scenario);
+            select_committee(&registry, &mut claim, &randomness, &clock, scenario.ctx());
+            test_scenario::return_shared(randomness);
+            assert!(claim::state(&claim) == claim::state_commit_1());
+            claim::destroy_claim_for_testing(claim);
+
+            test_scenario::next_tx(&mut scenario, @0xCAFE);
+            let committee = test_scenario::take_shared<Committee>(&scenario);
+            assert!(committee.agent_profile_ids.length() == COMMITTEE_SIZE);
+            assert!(committee.reserve_profile_ids.length() == RESERVE_COUNT);
+            // Every cap the restart could have corrupted, checked on the result.
+            let mut a = 0;
+            while (a < COMMITTEE_SIZE) {
+                let mut b = a + 1;
+                while (b < COMMITTEE_SIZE) {
+                    assert!(committee.agent_owners[a] != committee.agent_owners[b]);
+                    b = b + 1;
+                };
+                a = a + 1;
+            };
+            let policy = df::borrow<CommitteePolicyKey, CommitteePolicy>(
+                &committee.id,
+                CommitteePolicyKey {},
+            );
+            assert!(model_caps_valid(&policy.selected_model_hashes));
+            assert!(distinct_hash_count(&policy.selected_model_hashes) >= 3);
+            assert!(vector::contains(
+                &policy.selected_role_hashes,
+                &agent_registry::skeptic_role_hash(),
+            ));
+            assert!(vector::contains(
+                &policy.selected_role_hashes,
+                &agent_registry::source_authenticity_role_hash(),
+            ));
+            // The two reserves always carry one skeptic and one source.
+            assert!(distinct_hash_count(&policy.reserve_role_hashes) == RESERVE_COUNT);
+            destroy_committee_for_testing(committee);
+            round = round + 1;
+        };
+
         agent_registry::destroy_registry_for_testing(registry);
         clock::destroy_for_testing(clock);
         scenario.end();

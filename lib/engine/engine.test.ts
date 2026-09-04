@@ -2982,6 +2982,58 @@ describe("real stake on a juror seat", () => {
     ).rejects.toThrow("canonical lowercase 32-byte Sui address");
   });
 
+  it("refuses a seat no committee could hold and takes the one that fits", async () => {
+    // The roster that stalled the draw on 2026-09-04: every source seat runs
+    // one model family, the four skeptics run two others.
+    const setup = await registrationSetup({
+      verifierResult: true,
+      signerCount: 9,
+      initialAgentCount: 7,
+      seats: [
+        { modelId: "model-a", role: "SOURCE_AUTHENTICITY" },
+        { modelId: "model-a", role: "SOURCE_AUTHENTICITY" },
+        { modelId: "model-a", role: "SOURCE_AUTHENTICITY" },
+        { modelId: "model-b", role: "SKEPTIC" },
+        { modelId: "model-b", role: "SKEPTIC" },
+        { modelId: "model-c", role: "SKEPTIC" },
+        { modelId: "model-c", role: "SKEPTIC" },
+      ],
+    });
+
+    // A model-a skeptic would spend one of the two model-a seats a jury may
+    // hold, leaving room for one source and four skeptics: one over the cap.
+    const refused = setup.engine.prepareStake({
+      stakerAddress,
+      modelId: "model-a",
+      role: "SKEPTIC",
+    });
+    await expect(refused).rejects.toThrow(EngineValidationError);
+    await expect(refused).rejects.toThrow(
+      "a model-a SKEPTIC seat cannot be seated on any valid committee: every " +
+        "SOURCE_AUTHENTICITY seat runs model-a and the draw seats at most 2 " +
+        "model-a jurors; stake on a SOURCE_AUTHENTICITY seat, or on another " +
+        "model family, instead",
+    );
+
+    const preparation = await setup.engine.prepareStake({
+      stakerAddress,
+      modelId: "model-b",
+      role: "SOURCE_AUTHENTICITY",
+    });
+
+    expect(preparation.args.roleHash).toBe(
+      toHex(
+        blake2b256(
+          new TextEncoder().encode("OPENVERDICT_ROLE_SOURCE_AUTHENTICITY"),
+        ),
+      ),
+    );
+    // The refused stake reserved nothing, so the eighth slot is still free.
+    expect(preparation.args.operationalOwner).toBe(
+      setup.signers.getAgentAt(7).address,
+    );
+  });
+
   it("confirms a settled stake, records the staker and funds the seat", async () => {
     const setup = await registrationSetup({ verifierResult: true });
     const preparation = await setup.engine.prepareStake({
@@ -3269,6 +3321,8 @@ async function registrationSetup(options: {
   verifierResult: boolean;
   signerCount?: number;
   initialAgentCount?: number;
+  /** Shapes the seeded roster seat by seat (draw feasibility tests). */
+  seats?: { modelId: string; role: string }[];
   /** Overrides the release manifest's evidence policy id (fail-closed test). */
   evidencePolicyId?: `0x${string}`;
   /** Uses the engine's own verifier so real signatures are checked offline. */
@@ -3298,8 +3352,10 @@ async function registrationSetup(options: {
     agentProfileId: fakeId(`registration-profile:${index}`),
     owner: agent.address,
     agentCapId: fakeId(`registration-cap:${index}`),
-    modelId: manifest.gonka.models[index % manifest.gonka.models.length]!,
-    role: "SKEPTIC",
+    modelId:
+      options.seats?.[index]?.modelId ??
+      manifest.gonka.models[index % manifest.gonka.models.length]!,
+    role: options.seats?.[index]?.role ?? "SKEPTIC",
   }));
   const gateway = new RecordingFakeSuiGateway(agents);
   const verify = vi.fn(async () => options.verifierResult);
