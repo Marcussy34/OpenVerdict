@@ -2494,3 +2494,71 @@ eligible, 8 active (7 demo + 1 staked MiniMax source), sources now on two
 families. Leftover: the app DB still shows the deprecated DeepSeek skeptic
 seat 0x81a737... as active (the engine does not read on-chain
 deactivation); the draw uses the chain and is unaffected.
+
+## 3ao. 2026-09-04 AFTERNOON: FAST PATH AND THE LIVE TRANSCRIPT (read 3an then this)
+
+OWNER (14:00 to 15:30, present): "do everything end to end, such that
+everything is optimized"; wants the claim page to feel like a chat with
+Claude (thinking process, current state, the five jurors expandable with
+their tool calls), keep everything that exists, toggle chat and graph or
+a mini graph inside the chat, and a replay for settled claims. Spec:
+docs/superpowers/specs/2026-09-04-fast-path-design.md (939316c).
+
+SHIPPED (pushed; two Opus workers; lead reviewed and deployed):
+- cf11dd4 perf(pipeline): Walrus writer lanes (4 writer keys derived from
+  OPENVERDICT_AGENT_SEED label WALRUS_WRITER, lib/walrus/lanes.ts, least
+  loaded lane, operator-lane fallback for unfunded writers or balance
+  errors; renew signs with the blob's owner); per-worker advisory tick
+  locks (workers/runtime.ts tickLockKey) and per-process operator gas
+  coins (OPENVERDICT_OPERATOR_GAS_SLOT 0/1/2 workers, 3 web, set in
+  scripts/start-production.mjs; unset = old behaviour); ACCEPTANCE_WINDOW_MS
+  20 s in jury.move and the TS mirror; DEFAULT_EVIDENCE_FREEZE_LEAD_MS 30 s
+  and freezeSettledDebate right after the debate settles; timing_ms on
+  committee_selected (draw), run_approved (model, seal, escrow, upload,
+  approve), vote_committed, vote_revealed (upload, reveal),
+  evidence_frozen (archive, freeze), claim_finalized (finalize,
+  total_from_created); `pnpm walrus:writers [--fund] [--split-gas N]`.
+- 154db2e feat(live): research_step events (lib/research/loop.ts
+  ResearchStepInfo, lib/engine/research-feed.ts, PUBLIC_NOW, sanitized,
+  never reveal-gated; RESEARCH_TICK kept for search and open); the Live
+  transcript view (lib/viz/transcript.ts pure builder + tests,
+  components/viz/live-transcript.tsx, juror-card.tsx): claim as the
+  person's message, one entry per event in plain words with timestamps,
+  five expandable juror cards (live status line, steps, sealed badge,
+  after reveal the answer, findings, quotes, counter-evidence, receipt),
+  mini graph preview with Open graph, Live/Graph switcher (?view=live or
+  ?view=graph, Live default), Replay at 1x/10x/30x with Skip to end; the
+  fact-check page lands on ?view=live after a 200; ov watch prints
+  research steps and, with --verbose, the timings; ov trace adds timings
+  to the receipt line. README, skill SKILL/reference updated.
+- Gates: typecheck, lint (0 errors), 872 tests / 70 files, 89 Move tests,
+  full localnet E2E green (lead's run and both workers' runs), pnpm build.
+- Testnet funding 15:05: `pnpm walrus:writers --fund --split-gas 4` (run
+  with OPENVERDICT_SUI_GRPC_URL=https://public-rpc.sui-testnet.mystenlabs.com
+  from the Mac): operator split into 4 gas coins (34.87 SUI, 2.98 WAL
+  left), writers 0..3 at 0.3 SUI + 0.5 WAL each (addresses in the script
+  output; digests 8xDohYJ1... split, Fimev1yt... fund).
+- Package upgrade (20 s acceptance) tx Ar1gsUNqkCT4Me8wcw2NzdrAZgne5UvzqAZ8eJtr8tZd,
+  packageId 0x38ecc9fa1deca5413376ca2cc82f099f468c6aa5f8311e6167e5268d582e04c8
+  (756d7e9). Note: the first upgrade run did execute but its output was
+  hidden by a grep and the config was written by hand from the
+  UpgradeCap's package field (version 5) and previousTransaction.
+- Deploy 15:30 SUCCESS while the weather was closed; /api/status on the
+  new package; the Live view checked in the browser on the settled claim
+  (transcript, expanded card with answer and quotes and receipt, mini
+  graph, replay).
+- Push protection incident: a broad `git add docs` swept the owner's
+  untracked docs/demo/deck/ into a commit and GitHub blocked the push
+  because docs/demo/deck/exports/slide-05.svg contains a string it flags
+  as a Dropbox access token. Removed from the commit with `git rm --cached`
+  (files untouched on disk, still untracked), amended, pushed. OWNER
+  SHOULD CHECK THAT SVG BEFORE THE DECK IS EVER COMMITTED.
+
+IN PROGRESS: feed worker adds the proof-derived step list to the juror
+card for runs without research_step events (every settled claim today
+shows "No research step has landed yet" when expanded); then commit and
+redeploy in a free window.
+
+NEXT MEASUREMENT: the first live claim on this deploy (attempt 2 of the
+minimum wage claim relaunches on clear weather) carries timing_ms on
+every step; read them with `ov watch --verbose` and `ov trace`.
