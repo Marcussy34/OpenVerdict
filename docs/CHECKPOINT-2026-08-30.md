@@ -3136,3 +3136,49 @@ a shared file: build the intended blob from HEAD plus the reviewed hunks
 END-TO-END RUN: still queued (weather closed all night: DeepSeek 429 on
 every probe, MiniMax and Kimi intermittent). Watchers bf3pw882b and
 b64wjsym0 alive. Queue expires 2026-09-04T21:04:48Z (05:04 local).
+
+## 3av. 2026-09-05 00:35: ALL FIVE OWNER BATCHES LIVE (read 3au then this)
+
+LIVE (HEAD 8939807, deploy 05284644 at 00:27): 3a32a6e + e8ca88e (3au),
+cbc18b9 (graph-revert: the force cloud from 6ffd1da back in the Graph
+view, draggable, every edge drawn, the claim kept only as an invisible
+pinned anchor; palette-aligned; elliptical seat ring sized by both axes;
+courtroom-layout.ts trimmed to miniRing), 36891f2 (docs column 84ch in a
+1240px frame, the piece left out of 3a32a6e), 4ea12fe (SuiVision
+everywhere: lib/web/explorer.ts builds testnet.suivision.xyz with
+/object, /account, /txblock; run-proof-transparency uses the helpers;
+footer, docs metadata, auditor, ov CLI, scripts, README, docs, llms.txt,
+audit skill, release manifest; explorer.test.ts), 8939807 (report page as
+a certificate page: statement title, criteria small, verdict word +
+"68 / 100" + one jury sentence, round-two and attempts lines only when
+they apply, Live view and Audit links, five tiles with one trail open at
+a time and the debate turns inside it, one collapsed Proof section:
+objects on SuiVision, evidence roots and manifests, run proof JSON per
+seat and round, audit bundle, compact timeline, the agent instruction
+via CommandRow exported from components/verify/agent-handoff.tsx, the
+scoring link).
+
+VERIFIED ON PRODUCTION: report of 0x273220b5 (NO, 2 / 100, "5 of 5
+jurors said NO", "Attempt 3 of 3" with the two voided attempts linked),
+Graph view of the same claim (force cloud, certificate in the middle, no
+claim node), SuiVision links, docs column. Screenshots in the scratchpad:
+prod-report.jpg, prod-graph.jpg, lead-report-*.jpg (local dataset).
+
+OPEN FOR THE OWNER: (1) the restored graph shows each vote twice (pill
+under the juror and the vote node); dropping the pill would declutter;
+(2) the Terms and Risk legal prose still says "experimental"; (3) the
+footer's console links are relative, so on docs.openverdict.info its
+"Agents" entry lands on the docs page; (4) the inspector's claim branch in
+app/claims/[id]/page.tsx is unreachable now (dead code, flagged, not
+removed); (5) components left unused by the report rewrite
+(position-panel, verdict-gauge, seat-seal, reveal) stay in place.
+
+WORKERS: the account session limit hit at 00:19 (resets 02:20); the
+report-redesign worker was cut off mid-verification and the lead verified
+its work itself (typecheck, eslint, browser on settled, split-vote and
+unresolved claims at 1440 and 375). No worker can be dispatched before
+02:20. Everything the owner asked for tonight is live.
+
+END-TO-END RUN: still queued at 00:35 (DeepSeek 429 on every probe).
+Queue 0x36d52a9c... expires 2026-09-04T21:04:48Z (05:04 local). Watchers
+bf3pw882b and b64wjsym0 alive.
