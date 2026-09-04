@@ -21,6 +21,7 @@ import { Reveal } from "@/components/viz/reveal";
 import { RunProof } from "@/components/claim/run-proof";
 import { cn } from "@/lib/utils";
 import { deriveRunId } from "@/lib/verify/run-proof";
+import { researchFeed } from "@/lib/viz/research-feed";
 import { computeTruthScoreBps, agentProbabilityBps } from "@/lib/protocol/truthScore";
 import { OUTCOME } from "@/lib/protocol/constants";
 import type { ClaimInspection, FactCheckReport } from "@/lib/engine/contract";
@@ -181,6 +182,9 @@ export default function ClaimDetailPage({ params }: ClaimDetailPageProps) {
       };
     });
   }, [claim, report]);
+
+  /** The live research feed, per seat: this lane's public tool calls in order. */
+  const researchSteps = useMemo(() => researchFeed(events), [events]);
 
   /** Compute outcome agreement and spread across valid final-round votes. */
   const agreementSummary = useMemo(() => {
@@ -702,6 +706,7 @@ export default function ClaimDetailPage({ params }: ClaimDetailPageProps) {
                   reasoning={seat.reasoning}
                   gonkaRequestId={seat.gonkaRequestId}
                   failureStatus={seat.failureStatus}
+                  researchSteps={researchSteps.get(seat.jurySeatId)}
                 />
               ))}
             </div>

@@ -17,6 +17,8 @@ const SUISCAN = "https://suiscan.xyz/testnet";
 /** Width of the "kind in words" column of a watch line. */
 const KIND_WIDTH = 17;
 const ARGUMENT_PREVIEW = 100;
+/** Sites named on one "opened n pages" line before the rest is a count. */
+const OPEN_DOMAIN_PREVIEW = 4;
 
 // ---------------------------------------------------------------------------
 // Durations and times
@@ -68,6 +70,15 @@ export function isoTime(at: string | number | undefined): string {
   const ms = typeof at === "number" ? at : at ? Date.parse(at) : Number.NaN;
   if (!Number.isFinite(ms)) return "-";
   return new Date(ms).toISOString().replace(/\.\d{3}Z$/, "Z");
+}
+
+/** The site a URL belongs to ("mit.edu"); anything unparseable prints as it is. */
+export function domainOf(url: string): string {
+  try {
+    return new URL(url).hostname.replace(/^www\./, "");
+  } catch {
+    return url;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -525,6 +536,48 @@ export function eventTime(event: StreamEvent): string | undefined {
   return event.occurredAt;
 }
 
+/**
+ * What one live research step did: `searched (support) "..."`, `opened 3
+ * pages: mit.edu, apa.org`, `is drafting its answer`. The query is quoted
+ * through JSON so a query with a quote or a newline stays on one line.
+ */
+function researchStepWords(payload: Json): string | undefined {
+  const kind = asString(payload.kind);
+  if (kind === "answer") return "is drafting its answer";
+  if (kind === "search") {
+    const intent = asString(payload.intent);
+    const searched = intent ? `searched (${intent})` : "searched";
+    const query = asString(payload.query);
+    return query === undefined
+      ? `${searched} the web`
+      : `${searched} ${JSON.stringify(truncate(query, ARGUMENT_PREVIEW))}`;
+  }
+  if (kind !== "open") return undefined;
+  const urls = asArray(payload.urls).filter((url): url is string => typeof url === "string");
+  const count = asNumber(payload.page_count) ?? urls.length;
+  const pages = `opened ${count} page${count === 1 ? "" : "s"}`;
+  const sites: string[] = [];
+  for (const url of urls) {
+    const site = domainOf(url);
+    if (!sites.includes(site)) sites.push(site);
+  }
+  if (sites.length === 0) return pages;
+  const rest = sites.length - OPEN_DOMAIN_PREVIEW;
+  return `${pages}: ${sites.slice(0, OPEN_DOMAIN_PREVIEW).join(", ")}${rest > 0 ? `, +${rest} more` : ""}`;
+}
+
+/** "(model 19.0 s, upload 8.0 s)" from a step's timing_ms payload, --verbose only. */
+export function timingWords(value: unknown): string | undefined {
+  if (!isRecord(value)) return undefined;
+  const parts: string[] = [];
+  for (const [name, milliseconds] of Object.entries(value)) {
+    const ms = asNumber(milliseconds);
+    if (ms === undefined || ms < 0) continue;
+    parts.push(`${name.replace(/_/g, " ")} ${(ms / 1_000).toFixed(1)} s`);
+  }
+  return parts.length === 0 ? undefined : `(${parts.join(", ")})`;
+}
+
 /** `HH:MM:SSZ  <kind in words>  <detail>`. */
 function line(event: StreamEvent, kind: string, detail: string): string {
   return `${clockTime(eventTime(event))}  ${kind.padEnd(KIND_WIDTH)}  ${detail}`.trimEnd();
@@ -533,8 +586,18 @@ function line(event: StreamEvent, kind: string, detail: string): string {
 /**
  * One watch line for an event, or undefined when the kind is skipped. Also
  * advances the per-phase counters, so call it exactly once per event.
+ *
+ * With --verbose the line carries the step's own `timing_ms` payload, so a
+ * slow claim says where the time went without opening the dossier.
  */
 export function renderEvent(event: StreamEvent, context: EventContext): string | undefined {
+  const text = renderEventLine(event, context);
+  if (text === undefined || !context.verbose) return text;
+  const timings = timingWords(event.payload.timing_ms);
+  return timings === undefined ? text : `${text} ${timings}`;
+}
+
+function renderEventLine(event: StreamEvent, context: EventContext): string | undefined {
   const payload = event.payload;
   const raw = event.raw;
   const who = () => jurorLabel(context.seats, seatOf(payload), agentOf(payload, raw));
@@ -565,6 +628,11 @@ export function renderEvent(event: StreamEvent, context: EventContext): string |
     case "RESEARCH_TICK":
       if (!context.verbose) return undefined;
       return line(event, "research", `${who()} ${asString(payload.kind) ?? "tick"}`);
+    case "research_step": {
+      // The live feed: public web material only, printed as it lands.
+      const words = researchStepWords(payload);
+      return words === undefined ? undefined : line(event, "research", `${who()} ${words}`);
+    }
     case "output_repaired":
       return line(event, "output repaired", `${who()} output repaired: ${asString(payload.field) ?? "?"}`);
     case "run_approved":

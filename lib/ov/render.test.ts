@@ -309,6 +309,51 @@ describe("event lines", () => {
     );
   });
 
+  it("prints one line per live research step", () => {
+    const ctx = context();
+    expect(
+      renderEvent(
+        event("research_step", { jury_seat_id: seat, ordinal: 0, kind: "search", intent: "support", query: 'the "ten percent" myth' }),
+        ctx,
+      ),
+    ).toBe('03:21:06Z  research           juror 3 (MiniMax) searched (support) "the \\"ten percent\\" myth"');
+    expect(
+      renderEvent(
+        event("research_step", {
+          jury_seat_id: seat,
+          ordinal: 1,
+          kind: "open",
+          urls: ["https://www.mit.edu/a", "https://mit.edu/b", "https://apa.org/c"],
+          page_count: 3,
+        }),
+        ctx,
+      ),
+    ).toBe("03:21:06Z  research           juror 3 (MiniMax) opened 3 pages: mit.edu, apa.org");
+    expect(renderEvent(event("research_step", { jury_seat_id: seat, ordinal: 2, kind: "answer" }), ctx)).toBe(
+      "03:21:06Z  research           juror 3 (MiniMax) is drafting its answer",
+    );
+    // A step of an unknown shape says nothing rather than half a line.
+    expect(renderEvent(event("research_step", { jury_seat_id: seat, ordinal: 3 }), ctx)).toBeUndefined();
+  });
+
+  it("adds the step timings to any line only with --verbose", () => {
+    const payload = {
+      jury_seat_id: seat,
+      run_hash: `0x${"ab".repeat(32)}`,
+      timing_ms: { model: 19_000, upload: 8_040, approve: 3_000, seal: -1 },
+    };
+    const ctx = context();
+    expect(renderEvent(event("run_approved", payload), ctx)).toBe(
+      "03:21:06Z  run approved       juror 3 (MiniMax) run approved, hash 0xabababab…",
+    );
+    expect(renderEvent(event("run_approved", payload), { ...ctx, verbose: true })).toBe(
+      "03:21:06Z  run approved       juror 3 (MiniMax) run approved, hash 0xabababab… (model 19.0 s, upload 8.0 s, approve 3.0 s)",
+    );
+    expect(renderEvent(event("evidence_frozen", { root: "0x1", phase: 1 }), { ...ctx, verbose: true })).toBe(
+      "03:21:06Z  evidence frozen    root 0x1, phase 1",
+    );
+  });
+
   it("skips research ticks and unknown kinds unless verbose", () => {
     const ctx = context();
     expect(renderEvent(event("RESEARCH_TICK", { kind: "open", jurySeatId: seat }), ctx)).toBeUndefined();

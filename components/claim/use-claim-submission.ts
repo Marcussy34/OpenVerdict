@@ -81,7 +81,8 @@ export function useClaimSubmission() {
         return false;
       }
       if (data.claimId) {
-        router.push(`/claims/${encodeURIComponent(data.claimId)}`);
+        // Straight into the live transcript: the jury forms while the page loads.
+        router.push(`/claims/${encodeURIComponent(data.claimId)}?view=live`);
         return true;
       }
       return false;

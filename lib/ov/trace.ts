@@ -18,7 +18,7 @@ import {
   type RunAudit,
 } from "../audit/audit-claim";
 import { OvError, asArray, asNumber, asString, isRecord, type Json } from "./api";
-import { modelLabel, wrapText } from "./render";
+import { domainOf, modelLabel, timingWords, wrapText } from "./render";
 
 /** Terminal columns when stdout is not a TTY. */
 export const DEFAULT_TRACE_WIDTH = 100;
@@ -90,6 +90,8 @@ export type TraceRound = {
   rawAnswer?: string;
   /** Plain words for a round with no trail (failed seat, sealed run). */
   missing?: string;
+  /** `timing_ms` of this run's approval event: model, seal, upload, approve. */
+  timings?: Record<string, number>;
 };
 
 export type TraceJuror = {
@@ -306,9 +308,29 @@ function missingReason(result: AuditResult, run: RunAudit): string {
   return "no run proof exists for this seat yet";
 }
 
+/** The `timing_ms` object the run_approved event carried for this run, if any. */
+function timingsOf(result: AuditResult, runId: string): Record<string, number> | undefined {
+  for (const event of result.sources.events) {
+    if (event.kind !== "run_approved") continue;
+    const payload = isRecord(event.payload) ? event.payload : {};
+    const id = asString(payload.run_id) ?? asString(event.runId);
+    if (id?.toLowerCase() !== runId.toLowerCase()) continue;
+    const timings = isRecord(payload.timing_ms) ? payload.timing_ms : undefined;
+    if (timings === undefined) continue;
+    const entries: Record<string, number> = {};
+    for (const [name, value] of Object.entries(timings)) {
+      const milliseconds = asNumber(value);
+      if (milliseconds !== undefined && milliseconds >= 0) entries[name] = milliseconds;
+    }
+    if (Object.keys(entries).length > 0) return entries;
+  }
+  return undefined;
+}
+
 function roundOf(result: AuditResult, run: RunAudit): TraceRound {
   const proof = isRecord(result.sources.proofs[run.runId]) ? (result.sources.proofs[run.runId] as Json) : undefined;
   const bundle = proof && isRecord(proof.bundle) ? proof.bundle : undefined;
+  const timings = timingsOf(result, run.runId);
   const round: TraceRound = {
     phase: run.phase,
     runId: run.runId,
@@ -316,6 +338,7 @@ function roundOf(result: AuditResult, run: RunAudit): TraceRound {
     ...(run.role ? { role: run.role } : {}),
     ...(run.vote ? { vote: run.vote } : {}),
     turns: [],
+    ...(timings === undefined ? {} : { timings }),
   };
   if (!bundle) {
     round.missing = missingReason(result, run);
@@ -440,14 +463,6 @@ export function buildTrace(result: AuditResult, filter: TraceFilter = {}): Trace
 // ---------------------------------------------------------------------------
 
 /** "mcgovern.mit.edu" for a full url; the raw value when it does not parse. */
-export function domainOf(url: string): string {
-  try {
-    return new URL(url).hostname.replace(/^www\./, "");
-  } catch {
-    return url;
-  }
-}
-
 /** The url without its scheme, as the trail prints opened pages. */
 function bareUrl(url: string): string {
   return url.replace(/^https?:\/\//i, "").replace(/^www\./, "");
@@ -483,13 +498,15 @@ function pageLine(page: TracePage): string {
 /** "gonka req-...  devshard 70083  9029 tokens  18.3 s". */
 function receiptLine(round: TraceRound): string | undefined {
   const gateway = round.gateway;
-  if (!gateway) return undefined;
   const parts: string[] = [];
-  if (gateway.requestId) parts.push(`gonka ${gateway.requestId}`);
-  if (gateway.devshardId) parts.push(`devshard ${gateway.devshardId}`);
-  if (gateway.tokens !== undefined) parts.push(`${gateway.tokens} tokens`);
-  if (gateway.latencyMs !== undefined) parts.push(`${(gateway.latencyMs / 1_000).toFixed(1)} s`);
-  if (gateway.attempts !== undefined) parts.push(`${gateway.attempts} provider calls`);
+  if (gateway?.requestId) parts.push(`gonka ${gateway.requestId}`);
+  if (gateway?.devshardId) parts.push(`devshard ${gateway.devshardId}`);
+  if (gateway?.tokens !== undefined) parts.push(`${gateway.tokens} tokens`);
+  if (gateway?.latencyMs !== undefined) parts.push(`${(gateway.latencyMs / 1_000).toFixed(1)} s`);
+  if (gateway?.attempts !== undefined) parts.push(`${gateway.attempts} provider calls`);
+  // What each step of this seat took, when the approval event recorded it.
+  const timings = timingWords(round.timings);
+  if (timings !== undefined) parts.push(timings);
   return parts.length === 0 ? undefined : parts.join("  ");
 }
 
@@ -699,6 +716,7 @@ export function traceJson(trace: Trace): Json {
           ...(turn.answer ? { answer: turn.answer } : {}),
         })),
         ...(round.gateway ? { gateway: round.gateway } : {}),
+        ...(round.timings ? { timings: round.timings } : {}),
       })),
     })),
     ...(trace.debate ? { debate: trace.debate } : {}),

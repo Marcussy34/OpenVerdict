@@ -80,6 +80,7 @@ process); the five seats form the **committee**, and **4 of 5** is the
 - Each juror, alone, searches the live web **for AND against** the claim
 - **Word-for-word quotes from 2+ sites** required; every AI call runs **through GonkaRouter, nothing else**
 - Every page a juror opens is **archived publicly on Walrus**
+- Each search and page open is **published as it happens**; the answer, the vote and the reasoning stay sealed until the reveal
 - A failed juror records a **public failure**; no vote is ever invented
 
 <img src="docs/assets/hairline.svg" width="100%" height="1" alt="" />
@@ -231,6 +232,7 @@ truth: manipulation cannot hide.
 | GonkaRouter response metadata | Walrus run audit + Sui RunApproval object |
 | Gonka Request IDs, devshard ids, fingerprints, every attempt (retries, repairs, hedges) | Revealed run bundle on Walrus (sealed copy cited on chain before the commit) |
 | Juror research trail (searches with intent, pages opened on both sides, citations) | Transcript inside the sealed bundle; its hash is in the on-chain run hash |
+| Live juror research (each search with its intent and query, each page open) | Public `research_step` events as they land, replayable from the event stream |
 | Exact prompt and conversation sent to the model | `request.messages` in the revealed bundle; re-runnable through the re-execution check |
 | Reveal keys | Published at reveal, and escrowed under the Seal time-lock policy so the sealed bundle opens after the deadline without the operator |
 | Failed seats | Failure record (status, message, trail, attempts) on Walrus and on the claim page; no vote is inferred |
@@ -271,8 +273,10 @@ never FAIL. Run links, report links, queue links and bare ids are accepted;
 The whole journey runs from the same terminal through the public CLI `ov`
 (`pnpm ov`, also no key, no database, no wallet): check the jury's weather,
 extract a checkable claim from a page, submit it, watch the jury live, audit
-the verdict. The web console stays the visual monitor; the CLI reads and
-writes only the public API.
+the verdict. The web console stays the visual monitor: a claim page opens as a
+live transcript, the same events in the same words with one card per juror, and
+switches to the deliberation graph in a click. The CLI reads and writes only the
+public API.
 
 ```bash
 pnpm ov weather                                                    # DeepSeek, MiniMax, Kimi, Web search: ok or down, clear or not

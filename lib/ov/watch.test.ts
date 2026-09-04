@@ -134,6 +134,43 @@ describe("watch: history replay", () => {
     expect(h.out.some((line) => /research {11}juror 4 \(MiniMax\) search$/.test(line))).toBe(true);
   });
 
+  it("prints the live research feed as it lands and passes it through --json", async () => {
+    const seat = FINALIZED.rounds![0]!.expectedJurySeatIds[2]!;
+    const step = (sequenceNumber: number, payload: Record<string, unknown>) => ({
+      kind: "research_step",
+      sequence: sequenceNumber,
+      claimId: FINALIZED_ID,
+      phase: "INFERENCE_1",
+      source: "ENGINE",
+      visibility: "PUBLIC_NOW",
+      runId: `0x${"aa".repeat(32)}`,
+      occurredAt: "2026-09-03T03:20:00.000Z",
+      payload: { jury_seat_id: seat, ...payload },
+    });
+    // The steps land while the seat researches, before its run is approved.
+    const events = [...EVENTS];
+    events.splice(14, 0,
+      step(40, { ordinal: 0, kind: "search", intent: "challenge", query: "ten percent brain myth" }),
+      step(41, { ordinal: 1, kind: "open", urls: ["https://mcgovern.mit.edu/a", "https://www.apa.org/b"], page_count: 2 }),
+      step(42, { ordinal: 2, kind: "answer" }),
+    );
+
+    const h = harness({ kind: "claim", id: FINALIZED_ID });
+    Object.entries(finalizedRoutes(h.clock, FINALIZED, events)).forEach(([key, route]) => h.net.route(key, route));
+    expect((await h.run()).exitCode).toBe(0);
+    expect(h.out).toContain('03:20:00Z  research           juror 3 (MiniMax) searched (challenge) "ten percent brain myth"');
+    expect(h.out).toContain("03:20:00Z  research           juror 3 (MiniMax) opened 2 pages: mcgovern.mit.edu, apa.org");
+    expect(h.out).toContain("03:20:00Z  research           juror 3 (MiniMax) is drafting its answer");
+
+    const j = harness({ kind: "claim", id: FINALIZED_ID });
+    Object.entries(finalizedRoutes(j.clock, FINALIZED, events)).forEach(([key, route]) => j.net.route(key, route));
+    await j.run({ json: true });
+    const lines = j.out.map((line) => JSON.parse(line) as Record<string, unknown>);
+    const passed = lines.filter((line) => line.kind === "research_step");
+    expect(passed).toHaveLength(3);
+    expect(passed[0]).toMatchObject({ payload: { kind: "search", query: "ten percent brain myth" } });
+  });
+
   it("renders a two-round claim with the debate and round two seats", async () => {
     const h = harness({ kind: "claim", id: DEBATE.claimId });
     Object.entries(finalizedRoutes(h.clock, DEBATE, DEBATE_EVENTS)).forEach(([key, route]) => h.net.route(key, route));

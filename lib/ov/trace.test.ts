@@ -7,7 +7,7 @@ import type { ClaimInspection } from "../engine/contract";
 import { deriveRunId } from "../verify/run-proof";
 import { Api, OvError } from "./api";
 import { auditCommand, traceCommand, type CommandEnv } from "./commands";
-import { captured, clone, createClock, fakeFetch, fixture, json, type FakeFetch } from "./fixtures.test-utils";
+import { captured, clone, createClock, fakeFetch, fixture, json, sseResponse, type FakeFetch } from "./fixtures.test-utils";
 
 const BASE = "https://ov.test";
 const NOW = Date.parse("2026-09-03T10:00:00Z");
@@ -223,6 +223,40 @@ describe("ov trace on a settled one-round claim", () => {
     expect(await traceCommand(s.env, { target: FINALIZED.claimId, round: 2, full: false })).toBe(0);
     expect(s.out).toContain("this claim settled in one round; there is no round two");
     expect(s.out.filter((line) => line.startsWith("juror "))).toHaveLength(0);
+  });
+
+  it("appends the run's step timings to the receipt when the approval carried them", async () => {
+    const s = setup(FINALIZED, proofsForRound(FINALIZED, 1, RESEARCH_PROOF));
+    const seat = FINALIZED.rounds![0]!.expectedJurySeatIds[0]!;
+    const runId = deriveRunId(FINALIZED.claimId, seat, 1);
+    const clock = createClock(NOW);
+    s.net.route(`GET /api/claims/${FINALIZED.claimId}/events`, (init) =>
+      sseResponse(
+        clock,
+        [
+          {
+            event: {
+              kind: "run_approved",
+              sequence: 1,
+              claimId: FINALIZED.claimId,
+              runId,
+              phase: "INFERENCE_1",
+              source: "SUI",
+              visibility: "PUBLIC_NOW",
+              occurredAt: "2026-09-03T03:21:06.093Z",
+              payload: { run_id: runId, timing_ms: { model: 19_100, upload: 8_000, approve: 3_000 } },
+            },
+          },
+          { close: true },
+        ],
+        init?.signal,
+      ),
+    );
+
+    expect(await traceCommand(s.env, { target: FINALIZED.claimId, juror: 1, full: false })).toBe(0);
+    expect(s.out.join("\n")).toContain(
+      "       gonka req-1788405572969008592-322552  devshard 70083  9029 tokens  19.1 s  (model 19.1 s, upload 8.0 s, approve 3.0 s)",
+    );
   });
 
   it("--json prints the documented shape on stdout", async () => {

@@ -269,6 +269,9 @@ Report only what the lines show. Never predict a verdict, and never count partia
 - claim created: "The claim is live on Sui (transaction <digest>); its deadlines started with it."
 - evidence frozen, phase 1: "The evidence is frozen: root <0x...> on Sui, the manifest on Walrus, before any juror reasons. Nothing can be slipped in or out now."
 - seats drawn: "Sui's randomness drew five seats: <models in seat order>. At most two seats per model, three families."
+- research, searched: "Juror n searched for evidence <support or challenge> of the claim: '<query>'. The query and the sites are public as it happens; what it makes of them stays sealed."
+- research, opened: "Juror n opened <k> pages: <sites>. Every page is archived on Walrus before the juror reads it."
+- research, drafting: "Juror n is drafting its answer. The answer, its vote and its reasoning stay sealed until the reveal."
 - run approved: "Juror n finished its research; its run hash is on Sui and its sealed bundle is cited on chain. It can commit now."
 - vote committed: "Juror n sealed its vote (k of 5). Nobody, including us, can read it yet."
 - phase changed, COMMIT_1 to REVEAL_1: "All five have committed (or the commit window closed): the votes open together now, and Sui recomputes each commitment before accepting it."
@@ -287,11 +290,11 @@ Report only what the lines show. Never predict a verdict, and never count partia
 
 When a juror fails closed (a failed run, a missed commit, a missed reveal), say so the moment the line lands, name the seat and the model from the line, say that the attempt is voided as a whole and what happens next (relaunch on clear weather, attempt n of 3, give-up after three voids or six hours of bad weather after a void). The void line may arrive up to a minute after the failure, because the follower polls the claim record every 60 s alongside the stream.
 
-Skip `RESEARCH_TICK` lines (content-free pulses; they only mean a seat is working) and mention `inference_completed` or `argument_published` in at most one short line.
+Skip `RESEARCH_TICK` lines (content-free pulses; they only mean a seat is working) and mention `inference_completed` or `argument_published` in at most one short line. The `research` lines are the live feed and are worth narrating, but group them: one sentence per juror per burst, never one sentence per line.
 
 ## Demo flow B (end to end)
 
-Only when `ov.sh weather` says clear. Have a fresh statement ready (never one submitted in the last hour) and the pre-settled rehearsal claim at hand for the audit (`0x273220b56d87edea0a6db35f85c0fc8f36591461ee6be6962e86bb4586ee4ac6`, "Humans use only ten percent of their brains.", NO, truth score 2.00, 5 of 5 seats). Open `<base>/claims/<id>` on the audience screen as soon as the claim id exists: the console shows the same events live (the stage pill naming the round, the LIVE chip, the "Attempt n of 3" pill, juror pulses during research, the graph blooming into searches, pages and citations at reveal, the debate dock in a second round, the certificate at settlement).
+Only when `ov.sh weather` says clear. Have a fresh statement ready (never one submitted in the last hour) and the pre-settled rehearsal claim at hand for the audit (`0x273220b56d87edea0a6db35f85c0fc8f36591461ee6be6962e86bb4586ee4ac6`, "Humans use only ten percent of their brains.", NO, truth score 2.00, 5 of 5 seats). Open `<base>/claims/<id>` on the audience screen as soon as the claim id exists: the console opens in the Live view and shows the same events as they land (the claim as the first message, one line per event, five juror cards with their live status lines, the stage pill naming the round, the LIVE chip, the "Attempt n of 3" pill). The Graph view, one click away, blooms into searches, pages and citations at the reveal, carries the debate dock in a second round, and lands the certificate at settlement.
 
 Spoken script, in order:
 

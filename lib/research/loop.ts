@@ -115,6 +115,21 @@ type BatchOpenResolution = BatchOpenTarget &
       }
   );
 
+/**
+ * What an activity observer learns about one recorded research step: the
+ * public web material the juror asked for (a query, the result domains, the
+ * URLs it opened), never a page's text, the answer, the vote or the reasoning.
+ */
+export type ResearchStepInfo = {
+  kind: "search" | "open" | "answer";
+  ordinal: number;
+  intent?: "support" | "challenge";
+  query?: string;
+  urls?: string[];
+  resultDomains?: string[];
+  pageCount?: number;
+};
+
 export type ResearchLoopFailureStatus =
   | "INVALID_SCHEMA"
   | "CITATION_INVALID"
@@ -154,6 +169,59 @@ function visibleSearchResults(
       ? {}
       : { publishedAt: result.publishedAt }),
   }));
+}
+
+/** The site a URL belongs to, for the public activity feed ("mit.edu"). */
+function siteOf(url: string): string | undefined {
+  try {
+    const hostname = new URL(url).hostname.toLowerCase().replace(/^www\./, "");
+    return hostname.length > 0 ? hostname : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** Distinct result sites in rank order; the feed shows sites, never snippets. */
+function resultDomains(results: readonly { url: string }[]): string[] {
+  const sites: string[] = [];
+  for (const result of results) {
+    const site = siteOf(result.url);
+    if (site !== undefined && !sites.includes(site)) sites.push(site);
+  }
+  return sites;
+}
+
+/**
+ * What an observer is told about one recorded step. Search queries, result
+ * sites and opened URLs are public web material; an invalid action carries
+ * the model's raw content, so it is never reported.
+ */
+function stepInfo(
+  ordinal: number,
+  action: ResearchTranscriptStep["action"],
+  result: ResearchTranscriptStep["result"],
+): ResearchStepInfo | undefined {
+  if (action.action === "search") {
+    const domains = result.tool === "search" ? resultDomains(result.results) : [];
+    return {
+      kind: "search",
+      ordinal,
+      ...(action.intent === undefined ? {} : { intent: action.intent }),
+      query: action.query,
+      ...(domains.length === 0 ? {} : { resultDomains: domains }),
+    };
+  }
+  if (action.action === "open") {
+    const urls = action.urls ?? (action.url === undefined ? [] : [action.url]);
+    return {
+      kind: "open",
+      ordinal,
+      ...(urls.length === 0 ? {} : { urls, pageCount: urls.length }),
+    };
+  }
+  // The answer itself stays sealed until reveal; only the step is public.
+  if (action.action === "answer") return { kind: "answer", ordinal };
+  return undefined;
 }
 
 const RESEARCH_REQUIRED_MESSAGE =
@@ -250,7 +318,7 @@ export async function runResearchLoop(
     pages: PageStore;
     searchCache: SearchCache;
     now?: () => number;
-    onStep?: (info: { kind: "search" | "open"; ordinal: number }) => void;
+    onStep?: (info: ResearchStepInfo) => void;
     /** Injectable pause between provider retries (tests pass a no-op). */
     sleep?: (milliseconds: number) => Promise<void>;
     /**
@@ -355,6 +423,16 @@ export async function runResearchLoop(
     messages.push({ role: "user", content });
   };
 
+  const emitStep = (info: ResearchStepInfo | undefined): void => {
+    if (info === undefined) return;
+    // Activity observers receive no research content and cannot affect the run.
+    try {
+      deps.onStep?.(info);
+    } catch {
+      // The transcript remains the source of truth when an observer fails.
+    }
+  };
+
   const recordStep = (
     turn: number,
     startedAtMs: number,
@@ -374,14 +452,8 @@ export async function runResearchLoop(
       action,
       result,
     });
-    if (action.action === "search" || action.action === "open") {
-      // Activity observers receive no research content and cannot affect the run.
-      try {
-        deps.onStep?.({ kind: action.action, ordinal });
-      } catch {
-        // The transcript remains the source of truth when an observer fails.
-      }
-    }
+    // A batched open reports once for the whole batch, below, not per page.
+    if (batch === undefined) emitStep(stepInfo(ordinal, action, result));
   };
 
   const forceAnswerBeforeLastTurn = (turn: number): void => {
@@ -759,6 +831,17 @@ export async function runResearchLoop(
           { tool: "open_many" }
         >["pages"] = [];
         const from = researchAction.from ?? 0;
+
+        // One observer step per open action: the batch's URLs in request order,
+        // reported before the per-page steps below take their own ordinals.
+        if (requestedUrls.length > 0) {
+          emitStep({
+            kind: "open",
+            ordinal: steps.length,
+            urls: [...requestedUrls],
+            pageCount: requestedUrls.length,
+          });
+        }
 
         for (const [index, resolution] of resolutions.entries()) {
           const batch = { size: requestedUrls.length, position: index + 1 };

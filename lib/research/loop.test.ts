@@ -32,6 +32,7 @@ import { createFakeResearchProvider } from "./fake";
 import {
   runResearchLoop,
   type PageStore,
+  type ResearchStepInfo,
   type StoredPage,
 } from "./loop";
 import type { ResearchProvider } from "./provider";
@@ -325,7 +326,7 @@ function loopDependencies(options: {
   searchCache?: SearchCache;
   now?: () => number;
   deadlineMs?: number;
-  onStep?: (info: { kind: "search" | "open"; ordinal: number }) => void;
+  onStep?: (info: ResearchStepInfo) => void;
 }) {
   return {
     complete: options.complete,
@@ -385,7 +386,7 @@ describe("research loop", () => {
       action({ action: "open", url }),
       unsureAnswer(),
     ]);
-    const calls: Array<{ kind: "search" | "open"; ordinal: number }> = [];
+    const calls: ResearchStepInfo[] = [];
 
     const result = await runResearchLoop(
       loopDependencies({
@@ -398,13 +399,52 @@ describe("research loop", () => {
     );
 
     expect(result.ok).toBe(true);
+    // The feed carries public web material only: the query, the result sites
+    // and the opened URLs. The answer step names no content at all.
     expect(calls).toEqual([
-      { kind: "search", ordinal: 0 },
-      { kind: "open", ordinal: 1 },
+      { kind: "search", ordinal: 0, query, resultDomains: ["fake.evidence.test"] },
+      { kind: "open", ordinal: 1, urls: [url], pageCount: 1 },
+      { kind: "answer", ordinal: 2 },
     ]);
-    for (const info of calls) {
-      expect(Object.keys(info).sort()).toEqual(["kind", "ordinal"]);
-    }
+    expect(Object.keys(calls[2]!).sort()).toEqual(["kind", "ordinal"]);
+  });
+
+  it("reports a batched open once, with every requested URL", async () => {
+    const query = "batched research";
+    const urls = [
+      "https://fake.evidence.test/batched-research/1",
+      "https://fake.evidence.test/batched-research/2",
+    ];
+    const script = scriptedCompletion([
+      action({ action: "search", query, intent: "support" }),
+      action({ action: "open", urls }),
+      unsureAnswer(),
+    ]);
+    const calls: ResearchStepInfo[] = [];
+
+    const result = await runResearchLoop(
+      loopDependencies({
+        complete: script.complete,
+        policy: v4Policy(),
+        spec: DEFAULT_PROMPT_SPEC_V4,
+        input: makeInput({ promptVersion: "4" }),
+        onStep: (info) => calls.push(info),
+      }),
+    );
+
+    expect(result.ok).toBe(true);
+    // Two pages, one open action, one feed line; the intent rides the search.
+    expect(calls).toEqual([
+      {
+        kind: "search",
+        ordinal: 0,
+        intent: "support",
+        query,
+        resultDomains: ["fake.evidence.test"],
+      },
+      { kind: "open", ordinal: 1, urls, pageCount: 2 },
+      { kind: "answer", ordinal: 3 },
+    ]);
   });
 
   it("searches, opens, and returns a cited answer with faithful messages", async () => {

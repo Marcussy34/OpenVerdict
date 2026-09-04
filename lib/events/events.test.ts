@@ -41,6 +41,77 @@ describe("public resolution-event serialization", () => {
     ).toMatchObject({ kind: "inference_completed", runId: "run-1" });
   });
 
+  it("publishes research_step before the reveal, with bounded public material", () => {
+    const event = createResolutionEvent({
+      ...base,
+      runId: "run-1",
+      actorId: "agent-1",
+      kind: "research_step",
+      source: "ENGINE",
+      visibility: "PUBLIC_NOW",
+      payload: {
+        claim_id: "0xclaim",
+        jury_seat_id: "0xseat",
+        agent_profile_id: "agent-1",
+        run_id: "run-1",
+        phase: 1,
+        ordinal: 2,
+        kind: "search",
+        intent: "challenge",
+        query: "q".repeat(400),
+        result_domains: ["mit.edu", "apa.org"],
+      },
+    });
+
+    // Not reveal-gated: the query and the sites are public web material.
+    const serialized = serializePublicEvent(event, { revealedRunIds: new Set() });
+    expect(serialized?.payload).toEqual({
+      claim_id: "0xclaim",
+      jury_seat_id: "0xseat",
+      agent_profile_id: "agent-1",
+      run_id: "run-1",
+      phase: 1,
+      ordinal: 2,
+      kind: "search",
+      intent: "challenge",
+      query: "q".repeat(300),
+      result_domains: ["mit.edu", "apa.org"],
+    });
+  });
+
+  it("allowlists research_step fields and caps the opened URL list", () => {
+    const urls = Array.from({ length: 14 }, (_, index) => `https://site.test/${index}`);
+    const event = createResolutionEvent({
+      ...base,
+      runId: "run-1",
+      kind: "research_step",
+      source: "ENGINE",
+      visibility: "PUBLIC_NOW",
+      payload: {
+        jury_seat_id: "0xseat",
+        ordinal: 3,
+        kind: "open",
+        urls: [...urls, 7],
+        page_count: 14,
+        outcome: "YES",
+        reasoning: "leak",
+        salt: "leak",
+        nested: { outcome: "NO" },
+      },
+    });
+
+    const serialized = serializePublicEvent(event, { revealedRunIds: new Set() });
+    expect(serialized?.payload).toEqual({
+      jury_seat_id: "0xseat",
+      ordinal: 3,
+      kind: "open",
+      urls: urls.slice(0, 10),
+      page_count: 14,
+    });
+    expect(JSON.stringify(serialized)).not.toContain("YES");
+    expect(JSON.stringify(serialized)).not.toContain("leak");
+  });
+
   it("allowlists agent_activity fields so payload tricks cannot leak a vote", () => {
     const event = createResolutionEvent({
       ...base,

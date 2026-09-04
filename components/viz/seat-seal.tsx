@@ -5,6 +5,8 @@ import { Lock, Unlock, Clock, ShieldTick, ShieldCross, Warning2, Cpu } from "@/c
 import { cn } from "@/lib/utils";
 import { HashChip } from "./hash-chip";
 import { ModelDot, modelFamily } from "./model-badge";
+import { ResearchFeed } from "./research-feed";
+import type { ResearchFeedStep } from "@/lib/viz/research-feed";
 
 export type SeatState = "pending" | "running" | "sealed" | "revealed" | "failed";
 export type SeatOutcome = "YES" | "NO" | "UNSURE";
@@ -256,6 +258,7 @@ export function SeatSeal({
   reasoning,
   gonkaRequestId,
   failureStatus,
+  researchSteps,
   footer,
   className,
 }: {
@@ -270,6 +273,8 @@ export function SeatSeal({
   reasoning?: string;
   gonkaRequestId?: string;
   failureStatus?: string;
+  /** This seat's live research steps, newest last; empty until the first lands. */
+  researchSteps?: readonly ResearchFeedStep[];
   footer?: React.ReactNode;
   className?: string;
 }) {
@@ -422,6 +427,19 @@ export function SeatSeal({
         <div className="flex items-center gap-1.5 rounded-lg border border-dashed border-border bg-surface px-2.5 py-2 text-[10px] text-muted-foreground">
           <Clock size="12" variant="Bold" />
           <span className="ov-micro ov-micro-sm">Awaiting commitment</span>
+        </div>
+      )}
+
+      {/* The live research feed: public tool calls as they land, under the
+          sealed vote. The lane scrolls so one busy juror cannot stretch the row. */}
+      {researchSteps !== undefined && researchSteps.length > 0 && (
+        <div className="space-y-1.5 rounded-lg border border-border/70 bg-surface p-2.5">
+          <span className="ov-micro ov-micro-sm text-muted-foreground">
+            Research feed
+          </span>
+          <div className="ov-scroll max-h-32 overflow-y-auto">
+            <ResearchFeed steps={researchSteps} />
+          </div>
         </div>
       )}
 

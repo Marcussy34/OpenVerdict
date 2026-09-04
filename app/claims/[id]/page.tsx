@@ -26,10 +26,12 @@ import {
   CloseCircle,
   DocumentText,
   ExportSquare,
+  Hierarchy,
   InfoCircle,
   Judge,
   Pause,
   Play,
+  Radar,
   Refresh,
   ShieldTick,
   Warning2,
@@ -41,8 +43,15 @@ import { CanvasHighlightProvider } from "@/components/viz/canvas-highlight";
 import { DeliberationCanvas } from "@/components/viz/deliberation-canvas";
 import { DeliberationChat } from "@/components/viz/deliberation-chat";
 import { HashChip } from "@/components/viz/hash-chip";
+import { LiveTranscript } from "@/components/viz/live-transcript";
+import { ResearchFeed } from "@/components/viz/research-feed";
 import { outcomeLabel } from "@/components/viz/seat-seal";
-import type { ClaimInspection, DeliberationTurnPublic, ResolutionEvent } from "@/lib/engine/contract";
+import type {
+  AgentDirectoryEntry,
+  ClaimInspection,
+  DeliberationTurnPublic,
+  ResolutionEvent,
+} from "@/lib/engine/contract";
 import { isStrandedDiscussion } from "@/lib/engine/claim-lifecycle";
 import { CLAIM_MODE, CLAIM_STATE } from "@/lib/protocol/constants";
 import { suiObjectUrl, suiTransactionUrl } from "@/lib/web/explorer";
@@ -54,6 +63,12 @@ import {
   type GraphNode,
   type JurorFamily,
 } from "@/lib/viz/deliberation-graph";
+import {
+  researchFeed,
+  researchStepWords,
+  type ResearchFeedStep,
+} from "@/lib/viz/research-feed";
+import { buildTranscript } from "@/lib/viz/transcript";
 import { deriveRunId, type BrowserRunProof } from "@/lib/verify/run-proof";
 import { useReplay } from "@/components/viz/use-replay";
 
@@ -64,6 +79,12 @@ interface ClaimCanvasPageProps {
 type ProofCache = Record<string, BrowserRunProof>;
 type ReplayControls = ReturnType<typeof useReplay>;
 type UnknownRecord = Record<string, unknown>;
+/** The live transcript, or the deliberation graph, over the same record. */
+type ClaimView = "live" | "graph";
+/** The public agent directory: a seat's model and role before any reveal. */
+type AgentDirectory = ReadonlyMap<string, { modelId?: string; role?: string }>;
+/** Replay speed of the live transcript: a ten-minute verdict in thirty seconds. */
+const TRANSCRIPT_REPLAY_SPEED = 20;
 
 const EMPTY_GRAPH: DeliberationGraph = { nodes: [], edges: [] };
 const JUROR_AVATARS: Partial<Record<JurorFamily, string[]>> = {
@@ -616,18 +637,60 @@ function LeftRail({
   );
 }
 
+/**
+ * The two views of one claim. The label of the segment you are not on names
+ * where it takes you, so the graph always offers the way back to live.
+ */
+function ViewSwitcher({
+  view,
+  onChange,
+}: {
+  view: ClaimView;
+  onChange: (next: ClaimView) => void;
+}) {
+  const segment = (
+    target: ClaimView,
+    label: string,
+    Icon: typeof Radar,
+  ) => (
+    <button
+      type="button"
+      onClick={() => onChange(target)}
+      aria-pressed={view === target}
+      className={cn(
+        "inline-flex min-h-8 items-center gap-1.5 rounded-full px-3 text-[11px] font-semibold transition-colors focus-visible:ring-2 focus-visible:ring-white/80 focus-visible:outline-none",
+        view === target
+          ? "bg-[#0e76ff] text-white"
+          : "text-white/60 hover:text-white",
+      )}
+    >
+      <Icon size="13" variant="Bold" />
+      {label}
+    </button>
+  );
+
+  return (
+    <div className="absolute top-4 left-4 z-40 flex items-center gap-1 rounded-full border border-white/15 bg-[#07162f]/90 p-1 shadow-xl backdrop-blur">
+      {segment("live", view === "graph" ? "Back to live" : "Live", Radar)}
+      {segment("graph", "Graph", Hierarchy)}
+    </div>
+  );
+}
+
 function SeatInspector({
   claim,
   events,
   graph,
   node,
   proofsByRunId,
+  researchSteps,
 }: {
   claim: ClaimInspection;
   events: ResolutionEvent[];
   graph: DeliberationGraph;
   node: GraphNode;
   proofsByRunId: ProofCache;
+  researchSteps: Map<string, ResearchFeedStep[]>;
 }) {
   const seatId = node.seatId;
   if (seatId === undefined) return null;
@@ -664,6 +727,7 @@ function SeatInspector({
     ?? verdictNode?.confidenceBps
     ?? commitment.confidenceBps
     ?? output?.confidenceBps;
+  const steps = researchSteps.get(seatId) ?? [];
 
   return (
     <div className="space-y-5">
@@ -709,6 +773,16 @@ function SeatInspector({
         </div>
       </dl>
 
+      {steps.length > 0 && (
+        <div className="space-y-2 rounded-xl border border-white/10 bg-white/[0.04] p-3">
+          <p className="text-[10px] tracking-[0.12em] text-white/40 uppercase">
+            Research feed
+          </p>
+          {/* Live public tool calls; the vote stays sealed until reveal. */}
+          <ResearchFeed steps={steps} />
+        </div>
+      )}
+
       {proof !== undefined ? (
         <RunProof
           key={`proof-${commitment.jurySeatId}`}
@@ -733,12 +807,14 @@ function NodeInspector({
   graph,
   node,
   proofsByRunId,
+  researchSteps,
 }: {
   claim: ClaimInspection;
   events: ResolutionEvent[];
   graph: DeliberationGraph;
   node: GraphNode | null;
   proofsByRunId: ProofCache;
+  researchSteps: Map<string, ResearchFeedStep[]>;
 }) {
   if (node === null) {
     return (
@@ -759,6 +835,7 @@ function NodeInspector({
         graph={graph}
         node={node}
         proofsByRunId={proofsByRunId}
+        researchSteps={researchSteps}
       />
     );
   }
@@ -768,17 +845,31 @@ function NodeInspector({
     const seatFailure = claim.commitments.find(
       (commitment) => commitment.jurySeatId === node.seatId,
     )?.failureStatus;
+    // The live feed publishes the query and the URLs of this step as it lands;
+    // only the answer, the vote and the reasoning wait for the reveal.
+    const liveStep = researchSteps
+      .get(node.seatId ?? "")
+      ?.find((step) => step.ordinal === node.stepIndex && step.kind !== "answer");
     return (
       <div className="space-y-4">
         <span className="inline-flex rounded-full border border-white/20 bg-white/[0.06] px-2 py-1 text-[10px] font-semibold text-white/75 uppercase">
-          Sealed {kind}
+          {liveStep === undefined ? "Sealed" : "Live"} {kind}
         </span>
-        <p className="text-sm leading-relaxed text-white/85">
-          This juror performed a {kind} at this point in its research. What was
-          {kind === "search" ? " searched" : " opened"} stays sealed inside the
-          juror&apos;s run bundle so no other juror can copy the research and no
-          observer can front-run the vote while the round is live.
-        </p>
+        {liveStep !== undefined ? (
+          <p className="text-sm leading-relaxed text-white/85">
+            At this point in its research, this juror{" "}
+            {researchStepWords(liveStep)}. The step itself is public as it
+            happens; the answer it draws, its vote and its reasoning stay
+            sealed until the reveal.
+          </p>
+        ) : (
+          <p className="text-sm leading-relaxed text-white/85">
+            This juror performed a {kind} at this point in its research. What was
+            {kind === "search" ? " searched" : " opened"} stays sealed inside the
+            juror&apos;s run bundle so no other juror can copy the research and no
+            observer can front-run the vote while the round is live.
+          </p>
+        )}
         {seatFailure !== undefined ? (
           <p className="rounded-xl border border-white/10 bg-white/[0.04] p-3 text-xs leading-relaxed text-white/70">
             This seat later failed ({seatFailure}) and never revealed, so the
@@ -1243,6 +1334,10 @@ function ClaimCanvasContent({ params }: ClaimCanvasPageProps) {
   const [loading, setLoading] = useState(true);
   const [engineOffline, setEngineOffline] = useState(false);
   const [notFound, setNotFound] = useState(false);
+  // The two views of the same record: the live transcript and the graph.
+  const [view, setView] = useState<ClaimView | null>(null);
+  const [agents, setAgents] = useState<AgentDirectory>(new Map());
+  const [loadingRunIds, setLoadingRunIds] = useState<ReadonlySet<string>>(new Set());
 
   const loadData = useCallback(async () => {
     try {
@@ -1319,6 +1414,33 @@ function ClaimCanvasContent({ params }: ClaimCanvasPageProps) {
     return () => clearTimeout(timer);
   }, [eventCount, loadData]);
 
+  // The public agent directory names each seat's model and role from the draw,
+  // long before any run is revealed. A failure only costs the role chips.
+  useEffect(() => {
+    let ignore = false;
+    void (async () => {
+      try {
+        const response = await fetch("/api/agents", { cache: "no-store" });
+        if (!response.ok || ignore) return;
+        const body = await response.json() as { agents?: AgentDirectoryEntry[] };
+        if (ignore) return;
+        setAgents(
+          new Map(
+            (body.agents ?? []).map((agent) => [
+              agent.agentProfileId,
+              { modelId: agent.modelId, role: agent.role },
+            ]),
+          ),
+        );
+      } catch {
+        /* the transcript falls back to the record's model ids */
+      }
+    })();
+    return () => {
+      ignore = true;
+    };
+  }, []);
+
   useEffect(() => {
     if (claim === null) return;
     const pending = claim.commitments.flatMap((commitment, index) => {
@@ -1358,6 +1480,42 @@ function ClaimCanvasContent({ params }: ClaimCanvasPageProps) {
     });
   }, [claim, id]);
 
+  /** Fetch a juror's run proof the first time its card is opened. */
+  const requestProofs = useCallback((runIds: string[]) => {
+    const pending = runIds.filter((runId) => !requestedProofsRef.current.has(runId));
+    if (pending.length === 0) return;
+    for (const runId of pending) requestedProofsRef.current.add(runId);
+    setLoadingRunIds((current) => new Set([...current, ...pending]));
+    void Promise.all(
+      pending.map(async (runId) => {
+        try {
+          const response = await fetch(
+            `/api/claims/${encodeURIComponent(id)}/runs/${encodeURIComponent(runId)}/proof`,
+            { cache: "no-store" },
+          );
+          if (!response.ok) return null;
+          return [runId, await response.json() as BrowserRunProof] as const;
+        } catch {
+          return null;
+        }
+      }),
+    ).then((loaded) => {
+      setLoadingRunIds((current) => {
+        const next = new Set(current);
+        for (const runId of pending) next.delete(runId);
+        return next;
+      });
+      setProofsByRunId((current) => {
+        const next = { ...current };
+        for (const entry of loaded) {
+          if (entry === null) continue;
+          next[entry[0]] = entry[1];
+        }
+        return next;
+      });
+    });
+  }, [id]);
+
   const proofs = useMemo(
     () => Object.values(proofsByRunId).map((proof) => ({
       runId: proof.runId,
@@ -1367,6 +1525,17 @@ function ClaimCanvasContent({ params }: ClaimCanvasPageProps) {
       revealed: proof.revealed,
     })),
     [proofsByRunId],
+  );
+
+  // The live research feed, per seat: one lane's public tool calls in order.
+  const researchSteps = useMemo(() => researchFeed(events), [events]);
+
+  // The same record read as a conversation, with one card per juror.
+  const transcript = useMemo(
+    () => claim === null
+      ? { entries: [], jurors: [] }
+      : buildTranscript({ claim, events, agents }),
+    [agents, claim, events],
   );
 
   const graph = useMemo(() => {
@@ -1400,7 +1569,18 @@ function ClaimCanvasContent({ params }: ClaimCanvasPageProps) {
     }
     return [...byOrdinal.values()].sort((left, right) => left.ordinal - right.ordinal);
   }, [claim, events]);
-  const replay = useReplay(graph, claim !== null && claim.state >= 9);
+  const replayable =
+    claim !== null
+    && (claim.state >= 9
+      || claim.attemptChain?.status === "VOIDED"
+      || claim.attemptChain?.status === "GAVE_UP");
+  const replay = useReplay(graph, replayable);
+
+  // The live transcript is the way in; ?view=graph opens the canvas instead
+  // (the switcher takes over from there). The default is deliberately not
+  // derived from the claim's state: settling must never move the reader.
+  const resolvedView: ClaimView =
+    view ?? (searchParams.get("view") === "graph" ? "graph" : "live");
 
   // Autoplay replay once when requested via ?replay=1 on a terminal claim.
   // We wait until events or graph nodes have loaded so the replay has a valid span.
@@ -1482,24 +1662,54 @@ function ClaimCanvasContent({ params }: ClaimCanvasPageProps) {
 
       <main className="relative h-dvh flex-1 overflow-hidden">
         <StageBanner claim={claim} graph={graph} replay={replay} now={now} streamStatus={streamStatus} />
-        <DeliberationCanvas
-          graph={replay.visible}
-          selectedId={selectedId}
-          onSelect={handleSelect}
-          avatars={JUROR_AVATARS}
-          externalHighlightId={trailHighlightId}
-        />
+        <ViewSwitcher view={resolvedView} onChange={setView} />
 
-        <DeliberationChat
-          turns={
-            replay.active && replay.t < replay.endMs
-              ? deliberationTurns.filter((turn) => turn.atMs <= replay.t)
-              : deliberationTurns
-          }
-          commitments={claim.commitments}
-          live={claim.state === CLAIM_STATE.DISCUSSION}
-          convergedAfterExchange={claim.debateConvergedAfterExchange ?? null}
-        />
+        {resolvedView === "live" ? (
+          <LiveTranscript
+            claimId={claim.claimId}
+            statementFallback={claim.statement}
+            entries={transcript.entries}
+            jurors={transcript.jurors}
+            // The replay cursor, or the whole record when it is not running.
+            t={replay.active ? replay.t : Number.POSITIVE_INFINITY}
+            graph={replay.visible}
+            avatars={JUROR_AVATARS}
+            onOpenGraph={() => setView("graph")}
+            replay={{
+              available: replayable,
+              active: replay.active,
+              onReplay: () => {
+                replay.setSpeed(TRANSCRIPT_REPLAY_SPEED);
+                replay.start();
+              },
+              onSkipToEnd: replay.stop,
+            }}
+            proofsByRunId={proofsByRunId}
+            onRequestProof={requestProofs}
+            loadingRunIds={loadingRunIds}
+          />
+        ) : (
+          <>
+            <DeliberationCanvas
+              graph={replay.visible}
+              selectedId={selectedId}
+              onSelect={handleSelect}
+              avatars={JUROR_AVATARS}
+              externalHighlightId={trailHighlightId}
+            />
+
+            <DeliberationChat
+              turns={
+                replay.active && replay.t < replay.endMs
+                  ? deliberationTurns.filter((turn) => turn.atMs <= replay.t)
+                  : deliberationTurns
+              }
+              commitments={claim.commitments}
+              live={claim.state === CLAIM_STATE.DISCUSSION}
+              convergedAfterExchange={claim.debateConvergedAfterExchange ?? null}
+            />
+          </>
+        )}
 
         <button
           type="button"
@@ -1512,24 +1722,26 @@ function ClaimCanvasContent({ params }: ClaimCanvasPageProps) {
           <DocumentText size="16" variant="Bold" />
           Claim
         </button>
-        <button
-          type="button"
-          onClick={() => {
-            setInspectorOpen(true);
-            setLeftOpen(false);
-          }}
-          className="absolute right-4 bottom-5 z-20 inline-flex min-h-11 items-center gap-2 rounded-full border border-white/15 bg-[#07162f]/90 px-4 text-xs font-semibold text-white shadow-xl backdrop-blur lg:hidden"
-        >
-          <Judge size="16" variant="Bold" />
-          Inspect
-        </button>
+        {resolvedView === "graph" && (
+          <button
+            type="button"
+            onClick={() => {
+              setInspectorOpen(true);
+              setLeftOpen(false);
+            }}
+            className="absolute right-4 bottom-5 z-20 inline-flex min-h-11 items-center gap-2 rounded-full border border-white/15 bg-[#07162f]/90 px-4 text-xs font-semibold text-white shadow-xl backdrop-blur lg:hidden"
+          >
+            <Judge size="16" variant="Bold" />
+            Inspect
+          </button>
+        )}
       </main>
 
       {/* The inspector exists only while a node is selected; clicking empty
           canvas deselects and gives the stage the full width. It OVERLAYS the
           canvas (absolute, not in flow) so opening or closing it never
           resizes the stage and the node positions stay exactly put. */}
-      {selectedNode !== null && (
+      {resolvedView === "graph" && selectedNode !== null && (
         <aside
           style={{ width: inspectorWidth }}
           className="ov-inspector-dark @container absolute inset-y-0 right-0 z-30 hidden overflow-hidden max-w-[calc(100vw-28rem)] border-l border-white/12 bg-[#061532]/95 shadow-[-28px_0_60px_rgba(1,8,22,0.55)] backdrop-blur-md lg:block"
@@ -1577,6 +1789,7 @@ function ClaimCanvasContent({ params }: ClaimCanvasPageProps) {
                 graph={graph}
                 node={selectedNode}
                 proofsByRunId={proofsByRunId}
+                researchSteps={researchSteps}
               />
             </CanvasHighlightProvider>
           </div>
@@ -1601,7 +1814,7 @@ function ClaimCanvasContent({ params }: ClaimCanvasPageProps) {
         </MobileSheet>
       ) : null}
 
-      {inspectorOpen ? (
+      {inspectorOpen && resolvedView === "graph" ? (
         <MobileSheet title="Node inspector" onClose={() => setInspectorOpen(false)}>
           <div className="ov-inspector-dark @container p-5">
             <CanvasHighlightProvider onHighlight={setTrailHighlightId}>
@@ -1611,6 +1824,7 @@ function ClaimCanvasContent({ params }: ClaimCanvasPageProps) {
                 graph={graph}
                 node={selectedNode}
                 proofsByRunId={proofsByRunId}
+                researchSteps={researchSteps}
               />
             </CanvasHighlightProvider>
           </div>
