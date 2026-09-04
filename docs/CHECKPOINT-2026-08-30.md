@@ -2483,3 +2483,14 @@ E2E green. Testnet upgrade tx CDcEop1RtneqZdBsFwFsygH78PurXZ29JRWhPpnB9chh,
 packageId 0x0e990f3e4f39692b2ba38c59a68187b75fc9dee7f87691512a5e151bfd53afbc
 (a5f482d), deployed 13:38 while the weather was closed. Live check of the
 guard recorded below.
+Live guard check 13:41: POST /api/agents/stake/prepare with a DeepSeek
+SKEPTIC answers 400 "cannot be seated on any valid committee ... stake on a
+SOURCE_AUTHENTICITY seat, or on another model family, instead". Then a
+MiniMax SOURCE_AUTHENTICITY seat was staked through the public API (profile
+0xc32aa5db303d2d479133cd8476afedf1fa8f4eac1241bd90b57a3fb2723d6037, slot 8
+key 0x63c120ff..., staker throwaway 0x74125f01..., tx
+A2Xdg2aCjYnopx23TKzUseiWqJXLXF2LbW8mAh82AXvj, gas by Shinami): registry 9
+eligible, 8 active (7 demo + 1 staked MiniMax source), sources now on two
+families. Leftover: the app DB still shows the deprecated DeepSeek skeptic
+seat 0x81a737... as active (the engine does not read on-chain
+deactivation); the draw uses the chain and is unaffected.
