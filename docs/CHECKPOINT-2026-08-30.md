@@ -2562,3 +2562,10 @@ redeploy in a free window.
 NEXT MEASUREMENT: the first live claim on this deploy (attempt 2 of the
 minimum wage claim relaunches on clear weather) carries timing_ms on
 every step; read them with `ov watch --verbose` and `ov trace`.
+CARD FALLBACK SHIPPED 15:50: a7c0ce9 (lib/research/trail.ts shared by ov
+trace and the transcript; lib/viz/transcript.ts stepsFromRunProof; juror
+cards on pre-feed claims show the five rebuilt steps). Deployed 15:48
+while the weather was closed; verified in the browser on 0x273220b5
+(cards read "5 steps", expanded card lists searched (challenge), opened 3
+pages, searched (support), opened 2 pages, drafting the answer, then the
+answer). Seeder re-armed. Tree clean at a7c0ce9 + this note.
