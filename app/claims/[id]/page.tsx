@@ -37,7 +37,6 @@ import {
   Warning2,
 } from "@/components/icons";
 import { Button } from "@/components/ui/button";
-import { Separator } from "@/components/ui/separator";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { useClaimEvents, type EventStreamStatus } from "@/components/use-claim-events";
 import { useNow } from "@/components/use-now";
@@ -85,8 +84,6 @@ type UnknownRecord = Record<string, unknown>;
 type ClaimView = "live" | "graph";
 /** The public agent directory: a seat's model and role before any reveal. */
 type AgentDirectory = ReadonlyMap<string, { modelId?: string; role?: string }>;
-/** Replay speed of the live transcript: a ten-minute verdict in thirty seconds. */
-const TRANSCRIPT_REPLAY_SPEED = 20;
 
 const EMPTY_GRAPH: DeliberationGraph = { nodes: [], edges: [] };
 
@@ -622,24 +619,16 @@ const SEGMENT_SKIN =
   "text-muted-foreground hover:text-foreground data-[state=on]:bg-primary data-[state=on]:text-white";
 
 /**
- * The stage's control cluster: the segmented Live / Graph switcher, and on the
- * live view the replay control beside it, so view and time read as one group.
- * The label of the segment you are not on names where it takes you, so the
- * graph always offers the way back to live.
+ * Two segments, Chat and Graph, with the same labels in both views so the
+ * control reads as one switch (owner: "it should just be chat and graph").
+ * Replay lives in the left rail's Replay card, not here.
  */
 function StageControls({
   view,
   onChange,
-  replay,
 }: {
   view: ClaimView;
   onChange: (next: ClaimView) => void;
-  replay: {
-    available: boolean;
-    active: boolean;
-    onReplay: () => void;
-    onSkipToEnd: () => void;
-  };
 }) {
   return (
     <div className="flex shrink-0 items-center gap-1 border border-border bg-card p-1 text-foreground">
@@ -654,31 +643,13 @@ function StageControls({
       >
         <ToggleGroupItem value="live" className={SEGMENT_SKIN}>
           <Radar size="13" variant="Bold" />
-          {view === "graph" ? "Back to live" : "Live"}
+          Chat
         </ToggleGroupItem>
         <ToggleGroupItem value="graph" className={SEGMENT_SKIN}>
           <Hierarchy size="13" variant="Bold" />
           Graph
         </ToggleGroupItem>
       </ToggleGroup>
-
-      {view === "live" && replay.available && (
-        <>
-          <Separator orientation="vertical" className="mx-0.5 h-5" />
-          <button
-            type="button"
-            onClick={replay.active ? replay.onSkipToEnd : replay.onReplay}
-            className="ov-micro ov-micro-sm inline-flex h-9 items-center gap-1.5 px-3 text-muted-foreground transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-          >
-            {replay.active ? (
-              <Refresh size="13" variant="Bold" />
-            ) : (
-              <Play size="13" variant="Bold" />
-            )}
-            {replay.active ? "Skip to end" : "Replay"}
-          </button>
-        </>
-      )}
     </div>
   );
 }
@@ -1674,19 +1645,7 @@ function ClaimCanvasContent({ params }: ClaimCanvasPageProps) {
             the flow rather than over it, so the record scrolls beneath it
             instead of under a floating pill. */}
         <div className="relative z-40 flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-border bg-card px-4 py-3">
-          <StageControls
-            view={resolvedView}
-            onChange={setView}
-            replay={{
-              available: replayable,
-              active: replay.active,
-              onReplay: () => {
-                replay.setSpeed(TRANSCRIPT_REPLAY_SPEED);
-                replay.start();
-              },
-              onSkipToEnd: replay.stop,
-            }}
-          />
+          <StageControls view={resolvedView} onChange={setView} />
           <StageBanner claim={claim} graph={graph} replay={replay} now={now} streamStatus={streamStatus} />
         </div>
 
