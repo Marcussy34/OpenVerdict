@@ -4,10 +4,19 @@ import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { motion, useReducedMotion } from "motion/react";
 
 import { CornerPin, Hairline, SplitButton } from "@/components/landing/primitives";
+import {
+  DebateExchangeRule,
+  DebateTurnBubble,
+  TableStandingCard,
+  debateTurnViews,
+  type DebateSeatMeta,
+} from "@/components/viz/debate-turn";
 import { JurorCard, JurorTrailPanel } from "@/components/viz/juror-card";
 import { modelVariantFor } from "@/components/viz/model-logo";
-import { ExportSquare, Judge } from "@/components/icons";
+import { ExportSquare, Judge, Lock, ShieldTick } from "@/components/icons";
 import { cn } from "@/lib/utils";
+import { debateStanding } from "@/lib/viz/debate-standing";
+import { miniRing } from "@/lib/viz/courtroom-layout";
 import { suiObjectUrl, suiTransactionUrl } from "@/lib/web/explorer";
 import { deriveRunId, type BrowserRunProof } from "@/lib/verify/run-proof";
 import {
@@ -19,18 +28,101 @@ import {
 } from "@/lib/viz/transcript";
 
 /**
- * The mark on the timeline rail, in the entry's own semantic colour. A 6px
- * square, the same mark the landing pins its sections with.
+ * The mark on the timeline rail: a 6px square, the same mark the landing pins
+ * its sections with. Ink and muted ink carry the rail; only an outcome or a
+ * failure earns a colour (owner's palette rule, 2026-09-04).
  */
 const TONE_MARK: Record<string, string> = {
   neutral: "bg-muted-foreground/60",
-  chain: "bg-chain",
-  sealed: "bg-sealed",
+  chain: "bg-foreground",
+  sealed: "bg-muted-foreground",
   yes: "bg-yes",
   no: "bg-no",
   unsure: "bg-unsure",
   alert: "bg-no",
 };
+
+/** The seat mark on the preview ring, one per juror state. */
+const PREVIEW_MARK: Record<string, string> = {
+  YES: "border-yes/50 bg-yes",
+  NO: "border-no/50 bg-no",
+  UNSURE: "border-unsure/50 bg-unsure",
+};
+
+/**
+ * The courtroom at a glance: one mark per seat in its vote colour or under a
+ * lock, and the certificate closing the ring once the claim settles. Same
+ * seating chart as the graph, drawn at a small radius, and with the same
+ * empty middle.
+ */
+function CourtroomPreview({
+  jurors,
+  t,
+  settled,
+}: {
+  jurors: readonly TranscriptJuror[];
+  /** Replay cursor, so the ring fills as the record does. */
+  t: number;
+  /** The settled outcome's tone, or null while the claim is still open. */
+  settled: string | null;
+}) {
+  const ordered = [...jurors].sort((left, right) => left.index - right.index);
+  const ring = miniRing(ordered.length, 36);
+  return (
+    <div
+      aria-hidden
+      className="relative shrink-0"
+      style={{ width: ring.size, height: ring.size }}
+    >
+      {/* The table: one hairline circle, no dotted ground. */}
+      <span
+        className="absolute rounded-full border border-border"
+        style={{
+          left: ring.centre.x - 36,
+          top: ring.centre.y - 36,
+          width: 72,
+          height: 72,
+        }}
+      />
+      {ordered.map((juror, index) => {
+        const point = ring.seats[index];
+        if (point === undefined) return null;
+        const view = jurorAt(juror, t);
+        const outcome = view.state === "revealed" ? juror.outcome : undefined;
+        return (
+          <span
+            key={juror.index}
+            className={cn(
+              "absolute grid size-3.5 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full border",
+              view.state === "failed" && "border-no/60 bg-no/20 text-no",
+              outcome === undefined
+                ? "border-border bg-card text-muted-foreground"
+                : PREVIEW_MARK[outcome],
+            )}
+            style={{ left: point.x, top: point.y }}
+          >
+            {view.state === "sealed" ? <Lock size="8" variant="Bold" /> : null}
+          </span>
+        );
+      })}
+      {settled === null ? null : (
+        <span
+          className={cn(
+            "absolute grid size-4 -translate-x-1/2 -translate-y-1/2 place-items-center border bg-card",
+            settled === "no"
+              ? "border-no/50 text-no"
+              : settled === "unsure"
+                ? "border-unsure/50 text-unsure"
+                : "border-yes/50 text-yes",
+          )}
+          style={{ left: ring.certificate.x, top: ring.certificate.y }}
+        >
+          <ShieldTick size="10" variant="Bold" />
+        </span>
+      )}
+    </div>
+  );
+}
 
 /** UTC, the same clock the CLI's watch lines print. */
 function clockTime(atMs: number): string {
@@ -77,7 +169,7 @@ function EntryRow({
             href={linkHref(entry.link)}
             target={entry.link.target === "claim" ? undefined : "_blank"}
             rel={entry.link.target === "claim" ? undefined : "noreferrer"}
-            className="mt-1.5 inline-flex items-center gap-1 text-[13px] font-medium text-chain hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ov-accent)]"
+            className="mt-1.5 inline-flex items-center gap-1 text-[13px] font-medium text-primary hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ov-accent)]"
           >
             {entry.link.label}
             <ExportSquare size="11" variant="Bold" />
@@ -127,6 +219,7 @@ export function LiveTranscript({
   statementFallback,
   entries,
   jurors,
+  debate,
   t,
   onOpenGraph,
   replay,
@@ -138,6 +231,14 @@ export function LiveTranscript({
   statementFallback: string;
   entries: TranscriptEntry[];
   jurors: TranscriptJuror[];
+  /** What the debate section needs beyond the turns the entries carry. */
+  debate: {
+    /** The debaters, numbered as the record numbers them. */
+    seats: DebateSeatMeta[];
+    /** True while the deliberation window is open. */
+    live: boolean;
+    convergedAfterExchange?: 1 | 2 | 3 | null;
+  };
   /** Replay cursor; Infinity for the live view. */
   t: number;
   onOpenGraph: () => void;
@@ -188,6 +289,47 @@ export function LiveTranscript({
   const beforeJury = drawn ? stream.slice(0, drawIndex + 1) : stream;
   const afterJury = drawn ? stream.slice(drawIndex + 1) : [];
   const shouldAnimate = (entry: TranscriptEntry) => replay.active || !seen.has(entry.id);
+  // The preview's certificate appears with the line that announces it.
+  const settledTone = visible.find((entry) => entry.kind === "final")?.tone ?? null;
+
+  // The debate is a section of its own, where the record put it: every turn
+  // in full rather than a preview (owner: "is it possible to show all
+  // conversations rather than just a summary?").
+  const debateStart = afterJury.findIndex((entry) => entry.kind === "debate");
+  let debateEnd = -1;
+  for (let index = afterJury.length - 1; index >= 0; index -= 1) {
+    if (afterJury[index]?.kind === "debate") {
+      debateEnd = index;
+      break;
+    }
+  }
+  const debating = debateStart !== -1;
+  const beforeDebate = debating ? afterJury.slice(0, debateStart) : afterJury;
+  const debateEntries = debating ? afterJury.slice(debateStart, debateEnd + 1) : [];
+  const afterDebate = debating ? afterJury.slice(debateEnd + 1) : [];
+  // A replay standing before the last turn is a debate still running, so the
+  // closing card shows running counts rather than an ending it cannot know.
+  const allTurns = entries.flatMap((entry) => (entry.turn === undefined ? [] : [entry.turn]));
+  const shownTurns = debateEntries.flatMap((entry) =>
+    entry.turn === undefined ? [] : [entry.turn],
+  );
+  const standing = debateStanding({
+    seats: debate.seats,
+    turns: shownTurns,
+    running: debate.live || shownTurns.length < allTurns.length,
+    convergedAfterExchange: debate.convergedAfterExchange ?? null,
+  });
+  const turnViews = debateTurnViews({
+    turns: shownTurns,
+    seats: debate.seats,
+    standing,
+  });
+  const viewByOrdinal = new Map(turnViews.map((view) => [view.turn.ordinal, view]));
+  const exchangeStarts = new Set(
+    shownTurns
+      .filter((turn, index) => shownTurns[index - 1]?.exchange !== turn.exchange)
+      .map((turn) => turn.ordinal),
+  );
 
   // Seats of the same model wear different tints, keyed on committee order.
   const seatTints = jurors.map((juror) => ({
@@ -257,6 +399,65 @@ export function LiveTranscript({
     </section>
   );
 
+  // The debate, in the flow of the record: one card per turn, in full, and
+  // the closing card saying where the table stands.
+  const tableSection = (
+    <section aria-label="The table">
+      <div className="flex items-baseline justify-between gap-3">
+        <h2 className="ov-micro ov-micro-sm text-muted-foreground">The table</h2>
+        <p className="font-mono text-[11px] text-muted-foreground/80 tabular-nums">
+          {shownTurns.length} turn{shownTurns.length === 1 ? "" : "s"}
+        </p>
+      </div>
+      <Hairline className="mt-3" />
+      <p className="mt-3 max-w-[70ch] text-[15px] leading-[1.55] text-muted-foreground">
+        The revealed jurors argue over the frozen record. Each one answers a named seat
+        before it states its own position, and no new evidence may enter.
+      </p>
+
+      <div className="mt-4 space-y-3">
+        {debateEntries.map((entry) => {
+          const view = entry.turn === undefined ? undefined : viewByOrdinal.get(entry.turn.ordinal);
+          if (view === undefined) {
+            // The convergence line is said once, by the closing card below.
+            if (entry.kind === "debate") return null;
+            return (
+              <EntryRow
+                key={entry.id}
+                entry={entry}
+                animate={shouldAnimate(entry)}
+                reduceMotion={reduceMotion}
+              />
+            );
+          }
+          return (
+            <Fragment key={entry.id}>
+              {exchangeStarts.has(view.turn.ordinal) && (
+                <DebateExchangeRule
+                  exchange={view.turn.exchange}
+                  first={view.turn.ordinal === shownTurns[0]?.ordinal}
+                />
+              )}
+              <motion.div
+                initial={
+                  shouldAnimate(entry) ? { opacity: 0, y: reduceMotion ? 0 : 6 } : false
+                }
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.25, ease: "easeOut" }}
+              >
+                <DebateTurnBubble
+                  {...view}
+                  className="border border-border bg-card px-4 py-4 sm:px-5"
+                />
+              </motion.div>
+            </Fragment>
+          );
+        })}
+        <TableStandingCard standing={standing} />
+      </div>
+    </section>
+  );
+
   return (
     <div
       ref={scrollRef}
@@ -293,7 +494,15 @@ export function LiveTranscript({
         )}
 
         <EntryList
-          entries={afterJury}
+          entries={beforeDebate}
+          shouldAnimate={shouldAnimate}
+          reduceMotion={reduceMotion}
+        />
+
+        {debating && tableSection}
+
+        <EntryList
+          entries={afterDebate}
           shouldAnimate={shouldAnimate}
           reduceMotion={reduceMotion}
         />
@@ -301,12 +510,15 @@ export function LiveTranscript({
         {/* The graph is the same record drawn as a map; this opens it. */}
         {drawn && (
           <div className="flex flex-wrap items-center justify-between gap-4 border border-border bg-card px-4 py-4 sm:px-6">
-            <div className="min-w-0">
-              <p className="ov-micro ov-micro-sm text-muted-foreground">The deliberation graph</p>
-              <p className="mt-1.5 max-w-[52ch] text-[15px] leading-[1.55] text-muted-foreground">
-                The same record drawn as a map: every seat, every search and page it opened,
-                every vote, and the certificate at the end.
-              </p>
+            <div className="flex min-w-0 items-center gap-4">
+              <CourtroomPreview jurors={jurors} t={t} settled={settledTone} />
+              <div className="min-w-0">
+                <p className="ov-micro ov-micro-sm text-muted-foreground">The deliberation graph</p>
+                <p className="mt-1.5 max-w-[52ch] text-[15px] leading-[1.55] text-muted-foreground">
+                  The same record drawn as a map: every seat, every search and page it opened,
+                  every vote, and the certificate at the end.
+                </p>
+              </div>
             </div>
             <SplitButton onClick={onOpenGraph} tone="muted">
               Open graph

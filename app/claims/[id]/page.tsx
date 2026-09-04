@@ -44,6 +44,7 @@ import { Hairline } from "@/components/landing/primitives";
 import { CanvasHighlightProvider } from "@/components/viz/canvas-highlight";
 import { DeliberationCanvas } from "@/components/viz/deliberation-canvas";
 import { DeliberationChat } from "@/components/viz/deliberation-chat";
+import { debateSeatsOf } from "@/components/viz/debate-turn";
 import { HashChip } from "@/components/viz/hash-chip";
 import { LiveTranscript } from "@/components/viz/live-transcript";
 import { ResearchFeed } from "@/components/viz/research-feed";
@@ -661,6 +662,7 @@ function SeatInspector({
   node,
   proofsByRunId,
   researchSteps,
+  seatNumbers,
 }: {
   claim: ClaimInspection;
   events: ResolutionEvent[];
@@ -668,6 +670,8 @@ function SeatInspector({
   node: GraphNode;
   proofsByRunId: ProofCache;
   researchSteps: Map<string, ResearchFeedStep[]>;
+  /** Juror numbers as the Live view and the graph ring count them. */
+  seatNumbers: ReadonlyMap<string, number>;
 }) {
   const seatId = node.seatId;
   if (seatId === undefined) return null;
@@ -678,6 +682,7 @@ function SeatInspector({
   if (seatIndex < 0 || commitment === undefined) return null;
 
   const phase: 1 | 2 = seatIndex < 5 ? 1 : 2;
+  const jurorNumber = seatNumbers.get(seatId) ?? seatIndex + 1;
   const runId = node.runId ?? deriveRunId(claim.claimId, seatId, phase);
   const proof = proofsByRunId[runId];
   const seatNode = graph.nodes.find(
@@ -716,7 +721,7 @@ function SeatInspector({
         />
         <div className="min-w-0">
           <p className="text-sm font-semibold text-foreground">
-            Juror {seatIndex + 1}
+            Juror {jurorNumber}
           </p>
           <p className="mt-1 break-all text-[11px] leading-relaxed text-muted-foreground">
             {modelId ?? "Model id unavailable"}
@@ -764,8 +769,8 @@ function SeatInspector({
           claimId={claim.claimId}
           runId={runId}
           seatLabel={phase === 2
-            ? `Seat ${seatIndex + 1}, table vote`
-            : `Seat ${seatIndex + 1}, phase ${phase}`}
+            ? `Juror ${jurorNumber}, table vote`
+            : `Juror ${jurorNumber}, phase ${phase}`}
         />
       ) : (
         <p className="rounded-xl border border-border bg-surface p-3 text-xs leading-relaxed text-muted-foreground">
@@ -783,6 +788,7 @@ function NodeInspector({
   node,
   proofsByRunId,
   researchSteps,
+  seatNumbers,
 }: {
   claim: ClaimInspection;
   events: ResolutionEvent[];
@@ -790,6 +796,7 @@ function NodeInspector({
   node: GraphNode | null;
   proofsByRunId: ProofCache;
   researchSteps: Map<string, ResearchFeedStep[]>;
+  seatNumbers: ReadonlyMap<string, number>;
 }) {
   if (node === null) {
     return (
@@ -811,6 +818,7 @@ function NodeInspector({
         node={node}
         proofsByRunId={proofsByRunId}
         researchSteps={researchSteps}
+        seatNumbers={seatNumbers}
       />
     );
   }
@@ -1517,6 +1525,16 @@ function ClaimCanvasContent({ params }: ClaimCanvasPageProps) {
     [agents, claim, events, proofsByRunId],
   );
 
+  // One juror number for both of a juror's seats, so the graph's ring, the
+  // Live view and the inspector all count the jury the same way.
+  const seatNumbers = useMemo(() => {
+    const numbers = new Map<string, number>();
+    for (const juror of transcript.jurors) {
+      for (const seat of juror.seats) numbers.set(seat.seatId, juror.index);
+    }
+    return numbers;
+  }, [transcript.jurors]);
+
   const graph = useMemo(() => {
     if (claim === null) return EMPTY_GRAPH;
     return buildDeliberationGraph({
@@ -1548,6 +1566,10 @@ function ClaimCanvasContent({ params }: ClaimCanvasPageProps) {
     }
     return [...byOrdinal.values()].sort((left, right) => left.ordinal - right.ordinal);
   }, [claim, events]);
+
+  // The debaters, numbered the way the debate numbers them, so the Live view's
+  // table section and the graph dock read the same conversation.
+  const debateSeats = useMemo(() => (claim === null ? [] : debateSeatsOf(claim)), [claim]);
   const replayable =
     claim !== null
     && (claim.state >= 9
@@ -1656,6 +1678,11 @@ function ClaimCanvasContent({ params }: ClaimCanvasPageProps) {
             statementFallback={claim.statement}
             entries={transcript.entries}
             jurors={transcript.jurors}
+            debate={{
+              seats: debateSeats,
+              live: claim.state === CLAIM_STATE.DISCUSSION,
+              convergedAfterExchange: claim.debateConvergedAfterExchange ?? null,
+            }}
             // The replay cursor, or the whole record when it is not running.
             t={replay.active ? replay.t : Number.POSITIVE_INFINITY}
             onOpenGraph={() => setView("graph")}
@@ -1671,6 +1698,7 @@ function ClaimCanvasContent({ params }: ClaimCanvasPageProps) {
               selectedId={selectedId}
               onSelect={handleSelect}
               externalHighlightId={trailHighlightId}
+              seatNumbers={seatNumbers}
             />
 
             <DeliberationChat
@@ -1679,7 +1707,7 @@ function ClaimCanvasContent({ params }: ClaimCanvasPageProps) {
                   ? deliberationTurns.filter((turn) => turn.atMs <= replay.t)
                   : deliberationTurns
               }
-              commitments={claim.commitments}
+              seats={debateSeats}
               live={claim.state === CLAIM_STATE.DISCUSSION}
               convergedAfterExchange={claim.debateConvergedAfterExchange ?? null}
             />
@@ -1766,6 +1794,7 @@ function ClaimCanvasContent({ params }: ClaimCanvasPageProps) {
                 node={selectedNode}
                 proofsByRunId={proofsByRunId}
                 researchSteps={researchSteps}
+                seatNumbers={seatNumbers}
               />
             </CanvasHighlightProvider>
           </div>
@@ -1801,6 +1830,7 @@ function ClaimCanvasContent({ params }: ClaimCanvasPageProps) {
                 node={selectedNode}
                 proofsByRunId={proofsByRunId}
                 researchSteps={researchSteps}
+                seatNumbers={seatNumbers}
               />
             </CanvasHighlightProvider>
           </div>

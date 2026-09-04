@@ -66,6 +66,9 @@ export type TranscriptEntry = {
   link?: TranscriptLink;
   /** The juror cards render right after this entry (the draw). */
   showJurors?: boolean;
+  /** A debate turn, carried whole: the view shows the argument in full
+   *  rather than the one-line summary, so nothing public is cut short. */
+  turn?: DeliberationTurnPublic;
 };
 
 export type TranscriptJurorState =
@@ -119,8 +122,6 @@ const FAMILY_NAME: Record<JurorFamily, string> = {
 
 /** Sites named on one status line before the rest becomes a count. */
 const STATUS_DOMAINS = 3;
-/** How much of a debate argument the transcript quotes. */
-const ARGUMENT_PREVIEW = 180;
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -261,11 +262,6 @@ function score(bps: number | null | undefined): string {
 function shortId(value: string | undefined): string {
   if (value === undefined || value.length <= 12) return value ?? "";
   return `${value.slice(0, 10)}…${value.slice(-6)}`;
-}
-
-function truncate(text: string, limit: number): string {
-  const flat = text.replace(/\s+/g, " ").trim();
-  return flat.length <= limit ? flat : `${flat.slice(0, limit)}…`;
 }
 
 const STATE_WORDS: Record<number, string> = {
@@ -624,12 +620,19 @@ export function buildTranscript(input: {
         const ordinal = numberAt(payload, "ordinal");
         const number = ordinal === undefined ? "?" : String(ordinal + 1);
         const who = label(turn.jurySeatId);
+        // The turn travels whole: the view renders the argument as it was
+        // spoken, and this line stays as the one `ov watch` prints.
+        const whole =
+          typeof turn.ordinal === "number" && typeof turn.jurySeatId === "string"
+            ? { turn: turn as DeliberationTurnPublic }
+            : {};
         if (turn.status === "SKIPPED") {
           push({
             kind: "debate",
             seatId: turn.jurySeatId,
             text: `Debate turn ${number}, ${who} skipped${turn.failureStatus ? ` (${turn.failureStatus})` : ""}.`,
             tone: "alert",
+            ...whole,
           });
           break;
         }
@@ -637,8 +640,8 @@ export function buildTranscript(input: {
           kind: "debate",
           seatId: turn.jurySeatId,
           text: `Debate turn ${number}, ${who}${turn.stance ? ` ${turn.stance} at ${percent(turn.confidenceBps)}` : ""}.`,
-          detail: turn.argument ? truncate(turn.argument, ARGUMENT_PREVIEW) : undefined,
           tone: toneOfOutcome(turn.stance),
+          ...whole,
         });
         break;
       }

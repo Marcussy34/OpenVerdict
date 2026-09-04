@@ -253,6 +253,66 @@ describe("live transcript", () => {
     expect(entries.at(-1)?.text).toBe("Juror 3 (MiniMax) sealed its vote (1 of 1, round two).");
     expect(jurorAt(jurors[2]!, Number.POSITIVE_INFINITY).status).toBe("table vote sealed");
   });
+
+  it("carries a debate turn whole, so the view shows the argument in full", () => {
+    const turn = {
+      claimId: "claim-1",
+      jurySeatId: SEAT_IDS[1],
+      agentProfileId: "agent-2",
+      ordinal: 0,
+      exchange: 1,
+      specVersion: "4",
+      answering: 2,
+      theirPoint: "Seat 2 read the filing as a completed sale.",
+      analysis: "That holds for the escrow language, but the same filing dates it later.",
+      question: { seat: 4, text: "Which clause closes the sale?" },
+      position: "I hold NO and lower my confidence.",
+      argument:
+        "That holds for the escrow language, but the same filing dates it later. I hold NO and lower my confidence.",
+      citations: ["https://example.test/filing"],
+      stance: "NO",
+      confidenceBps: 6_200,
+      status: "SPOKEN",
+      atMs: START_MS + 100_000,
+    };
+    const { entries } = buildTranscript({
+      claim: inspection(),
+      events: [...stream(), event("DELIBERATION_TURN", START_MS + 100_000, turn)],
+    });
+
+    const debate = entries.find((entry) => entry.kind === "debate");
+    // The whole turn travels, and nothing is quoted at preview length.
+    expect(debate?.turn).toEqual(turn);
+    expect(debate?.detail).toBeUndefined();
+    expect(debate?.text).toBe("Debate turn 1, Juror 2 (DeepSeek) NO at 62 percent.");
+    expect(debate?.tone).toBe("no");
+  });
+
+  it("keeps the skipped turn's alert line and still carries the turn", () => {
+    const turn = {
+      claimId: "claim-1",
+      jurySeatId: SEAT_IDS[0],
+      agentProfileId: "agent-1",
+      ordinal: 2,
+      exchange: 2,
+      argument: "",
+      citations: [],
+      status: "SKIPPED",
+      failureStatus: "WINDOW_EXHAUSTED",
+      atMs: START_MS + 110_000,
+    };
+    const { entries } = buildTranscript({
+      claim: inspection(),
+      events: [...stream(), event("DELIBERATION_TURN", START_MS + 110_000, turn)],
+    });
+
+    const debate = entries.find((entry) => entry.kind === "debate");
+    expect(debate?.text).toBe(
+      "Debate turn 3, Juror 1 (DeepSeek) skipped (WINDOW_EXHAUSTED).",
+    );
+    expect(debate?.tone).toBe("alert");
+    expect(debate?.turn?.status).toBe("SKIPPED");
+  });
 });
 
 /** A bundle shaped like the engine writes one: the conversation as sent. */
