@@ -2798,3 +2798,37 @@ claim fires on the first clear probe.
 - WORKERS RUNNING: courtroom-graph, debate-v4, verify-ux, stake-role,
   learn-simple, docs-site. Queued: debate-ui (after courtroom-graph and
   debate-v4), a palette sweep over the whole app, checkpoint 3as.
+
+### 3ar progress, 19:05: V4 engine reviewed, seat numbering decision, Learn shipped
+
+- debate-v4 landed in the working tree (uncommitted): spec V4, lib/engine/
+  debateOrder.ts (17 tests), engine loop re-reads stored turns each turn and
+  tolerates a sibling process, validateDeliberationOutputV4 with labels
+  INVALID_OUTPUT/LENGTH/ANSWERING/QUESTION/CITATIONS, env
+  OPENVERDICT_DELIBERATION_SPEC (4 default, 3 fallback), promptSpecHash per
+  turn + public specVersion "4", TableVoteInput.deliberationSpecVersion,
+  auditor rows (Answers column, questions list). Reviewed by the lead:
+  sound. Engine-side tests 407 green, lint clean. e2e:localnet passed at
+  19:03 with V4 debates on both two-round paths (10 spoken turns each,
+  question hand-off proven).
+- DECISION 19:02 (lead): V4 seat numbers are 1-BASED, equal to the juror
+  numbers the console and ov trace print (V1 to V3 records keep 0-based
+  "Seat N" text and the auditor's "juror n holds seat n-1" note). debate-v4
+  is applying it (round 2) and re-running e2e; debate-ui renders the
+  record's own numbers verbatim (option A) and numbers the dock by the
+  phase-1 order. The engine batch (debate V4 + stake-role) commits after
+  that e2e; deploy needs OPENVERDICT_DELIBERATION_SPEC unset or 4.
+- stake-role landed (uncommitted): lib/engine/debate-role.ts (7 tests),
+  assignSeatRole (balance, then drawability), optional role on both
+  routes, card without the picker, docs. NOTE the Move draw REQUIRES one
+  SKEPTIC and one SOURCE_AUTHENTICITY per committee
+  (jury.move selected_diversity_valid), so roles matter to the draw too;
+  the owner was told.
+- Learn page committed cc6fb18 (plain words, five sections, DOCS_URL
+  https://docs.openverdict.info), not yet deployed.
+- courtroom-graph: round 1 sent (ring should fill ~80% of the shorter
+  stage dimension; the ring must stay whole when the deliberation dock is
+  open). Its v1 screenshot: scratchpad/courtroom-v1-local.jpg.
+- RUNNING: courtroom-graph (round 1), debate-v4 (round 2), verify-ux,
+  docs-site, debate-ui. Done and awaiting commit: stake-role, learn-simple
+  (committed).
