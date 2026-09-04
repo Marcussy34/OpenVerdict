@@ -2928,3 +2928,25 @@ claim fires on the first clear probe.
   chat view with whole debate turns. Screenshots
   scratchpad/production-graph-courtroom.jpg, production-chat-debate.jpg.
 - RUNNING: docs-site round 2, palette-sweep, docs-accuracy.
+
+### 3ar progress, 21:45: docs round 2 live, docs accuracy committed, workers resumed after the session limit
+
+- 19:56 the three running workers (palette-sweep, docs-accuracy, docs-site)
+  stopped on the account's session limit (reset 21:20); all three were
+  resumed by message at 21:23 from their transcripts. The board watcher
+  script had ended (its cycle limit) and was restarted at 21:23; the old
+  duplicate monitor was stopped.
+- 748b3fb Learn example is now "The EU AI Act entered into force on
+  1 August 2024." (owner: a professional claim), deploy 1e7b643b 21:25.
+- e1b29dd + e3a5c76 docs accuracy (README, AGENTS.md, STATUS, llms.txt,
+  runbook; CLAUDE.md and contract.ts drop the obsolete one-seat-per-staker
+  rule; the V4 design doc says specVersion is on spoken turns only). Test
+  counts now 996 vitest, 89 protocol + 4 Seal Move tests.
+- 46c3d00 docs round 2 (nine Mermaid diagrams via components/docs/
+  mermaid.tsx with mermaid 11.17.2 dynamically imported, three images in
+  public/diagrams, glossary, FAQ, env vars, 24 event kinds, schemas by
+  version, Move abort codes, worked Truth Score), deploy 092fe96b 21:43;
+  /glossary and /faq answer on docs.openverdict.info.
+- RUNNING: palette-sweep (resumed; also renames the footer's /verify
+  label to Audit). After it: commit, deploy, verify, checkpoint 3as, the
+  final owner summary.
