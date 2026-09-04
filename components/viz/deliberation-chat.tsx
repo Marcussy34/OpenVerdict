@@ -35,6 +35,8 @@ export function DeliberationChat({
   const reduceMotion = useReducedMotion() ?? false;
   const [open, setOpen] = useState(true);
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  const wrapRef = useRef<HTMLDivElement | null>(null);
+  const [maxPanel, setMaxPanel] = useState<number | null>(null);
 
   // Follow the conversation: newest turn scrolls into view as it lands.
   const turnCount = turns.length;
@@ -42,9 +44,31 @@ export function DeliberationChat({
     const el = scrollRef.current;
     if (el === null) return;
     el.scrollTo({ top: el.scrollHeight, behavior: reduceMotion ? "auto" : "smooth" });
-  }, [turnCount, open, reduceMotion]);
+    // maxPanel lands after the first paint and shortens the panel, so the
+    // follow has to run again or the dock opens stranded at the top.
+  }, [turnCount, open, reduceMotion, maxPanel]);
+
+  // The dock takes at most 45 percent of the stage, and never less than
+  // 280px, so the courtroom ring above it keeps most of its size while the
+  // debate is read; everything past the cap scrolls, the closing card
+  // included. Measured off the stage rather than the viewport, because the
+  // stage is what the ring has to share.
+  useEffect(() => {
+    const stage = wrapRef.current?.parentElement ?? null;
+    if (stage === null) return;
+    const measure = (): void => {
+      const height = stage.getBoundingClientRect().height;
+      if (height === 0) return;
+      setMaxPanel(Math.round(Math.max(280, height * 0.45)));
+    };
+    const sizes = new ResizeObserver(measure);
+    sizes.observe(stage);
+    measure();
+    return () => sizes.disconnect();
+  }, [open, live, turnCount]);
 
   if (turnCount === 0 && !live) return null;
+
   const standing = debateStanding({
     seats,
     turns,
@@ -54,16 +78,20 @@ export function DeliberationChat({
   const views = debateTurnViews({ turns, seats, standing });
 
   return (
-    // The wrapper spans the whole stage so the panel's cap can be read as a
-    // share of it, and the dock still sits at the bottom. On a phone the claim
-    // and inspect buttons own the bottom strip, so it lifts above them.
-    <div className="pointer-events-none absolute inset-0 z-20 flex items-end justify-center px-4 pb-5 max-lg:pb-20">
+    // The wrapper hugs the panel: the canvas measures this box to keep the
+    // courtroom above the dock. On a phone the claim and inspect buttons own
+    // the bottom strip, so the dock lifts above them.
+    <div
+      ref={wrapRef}
+      className="pointer-events-none absolute inset-x-0 bottom-5 z-20 flex justify-center px-4 max-lg:bottom-20"
+    >
       {open ? (
-        // Never more than 45 percent of the stage, and never under 280px, so
-        // the courtroom ring above keeps about two thirds of its size while
-        // the debate is read. The turns and the closing card scroll inside.
-        <div className="pointer-events-auto flex max-h-[max(280px,45%)] w-[min(680px,100%)] flex-col overflow-hidden border border-border bg-card shadow-lg">
-          <div className="flex items-center gap-2 border-b border-border px-4 py-2.5">
+        <div
+          // The cap is measured, not guessed: see maxPanelHeight below.
+          style={maxPanel === null ? undefined : { maxHeight: maxPanel }}
+          className="pointer-events-auto flex w-[min(680px,100%)] flex-col overflow-hidden border border-border bg-card shadow-lg"
+        >
+          <div className="flex shrink-0 items-center gap-2 border-b border-border px-4 py-2.5">
             <Judge size="14" variant="Bold" className="text-muted-foreground" />
             <span className="ov-micro ov-micro-sm text-muted-foreground">Deliberation</span>
             {live ? <LiveTell /> : null}
@@ -80,7 +108,7 @@ export function DeliberationChat({
           </div>
           <div
             ref={scrollRef}
-            className="ov-scroll flex min-h-0 flex-1 flex-col gap-3.5 overflow-y-auto px-4 py-3.5"
+            className="ov-scroll flex min-h-0 flex-col gap-3.5 overflow-y-auto px-4 py-3.5"
           >
             {turnCount === 0 ? (
               <p className="py-2 text-center text-[13px] text-muted-foreground">
