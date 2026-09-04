@@ -50,7 +50,7 @@ export default function LearnPage() {
       <Section n={1} title="What OpenVerdict does">
         <p>You give it one claim, for example:</p>
         <p className="border-l border-border pl-4 text-black">
-          &ldquo;A glass of red wine a day is good for your heart.&rdquo;
+          &ldquo;The EU AI Act entered into force on 1 August 2024.&rdquo;
         </p>
         <p>Five AI jurors research it on the live web and answer YES, NO or UNSURE.</p>
         <p>
