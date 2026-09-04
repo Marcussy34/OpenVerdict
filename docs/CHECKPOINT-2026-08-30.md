@@ -2892,3 +2892,27 @@ claim fires on the first clear probe.
   0x273220b56d...). Commit as a follow-up when it reports.
 - Still uncommitted: the viz batch (courtroom accepted + debate-ui in
   progress; page.tsx and live-transcript.tsx shared).
+
+### 3ar progress, 19:45: viz batch committed (courtroom + conversation rendering)
+
+- 8424c6e design(viz): courtroom-layout.ts (26 tests), deliberation-canvas
+  rewritten (no centre node, ink wires by dash/weight, ring ~85% of the
+  shorter stage side, keeps above the dock), mini ring preview,
+  debate-turn.tsx (shared bubble: answering + quoted point, analysis,
+  question callout, position, stance last, "moved from"), debate-standing.ts
+  ("Where the table stands"), transcript.ts carries whole turns ("The
+  table" section, no 180-char preview), dock numbered by phase-1 order,
+  links on the accent, use-force-layout.ts deleted. Follow-up commit: the
+  dock cap measured off the stage (45%, min 280 px) with the wrapper
+  hugging the panel (8424c6e's CSS cap made the canvas think the dock
+  covered the whole stage). Both deploying (chains b6atbu5pq, bdcr2ajyz);
+  verify the claim page on production (graph + chat) after.
+- All UI workers done: live-design, courtroom-graph, debate-ui,
+  verify-ux, learn-simple, stake-role, debate-v4. Only docs-site round 2
+  (diagrams, glossary, FAQ, depth) is running.
+- NEXT after docs round 2: palette sweep worker over the whole app (agents
+  pages, report page, landing, fact-check, status, claims list) against
+  the common-rules PALETTE RULE; README/AGENTS accuracy pass for the
+  V4 debate, roles, docs host, Chat/Graph toggle; checkpoint 3as; MCP
+  memory update; the first production V4 debate must be read before the
+  demo (weather permitting).
