@@ -28,8 +28,10 @@ export default function PrivacyPage() {
           and <strong className="text-ocean">Walrus decentralized storage</strong>.
         </p>
 
-        <div className="mt-4 flex items-start gap-2.5 rounded-xl border border-unsure/30 bg-unsure/8 p-3.5">
-          <Warning2 size="17" variant="Bold" className="mt-0.5 shrink-0 text-unsure" />
+        {/* Failure red, not amber: amber is the UNSURE verdict, and this is a
+            "do not do this" hazard warning. */}
+        <div className="mt-4 flex items-start gap-2.5 rounded-xl border border-destructive/30 bg-destructive/8 p-3.5">
+          <Warning2 size="17" variant="Bold" className="mt-0.5 shrink-0 text-destructive" />
           <p className="text-xs leading-relaxed text-foreground/85">
             <strong className="font-semibold text-ocean">Warning.</strong> Do not submit private
             personal data, confidential keys, credentials or proprietary information. Stored

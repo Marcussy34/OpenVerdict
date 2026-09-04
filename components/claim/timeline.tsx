@@ -33,18 +33,21 @@ interface TimelineStep {
   icon: typeof Clock;
 }
 
+// Lifecycle steps are not verdicts, so they do not spend the verdict colours:
+// a finished step is ink, the running one wears the accent the whole app gives
+// to "in progress", and only a genuine failure stays red.
 const NODE_CLASS = {
-  completed: "border-yes/45 bg-yes/10 text-yes",
+  completed: "border-border bg-surface text-muted-foreground",
   in_progress: "border-sea/60 bg-sea/12 text-primary",
-  pending: "border-border bg-surface text-muted-foreground",
-  failed: "border-no/45 bg-no/10 text-no",
+  pending: "border-border bg-surface text-muted-foreground/60",
+  failed: "border-destructive/45 bg-destructive/10 text-destructive",
 } as const;
 
 const STATUS_CHIP = {
-  completed: "border-yes/30 bg-yes/8 text-yes",
-  in_progress: "border-sea/35 bg-sea/10 text-primary",
-  pending: "border-border bg-surface text-muted-foreground",
-  failed: "border-no/30 bg-no/8 text-no",
+  completed: "border-border bg-surface text-muted-foreground",
+  in_progress: "border-sea/40 bg-sea/12 text-primary",
+  pending: "border-border bg-surface text-muted-foreground/60",
+  failed: "border-destructive/30 bg-destructive/8 text-destructive",
 } as const;
 
 const STATUS_LABEL = {
@@ -175,11 +178,13 @@ export function ClaimTimeline({ claim }: TimelineProps) {
 
   return (
     <div className="relative pl-9">
-      {/* Spine: a muted track with a Sui-blue fill up to the live milestone. */}
+      {/* Spine: a muted track with one accent fill up to the live milestone.
+          It used to ramp green into blue, which read as a verdict on a bar that
+          only reports progress. */}
       <div aria-hidden className="absolute top-3 bottom-3 left-[13px] w-0.5 rounded-full bg-border" />
       <motion.div
         aria-hidden
-        className="absolute top-3 left-[13px] w-0.5 origin-top rounded-full bg-gradient-to-b from-yes via-yes to-sea"
+        className="absolute top-3 left-[13px] w-0.5 origin-top rounded-full bg-primary"
         initial={{ height: 0 }}
         whileInView={{ height: `calc(${fillPercent}% - 0px)` }}
         viewport={{ once: true }}
@@ -213,7 +218,7 @@ export function ClaimTimeline({ claim }: TimelineProps) {
                 <Icon size="13" variant="Bold" />
               </span>
 
-              <div className="rounded-xl border border-border bg-card px-3.5 py-3 transition-colors hover:border-sea/35">
+              <div className="rounded-xl border border-border bg-card px-3.5 py-3 transition-colors hover:border-sea/40">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div className="flex min-w-0 items-center gap-2">
                     <span className="font-mono text-[10px] font-semibold text-muted-foreground tabular-nums">

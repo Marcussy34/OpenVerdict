@@ -403,9 +403,11 @@ export function RunProofSeal({ proof }: { proof: TransparentRunProof }) {
                 </time>
                 <span
                   className={cn(
-                    "rounded-full border px-2 py-0.5 text-[10px] font-semibold tracking-wide uppercase",
+                    "border px-2 py-0.5 text-[10px] font-semibold tracking-wide uppercase",
+                    // Openable is "in progress", which is the accent everywhere;
+                    // still sealed stays quiet ink with the lock.
                     canOpen
-                      ? "border-yes/30 bg-yes/8 text-yes"
+                      ? "border-sea/40 bg-sea/12 text-primary"
                       : "border-sealed/30 bg-sealed/8 text-sealed",
                   )}
                 >

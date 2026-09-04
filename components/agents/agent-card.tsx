@@ -140,9 +140,11 @@ export function AgentCard({ agent, reportCard, showVoteDetails = false }: AgentC
                         {typeof bps === "number" ? bps : "—"}
                       </span>
                     </div>
+                    {/* Accent, not the family tint: the bar is a counter, and
+                        provider colour lives in the logo tile alone. */}
                     <div className="h-1 w-full overflow-hidden rounded-full bg-surface-2">
                       <div
-                        className={cn("h-full rounded-full", family.dot)}
+                        className="h-full rounded-full bg-primary"
                         style={{ width: `${pct ?? 0}%` }}
                       />
                     </div>

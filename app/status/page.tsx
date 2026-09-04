@@ -79,7 +79,7 @@ export default function StatusPage() {
   }, []);
 
   const allHealthy = Boolean(status?.suiHealthy && status?.dbHealthy && !status?.paused);
-  const overallTone: DotTone = engineOffline ? "warn" : allHealthy ? "live" : "warn";
+  const overallTone: DotTone = engineOffline ? "idle" : allHealthy ? "live" : "down";
   const overallLabel = engineOffline
     ? "Standalone"
     : allHealthy
@@ -121,8 +121,9 @@ export default function StatusPage() {
         </div>
       ) : engineOffline ? (
         <div className="space-y-6">
-          <div className="flex items-start gap-3 rounded-2xl border border-unsure/30 bg-unsure/6 p-5">
-            <Warning2 size="20" variant="Bold" className="mt-0.5 shrink-0 text-unsure" />
+          {/* A deployment state, not a verdict and not a hazard: quiet ink. */}
+          <div className="flex items-start gap-3 rounded-2xl border border-border bg-surface p-5">
+            <Warning2 size="20" variant="Bold" className="mt-0.5 shrink-0 text-muted-foreground" />
             <div className="space-y-1">
               <h2 className="text-sm font-semibold text-ocean">
                 Engine status: standalone / unwired (503)
@@ -151,7 +152,7 @@ export default function StatusPage() {
               <Row label="Evidence bundles">Merkle root hashed</Row>
               <Row label="Retention">Indefinite / bounded epochs</Row>
             </Panel>
-            <Panel label="Protocol security & safety" icon={ShieldTick} tone="yes">
+            <Panel label="Protocol security & safety" icon={ShieldTick}>
               <Row label="Paused flag">false</Row>
               <Row label="SSRF protection">Active</Row>
               <Row label="Pre-reveal redaction">Enforced</Row>
@@ -165,28 +166,24 @@ export default function StatusPage() {
               label="Network"
               value={status.network}
               icon={Link21}
-              tone="chain"
               animate={false}
             />
             <StatTile
               label="Inference mode"
               value={status.gonkaMode}
               icon={Cpu}
-              tone="primary"
               animate={false}
             />
             <StatTile
               label="Storage mode"
               value={status.walrusMode}
               icon={DocumentText}
-              tone="sealed"
               animate={false}
             />
             <StatTile
               label="App version"
               value={status.appVersion}
               icon={Data}
-              tone="default"
               animate={false}
             />
           </div>
@@ -244,10 +241,9 @@ export default function StatusPage() {
             <Panel
               label="Database & protocol safety"
               icon={ShieldTick}
-              tone={!status.paused && status.dbHealthy ? "yes" : "warn"}
               action={
                 <StatusPill
-                  tone={!status.paused && status.dbHealthy ? "live" : "warn"}
+                  tone={!status.paused && status.dbHealthy ? "live" : "down"}
                   label={status.paused ? "Paused" : "Operational"}
                   pulse={!status.paused && status.dbHealthy}
                 />

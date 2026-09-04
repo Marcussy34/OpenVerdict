@@ -46,8 +46,9 @@ export default function TermsPage() {
         badges={<ExperimentalTag />}
       />
 
-      <div className="flex items-start gap-3 rounded-2xl border border-unsure/35 bg-unsure/6 p-4">
-        <Warning2 size="18" variant="Bold" className="mt-0.5 shrink-0 text-unsure" />
+      {/* Failure red, not amber: amber belongs to the UNSURE verdict alone. */}
+      <div className="flex items-start gap-3 rounded-2xl border border-destructive/35 bg-destructive/6 p-4">
+        <Warning2 size="18" variant="Bold" className="mt-0.5 shrink-0 text-destructive" />
         <div className="space-y-1">
           <p className="text-sm font-semibold text-ocean">Experimental research software</p>
           <p className="text-xs leading-relaxed text-muted-foreground">

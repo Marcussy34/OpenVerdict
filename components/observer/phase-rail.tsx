@@ -73,7 +73,7 @@ export function PhaseRail({ currentPhase, className = "" }: PhaseRailProps) {
         <h2 className="ov-micro ov-micro-sm text-muted-foreground">
           Phase progression
         </h2>
-        <span className="ov-micro ov-micro-sm border border-sea/30 bg-sea/10 px-2.5 py-0.5 text-primary">
+        <span className="ov-micro ov-micro-sm border border-sea/40 bg-sea/12 px-2.5 py-0.5 text-primary">
           Phase {activeIndex} of {PHASES.length} · {active.name}
         </span>
       </header>
@@ -90,7 +90,7 @@ export function PhaseRail({ currentPhase, className = "" }: PhaseRailProps) {
         />
         <motion.div
           aria-hidden
-          className="absolute top-[52px] left-[calc(8.33%+1.25rem)] hidden h-0.5 origin-left rounded-full bg-gradient-to-r from-yes to-sea lg:block"
+          className="absolute top-[52px] left-[calc(8.33%+1.25rem)] hidden h-0.5 origin-left rounded-full bg-primary lg:block"
           style={{ maxWidth: "calc(83.34% - 2.5rem)" }}
           initial={{ width: 0 }}
           animate={{ width: `calc((83.34% - 2.5rem) * ${fill / 100})` }}
@@ -108,11 +108,13 @@ export function PhaseRail({ currentPhase, className = "" }: PhaseRailProps) {
                 <span
                   className={cn(
                     "relative grid size-11 place-items-center border-2 bg-card transition-colors",
+                    // Phases are progress, not verdicts: a finished node is
+                    // ink, the running one wears the accent.
                     done
-                      ? "border-yes/50 bg-yes/10 text-yes"
+                      ? "border-border bg-surface text-muted-foreground"
                       : current
                         ? "border-sea bg-sea/12 text-primary"
-                        : "border-border text-muted-foreground",
+                        : "border-border text-muted-foreground/60",
                   )}
                 >
                   {current && (
@@ -128,10 +130,10 @@ export function PhaseRail({ currentPhase, className = "" }: PhaseRailProps) {
                   className={cn(
                     "ov-micro ov-micro-sm mt-2 rounded px-1.5 py-px",
                     done
-                      ? "bg-yes/10 text-yes"
+                      ? "bg-surface text-muted-foreground"
                       : current
                         ? "bg-sea/12 text-primary"
-                        : "bg-surface text-muted-foreground",
+                        : "bg-surface text-muted-foreground/60",
                   )}
                 >
                   {done ? "Done" : current ? "Active" : "Wait"}

@@ -25,7 +25,7 @@ interface StateBadgeProps {
   size?: "sm" | "md" | "lg";
 }
 
-type Tone = "open" | "settled" | "unresolved" | "no";
+type Tone = "open" | "closed" | "settled" | "unresolved" | "no";
 
 interface StateConfig {
   label: string;
@@ -35,13 +35,19 @@ interface StateConfig {
   tone: Tone;
 }
 
-// Three tones, so the badge answers one question at a glance: is this done,
-// and did it settle? Everything still in flight is amber, however far along it
-// is; only the two terminal outcomes earn a colour of their own.
+// Four tones, so the badge answers one question at a glance: is this done, and
+// did it settle? Anything still in flight wears the accent, which is the one
+// colour the whole app spends on "in progress"; anything closed without a
+// verdict is quiet ink, including UNRESOLVED, which reported no consensus
+// rather than a NO. Amber is reserved for the UNSURE verdict now, so a sealed
+// commit no longer wears the same colour as a jury that could not decide
+// (owner, 2026-09-04). Only a settled verdict and a voided attempt earn a
+// signal colour.
 const TONE_CLASS: Record<Tone, string> = {
-  open: "border-unsure/30 bg-unsure/8 text-unsure",
+  open: "border-sea/40 bg-sea/12 text-primary",
+  closed: "border-border bg-surface text-muted-foreground",
   settled: "border-yes/30 bg-yes/8 text-yes",
-  unresolved: "border-no/30 bg-no/8 text-no",
+  unresolved: "border-border bg-surface text-muted-foreground",
   no: "border-no/30 bg-no/8 text-no",
 };
 
@@ -80,11 +86,12 @@ export function getStateConfig(
       return { label: "Phase 1 · Reveal", short: "Revealing", icon: Unlock, tone: "open" };
     case CLAIM_STATE.DISCUSSION:
       if (stranded) {
+        // Expired is a stop, not progress: quiet ink rather than the accent.
         return {
           label: "Discussion · expired",
           short: "Expired",
           icon: CloseCircle,
-          tone: "open",
+          tone: "closed",
         };
       }
       return { label: "Discussion round", short: "Discussion", icon: Activity, tone: "open" };
@@ -114,10 +121,11 @@ export function getStateConfig(
         tone: "unresolved",
       };
     case CLAIM_STATE.CANCELLED:
-      return { label: "Cancelled", short: "Cancelled", icon: CloseCircle, tone: "open" };
+      return { label: "Cancelled", short: "Cancelled", icon: CloseCircle, tone: "closed" };
     default: {
+      // An unknown code is not progress either, so it stays ink.
       const fallback = typeof state === "string" ? state : `State ${state}`;
-      return { label: fallback, short: fallback, icon: Judge, tone: "open" };
+      return { label: fallback, short: fallback, icon: Judge, tone: "closed" };
     }
   }
 }

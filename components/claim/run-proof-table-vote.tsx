@@ -46,7 +46,7 @@ export function TableVotePanel({ bundle }: { bundle: TransparentBundle }) {
         <div className="rounded-lg border border-border bg-card p-2.5">
           <FieldLabel>Juror round-one vote</FieldLabel>
           <span className={cn(
-            "mt-1.5 inline-flex rounded-full px-2 py-0.5 text-xs font-bold",
+            "mt-1.5 inline-flex px-2 py-0.5 text-xs font-bold",
             roundOneOutcome === undefined
               ? "bg-muted text-muted-foreground"
               : OUTCOME_CHIP[roundOneOutcome],
@@ -85,7 +85,7 @@ export function TableVotePanel({ bundle }: { bundle: TransparentBundle }) {
                     Exchange {exchange ?? "?"}
                   </span>
                   <span className={cn(
-                    "rounded-full px-2 py-0.5 text-[10px] font-bold",
+                    "px-2 py-0.5 text-[10px] font-bold",
                     stance === undefined
                       ? "bg-muted text-muted-foreground"
                       : OUTCOME_CHIP[stance],
@@ -108,7 +108,7 @@ export function TableVotePanel({ bundle }: { bundle: TransparentBundle }) {
         )}
       </div>
 
-      <p className="rounded-lg border border-unsure/25 bg-unsure/8 px-3 py-2 text-xs font-semibold text-unsure">
+      <p className="rounded-lg border border-border bg-surface px-3 py-2 text-xs font-semibold text-muted-foreground">
         {convergedAfterExchange === undefined
           ? "Three exchanges, no convergence: to the vote"
           : `Debate converged after exchange ${convergedAfterExchange}: nobody moved`}

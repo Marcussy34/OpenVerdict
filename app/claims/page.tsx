@@ -201,9 +201,10 @@ export default function ClaimsPage() {
 
   return (
     <div className="mx-auto max-w-7xl space-y-10 px-5 py-16 md:px-7 md:py-24">
-      {/* Hero: the verify page's wave, in teal, so the two entry points read as
-          siblings. aria-label carries the word; the per-letter spans are hidden
-          from assistive tech so it is not spelled out one character at a time. */}
+      {/* Hero: the verify page's wave, in the one accent blue, so the two entry
+          points read as siblings. aria-label carries the word; the per-letter
+          spans are hidden from assistive tech so it is not spelled out one
+          character at a time. */}
       <div className="mx-auto max-w-3xl space-y-4 text-center">
         <h1 className="ov-display text-5xl text-ocean md:text-6xl">
           Find any{" "}
@@ -212,7 +213,7 @@ export default function ClaimsPage() {
               <span
                 key={index}
                 aria-hidden="true"
-                className="ov-wave-letter ov-wave-letter--teal"
+                className="ov-wave-letter"
                 style={{ "--i": index } as CSSProperties}
               >
                 {letter}
@@ -250,10 +251,12 @@ export default function ClaimsPage() {
                 aria-selected={active}
                 onClick={() => setActiveFilter(tab.key)}
                 className={cn(
-                  "flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors",
+                  // Sharp chip, one hairline weight, accent only when active:
+                  // the same recipe the agents filter and the seat picker use.
+                  "flex items-center gap-1.5 border px-3 py-1.5 text-xs font-medium transition-colors",
                   active
-                    ? "border-sea/40 bg-sea/10 text-primary"
-                    : "border-border bg-card text-muted-foreground hover:border-sea/30 hover:text-ocean",
+                    ? "border-sea/40 bg-sea/12 text-primary"
+                    : "border-border bg-card text-muted-foreground hover:border-sea/40 hover:text-ocean",
                 )}
               >
                 {tab.label}
@@ -271,7 +274,7 @@ export default function ClaimsPage() {
         {/* View switch: changes the directory's shape, never its contents. */}
         <div className="flex justify-end">
           <div
-            className="ov-edge inline-flex items-center gap-0.5 rounded-full border border-border bg-card p-0.5"
+            className="ov-edge inline-flex items-center gap-0.5 border border-border bg-card p-0.5"
             role="tablist"
             aria-label="Claims view"
           >
@@ -284,9 +287,9 @@ export default function ClaimsPage() {
                   aria-selected={active}
                   onClick={() => writeView(key)}
                   className={cn(
-                    "flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-colors",
+                    "flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors",
                     active
-                      ? "bg-sea/10 text-primary"
+                      ? "bg-sea/12 text-primary"
                       : "text-muted-foreground hover:text-ocean",
                   )}
                 >
@@ -317,7 +320,7 @@ export default function ClaimsPage() {
           )
         ) : engineOffline ? (
           <div className="flex flex-col items-center gap-3 rounded-2xl border border-dashed border-border bg-card px-6 py-14 text-center">
-            <span className="grid size-11 place-items-center rounded-xl bg-unsure/10 text-unsure">
+            <span className="grid size-11 place-items-center rounded-xl bg-destructive/10 text-destructive">
               <Warning2 size="22" variant="Bold" />
             </span>
             <p className="text-sm font-semibold text-ocean">Engine offline</p>
@@ -358,7 +361,7 @@ export default function ClaimsPage() {
                     {claim.result && (
                       <span
                         className={cn(
-                          "shrink-0 rounded-full px-2 py-0.5 font-mono text-[10px] font-bold tabular-nums",
+                          "shrink-0 px-2 py-0.5 font-mono text-[10px] font-bold tabular-nums",
                           OUTCOME_CHIP[claim.result.result] ?? OUTCOME_CHIP.UNRESOLVED,
                         )}
                       >

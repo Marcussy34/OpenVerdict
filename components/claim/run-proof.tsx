@@ -248,14 +248,14 @@ function ReexecuteRunBlock({
           className={cn(
             result.matches.outcome
               ? "ring-yes/30"
-              : "ring-unsure/35",
+              : "ring-destructive/35",
           )}
         >
           <CardHeader>
             <CardTitle
               className={cn(
                 "flex items-center gap-2",
-                result.matches.outcome ? "text-yes" : "text-unsure",
+                result.matches.outcome ? "text-yes" : "text-destructive",
               )}
             >
               {result.matches.outcome ? (
@@ -369,11 +369,11 @@ export function RunProofDetails({ proof }: { proof: TransparentRunProof }) {
             <ProofValue label="Prompt hash" value={proof.promptHash} tone="sealed" />
             <ProofValue label="Input hash" value={proof.inputHash} tone="chain" />
             <ProofValue label="Output hash" value={proof.outputHash} tone="chain" />
-            <ProofValue label="Run hash" value={proof.runHash} tone="yes" />
+            <ProofValue label="Run hash" value={proof.runHash} tone="sealed" />
             <ProofValue label="Gateway request id" value={proof.gateway?.gatewayRequestId} />
             <ProofValue label="Devshard id" value={proof.gateway?.devshardId} />
             <ProofValue label="Sealed blob id" value={proof.sealedBlobId} tone="sealed" />
-            <ProofValue label="Revealed blob id" value={proof.revealedBlobId} tone="yes" />
+            <ProofValue label="Revealed blob id" value={proof.revealedBlobId} />
           </div>
 
           {bundle !== null && proof.gateway?.gatewayRequestId ? (

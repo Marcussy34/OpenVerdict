@@ -140,7 +140,7 @@ function RecentFactChecks() {
                 <div className="h-4 w-3/4 rounded bg-surface-2" />
                 <div className="h-3 w-1/3 rounded bg-surface-2" />
               </div>
-              <div className="h-5 w-16 shrink-0 rounded-full bg-surface-2" />
+              <div className="h-5 w-16 shrink-0 bg-surface-2" />
             </li>
           ))}
         </ul>
@@ -172,7 +172,7 @@ function RecentFactChecks() {
                   {row.result && (
                     <span
                       className={cn(
-                        "shrink-0 rounded-full px-2 py-0.5 font-mono text-[10px] font-bold tabular-nums",
+                        "shrink-0 px-2 py-0.5 font-mono text-[10px] font-bold tabular-nums",
                         OUTCOME_CHIP[row.result.result] ?? OUTCOME_CHIP.UNRESOLVED,
                       )}
                     >
@@ -384,9 +384,10 @@ function FactCheckContent() {
       </div>
 
       <div className="mx-auto w-full max-w-3xl space-y-3">
+        {/* A deployment state, not a verdict: quiet ink rather than amber. */}
         {isEngineOffline && (
-          <Alert className="border-unsure/35 bg-unsure/8">
-            <Warning2 size="18" variant="Bold" className="text-unsure" />
+          <Alert className="border-border bg-surface">
+            <Warning2 size="18" variant="Bold" className="text-muted-foreground" />
             <AlertTitle className="text-sm font-semibold text-ocean">
               Engine backend offline / not wired
             </AlertTitle>
@@ -514,7 +515,8 @@ function FactCheckContent() {
                   <span
                     className={cn(
                       "text-[11px] tabular-nums",
-                      claimTooLong ? "text-unsure" : "text-muted-foreground",
+                      // Over the limit is an input failure, not an UNSURE verdict.
+                      claimTooLong ? "text-destructive" : "text-muted-foreground",
                     )}
                   >
                     {claim.length}/{isLongText ? MAX_PASTE : MAX_CLAIM}
@@ -526,7 +528,7 @@ function FactCheckContent() {
         )}
 
         {extractError && (
-          <p className="rounded-xl border border-unsure/30 bg-unsure/8 px-3 py-2 text-xs font-medium text-unsure">
+          <p className="rounded-xl border border-destructive/30 bg-destructive/8 px-3 py-2 text-xs font-medium text-destructive">
             {extractError}
           </p>
         )}

@@ -485,11 +485,13 @@ function Chip({
       aria-pressed={selected}
       onClick={onSelect}
       className={cn(
-        "min-h-[38px] rounded-full border px-3 py-1.5 text-xs transition-colors",
+        // The app's one chip recipe: sharp, one hairline weight, accent when
+        // selected. Matches the claims and agents filter rails.
+        "min-h-[38px] border px-3 py-1.5 text-xs transition-colors",
         mono ? "font-mono" : "font-medium",
         selected
-          ? "border-sea/40 bg-sea/10 text-primary"
-          : "border-border bg-card text-muted-foreground hover:border-sea/30 hover:text-ocean",
+          ? "border-sea/40 bg-sea/12 text-primary"
+          : "border-border bg-card text-muted-foreground hover:border-sea/40 hover:text-ocean",
       )}
     >
       {label}
@@ -512,12 +514,14 @@ function StepList({ phase }: { phase: StakePhase }) {
           <li key={step.phase} className="flex items-center gap-2.5 text-xs">
             <span
               className={cn(
+                // Step markers are ink; only the running step wears the accent.
+                // Green stays for protocol outcomes, not for wizard progress.
                 "grid size-5 shrink-0 place-items-center rounded-full text-[10px] font-semibold",
                 done
-                  ? "bg-yes/12 text-yes"
+                  ? "bg-surface-2 text-muted-foreground"
                   : active
                     ? "bg-sea/12 text-primary"
-                    : "bg-surface-2 text-muted-foreground",
+                    : "bg-surface-2 text-muted-foreground/60",
               )}
             >
               {done ? (

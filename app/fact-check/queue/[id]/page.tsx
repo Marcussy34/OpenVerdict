@@ -95,7 +95,7 @@ export default function QueuedFactCheckPage() {
   if (!item) {
     return (
       <div className="mx-auto flex max-w-2xl flex-col items-center gap-4 px-5 py-24 text-center">
-        <Warning2 size="24" className="text-unsure" />
+        <Warning2 size="24" className="text-destructive" />
         <p className="text-sm text-muted-foreground">{error ?? "Unable to load queue item"}</p>
         <Button
           size="sm"
@@ -135,7 +135,8 @@ export default function QueuedFactCheckPage() {
       <div className="mx-auto max-w-3xl space-y-6 px-5 py-16 md:px-7 md:py-24">
         <div className="space-y-2">
           <h1 className="ov-display text-3xl font-semibold text-ocean">Submission cancelled</h1>
-          <p className="text-sm text-no">
+          {/* A launch failure, not a NO verdict: the failure token, same red. */}
+          <p className="text-sm text-destructive">
             This submission could not be launched: {item.launchError ?? "Unknown launch error"}
           </p>
         </div>
@@ -162,7 +163,9 @@ export default function QueuedFactCheckPage() {
         </Link>
         <div className="flex items-center gap-3">
           <h1 className="ov-display text-4xl font-semibold text-ocean">Queued</h1>
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-unsure/10 px-3 py-1 text-xs font-bold text-unsure">
+          {/* Waiting is "in progress", which the whole app paints in the accent;
+              the sharp chip matches every other badge. */}
+          <span className="inline-flex items-center gap-1.5 border border-sea/40 bg-sea/12 px-3 py-1 text-xs font-bold text-primary">
             <Refresh size="13" className="motion-safe:animate-spin" />
             Waiting for clear weather
           </span>

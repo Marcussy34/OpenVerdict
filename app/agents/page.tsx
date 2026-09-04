@@ -152,7 +152,7 @@ export default function AgentsPage() {
           </div>
         ) : engineOffline ? (
           <div className="flex flex-col items-center gap-3 rounded-2xl border border-dashed border-border bg-card px-6 py-14 text-center">
-            <span className="grid size-11 place-items-center rounded-xl bg-unsure/10 text-unsure">
+            <span className="grid size-11 place-items-center rounded-xl bg-destructive/10 text-destructive">
               <Warning2 size="22" variant="Bold" />
             </span>
             <p className="text-sm font-semibold text-ocean">Engine offline</p>
@@ -242,10 +242,12 @@ function FamilyChip({
       onClick={onClick}
       aria-pressed={active}
       className={cn(
-        "flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors",
+        // Same chip recipe as the claims filter: sharp, one hairline weight,
+        // accent only when active.
+        "flex items-center gap-1.5 border px-3 py-1.5 text-xs font-medium transition-colors",
         active
-          ? "border-sea/40 bg-sea/10 text-primary"
-          : "border-border bg-card text-muted-foreground hover:border-sea/30 hover:text-ocean",
+          ? "border-sea/40 bg-sea/12 text-primary"
+          : "border-border bg-card text-muted-foreground hover:border-sea/40 hover:text-ocean",
       )}
     >
       {dot && <span className={cn("size-1.5 rounded-full", dot)} aria-hidden />}

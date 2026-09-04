@@ -139,7 +139,7 @@ export function GatewayReceiptCheck({
       </p>
 
       {error && (
-        <p className="rounded-lg border border-unsure/30 bg-unsure/8 p-2.5 text-xs font-semibold text-unsure">
+        <p className="rounded-lg border border-destructive/30 bg-destructive/8 p-2.5 text-xs font-semibold text-destructive">
           {error}
         </p>
       )}

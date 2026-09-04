@@ -5,7 +5,9 @@ import { Dialog as DialogPrimitive } from "radix-ui"
 
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
-import { XIcon } from "lucide-react"
+// Iconsax has no bare X; its plus rotated 45deg is the set's own close
+// glyph, and it keeps this primitive on the one icon family the app uses.
+import { Add } from "@/components/icons"
 
 function Dialog({
   ...props
@@ -74,8 +76,7 @@ function DialogContent({
               className="absolute top-2 right-2"
               size="icon-sm"
             >
-              <XIcon
-              />
+              <Add className="rotate-45" />
               <span className="sr-only">Close</span>
             </Button>
           </DialogPrimitive.Close>

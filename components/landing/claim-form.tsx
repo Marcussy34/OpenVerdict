@@ -52,7 +52,9 @@ export function ClaimForm() {
       <div className="mt-2.5 flex flex-wrap items-center justify-end gap-2">
         <span
           className={`ov-micro ov-micro-sm tabular-nums ${
-            tooLong ? "text-[#ffd479]" : "text-[#F3F3F3]/45"
+            // Over the limit is a failure, so it wears the failure red, in the
+            // dark-ground variant. It used to be an off-palette amber.
+            tooLong ? "text-no-dark" : "text-[#F3F3F3]/45"
           }`}
         >
           {claim.length}/{MAX_CLAIM}
@@ -63,7 +65,7 @@ export function ClaimForm() {
         <p
           id="landing-claim-error"
           role="alert"
-          className="mt-3 border-l-2 border-[#ffd479] bg-black/20 py-2 pl-3 text-[13px] leading-snug text-[#ffd479]"
+          className="mt-3 border-l-2 border-no-dark bg-black/20 py-2 pl-3 text-[13px] leading-snug text-no-dark"
         >
           {isEngineOffline
             ? "The verification engine is not reachable right now. Client-side proof tools stay available on the verifier."

@@ -127,10 +127,12 @@ export default function AppHomePage() {
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatTile label="Claims settled" value={stats.settled} icon={ShieldTick} tone="yes" />
-        <StatTile label="In deliberation" value={stats.running} icon={Judge} tone="sealed" />
-        <StatTile label="Jury seats drawn" value={stats.seats} icon={People} tone="primary" />
-        <StatTile label="Active jurors" value={stats.jurors} icon={Activity} tone="chain" />
+        {/* One tone across the rail: these are counters, not verdicts, so none
+            of them earns a colour of its own. The icon says what each counts. */}
+        <StatTile label="Claims settled" value={stats.settled} icon={ShieldTick} />
+        <StatTile label="In deliberation" value={stats.running} icon={Judge} />
+        <StatTile label="Jury seats drawn" value={stats.seats} icon={People} />
+        <StatTile label="Active jurors" value={stats.jurors} icon={Activity} />
       </div>
 
       {/* The desks. One card per thing a visitor can actually do. */}
@@ -151,7 +153,7 @@ export default function AppHomePage() {
             <h2 className="mt-4 text-[19px] leading-snug font-medium tracking-[-0.01em]">
               {desk.title}
             </h2>
-            <p className="mt-2 text-sm leading-[1.5] text-black/65">{desk.body}</p>
+            <p className="mt-2 text-sm leading-[1.5] text-muted-foreground">{desk.body}</p>
           </Link>
         ))}
       </div>
@@ -214,7 +216,7 @@ export default function AppHomePage() {
                 GonkaRouter
               </p>
             </div>
-            <p className="text-[15px] leading-[1.5] text-black/65">
+            <p className="text-[15px] leading-[1.5] text-muted-foreground">
               Five jurors across at least three model families, drawn by Sui native
               randomness, deliberating under commit–reveal.
             </p>

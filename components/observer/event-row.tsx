@@ -20,6 +20,11 @@ interface SourceConfig {
   icon: typeof Cpu;
 }
 
+// Subsystems are not verdicts, so none of them owns a hue: every chip is a
+// hairline ink chip and the icon plus the label says which subsystem spoke. The
+// one exception is SUI, which keeps the accent because settling on chain is the
+// thing the accent means everywhere else (owner, 2026-09-04). GONKA used to
+// wear the Kimi purple, which belongs to a model logo tile and nothing else.
 const SOURCES: Record<ResolutionEventSource, SourceConfig> = {
   ENGINE: {
     label: "ENGINE",
@@ -29,20 +34,20 @@ const SOURCES: Record<ResolutionEventSource, SourceConfig> = {
   },
   GONKA_ROUTER: {
     label: "GONKA",
-    chip: "border-family-b/30 bg-family-b/8 text-family-b",
-    spine: "bg-family-b",
+    chip: "border-border bg-surface text-muted-foreground",
+    spine: "bg-muted-foreground",
     icon: Activity,
   },
   TOOL: {
     label: "TOOL",
-    chip: "border-unsure/30 bg-unsure/8 text-unsure",
-    spine: "bg-unsure",
+    chip: "border-border bg-surface text-muted-foreground",
+    spine: "bg-border",
     icon: Hierarchy,
   },
   EVIDENCE: {
     label: "EVIDENCE",
-    chip: "border-yes/30 bg-yes/8 text-yes",
-    spine: "bg-yes",
+    chip: "border-sealed/30 bg-sealed/8 text-sealed",
+    spine: "bg-sealed",
     icon: DocumentText,
   },
   SUI: {
@@ -65,8 +70,9 @@ export function getSourceConfig(source: ResolutionEventSource): SourceConfig {
 }
 
 /**
- * One row of the live resolution stream. A coloured spine encodes the emitting
- * subsystem so a fast-scrolling log is still readable at a glance.
+ * One row of the live resolution stream. A spine marks the emitting subsystem
+ * so a fast-scrolling log is still readable at a glance; it differs by weight
+ * of ink rather than by hue, and only the chain rows carry the accent.
  */
 export function EventRow({ event, animate = false }: EventRowProps) {
   const reduce = useReducedMotion();
@@ -79,7 +85,7 @@ export function EventRow({ event, animate = false }: EventRowProps) {
       initial={animate && !reduce ? { opacity: 0, x: -10 } : false}
       animate={{ opacity: 1, x: 0 }}
       transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
-      className="relative flex flex-col gap-2 overflow-hidden rounded-xl border border-border bg-card py-2.5 pr-3 pl-4 transition-colors hover:border-sea/35 sm:flex-row sm:items-center sm:justify-between"
+      className="relative flex flex-col gap-2 overflow-hidden rounded-xl border border-border bg-card py-2.5 pr-3 pl-4 transition-colors hover:border-sea/40 sm:flex-row sm:items-center sm:justify-between"
     >
       <span aria-hidden className={cn("absolute inset-y-0 left-0 w-1", source.spine)} />
 
@@ -110,7 +116,8 @@ export function EventRow({ event, animate = false }: EventRowProps) {
             REDACTED
           </span>
         ) : (
-          <span className="inline-flex items-center gap-1 rounded border border-yes/25 bg-yes/8 px-1.5 py-0.5 font-mono text-[9px] text-yes">
+          // Visibility is a state, not an outcome, so it is ink like REDACTED.
+          <span className="inline-flex items-center gap-1 rounded border border-border bg-surface px-1.5 py-0.5 font-mono text-[9px] text-muted-foreground">
             <TickCircle size="10" variant="Bold" />
             PUBLIC
           </span>

@@ -68,7 +68,7 @@ export function ClaimCard({ claim }: ClaimCardProps) {
         {claim.result && !scored && !chipEchoesBadge && (
           <span
             className={cn(
-              "shrink-0 rounded-full px-2 py-0.5 font-mono text-[10px] font-bold tabular-nums",
+              "shrink-0 px-2 py-0.5 font-mono text-[10px] font-bold tabular-nums",
               OUTCOME_CHIP[claim.result.result] ?? OUTCOME_CHIP.UNRESOLVED,
             )}
           >

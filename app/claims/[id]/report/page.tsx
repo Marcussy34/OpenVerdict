@@ -284,7 +284,7 @@ export default function ClaimDetailPage({ params }: ClaimDetailPageProps) {
   if (engineOffline) {
     return (
       <div className="mx-auto flex max-w-2xl flex-col items-center gap-3 px-4 py-24 text-center">
-        <span className="grid size-12 place-items-center rounded-xl bg-unsure/10 text-unsure">
+        <span className="grid size-12 place-items-center rounded-xl bg-destructive/10 text-destructive">
           <Warning2 size="26" variant="Bold" />
         </span>
         <h1 className="text-xl font-semibold text-ocean">Engine offline (503)</h1>
@@ -394,7 +394,7 @@ export default function ClaimDetailPage({ params }: ClaimDetailPageProps) {
         <Panel
           label="Verification attempts"
           icon={Refresh}
-          tone={attemptStopped ? "warn" : "chain"}
+          tone={attemptStopped ? "default" : "chain"}
           action={
             <MetaTag
               tone={attemptStopped ? "default" : "chain"}
@@ -420,11 +420,13 @@ export default function ClaimDetailPage({ params }: ClaimDetailPageProps) {
                   {attempt.claimId}
                 </Link>
                 <span className={cn(
-                  "w-fit rounded-full px-2 py-0.5 text-[10px] font-bold",
+                  // ACTIVE is "in progress", so it takes the accent rather than
+                  // amber, which the palette keeps for the UNSURE verdict.
+                  "w-fit px-2 py-0.5 text-[10px] font-bold",
                   attempt.status === "SETTLED"
                     ? "bg-yes/10 text-yes"
                     : attempt.status === "ACTIVE"
-                      ? "bg-unsure/10 text-unsure"
+                      ? "bg-sea/12 text-primary"
                       : "bg-no/10 text-no",
                 )}>
                   {attempt.status}
@@ -513,8 +515,9 @@ export default function ClaimDetailPage({ params }: ClaimDetailPageProps) {
                   <div key={label} className="flex items-center gap-1.5">
                     <span
                       className={cn(
+                        // A failed check is a failure, not an UNSURE verdict.
                         "grid size-5 place-items-center rounded-full",
-                        ok ? "bg-yes/12 text-yes" : "bg-unsure/12 text-unsure",
+                        ok ? "bg-yes/12 text-yes" : "bg-destructive/12 text-destructive",
                       )}
                     >
                       <ShieldTick size="12" variant="Bold" />
@@ -534,7 +537,7 @@ export default function ClaimDetailPage({ params }: ClaimDetailPageProps) {
           </div>
         </Panel>
 
-        <Panel label="Consensus truth score" icon={Award} tone="yes">
+        <Panel label="Consensus truth score" icon={Award}>
           <div className="flex flex-col items-center gap-4">
             <VerdictGauge
               scoreBps={claim.result?.truthScoreBps ?? null}
@@ -738,7 +741,6 @@ export default function ClaimDetailPage({ params }: ClaimDetailPageProps) {
           <Panel
             label="Public verification report & audit bundle"
             icon={Award}
-            tone="yes"
             action={
               <Button
                 variant="outline"
@@ -1003,7 +1005,7 @@ export default function ClaimDetailPage({ params }: ClaimDetailPageProps) {
                       <span className="ov-micro ov-micro-sm text-muted-foreground">
                         Certificate object
                       </span>
-                      <HashChip value={report.sui.certificateId} tone="yes" full href={suiObjectUrl(report.sui.certificateId)} />
+                      <HashChip value={report.sui.certificateId} tone="chain" full href={suiObjectUrl(report.sui.certificateId)} />
                     </div>
                   )}
                   {report.evidenceRoot && (

@@ -87,16 +87,22 @@ export function PageHeader({
   );
 }
 
-/** The site-wide "Experimental" marker, used beside every page title. */
+/**
+ * The site-wide "Experimental" marker, used beside every page title.
+ *
+ * A hairline ink chip, not an amber one: amber is the UNSURE verdict, and this
+ * label says nothing about a verdict (owner, 2026-09-04). The breathing dot
+ * still carries the "this is live and unfinished" tell, in muted ink.
+ */
 export function ExperimentalTag({ className }: { className?: string }) {
   return (
     <span
       className={cn(
-        "ov-micro ov-micro-sm inline-flex items-center gap-1.5 border border-unsure/30 bg-unsure/8 px-2 py-0.5 text-unsure",
+        "ov-micro ov-micro-sm inline-flex items-center gap-1.5 border border-border bg-surface px-2 py-0.5 text-muted-foreground",
         className,
       )}
     >
-      <span className="ov-breathe size-1.5 rounded-full bg-unsure" aria-hidden />
+      <span className="ov-breathe size-1.5 rounded-full bg-muted-foreground" aria-hidden />
       Experimental
     </span>
   );

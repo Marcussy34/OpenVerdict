@@ -43,9 +43,12 @@ function getOutcomeChipClass(result: string): string {
     case "NO":
       return "border-no/30 bg-no/10 text-no";
     case "UNSURE":
+      return "border-unsure/30 bg-unsure/10 text-unsure";
+    // No consensus is not a verdict, so it stays ink rather than borrowing the
+    // UNSURE amber.
     case "UNRESOLVED":
     default:
-      return "border-unsure/30 bg-unsure/10 text-unsure";
+      return "border-border bg-surface text-muted-foreground";
   }
 }
 

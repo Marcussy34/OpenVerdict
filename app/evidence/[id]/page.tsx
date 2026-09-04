@@ -63,7 +63,7 @@ export default function EvidenceDetailPage({ params }: EvidenceDetailPageProps) 
         icon={DocumentText}
         badges={<ExperimentalTag />}
         actions={
-          <MetaTag tone="yes">
+          <MetaTag tone="sealed">
             <ShieldTick size="11" variant="Bold" />
             Frozen on Walrus
           </MetaTag>

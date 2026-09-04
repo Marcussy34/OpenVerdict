@@ -55,14 +55,16 @@ export default function RiskPage() {
           </Panel>
         ))}
 
-        {/* Hackathon caps — deliberately louder than the other cards. */}
-        <section className="ov-edge relative overflow-hidden rounded-2xl border border-unsure/35 bg-unsure/6 p-5">
+        {/* Hackathon caps, deliberately louder than the other cards. It wears
+            the failure red rather than amber: amber is the UNSURE verdict, and
+            a "do not deposit capital" warning is a hazard, not a verdict. */}
+        <section className="ov-edge relative overflow-hidden rounded-2xl border border-destructive/35 bg-destructive/6 p-5">
           <div className="flex items-start gap-3">
-            <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-unsure/15 text-unsure">
+            <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-destructive/15 text-destructive">
               <ShieldCross size="20" variant="Bold" />
             </span>
             <div className="space-y-2">
-              <span className="ov-micro ov-micro-sm text-unsure">
+              <span className="ov-micro ov-micro-sm text-destructive">
                 Risk 04
               </span>
               <h2 className="text-base font-semibold text-ocean">

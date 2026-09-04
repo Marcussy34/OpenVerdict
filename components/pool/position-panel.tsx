@@ -369,7 +369,7 @@ export function PositionPanel() {
         {!account ? (
           <div className="flex flex-col items-start gap-4 rounded-xl border border-dashed border-border bg-surface p-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex max-w-2xl items-start gap-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-sea/10 text-primary ring-1 ring-sea/20">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-sea/12 text-primary ring-1 ring-sea/25">
                 <Wallet size="20" variant="Bold" aria-hidden="true" />
               </div>
               <div className="space-y-1">

@@ -363,7 +363,7 @@ export default function AgentDetailPage({ params }: AgentDetailPageProps) {
       </Panel>
 
       {/* Reputation */}
-      <Panel label="On-chain reputation counters (static in v1)" icon={ShieldTick} tone="yes">
+      <Panel label="On-chain reputation counters (static in v1)" icon={ShieldTick}>
         <p className="mb-4 text-xs leading-relaxed text-muted-foreground">
           Counters registered on-chain for every agent, in basis points
           (10,000 = 100%). In this release the protocol records them at their
@@ -389,9 +389,11 @@ export default function AgentDetailPage({ params }: AgentDetailPageProps) {
                       {typeof bps === "number" ? `${bps} bps · ${pct}%` : "Not recorded"}
                     </span>
                   </div>
+                  {/* The bar reads a counter, not a provider: the accent, not
+                      the model-family tint, which belongs to the logo tile. */}
                   <div className="h-2 w-full overflow-hidden rounded-full bg-surface-2">
                     <div
-                      className={cn("h-full rounded-full transition-[width] duration-700", family.dot)}
+                      className="h-full rounded-full bg-primary transition-[width] duration-700"
                       style={{ width: `${pct}%` }}
                       role="progressbar"
                       aria-valuenow={pct}

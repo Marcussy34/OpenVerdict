@@ -213,24 +213,28 @@ export function WeatherStrip({
           let dotColor = "";
           let stateWord = "";
 
+          // The chip body is ink and only a failure earns a colour: the strip
+          // used to run a green/amber/red traffic light, and amber belongs to
+          // the UNSURE verdict (owner, 2026-09-04). The dot still marks a
+          // passing probe, and the word plus the latency carry "slow".
           if (chip.state === "healthy") {
             stateWord = "healthy";
             dotColor = "bg-yes";
             badgeClasses = isDark
-              ? "bg-yes/15 text-yes border-yes/30"
-              : "bg-yes/10 text-yes border-yes/25";
+              ? "bg-white/5 text-[#F3F3F3]/80 border-white/15"
+              : "bg-surface text-muted-foreground border-border";
           } else if (chip.state === "slow") {
             stateWord = "slow";
-            dotColor = "bg-unsure";
+            dotColor = isDark ? "bg-white/45" : "bg-muted-foreground";
             badgeClasses = isDark
-              ? "bg-unsure/15 text-unsure border-unsure/30"
-              : "bg-unsure/10 text-unsure border-unsure/25";
+              ? "bg-white/5 text-[#F3F3F3]/80 border-white/15"
+              : "bg-surface text-muted-foreground border-border";
           } else if (chip.state === "down") {
             stateWord = "down";
-            dotColor = "bg-no";
+            dotColor = isDark ? "bg-no-dark" : "bg-destructive";
             badgeClasses = isDark
-              ? "bg-no/15 text-no border-no/30"
-              : "bg-no/10 text-no border-no/25";
+              ? "bg-no-dark/15 text-no-dark border-no-dark/30"
+              : "bg-destructive/10 text-destructive border-destructive/25";
           } else {
             stateWord = "no recent probe";
             dotColor = isDark ? "bg-white/40" : "bg-muted-foreground";
@@ -243,7 +247,7 @@ export function WeatherStrip({
             <div
               key={chip.key}
               className={cn(
-                "inline-flex items-center gap-1.5 rounded-full border font-medium transition-colors",
+                "inline-flex items-center gap-1.5 border font-medium transition-colors",
                 compact ? "px-2.5 py-0.5 text-[11px]" : "px-3 py-1 text-xs",
                 badgeClasses,
               )}

@@ -8,11 +8,16 @@ import { SuiMark, GonkaMark } from "@/components/brand/logos";
 import { DOCS_URL } from "@/lib/web/site-urls";
 import { useScrollFrame, clamp01 } from "./scroll-driver";
 
+// Same labels as the site header, in the same order: "Verify" is claim
+// submission at /fact-check, and the independent run auditor at /verify is
+// "Audit". The footer used to call /verify "Verify" and omit /fact-check, so
+// the two nav lists disagreed about what the word meant.
 const NAVIGATION = [
   { href: "/", label: "Home" },
+  { href: "/fact-check", label: "Verify" },
   { href: "/claims", label: "Claims" },
   { href: "/agents", label: "Agents" },
-  { href: "/verify", label: "Verify" },
+  { href: "/verify", label: "Audit" },
   { href: "/status", label: "Status" },
 ];
 

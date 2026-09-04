@@ -39,6 +39,7 @@
     /* Semantic protocol signals — verdicts, seals and chain events. */
     --color-yes: var(--signal-yes);
     --color-no: var(--signal-no);
+    --color-no-dark: var(--signal-no-dark);
     --color-unsure: var(--signal-unsure);
     --color-sealed: var(--signal-sealed);
     --color-chain: var(--signal-chain);
@@ -161,6 +162,11 @@
     /* --- Semantic signals (all AA on white) ------------------------------ */
     --signal-yes: #0e7a4b;
     --signal-no: #ce2c2c;
+    /* The same failure red, re-anchored for the deep navy grounds, exactly as
+       --brand-sea-ink re-anchors the accent for text. #ce2c2c is only 3.4:1 on
+       #04122b; this clears 7:1, so the landing's errors stop reaching for an
+       off-palette amber (owner, 2026-09-04). */
+    --signal-no-dark: #f28b82;
     --signal-unsure: #8a5600; /* Darkened from #a56800 to pass 4.5:1 WCAG AA on #f8f3eb (5.57:1) and #ffffff (6.16:1) */
     --signal-sealed: #5a6b7e; /* sealed reads as quiet ink with the lock icon: one palette, no extra hue (owner, 2026-09-04) */
     --signal-chain: var(--brand-sea-ink);
@@ -171,9 +177,11 @@
     --family-b: #8b2fd6; /* Kimi */
     --family-c: #0e7490; /* MiniMax */
 
+    /* Charts spend the accent and the three signal colours, plus quiet ink for
+       a fifth series. No indigo: the app has one blue, and it is the accent. */
     --chart-1: var(--brand-sea-strong);
     --chart-2: #0e7a4b;
-    --chart-3: #5145cd;
+    --chart-3: var(--signal-sealed);
     --chart-4: #8a5600;
     --chart-5: #ce2c2c;
 
@@ -334,10 +342,12 @@
    ever half-migrating into a dark theme.
 --------------------------------------------------------------------------- */
 
+/* Both washes are the one accent blue: the second used to be an indigo
+   (rgb(81 69 205)) that appeared nowhere else in the product. */
 .ov-slab {
     background:
-        radial-gradient(118% 88% at 76% 12%, rgb(77 162 255 / 22%), transparent 60%),
-        radial-gradient(84% 70% at 8% 96%, rgb(81 69 205 / 26%), transparent 66%),
+        radial-gradient(118% 88% at 76% 12%, rgb(14 118 255 / 22%), transparent 60%),
+        radial-gradient(84% 70% at 8% 96%, rgb(14 118 255 / 18%), transparent 66%),
         linear-gradient(163deg, #072033 0%, #04121f 54%, #030c17 100%);
 }
 
@@ -811,20 +821,15 @@
         #f7f7f5 100%
     );
 }
-/* Footer: light blue → accent family → deep navy. */
+/* Footer: paper into the same deep ink the hero and the black band close on.
+   It used to ramp through a mid-blue (#6f9bd2 → #1f62c4) that belonged to no
+   token, so the last band of every page wore a hue the rest of the app never
+   used. One ink family now, quiet under the hairlines (owner, 2026-09-04). */
 .ov-footer-ground {
     background:
         var(--ov-paper-join),
-        linear-gradient(
-            180deg,
-            #cddcee 0%,
-            #6f9bd2 16%,
-            #1f62c4 38%,
-            #0d3f8e 60%,
-            #061c3f 82%,
-            #030f24 100%
-        );
-    /* Shallower than the others on purpose: this ground is already deep blue
+        linear-gradient(180deg, #0b1b28 0%, #04122b 46%, #020c1c 100%);
+    /* Shallower than the others on purpose: this ground is already deep ink
        by 97px and the "Settled on" row sits just below that, so the band has
        to be clear of it. */
     background-size:
@@ -1014,13 +1019,6 @@
     color: transparent;
     animation: ov-wave-letter 2.4s ease-in-out calc(var(--i, 0) * -0.22s)
         infinite;
-}
-
-/* The claims hero wears the same wave in teal. The verify hero owns the blue,
-   and the badge palette already spends green, red and amber on lifecycle state,
-   so a hue with no state meaning keeps the heading from implying a verdict. */
-.ov-wave-letter--teal {
-    background-image: linear-gradient(90deg, #0e7490, #22b8cf 50%, #0e7490);
 }
 
 @keyframes ov-wave-letter {
