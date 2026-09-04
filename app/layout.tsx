@@ -84,7 +84,7 @@ export default async function RootLayout({
             <ChromeVisibility>
               <SiteHeader consoleHost={consoleHost} />
             </ChromeVisibility>
-            <main id="main" className="flex-1">
+            <main id="main" className="flex-1 min-h-[72vh] pb-20">
               {children}
             </main>
             {/* One footer for the whole product — the landing's deep-blue
