@@ -2401,3 +2401,76 @@ LEFTOVERS: the upgrade script's published-id fallback; the on-chain
 Display string; rotate the Shinami key after the demo; double-debate cost
 fix; several stakers per seat, stake-weighted draw, slashing rules,
 independent operators (spec "Out of scope").
+
+## 3an. 2026-09-04 MORNING: CLI TRACE, AGENT DOCS, DIAGRAMS, FIRST LIVE CLAIM ON THE NEW PACKAGE (read 3am then this)
+
+OWNER (11:30 to 13:15, present): ran the CLI review, the audit of claim
+#6 with the full reasoning trail, asked whether the README and the three
+diagrams were accurate, approved agent docs (AGENTS.md, docs/API.md,
+llms.txt) and said MCP is not needed for the submission (stdio-only wrapper
+is a possible later two hours; hosted variant stays out).
+
+SHIPPED (all pushed):
+- ec561af fix(audit): one retry per RPC endpoint on a dropped request
+  (a transient publicnode failure had produced 3 UNAVAILABLE checks).
+- b3fe77a README accuracy pass: test counts (787 TS, 92 Move), the
+  protocol fee is live (5 percent ticket at settlement; claim #6 minted
+  one 500,000 MIST fee ticket beside five 1,900,000 MIST jury tickets),
+  seat stakes in the Sui track table, first staked seat link, ov CLI row;
+  every "bond lost on slashing" sentence (README, learn, agents, FAQ,
+  stake card, skill, PRD) now says slashing is specified, not yet
+  enforced on chain. Deployed 12:1x.
+- 4df32ee AGENTS.md (how an agent uses OpenVerdict), docs/API.md (20
+  routes, every status code, read routes verified live), public/llms.txt.
+  Findings from that pass: GET /api/claims ignores ?limit (the auditor
+  trims client-side); POST /api/evidence is a stub (validates, persists
+  nothing); /claims/<id>/runs/<runId> is a 404 page (input link only).
+- 1a84e29 ov trace <claim> [--juror N] [--round 1|2] [--full] [--json]
+  (turns from request.messages, transcript fallback, debate and table
+  votes, receipt line), ov audit --trace and the closing hint, skill
+  presentation in three tiers with concrete offers, question-table row,
+  jq recipes, reference "The research trail", faq 33. 803 tests.
+- ae9934e diagrams revised (architecture: CLIs + skill box, juror runner
+  with research, Seal and Shinami boxes, seat stakes and fee, attempts and
+  queue bullets, request id + devshard; lifecycle: debate over the frozen
+  record, same five seats table vote, attempts note; jury round: research,
+  roles skeptic and source authenticity, run attestor, Seal, req- ids,
+  void wording). Light PNGs re-rendered (render_excalidraw.py --width
+  3300 --scale 2), dark PNGs by inversion mapped into 16..245. Lead fixed
+  one overlap (lifecycle subtitle wrapped).
+- e5ad442 fix(worker): MISSING_COMMITTEE void (below). e7a4e67 fix(ov):
+  seatless void names no model.
+
+INCIDENT 12:47 to 13:10 (first live claim on the upgraded package):
+weather cleared at 12:46:53 after 23 hours; the seeder submitted
+"Raising the minimum wage reduces overall employment." (claim
+0xadee0c44fe1989ab2fa29dfd6aba45c217306071de90f8003714b6ea80e90eec,
+attempt 1). Every select_committee aborted E_INSUFFICIENT_DIVERSE_AGENTS
+(abort code 0): the roster had eight active seats, the demo seven (3
+DeepSeek SOURCE_AUTHENTICITY, 2 MiniMax SKEPTIC, 2 Kimi SKEPTIC) plus the
+staked DeepSeek SKEPTIC 0x81a737... The greedy non-backtracking draw
+starves whenever that seat is picked before both DeepSeek sources (model
+cap two, role cap three, sources only on DeepSeek): about two draws in
+three fail. The engine failed five times with exponential backoff while
+the commit deadline passed; a later retry aborted E_DEADLINE_PASSED (7) in
+create_first_round, and the worker had no void rule for REVIEW_REQUESTED
+past the deadline. Actions: deprecate_agent on the staked seat signed by
+its operational key slot 7 (tx 48Go5SdSdUuk8ijJqzy8LJ3XkWjfurr4Caa4jfTGQoZZ;
+registry 8 eligible, 7 active); worker fix e5ad442 deployed 13:10 (void
+MISSING_COMMITTEE when the first commit deadline passes with no
+committee); attempt 1 voided at 13:11, relaunch pending on clear weather
+(DeepSeek 429 again). The app DB still lists the staked seat as active
+(the engine does not read on-chain deactivation); the seat is inactive on
+chain, which is what the draw uses.
+
+IN PROGRESS: worker draw-fix (Opus): jury.move select_committee restarts
+its sample after 8 consecutive rejections (MAX_SELECTION_DRAWS 160) so a
+roster that admits a committee is always drawn; lib/engine/
+draw-feasibility.ts mirrors the Move caps and prepareStake refuses a seat
+that would leave the roster without any valid committee (400 with a plain
+reason). Needs Move tests, engine tests, the localnet E2E, a fourth
+package upgrade and a deploy between claims. Until then the stake card is
+not to be demoed with a DeepSeek SKEPTIC.
+
+BOARD: attempt 2 of the minimum wage claim relaunches on the next clear
+probe (engine relaunchTick); seeder armed; watcher and ov watch streaming.
