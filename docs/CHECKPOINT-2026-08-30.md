@@ -2950,3 +2950,70 @@ claim fires on the first clear probe.
 - RUNNING: palette-sweep (resumed; also renames the footer's /verify
   label to Audit). After it: commit, deploy, verify, checkpoint 3as, the
   final owner summary.
+
+## 3as. CLOSING STATE 2026-09-04 21:50 (read 3ao, 3ap, 3aq, 3ar, then THIS; continue as if nothing happened)
+
+EVERYTHING BELOW IS COMMITTED ON main AND LIVE (last deploy d4b80949 at
+21:47, commit 60cb627). Working tree clean apart from the owner-owned
+untracked folders (docs/demo/deck, docs/demo/devfolio, public/brand,
+scripts/generate-brand-assets.py) and the generated .codebase-memory/.
+
+SHIPPED TODAY (in order): light landing-aligned redesign; compact tiles
+and trail panels; provider logos with tints (Kimi = Moonshot's current K);
+Chat | Graph toggle only; one trail open at a time; sealed = muted ink;
+no weather strip on /fact-check; agents grid three per row without the
+stake-kind chip; Status out of the top nav; ENGINE: deliberation spec V4
+(conversation debate, 1-based seat numbers, fail-closed labels,
+OPENVERDICT_DELIBERATION_SPEC 4 default / 3 fallback, specVersion on
+spoken turns) + engine-assigned debate roles; VIZ: courtroom ring with no
+centre node (lib/viz/courtroom-layout.ts), conversation bubbles
+(components/viz/debate-turn.tsx), "Where the table stands"
+(lib/viz/debate-standing.ts), whole turns in the chat view, dock capped
+at 45% of the stage measured; Learn in plain words (example "The EU AI
+Act entered into force on 1 August 2024."); Audit page with "With an
+agent" | "By hand" and prefill from the public report; DOCS SITE at
+docs.openverdict.info (12 pages, 9 Mermaid diagrams, glossary, FAQ, env
+vars, 24 event kinds, schemas, Move abort codes, worked Truth Score;
+same Railway app, docs. host rewrite, NEXT_PUBLIC_DOCS_URL set on
+Railway, DNS on Vercel DNS: CNAME docs -> 7jphmc6c.up.railway.app plus
+_railway-verify.docs TXT); docs accuracy pass (README, AGENTS.md, STATUS,
+llms.txt, runbook; CLAUDE.md and contract.ts drop the obsolete
+one-seat-per-staker rule); PALETTE SWEEP over 31 files (amber = UNSURE
+only, in-flight states = accent, failures = red, UNRESOLVED = ink, footer
+ink ramp, EXPERIMENTAL ink chip, no lucide, square chips, footer labels
+Verify = /fact-check and Audit = /verify).
+
+TESTS: 996 vitest (77 files), 89 protocol + 4 Seal Move tests; localnet
+e2e green three times today (last 515 s) with V4 debates on both
+two-round paths and the question hand-off proven.
+
+BOARD: weather closed all evening (DeepSeek/Kimi/MiniMax 429 or TIMEOUT
+in turns). The minimum-wage claim 0xadee0c44... attempt 2 relaunches by
+itself on the first clear probe; the seeder (scratchpad/seeder.sh) and
+the board watcher (scratchpad/board-watch.sh restarted 21:23, log
+board-watch.log, monitor b64wjsym0 prints live:/CLEAR/settlement lines)
+are running. THE FIRST PRODUCTION V4 DEBATE MUST BE READ (ov trace)
+BEFORE THE DEMO.
+
+WORKERS: all idle (live-design, courtroom-graph, debate-v4, debate-ui,
+verify-ux, stake-role, learn-simple, docs-site, docs-accuracy,
+palette-sweep). Account session limit reset at 21:20 after stopping three
+of them at 19:56; resumed by message.
+
+LEFTOVERS / OWNER TO-DOS: check docs/demo/deck/exports/slide-05.svg
+(GitHub push protection: Dropbox token pattern); delete the stray
+/Users/marcus/pnpm-workspace.yaml; rotate the Shinami gas key after the
+demo; Kimi logo terms forbid recolouring (marks keep the seat tints on
+the owner's request; a one-line switch to official colours exists in
+components/viz/model-logo.tsx); optional: switch the Chrome tab group's
+allowed domains if the apex landing needs a browser check (app host is
+allowed, apex was refused); the on-chain Display string; the
+double-debate cost fix; the app DB lists the deprecated DeepSeek skeptic
+seat 0x81a737... as active (display only); a stdio MCP wrapper.
+
+DEPLOY RULES (unchanged): pause the seeder (touch scratchpad/seeder.pause)
+around deploys; deploy only while the weather is not clear or right after
+a settlement; `railway up -s app -d` from scratchpad/railway-tree at
+detached origin/main; CONFIRM the newest deployment id changed before
+polling (unpause-after-deploy.sh polls the newest); never filter the
+upgrade script's output; never git add owner folders.
