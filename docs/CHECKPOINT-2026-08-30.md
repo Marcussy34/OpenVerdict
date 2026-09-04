@@ -2694,3 +2694,47 @@ stake/staker (see 3ak). Leftovers: on-chain Display string; rotate the
 Shinami key after the demo; double-debate cost fix; the app DB lists the
 deprecated DeepSeek skeptic seat 0x81a737... as active (display only);
 stdio MCP wrapper is optional later.
+
+## 3ar. 2026-09-04 17:45: DESIGN PASS SHIPPED, DEBATE V4 AND COURTROOM GRAPH IN FLIGHT (read 3aq then this)
+
+DESIGN PASS COMMITTED e13fd97 (light graph, dock and inspector; provider
+logos with three tints per provider in components/viz/model-logo.tsx,
+lobe-icons MIT; left rail and top bar back on paper, #0E76FF as accent
+only, filled controls on the AA token #0B60D8). Gates green (typecheck,
+lint, 28 viz tests, build, 877 tests). Railway deployment 07d28ce6 started
+17:43 with the seeder paused; verify both views on production afterwards.
+
+OWNER FEEDBACK 17:23 to 17:40: the deliberation panel on the local dev
+server reads "This juror maintains the position in its revealed record"
+for every turn: that is the fake Gonka provider's canned line
+(lib/gonka/fake.ts nextDeliberation), local fixtures only. Production
+debates carry real arguments (example 0x1d53f02c82..., six turns with
+citations). Owner then asked for a real conversation: jurors answering
+each other's specific points, a question and answer rhythm, positions
+stated last, a consensus at the end. Approved 17:40 ("lets do it").
+
+DISPATCHED (fresh Opus workers, both running):
+- debate-v4: brief scratchpad/opus-debate-v4.md. Deliberation prompt spec
+  V4 (structured turn: answering, theirPoint, analysis, question,
+  position, stance, confidenceBps, citations; argument composed as
+  analysis + position for old readers), dissenter-first alternating
+  order with question hand-off, resume-safe pure order function,
+  OPENVERDICT_DELIBERATION_SPEC env (4 default, 3 fallback) recorded
+  wherever the spec hash is recorded, realistic localnet fixtures,
+  parity tests, e2e:localnet, docs. Owns lib/engine, lib/gonka,
+  lib/audit, lib/verify, lib/evidence, lib/research, lib/ov, scripts,
+  docs. Spec doc to be written first at
+  docs/superpowers/specs/2026-09-04-deliberation-conversation-design.md.
+- courtroom-graph: brief scratchpad/opus-courtroom-graph.md (fixed radial
+  layout). Owns lib/viz/courtroom-layout.ts, components/viz/
+  deliberation-canvas.tsx, use-force-layout.ts, the mini preview in
+  live-transcript.tsx. transcript.ts and deliberation-chat.tsx read-only.
+
+AFTER BOTH LAND: review each diff, gates, commit separately, then a third
+worker renders the V4 fields (deliberation-chat.tsx bubbles: "answering
+Seat N" + their point, analysis, question callout, position and stance
+chip last; Live view shows full turns instead of the 180-char preview;
+"where the table stands" line from the stances), deploy in a free window,
+one canary debate before the demo. Weather still closed at 17:40
+(DeepSeek TIMEOUT / MiniMax 429 in turns); attempt 2 of the minimum-wage
+claim fires on the first clear probe.
