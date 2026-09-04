@@ -2856,3 +2856,18 @@ claim fires on the first clear probe.
   verbatim (option A) which become 1-based after debate-v4's round 2.
 - Screenshots: scratchpad/courtroom-closed.jpg, courtroom-open.jpg,
   production-learn.jpg, production-audit.jpg.
+
+### 3ar progress, 19:27: ENGINE BATCH LIVE (V4 debate + auto roles)
+
+- ad731ec committed and deployed (Railway 506e8801 SUCCESS 19:25):
+  deliberation spec V4 (hash 0xe6d2b47d..., 1-based seat numbers on the V4
+  path, INVALID_* labels, OPENVERDICT_DELIBERATION_SPEC 4 default / 3
+  fallback, specVersion on public turns, seatNumber next to seatIndex in
+  the V4 table-vote input), engine-assigned debate roles (optional role on
+  both routes, stake card without the picker), auditor/skill/docs updated,
+  localnet e2e green three times (last 515 s, hand-off proven with the new
+  numbering). Production env has no OPENVERDICT_DELIBERATION_SPEC, so V4
+  runs on the next split jury. Canary: the first production debate on V4
+  must be read (ov trace) before the demo.
+- Still uncommitted in the tree: the viz batch (courtroom-graph accepted +
+  debate-ui in progress) and the docs site (docs-site in progress).
