@@ -283,7 +283,12 @@ pnpm ov queue <queueId>                                            # QUEUED, LAU
 pnpm ov status <claimId>                                           # one block: state in plain words, seats committed and revealed, next deadline
 pnpm ov watch <claimId> --for 9m                                   # one dated line per event until the final line (rerun with --since N)
 pnpm ov audit <claimId>                                            # the same dossier as pnpm audit:claim
+pnpm ov trace <claimId> [--juror N] [--full]                       # every juror's searches, pages, quotes, answer and receipt; --full prints the exact prompt and output
 ```
+
+`ov trace` is the judge's answer to "show me the reasoning": it rebuilds each
+juror's turns from the recorded conversation in the public run proof, so the
+order and the results the model actually saw are exact.
 
 Exit codes of `ov`: 0 success, 2 input or request error (one `error: ...`
 line on stderr), 3 the claim voided or the verification gave up (`watch`),

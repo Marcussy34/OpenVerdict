@@ -53,6 +53,40 @@ Fixed in the prompt spec and tool policy (version 4, hashed into the juror's on-
 - The answer must name the strongest evidence against the verdict (the counter-evidence summary).
 - Temperature 0, JSON only, strict schema.
 
+## The research trail
+
+What one juror's run looks like from the inside, as the public run proof records it (`GET <base>/api/claims/<claimId>/runs/<runId>/proof`, field `bundle`). `ov trace <claimId>` prints exactly this; `--full` prints it verbatim.
+
+1. The pinned system prompt (`bundle.promptSpec.systemPrompt`, hashed into `promptHash` and from there into the run hash on Sui). It states the three actions, the method, the output contract and the budgets. It is identical for every juror of a round, so the trail prints it once.
+2. The claim JSON (`bundle.input`): the statement, the resolution criteria, the relevant deadline, the frozen evidence manifest with its root, the submitter's material as context only, the seat's role, and the output contract.
+3. A loop of turns. Each turn is one JSON action from the model, answered by one tool result:
+   - `{"action":"search","query":"...","intent":"support"|"challenge"}` returns `{"tool":"search","results":[{"n","title","url","snippet"}]}`;
+   - `{"action":"open","urls":[...],"from":0}` (or a single `"url"`) returns `{"pages":[{"evidenceId","ref","url","from","chars","totalChars","truncated","text"}]}`, or `{"url","error"}` for a page that could not be read;
+   - `{"action":"answer","output":{...}}` ends the run. The output is the validated output the vote commitment binds: outcome, confidenceBps, evidenceFor, evidenceAgainst, unsupportedClaims, decisiveEvidence, reasoning, publicReasoningTrace (each entry a check, its evidence ids, its assessment SUPPORTS, CONTRADICTS, MIXED or INSUFFICIENT, and its finding), citations (evidence id, url and one verbatim quote) and counterEvidenceSummary.
+
+   Pages are opened by the engine, never by the model, and each opened page is archived on Walrus and hashed into the transcript (`bundle.transcript`), whose hash is bound by the run hash.
+
+Budgets, from the pinned tool policy v4 (`DEFAULT_TOOL_POLICY_V4` in `lib/gonka/promptSpec.ts`, copied into every bundle as `bundle.toolPolicy` and hashed as `toolPolicyHash`):
+
+| Budget | Value |
+| --- | --- |
+| `maxSearches` | 4 |
+| `maxOpens` | 5 |
+| `maxOpensPerTurn` | 3 |
+| `maxTurns` | 10 |
+| `maxLoopMs` | 600000 (ten minutes) |
+| `resultsPerSearch` | 5 |
+| `snippetChars` | 200 |
+| `pageSliceChars` | 4000 (one slice per open; `from` reads further) |
+| `maxPageChars` | 60000 |
+| `minCitationDomains` | 2 |
+| `minOpensPerSide` | 1 |
+| `requireChallengeSearch` | true |
+| `tools` | search, open |
+| `provider` | firecrawl |
+
+When a budget is exhausted the tool answers with an error (for example `BUDGET_OPENS`) and the juror must answer with what it has. A round-two table vote (bundle version 6) has no transcript and no budgets of this kind: it is one no-tools call over the frozen record and the debate transcript, under the pinned table-vote prompt.
+
 ## What each hash binds
 
 All hashes are blake2b-256 (`@noble/hashes` in TypeScript equals `sui::hash::blake2b256` in Move; the cross-language parity vectors are pinned in both test suites). "Canonical JSON" means the canonical serialization the engine uses for hashing.

@@ -13,6 +13,7 @@ import {
   formatRelative,
   formatScore,
   gaveUpWords,
+  modelLabel,
   modelName,
   parseDuration,
   phaseWords,
@@ -25,6 +26,7 @@ import {
   weatherInline,
   weatherLines,
   weatherSummary,
+  wrapText,
   type EventContext,
 } from "./render";
 import { buildSeatIndex } from "./watch";
@@ -46,6 +48,20 @@ const WEATHER: WeatherReport = {
     { modelId: "MiniMaxAI/MiniMax-M2.7", family: "minimax", ok: true, latencyMs: 682, status: "200" },
   ],
 };
+
+describe("wrapped prose", () => {
+  it("wraps to the width behind a prefix, indents the rest and never breaks a word", () => {
+    const lines = wrapText("one two three four five six seven", { width: 20, prefix: "  reason: ", continuation: "    " });
+    expect(lines).toEqual(["  reason: one two", "    three four five", "    six seven"]);
+    // A word longer than the width overflows rather than becoming unusable.
+    expect(wrapText("https://example.org/a/very/long/path", { width: 10 })).toEqual(["https://example.org/a/very/long/path"]);
+    // Whitespace is collapsed and empty text prints nothing.
+    expect(wrapText("  spaced \n text ", { width: 40 })).toEqual(["spaced text"]);
+    expect(wrapText("   ", { width: 40 })).toEqual([]);
+    // Without a continuation the later lines align under the prefix.
+    expect(wrapText("aaa bbb", { width: 6, prefix: "> " })).toEqual(["> aaa", "  bbb"]);
+  });
+});
 
 describe("durations and times", () => {
   it("parses 30s, 9m, 1h, combinations and bare seconds", () => {
@@ -110,6 +126,12 @@ describe("words", () => {
     expect(modelName("MiniMaxAI/MiniMax-M2.7")).toBe("MiniMax");
     expect(modelName("moonshotai/Kimi-K2.6")).toBe("Kimi");
     expect(modelName("acme/other")).toBe("acme/other");
+    // modelLabel keeps the version the trail needs; the build date goes.
+    expect(modelLabel("deepseek-ai/DeepSeek-V4-Flash-0731")).toBe("DeepSeek V4 Flash");
+    expect(modelLabel("MiniMaxAI/MiniMax-M2.7")).toBe("MiniMax M2.7");
+    expect(modelLabel("moonshotai/Kimi-K2.6")).toBe("Kimi K2.6");
+    expect(modelLabel("plain")).toBe("plain");
+    expect(modelLabel(undefined)).toBe("unknown model");
     expect(formatScore(200)).toBe("2.00 (200 bps)");
     expect(formatScore(2125)).toBe("21.25 (2125 bps)");
     expect(formatScore(null)).toBe("-");

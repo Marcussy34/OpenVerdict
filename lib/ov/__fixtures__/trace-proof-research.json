@@ -1,0 +1,636 @@
+{
+  "runId": "0x36173f4176a2ee7cdcd6192054caf32c93d54836ef27f5015a47ccde5dd1ea58",
+  "claimId": "0x273220b56d87edea0a6db35f85c0fc8f36591461ee6be6962e86bb4586ee4ac6",
+  "phase": 1,
+  "agentProfileId": "0x4ee8af570a34423592e73d14643c9235b477cb1119e9ec6b8785a7dc8c241d94",
+  "jurySeatId": "0xc5e4acc5e19353e155e238f09cd14b050f2067e67fccde2bb4b3a3a0388887d3",
+  "promptHash": "0x7257117d5b4d02b8c8de5e70d62f6856143d7f20225084a111645f3557a40b14",
+  "inputHash": "0x36aa0e27059e2ce5f529e2e5a0f91ea3ba7bdfc56f6ae594302f9f2e9179b194",
+  "outputHash": "0xb8ed07b3d89c94f81422b7e7941a20efa05dd818866e722a3514aa4e260f3c39",
+  "runHash": "0xc78558ae733f25e98d050ddc33793cd7041b804b31f1994fff22ebf420e4082a",
+  "revealed": true,
+  "sealedBlobId": "v17mZYblTP61eNT0ZXh0MVIUm0CmAkdV7dgKIT8jWu4",
+  "revealedBlobId": "Fj6fvRo1hcWF2-vqcq6-3QvSvL8dQZkmni4N8YFVsAU",
+  "gateway": {
+    "gatewayRequestId": "req-1788405572969008592-322552",
+    "devshardId": "70083",
+    "systemFingerprint": "vllm-0.25.1-tp2-8aac2e07"
+  },
+  "bundle": {
+    "version": 5,
+    "kind": "run-bundle",
+    "runId": "0x36173f4176a2ee7cdcd6192054caf32c93d54836ef27f5015a47ccde5dd1ea58",
+    "claimId": "0x273220b56d87edea0a6db35f85c0fc8f36591461ee6be6962e86bb4586ee4ac6",
+    "phase": 1,
+    "agentProfileId": "0x4ee8af570a34423592e73d14643c9235b477cb1119e9ec6b8785a7dc8c241d94",
+    "jurySeatId": "0xc5e4acc5e19353e155e238f09cd14b050f2067e67fccde2bb4b3a3a0388887d3",
+    "promptSpec": {
+      "version": "4",
+      "providerId": "gonkarouter",
+      "systemPrompt": "Research independently and weigh both sides. Cite sources with URLs. You are one juror on a five-seat fact-checking committee. You receive a claim, its resolution criteria, and any submitter-provided evidence excerpts as JSON. Reply with EXACTLY ONE JSON object per turn and nothing else. \n{\"budgets\":{\"maxLoopMs\":600000,\"maxOpens\":5,\"maxOpensPerTurn\":3,\"maxPageChars\":60000,\"maxSearches\":4,\"maxTurns\":10,\"minCitationDomains\":2,\"minOpensPerSide\":1,\"pageSliceChars\":4000,\"provider\":\"firecrawl\",\"requireChallengeSearch\":true,\"resultsPerSearch\":5,\"snippetChars\":200,\"tools\":[\"search\",\"open\"],\"version\":\"4\"}}",
+      "temperature": 0,
+      "maxOutputTokens": 4096,
+      "responseFormat": "json_object"
+    },
+    "promptHash": "0x7257117d5b4d02b8c8de5e70d62f6856143d7f20225084a111645f3557a40b14",
+    "toolPolicy": {
+      "maxLoopMs": 600000,
+      "maxOpens": 5,
+      "maxOpensPerTurn": 3,
+      "maxPageChars": 60000,
+      "maxSearches": 4,
+      "maxTurns": 10,
+      "minCitationDomains": 2,
+      "minOpensPerSide": 1,
+      "pageSliceChars": 4000,
+      "provider": "firecrawl",
+      "requireChallengeSearch": true,
+      "resultsPerSearch": 5,
+      "snippetChars": 200,
+      "tools": [
+        "search",
+        "open"
+      ],
+      "version": "4"
+    },
+    "toolPolicyHash": "0x8da9ec666479f784378c079cef16246ff0d29e8b789be66fc64853c1365c2e7c",
+    "transcript": {
+      "version": 1,
+      "runId": "0x36173f4176a2ee7cdcd6192054caf32c93d54836ef27f5015a47ccde5dd1ea58",
+      "provider": {
+        "mode": "cloud",
+        "name": "firecrawl"
+      },
+      "policyHash": "0x8da9ec666479f784378c079cef16246ff0d29e8b789be66fc64853c1365c2e7c",
+      "counts": {
+        "challengeSearches": 1,
+        "opens": 5,
+        "searches": 2,
+        "turns": 5
+      },
+      "steps": [
+        {
+          "action": {
+            "action": "search",
+            "intent": "challenge",
+            "query": "humans use only ten percent of their brains myth false"
+          },
+          "result": {
+            "cached": false,
+            "results": [
+              {
+                "rank": 1,
+                "snippet": "Movies like “Limitless” and “Lucy” play on the notion that h ...",
+                "title": "Do we only use 10 percent of our brain? - MIT McGovern Institute",
+                "url": "https://mcgovern.mit.edu/2024/01/26/do-we-use-only-10-percent-of-our-brain/"
+              },
+              {
+                "rank": 2,
+                "snippet": "## **SUGGESTED LESSON PLAN**\nIf we only use 10% of our brain ...",
+                "title": "Myth: We Only Use 10% of Our Brains",
+                "url": "https://www.psychologicalscience.org/uncategorized/myth-we-only-use-10-of-our-brains.html"
+              },
+              {
+                "rank": 3,
+                "snippet": "The **ten-percent-of-the-brain myth** states that humans gen ...",
+                "title": "Ten-percent-of-the-brain myth - Wikipedia",
+                "url": "https://en.wikipedia.org/wiki/Ten-percent-of-the-brain_myth"
+              }
+            ],
+            "resultsHash": "0x199f73d1206316060bdca45ab1d080c6bd20534dc8c322628967631a40140d11",
+            "tool": "search"
+          }
+        },
+        {
+          "action": {
+            "action": "open",
+            "from": 0,
+            "urls": [
+              "https://mcgovern.mit.edu/2024/01/26/do-we-use-only-10-percent-of-our-brain/",
+              "https://www.psychologicalscience.org/uncategorized/myth-we-only-use-10-of-our-brains.html",
+              "https://en.wikipedia.org/wiki/Ten-percent-of-the-brain_myth"
+            ]
+          },
+          "result": {
+            "cached": true,
+            "canonicalWalrusBlobId": "izRMUBV-slohNuQYdWbcCLUal-MRQIyFQkrVDLw5f6E",
+            "chars": 4000,
+            "contentHash": "0x96827f5db10130741997974d002e5ddacb4029eddd19ef46a669766f47b7761a",
+            "evidenceId": "0xd6672357c46e220b267a647bee11c03351cc1164cdcb0a30ea9587bb9d0015bb",
+            "from": 0,
+            "origin": "SEARCH",
+            "tool": "open",
+            "totalChars": 6575
+          }
+        },
+        {
+          "action": {
+            "action": "open",
+            "from": 0,
+            "urls": [
+              "https://mcgovern.mit.edu/2024/01/26/do-we-use-only-10-percent-of-our-brain/",
+              "https://www.psychologicalscience.org/uncategorized/myth-we-only-use-10-of-our-brains.html",
+              "https://en.wikipedia.org/wiki/Ten-percent-of-the-brain_myth"
+            ]
+          },
+          "result": {
+            "cached": true,
+            "canonicalWalrusBlobId": "qUVwb-wwBrYznCfqXhLjwfoUXT7JpdI_WvLf4OC6rd4",
+            "chars": 4000,
+            "contentHash": "0x53282da0fd8dca0697a10ba2f37a4ede42148334513fbc0fbd919f60664ba201",
+            "evidenceId": "0xed17c2f351431c046d5f29e45dbed4599c5f89ac708e32bbeacecbc9f231d4e4",
+            "from": 0,
+            "origin": "SEARCH",
+            "tool": "open",
+            "totalChars": 25496
+          }
+        },
+        {
+          "action": {
+            "action": "open",
+            "from": 0,
+            "urls": [
+              "https://mcgovern.mit.edu/2024/01/26/do-we-use-only-10-percent-of-our-brain/",
+              "https://www.psychologicalscience.org/uncategorized/myth-we-only-use-10-of-our-brains.html",
+              "https://en.wikipedia.org/wiki/Ten-percent-of-the-brain_myth"
+            ]
+          },
+          "result": {
+            "cached": true,
+            "canonicalWalrusBlobId": "FiTGeZx_OoGH_nckQ7us6_WdVpXKOPMHbc-fD7ERN0A",
+            "chars": 4000,
+            "contentHash": "0x6de91608b575b3817861ff88418833b6d60d068819812c09684f3883628a593f",
+            "evidenceId": "0x8966af5f663a556d3b2b97b5fe3bd12818fbbb9d261cf331d6ada50c9c59bf0f",
+            "from": 0,
+            "origin": "SEARCH",
+            "tool": "open",
+            "totalChars": 60000
+          }
+        },
+        {
+          "action": {
+            "action": "search",
+            "intent": "support",
+            "query": "brain imaging shows all parts of brain active evidence"
+          },
+          "result": {
+            "cached": false,
+            "results": [
+              {
+                "rank": 1,
+                "snippet": "By visualizing the brain's structure and activity, neuroimag ...",
+                "title": "Exploring the Frontiers of Neuroimaging: A Review of ... - PMC",
+                "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC10381462/"
+              },
+              {
+                "rank": 2,
+                "snippet": "New evidence from brain imaging research shows that \"aha! mo ...",
+                "title": "Brain Scans Reveal What Happens in the Mind When Insight Strikes",
+                "url": "https://today.duke.edu/2025/05/brain-scans-reveal-what-happens-mind-when-insight-strikes"
+              },
+              {
+                "rank": 3,
+                "snippet": "Current neuroimaging techniques reveal both form and functio ...",
+                "title": "Scanning the brain - American Psychological Association",
+                "url": "https://www.apa.org/topics/neuropsychology/brain-form-function"
+              }
+            ],
+            "resultsHash": "0x67d9f571ec911ec9153fe52a3b6deb700d25640217446883295e657e6ca6f9bc",
+            "tool": "search"
+          }
+        },
+        {
+          "action": {
+            "action": "open",
+            "from": 0,
+            "urls": [
+              "https://www.apa.org/topics/neuropsychology/brain-form-function",
+              "https://pmc.ncbi.nlm.nih.gov/articles/PMC10381462/"
+            ]
+          },
+          "result": {
+            "cached": false,
+            "canonicalWalrusBlobId": "7Uax5V2Gw7gWGmCu-3p2Ak2vQmLRxfIHemIEfgQlDMc",
+            "chars": 4000,
+            "contentHash": "0x1d87128931108b3ccbf0a1d61a4ac4113da466bfcfa71d8fe3cff8780c097ba2",
+            "evidenceId": "0x2c27e1ff061aa2615a62d123aaffc9e5b53e6d2b87a012a2ba494bef823038fa",
+            "from": 0,
+            "origin": "SEARCH",
+            "tool": "open",
+            "totalChars": 13113
+          }
+        },
+        {
+          "action": {
+            "action": "open",
+            "from": 0,
+            "urls": [
+              "https://www.apa.org/topics/neuropsychology/brain-form-function",
+              "https://pmc.ncbi.nlm.nih.gov/articles/PMC10381462/"
+            ]
+          },
+          "result": {
+            "cached": false,
+            "canonicalWalrusBlobId": "I-agJpxBNSBQa-HXiwv75pFvooQLVSKpcl65xvR9knQ",
+            "chars": 4000,
+            "contentHash": "0xe24cccf412ee5bd55fecf12ef14bb112f65a9454ac2f89e8c3bb14c15e53da7e",
+            "evidenceId": "0xa858aa1458434c795987434fd95873cbc52a67777446b56f64d5751a0183724f",
+            "from": 0,
+            "origin": "SEARCH",
+            "tool": "open",
+            "totalChars": 60000
+          }
+        },
+        {
+          "action": {
+            "action": "answer",
+            "output": {
+              "citations": [
+                {
+                  "evidenceId": "0xd6672357c46e220b267a647bee11c03351cc1164cdcb0a30ea9587bb9d0015bb",
+                  "quote": "But the idea that we use 10 percent of our brain is 100 percent a myth.",
+                  "url": "https://mcgovern.mit.edu/2024/01/26/do-we-use-only-10-percent-of-our-brain/"
+                },
+                {
+                  "evidenceId": "0xed17c2f351431c046d5f29e45dbed4599c5f89ac708e32bbeacecbc9f231d4e4",
+                  "quote": "If we only use 10% of our brain, then a PET scan should look like Slide 2 in the accompanying PowerPoint slides.",
+                  "url": "https://www.psychologicalscience.org/uncategorized/myth-we-only-use-10-of-our-brains.html"
+                },
+                {
+                  "evidenceId": "0x8966af5f663a556d3b2b97b5fe3bd12818fbbb9d261cf331d6ada50c9c59bf0f",
+                  "quote": "The ten-percent-of-the-brain myth states that humans generally use only one-tenth (or some other small fraction) of their brains.",
+                  "url": "https://en.wikipedia.org/wiki/Ten-percent-of-the-brain_myth"
+                }
+              ],
+              "confidenceBps": 9500,
+              "counterEvidenceSummary": "The strongest evidence against my verdict is the widespread popular belief in the 10% myth, but this is a misconception, not scientific fact. Multiple credible sources including MIT and the Association for Psychological Science explicitly debunk it, and neuroimaging shows the entire brain is active. The claim is false as stated.",
+              "decisiveEvidence": [
+                "0xd6672357c46e220b267a647bee11c03351cc1164cdcb0a30ea9587bb9d0015bb",
+                "0xed17c2f351431c046d5f29e45dbed4599c5f89ac708e32bbeacecbc9f231d4e4"
+              ],
+              "evidenceAgainst": [
+                "0xd6672357c46e220b267a647bee11c03351cc1164cdcb0a30ea9587bb9d0015bb",
+                "0xed17c2f351431c046d5f29e45dbed4599c5f89ac708e32bbeacecbc9f231d4e4",
+                "0x8966af5f663a556d3b2b97b5fe3bd12818fbbb9d261cf331d6ada50c9c59bf0f"
+              ],
+              "evidenceFor": [],
+              "outcome": "NO",
+              "publicReasoningTrace": [
+                {
+                  "assessment": "CONTRADICTS",
+                  "check": "Challenge search for myth debunking",
+                  "evidenceIds": [
+                    "0xd6672357c46e220b267a647bee11c03351cc1164cdcb0a30ea9587bb9d0015bb",
+                    "0xed17c2f351431c046d5f29e45dbed4599c5f89ac708e32bbeacecbc9f231d4e4",
+                    "0x8966af5f663a556d3b2b97b5fe3bd12818fbbb9d261cf331d6ada50c9c59bf0f"
+                  ],
+                  "finding": "Multiple authoritative sources explicitly label the 10% claim as a myth and state humans use their entire brain."
+                },
+                {
+                  "assessment": "SUPPORTS",
+                  "check": "Support search for brain imaging evidence",
+                  "evidenceIds": [
+                    "0x2c27e1ff061aa2615a62d123aaffc9e5b53e6d2b87a012a2ba494bef823038fa",
+                    "0xa858aa1458434c795987434fd95873cbc52a67777446b56f64d5751a0183724f"
+                  ],
+                  "finding": "Neuroimaging sources confirm that brain imaging reveals activity across the whole brain, supporting the debunking."
+                }
+              ],
+              "reasoning": "The claim that humans use only ten percent of their brains is a well-documented myth, contradicted by multiple credible sources including MIT's McGovern Institute)Skip to content and the Association for Psychological Science. Neuroimaging evidence shows the entire brain is active, and the claim is widely debunked by neuroscientists.",
+              "unsupportedClaims": []
+            }
+          },
+          "result": {
+            "errors": [],
+            "tool": "answer",
+            "valid": true
+          }
+        }
+      ],
+      "opened": [
+        {
+          "canonicalHash": "0x96827f5db10130741997974d002e5ddacb4029eddd19ef46a669766f47b7761a",
+          "canonicalWalrusBlobId": "izRMUBV-slohNuQYdWbcCLUal-MRQIyFQkrVDLw5f6E",
+          "contentHash": "0x96827f5db10130741997974d002e5ddacb4029eddd19ef46a669766f47b7761a",
+          "evidenceId": "0xd6672357c46e220b267a647bee11c03351cc1164cdcb0a30ea9587bb9d0015bb",
+          "finalUrl": "https://mcgovern.mit.edu/2024/01/26/do-we-use-only-10-percent-of-our-brain/",
+          "origin": "SEARCH",
+          "ref": "p1",
+          "sides": [
+            "challenge"
+          ],
+          "title": "Do we only use 10 percent of our brain? - MIT McGovern Institute",
+          "totalChars": 6575,
+          "truncated": false,
+          "url": "https://mcgovern.mit.edu/2024/01/26/do-we-use-only-10-percent-of-our-brain"
+        },
+        {
+          "canonicalHash": "0x53282da0fd8dca0697a10ba2f37a4ede42148334513fbc0fbd919f60664ba201",
+          "canonicalWalrusBlobId": "qUVwb-wwBrYznCfqXhLjwfoUXT7JpdI_WvLf4OC6rd4",
+          "contentHash": "0x53282da0fd8dca0697a10ba2f37a4ede42148334513fbc0fbd919f60664ba201",
+          "evidenceId": "0xed17c2f351431c046d5f29e45dbed4599c5f89ac708e32bbeacecbc9f231d4e4",
+          "finalUrl": "https://www.psychologicalscience.org/uncategorized/myth-we-only-use-10-of-our-brains.html",
+          "origin": "SEARCH",
+          "ref": "p2",
+          "sides": [
+            "challenge"
+          ],
+          "title": "Myth: We Only Use 10% of Our Brains – Association for Psychological Science – APS",
+          "totalChars": 25496,
+          "truncated": false,
+          "url": "https://www.psychologicalscience.org/uncategorized/myth-we-only-use-10-of-our-brains.html"
+        },
+        {
+          "canonicalHash": "0x6de91608b575b3817861ff88418833b6d60d068819812c09684f3883628a593f",
+          "canonicalWalrusBlobId": "FiTGeZx_OoGH_nckQ7us6_WdVpXKOPMHbc-fD7ERN0A",
+          "contentHash": "0x6de91608b575b3817861ff88418833b6d60d068819812c09684f3883628a593f",
+          "evidenceId": "0x8966af5f663a556d3b2b97b5fe3bd12818fbbb9d261cf331d6ada50c9c59bf0f",
+          "finalUrl": "https://en.wikipedia.org/wiki/Ten-percent-of-the-brain_myth",
+          "origin": "SEARCH",
+          "ref": "p3",
+          "sides": [
+            "challenge"
+          ],
+          "title": "Ten-percent-of-the-brain myth - Wikipedia",
+          "totalChars": 60000,
+          "truncated": true,
+          "url": "https://en.wikipedia.org/wiki/Ten-percent-of-the-brain_myth"
+        },
+        {
+          "canonicalHash": "0x1d87128931108b3ccbf0a1d61a4ac4113da466bfcfa71d8fe3cff8780c097ba2",
+          "canonicalWalrusBlobId": "7Uax5V2Gw7gWGmCu-3p2Ak2vQmLRxfIHemIEfgQlDMc",
+          "contentHash": "0x1d87128931108b3ccbf0a1d61a4ac4113da466bfcfa71d8fe3cff8780c097ba2",
+          "evidenceId": "0x2c27e1ff061aa2615a62d123aaffc9e5b53e6d2b87a012a2ba494bef823038fa",
+          "finalUrl": "https://www.apa.org/topics/neuropsychology/brain-form-function",
+          "origin": "SEARCH",
+          "ref": "p4",
+          "sides": [
+            "support"
+          ],
+          "title": "Scanning the brain",
+          "totalChars": 13113,
+          "truncated": false,
+          "url": "https://www.apa.org/topics/neuropsychology/brain-form-function"
+        },
+        {
+          "canonicalHash": "0xe24cccf412ee5bd55fecf12ef14bb112f65a9454ac2f89e8c3bb14c15e53da7e",
+          "canonicalWalrusBlobId": "I-agJpxBNSBQa-HXiwv75pFvooQLVSKpcl65xvR9knQ",
+          "contentHash": "0xe24cccf412ee5bd55fecf12ef14bb112f65a9454ac2f89e8c3bb14c15e53da7e",
+          "evidenceId": "0xa858aa1458434c795987434fd95873cbc52a67777446b56f64d5751a0183724f",
+          "finalUrl": "https://pmc.ncbi.nlm.nih.gov/articles/PMC10381462/",
+          "origin": "SEARCH",
+          "ref": "p5",
+          "sides": [
+            "support"
+          ],
+          "title": "Exploring the Frontiers of Neuroimaging: A Review of Recent Advances in Understanding Brain Functioning and Disorders - PMC",
+          "totalChars": 60000,
+          "truncated": true,
+          "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC10381462"
+        }
+      ],
+      "citations": [
+        {
+          "evidenceId": "0xd6672357c46e220b267a647bee11c03351cc1164cdcb0a30ea9587bb9d0015bb",
+          "found": true,
+          "quote": "But the idea that we use 10 percent of our brain is 100 percent a myth.",
+          "url": "https://mcgovern.mit.edu/2024/01/26/do-we-use-only-10-percent-of-our-brain/"
+        },
+        {
+          "evidenceId": "0xed17c2f351431c046d5f29e45dbed4599c5f89ac708e32bbeacecbc9f231d4e4",
+          "found": true,
+          "quote": "If we only use 10% of our brain, then a PET scan should look like Slide 2 in the accompanying PowerPoint slides.",
+          "url": "https://www.psychologicalscience.org/uncategorized/myth-we-only-use-10-of-our-brains.html"
+        },
+        {
+          "evidenceId": "0x8966af5f663a556d3b2b97b5fe3bd12818fbbb9d261cf331d6ada50c9c59bf0f",
+          "found": true,
+          "quote": "The ten-percent-of-the-brain myth states that humans generally use only one-tenth (or some other small fraction) of their brains.",
+          "url": "https://en.wikipedia.org/wiki/Ten-percent-of-the-brain_myth"
+        }
+      ]
+    },
+    "input": {
+      "agentRole": "SOURCE_AUTHENTICITY",
+      "claim": {
+        "outcomes": [
+          "YES",
+          "NO",
+          "UNSURE"
+        ],
+        "relevantDeadline": "2026-09-03T03:27:21.694Z",
+        "resolutionCriteria": "Decide whether the statement is true as written, as of the claim's evidence cutoff. Weigh evidence for and against from primary sources found through your own research; the submitter's material is context only. Answer YES or NO only when credible sources agree; answer UNSURE when they conflict or are insufficient.",
+        "statement": "Humans use only ten percent of their brains."
+      },
+      "evidenceManifest": {
+        "root": "0x532792caa77893b49cd95d19703da9f50c7053a8cc3a67c86f9a9d0723501740",
+        "items": [
+          {
+            "contentHash": "0x8753be8c01ee97e20dc5058a0702edc17d0e65124f08ff77cd54d24c93c573d6",
+            "evidenceId": "0x1561790553afa0c9945935b5273c0c544d850a6de1ff314aad068570795e1575",
+            "excerpt": "Humans use only ten percent of their brains.",
+            "retrievedAt": "2026-09-03T03:17:42.222Z",
+            "sourceClass": "USER_SUBMITTED",
+            "walrusBlobId": "5Wm-E1ZTXcfuIBjKaLhoZqOhUUGJ99RdGlStBEPwkBk"
+          }
+        ]
+      },
+      "promptVersion": "4",
+      "protocolVersion": "1.0",
+      "runId": "0x36173f4176a2ee7cdcd6192054caf32c93d54836ef27f5015a47ccde5dd1ea58",
+      "submission": {
+        "kind": "URL",
+        "submittedUrls": []
+      }
+    },
+    "inputHash": "0x36aa0e27059e2ce5f529e2e5a0f91ea3ba7bdfc56f6ae594302f9f2e9179b194",
+    "request": {
+      "model": "deepseek-ai/DeepSeek-V4-Flash-0731",
+      "temperature": 0,
+      "maxTokens": 4096,
+      "responseFormat": "json_object",
+      "attemptKind": "PRIMARY",
+      "messages": [
+        {
+          "role": "system",
+          "content": "Research independently and weigh both sides. Cite sources with URLs. You are one juror on a five-seat fact-checking committee. You receive a claim, its resolution criteria, and any submitter-provided evidence excerpts as JSON. Reply with EXACTLY ONE JSON object per turn and nothing else. \n{\"budgets\":{\"maxLoopMs\":600000,\"maxOpens\":5,\"maxOpensPerTurn\":3,\"maxPageChars\":60000,\"maxSearches\":4,\"maxTurns\":10,\"minCitationDomains\":2,\"minOpensPerSide\":1,\"pageSliceChars\":4000,\"provider\":\"firecrawl\",\"requireChallengeSearch\":true,\"resultsPerSearch\":5,\"snippetChars\":200,\"tools\":[\"search\",\"open\"],\"version\":\"4\"}}"
+        },
+        {
+          "role": "user",
+          "content": "{\"agentRole\":\"SOURCE_AUTHENTICITY\",\"claim\":{\"outcomes\":[\"YES\",\"NO\",\"UNSURE\"],\"relevantDeadline\":\"2026-09-03T03:27:21.694Z\",\"resolutionCriteria\":\"Decide whether the statement is true as written, as of the claim's evidence cutoff. Weigh evidence for and against from primary sources found through your own research; the submitter's material is context only. Answer YES or NO only when credible sources agree; answer UNSURE when they conflict or are insufficient.\",\"statement\":\"Humans use only ten percent of their brains.\"},\"evidenceManifest\":{\"root\":\"0x532792caa77893b49cd95d19703da9f50c7053a8cc3a67c86f9a9d0723501740\",\"items\":[{\"contentHash\":\"0x8753be8c01ee97e20dc5058a0702edc17d0e65124f08ff77cd54d24c93c573d6\",\"evidenceId\":\"0x1561790553afa0c9945935b5273c0c544d850a6de1ff314aad068570795e1575\",\"excerpt\":\"Humans use only ten percent of their brains.\",\"retrievedAt\":\"2026-09-03T03:17:42.222Z\",\"sourceClass\":\"USER_SUBMITTED\",\"walrusBlobId\":\"5Wm-E1ZTXcfuIBjKaLhoZqOhUUGJ99RdGlStBEPwkBk\"}]},\"promptVersion\":\"4\",\"protocolVersion\":\"1.0\",\"runId\":\"0x36173f4176a2ee7cdcd6192054caf32c93d54836ef27f5015a47ccde5dd1ea58\",\"submission\":{\"kind\":\"URL\",\"submittedUrls\":[]}}"
+        },
+        {
+          "role": "assistant",
+          "content": "{\"action\":\"search\",\"query\":\"humans use only ten percent of their brains myth false\",\"intent\":\"challenge\"}"
+        },
+        {
+          "role": "user",
+          "content": "{\"query\":\"humans use only ten percent of their brains myth false\",\"results\":[{\"n\":1,\"snippet\":\"Movies like “Limitless” and “Lucy” play on the notion that h ...\",\"title\":\"Do we only use 10 percent of our brain? - MIT McGovern Institute\",\"url\":\"https://mcgovern.mit.edu/2024/01/26/do-we-use-only-10-percent-of-our-brain/\"},{\"n\":2,\"snippet\":\"## **SUGGESTED LESSON PLAN**\\nIf we only use 10% of our brain ...\",\"title\":\"Myth: We Only Use 10% of Our Brains\",\"url\":\"https://www.psychologicalscience.org/uncategorized/myth-we-only-use-10-of-our-brains.html\"},{\"n\":3,\"snippet\":\"The **ten-percent-of-the-brain myth** states that humans gen ...\",\"title\":\"Ten-percent-of-the-brain myth - Wikipedia\",\"url\":\"https://en.wikipedia.org/wiki/Ten-percent-of-the-brain_myth\"}],\"tool\":\"search\"}"
+        },
+        {
+          "role": "assistant",
+          "content": "{\"action\":\"open\",\"urls\":[\"https://mcgovern.mit.edu/2024/01/26/do-we-use-only-10-percent-of-our-brain/\",\"https://www.psychologicalscience.org/uncategorized/myth-we-only-use-10-of-our-brains.html\",\"https://en.wikipedia.org/wiki/Ten-percent-of-the-brain_myth\"],\"from\":0}"
+        },
+        {
+          "role": "user",
+          "content": "{\"pages\":[{\"chars\":4000,\"evidenceId\":\"0xd6672357c46e220b267a647bee11c03351cc1164cdcb0a30ea9587bb9d0015bb\",\"from\":0,\"ref\":\"p1\",\"text\":\"Press Ctrl + M shortcut to access the main navigation menu.\\n\\n[Skip to content](https://mcgovern.mit.edu/2024/01/26/do-we ...\",\"totalChars\":6575,\"truncated\":false,\"url\":\"https://mcgovern.mit.edu/2024/01/26/do-we-use-only-10-percent-of-our-brain\"},{\"chars\":4000,\"evidenceId\":\"0xed17c2f351431c046d5f29e45dbed4599c5f89ac708e32bbeacecbc9f231d4e4\",\"from\":0,\"ref\":\"p2\",\"text\":\"![](https://www.psychologicalscience.org/redesign/wp-content/uploads/2018/07/GettyImages-914776586-1024x683.jpg)\\n\\n## **S ...\",\"totalChars\":25496,\"truncated\":false,\"url\":\"https://www.psychologicalscience.org/uncategorized/myth-we-only-use-10-of-our-brains.html\"},{\"chars\":4000,\"evidenceId\":\"0x8966af5f663a556d3b2b97b5fe3bd12818fbbb9d261cf331d6ada50c9c59bf0f\",\"from\":0,\"ref\":\"p3\",\"text\":\"[Jump to content](https://en.wikipedia.org/wiki/Ten-percent-of-the-brain_myth#bodyContent)\\n\\n[![Students using Wiki Educa ...\",\"totalChars\":60000,\"truncated\":true,\"url\":\"https://en.wikipedia.org/wiki/Ten-percent-of-the-brain_myth\"}],\"tool\":\"open_many\"}"
+        },
+        {
+          "role": "assistant",
+          "content": "{\"action\":\"search\",\"query\":\"brain imaging shows all parts of brain active evidence\",\"intent\":\"support\"}"
+        },
+        {
+          "role": "user",
+          "content": "{\"query\":\"brain imaging shows all parts of brain active evidence\",\"results\":[{\"n\":1,\"snippet\":\"By visualizing the brain's structure and activity, neuroimag ...\",\"title\":\"Exploring the Frontiers of Neuroimaging: A Review of ... - PMC\",\"url\":\"https://pmc.ncbi.nlm.nih.gov/articles/PMC10381462/\"},{\"n\":2,\"snippet\":\"New evidence from brain imaging research shows that \\\"aha! mo ...\",\"title\":\"Brain Scans Reveal What Happens in the Mind When Insight Strikes\",\"url\":\"https://today.duke.edu/2025/05/brain-scans-reveal-what-happens-mind-when-insight-strikes\"},{\"n\":3,\"snippet\":\"Current neuroimaging techniques reveal both form and functio ...\",\"title\":\"Scanning the brain - American Psychological Association\",\"url\":\"https://www.apa.org/topics/neuropsychology/brain-form-function\"}],\"tool\":\"search\"}"
+        },
+        {
+          "role": "assistant",
+          "content": "{\"action\":\"open\",\"urls\":[\"https://www.apa.org/topics/neuropsychology/brain-form-function\",\"https://pmc.ncbi.nlm.nih.gov/articles/PMC10381462/\"],\"from\":0}"
+        },
+        {
+          "role": "user",
+          "content": "{\"pages\":[{\"chars\":4000,\"evidenceId\":\"0x2c27e1ff061aa2615a62d123aaffc9e5b53e6d2b87a012a2ba494bef823038fa\",\"from\":0,\"ref\":\"p4\",\"text\":\"[skip to main content](https://www.apa.org/topics/neuropsychology/brain-form-function#maincontent)\\n\\n# Scanning the brain ...\",\"totalChars\":13113,\"truncated\":false,\"url\":\"https://www.apa.org/topics/neuropsychology/brain-form-function\"},{\"chars\":4000,\"evidenceId\":\"0xa858aa1458434c795987434fd95873cbc52a67777446b56f64d5751a0183724f\",\"from\":0,\"ref\":\"p5\",\"text\":\"[Skip to main content](https://pmc.ncbi.nlm.nih.gov/articles/PMC10381462/#main-content)\\n\\n![](https://cdn.ncbi.nlm.nih.go ...\",\"totalChars\":60000,\"truncated\":true,\"url\":\"https://pmc.ncbi.nlm.nih.gov/articles/PMC10381462\"}],\"tool\":\"open_many\"}"
+        }
+      ]
+    },
+    "attempts": [],
+    "rawResponse": {
+      "id": "devshard-70083-22",
+      "model": "deepseek-ai/DeepSeek-V4-Flash-0731",
+      "usage": {
+        "completion_tokens": 955,
+        "prompt_tokens": 8074,
+        "prompt_tokens_details": null,
+        "total_tokens": 9029
+      },
+      "choices": [
+        {
+          "index": 0,
+          "finish_reason": "stop",
+          "message": {
+            "role": "assistant",
+            "content": "{\"action\":\"answer\",\"output\":{\"citations\":[{\"evidenceId\":\"0xd6672357c46e220b267a647bee11c03351cc1164cdcb0a30ea9587bb9d0015bb\",\"quote\":\"But the idea that we use 10 percent of our brain is 100 percent a myth.\",\"url\":\"https://mcgovern.mit.edu/2024/01/26/do-we-use-only-10-percent-of-our-brain/\"},{\"evidenceId\":\"0xed17c2f351431c046d5f29e45dbed4599c5f89ac708e32bbeacecbc9f231d4e4\",\"quote\":\"If we only use 10% of our brain, then a PET scan should look like Slide 2 in the accompanying PowerPoint slides.\",\"url\":\"https://www.psychologicalscience.org/uncategorized/myth-we-only-use-10-of-our-brains.html\"},{\"evidenceId\":\"0x8966af5f663a556d3b2b97b5fe3bd12818fbbb9d261cf331d6ada50c9c59bf0f\",\"quote\":\"The ten-percent-of-the-brain myth states that humans generally use only one-tenth (or some other small fraction) of their brains.\",\"url\":\"https://en.wikipedia.org/wiki/Ten-percent-of-the-brain_myth\"}],\"confidenceBps\":9500,\"counterEvidenceSummary\":\"The strongest evidence against my verdict is the widespread popular belief in the 10% myth, but this is a misconception, not scientific fact. Multiple credible sources including MIT and the Association for Psychological Science explicitly debunk it, and neuroimaging shows the entire brain is active. The claim is false as stated.\",\"decisiveEvidence\":[\"0xd6672357c46e220b267a647bee11c03351cc1164cdcb0a30ea9587bb9d0015bb\",\"0xed17c2f351431c046d5f29e45dbed4599c5f89ac708e32bbeacecbc9f231d4e4\"],\"evidenceAgainst\":[\"0xd6672357c46e220b267a647bee11c03351cc1164cdcb0a30ea9587bb9d0015bb\",\"0xed17c2f351431c046d5f29e45dbed4599c5f89ac708e32bbeacecbc9f231d4e4\",\"0x8966af5f663a556d3b2b97b5fe3bd12818fbbb9d261cf331d6ada50c9c59bf0f\"],\"evidenceFor\":[],\"outcome\":\"NO\",\"publicReasoningTrace\":[{\"assessment\":\"CONTRADICTS\",\"check\":\"Challenge search for myth debunking\",\"evidenceIds\":[\"0xd6672357c46e220b267a647bee11c03351cc1164cdcb0a30ea9587bb9d0015bb\",\"0xed17c2f351431c046d5f29e45dbed4599c5f89ac708e32bbeacecbc9f231d4e4\",\"0x8966af5f663a556d3b2b97b5fe3bd12818fbbb9d261cf331d6ada50c9c59bf0f\"],\"finding\":\"Multiple authoritative sources explicitly label the 10% claim as a myth and state humans use their entire brain.\"},{\"assessment\":\"SUPPORTS\",\"check\":\"Support search for brain imaging evidence\",\"evidenceIds\":[\"0x2c27e1ff061aa2615a62d123aaffc9e5b53e6d2b87a012a2ba494bef823038fa\",\"0xa858aa1458434c795987434fd95873cbc52a67777446b56f64d5751a0183724f\"],\"finding\":\"Neuroimaging sources confirm that brain imaging reveals activity across the whole brain, supporting the debunking.\"}],\"reasoning\":\"The claim that humans use only ten percent of their brains is a well-documented myth, contradicted by multiple credible sources including MIT's McGovern Institute)Skip to content and the Association for Psychological Science. Neuroimaging evidence shows the entire brain is active, and the claim is widely debunked by neuroscientists.\",\"unsupportedClaims\":[]}}"
+          }
+        }
+      ]
+    },
+    "gateway": {
+      "devshardId": "70083",
+      "gatewayRequestId": "req-1788405572969008592-322552",
+      "systemFingerprint": "vllm-0.25.1-tp2-8aac2e07"
+    },
+    "validatedOutput": {
+      "citations": [
+        {
+          "evidenceId": "0xd6672357c46e220b267a647bee11c03351cc1164cdcb0a30ea9587bb9d0015bb",
+          "quote": "But the idea that we use 10 percent of our brain is 100 percent a myth.",
+          "url": "https://mcgovern.mit.edu/2024/01/26/do-we-use-only-10-percent-of-our-brain/"
+        },
+        {
+          "evidenceId": "0xed17c2f351431c046d5f29e45dbed4599c5f89ac708e32bbeacecbc9f231d4e4",
+          "quote": "If we only use 10% of our brain, then a PET scan should look like Slide 2 in the accompanying PowerPoint slides.",
+          "url": "https://www.psychologicalscience.org/uncategorized/myth-we-only-use-10-of-our-brains.html"
+        },
+        {
+          "evidenceId": "0x8966af5f663a556d3b2b97b5fe3bd12818fbbb9d261cf331d6ada50c9c59bf0f",
+          "quote": "The ten-percent-of-the-brain myth states that humans generally use only one-tenth (or some other small fraction) of their brains.",
+          "url": "https://en.wikipedia.org/wiki/Ten-percent-of-the-brain_myth"
+        }
+      ],
+      "confidenceBps": 9500,
+      "counterEvidenceSummary": "The strongest evidence against my verdict is the widespread popular belief in the 10% myth, but this is a misconception, not scientific fact. Multiple credible sources including MIT and the Association for Psychological Science explicitly debunk it, and neuroimaging shows the entire brain is active. The claim is false as stated.",
+      "decisiveEvidence": [
+        "0xd6672357c46e220b267a647bee11c03351cc1164cdcb0a30ea9587bb9d0015bb",
+        "0xed17c2f351431c046d5f29e45dbed4599c5f89ac708e32bbeacecbc9f231d4e4"
+      ],
+      "evidenceAgainst": [
+        "0xd6672357c46e220b267a647bee11c03351cc1164cdcb0a30ea9587bb9d0015bb",
+        "0xed17c2f351431c046d5f29e45dbed4599c5f89ac708e32bbeacecbc9f231d4e4",
+        "0x8966af5f663a556d3b2b97b5fe3bd12818fbbb9d261cf331d6ada50c9c59bf0f"
+      ],
+      "evidenceFor": [],
+      "outcome": "NO",
+      "publicReasoningTrace": [
+        {
+          "assessment": "CONTRADICTS",
+          "check": "Challenge search for myth debunking",
+          "evidenceIds": [
+            "0xd6672357c46e220b267a647bee11c03351cc1164cdcb0a30ea9587bb9d0015bb",
+            "0xed17c2f351431c046d5f29e45dbed4599c5f89ac708e32bbeacecbc9f231d4e4",
+            "0x8966af5f663a556d3b2b97b5fe3bd12818fbbb9d261cf331d6ada50c9c59bf0f"
+          ],
+          "finding": "Multiple authoritative sources explicitly label the 10% claim as a myth and state humans use their entire brain."
+        },
+        {
+          "assessment": "SUPPORTS",
+          "check": "Support search for brain imaging evidence",
+          "evidenceIds": [
+            "0x2c27e1ff061aa2615a62d123aaffc9e5b53e6d2b87a012a2ba494bef823038fa",
+            "0xa858aa1458434c795987434fd95873cbc52a67777446b56f64d5751a0183724f"
+          ],
+          "finding": "Neuroimaging sources confirm that brain imaging reveals activity across the whole brain, supporting the debunking."
+        }
+      ],
+      "reasoning": "The claim that humans use only ten percent of their brains is a well-documented myth, contradicted by multiple credible sources including MIT's McGovern Institute)Skip to content and the Association for Psychological Science. Neuroimaging evidence shows the entire brain is active, and the claim is widely debunked by neuroscientists.",
+      "unsupportedClaims": []
+    },
+    "outputHash": "0xb8ed07b3d89c94f81422b7e7941a20efa05dd818866e722a3514aa4e260f3c39",
+    "audit": {
+      "agentProfileId": "0x4ee8af570a34423592e73d14643c9235b477cb1119e9ec6b8785a7dc8c241d94",
+      "attempt": 5,
+      "claimObjectId": "0x273220b56d87edea0a6db35f85c0fc8f36591461ee6be6962e86bb4586ee4ac6",
+      "completedAtMs": 1788405591351,
+      "devshardId": "70083",
+      "evidenceRoot": "0x532792caa77893b49cd95d19703da9f50c7053a8cc3a67c86f9a9d0723501740",
+      "gatewayRequestId": "req-1788405572969008592-322552",
+      "gonkaRequestId": "devshard-70083-22",
+      "inputHash": "0x36aa0e27059e2ce5f529e2e5a0f91ea3ba7bdfc56f6ae594302f9f2e9179b194",
+      "inputTokens": 8074,
+      "jurySeatId": "0xc5e4acc5e19353e155e238f09cd14b050f2067e67fccde2bb4b3a3a0388887d3",
+      "latencyMs": 19110,
+      "modelId": "deepseek-ai/DeepSeek-V4-Flash-0731",
+      "outputHash": "0xb8ed07b3d89c94f81422b7e7941a20efa05dd818866e722a3514aa4e260f3c39",
+      "outputTokens": 955,
+      "phase": 1,
+      "promptHash": "0x7257117d5b4d02b8c8de5e70d62f6856143d7f20225084a111645f3557a40b14",
+      "providerId": "gonkarouter",
+      "requestedAtMs": 1788405572241,
+      "responseModelId": "deepseek-ai/DeepSeek-V4-Flash-0731",
+      "runId": "0x36173f4176a2ee7cdcd6192054caf32c93d54836ef27f5015a47ccde5dd1ea58",
+      "runWalrusBlobId": "",
+      "status": "SCHEMA_VALID",
+      "systemFingerprint": "vllm-0.25.1-tp2-8aac2e07",
+      "toolCallCount": 7,
+      "toolTranscriptHash": "0x0d899465b5fa45f131aa3dfdc3c226c95807f8f4323ce965214af10fba97d613",
+      "toolTranscriptWalrusBlobId": ""
+    },
+    "runHash": "0xc78558ae733f25e98d050ddc33793cd7041b804b31f1994fff22ebf420e4082a",
+    "verify": {
+      "commitment": "blake2b256(BCS(VotePreimageV1))",
+      "inputHash": "blake2b256(canonicalJson(input))",
+      "outputHash": "blake2b256(canonicalJson(validatedOutput))",
+      "promptHash": "blake2b256(canonicalJson(promptSpec))",
+      "runHash": "blake2b256(BCS(RunRecordV1))",
+      "systemPrompt": "promptSpec.systemPrompt + '\\n' + canonicalJson({budgets: toolPolicy})",
+      "toolPolicyHash": "blake2b256(canonicalJson(toolPolicy))",
+      "toolTranscriptHash": "blake2b256(canonicalJson(transcript))"
+    }
+  },
+  "sui": {
+    "claimObjectId": "0x273220b56d87edea0a6db35f85c0fc8f36591461ee6be6962e86bb4586ee4ac6",
+    "agentProfileId": "0x4ee8af570a34423592e73d14643c9235b477cb1119e9ec6b8785a7dc8c241d94",
+    "jurySeatId": "0xc5e4acc5e19353e155e238f09cd14b050f2067e67fccde2bb4b3a3a0388887d3",
+    "runApproval": {
+      "objectId": "0xcf3a6bc9f0785bc0041fd1fd3df3f1110227d609451ef992126ee798cfad025c",
+      "transactionDigest": "FKDaAKuki8Hsjk1ZiYvvm4WTQjiKMoWiTsVgdXxqbWaE"
+    },
+    "commitment": {
+      "objectId": "0x98cdacf3d85a6310b00cf1d2426bbb76ecc9805baf0058fda10ff4c7f83dd42d",
+      "transactionDigest": "Fgc3kP5b2zaidMT4geQLf2pUesPb5mgPFhUsJkhisXm9"
+    },
+    "reveal": {
+      "objectId": "0xea1afadf2dbc5de23e7829f967fdf68606aa6c79b6ed19939d21c22930b3d291",
+      "transactionDigest": "2a8Pg3xUHeheVGV7xFRK1XaSjRBujMnbwQbvBKc9dcho"
+    }
+  }
+}

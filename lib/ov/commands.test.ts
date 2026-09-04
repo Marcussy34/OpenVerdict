@@ -394,14 +394,16 @@ describe("watch command and help", () => {
 
   it("help lists every command with an example and the exit codes", () => {
     const text = helpText();
-    for (const name of ["weather", "board", "extract", "submit", "queue", "status", "watch", "audit", "help"]) {
+    for (const name of ["weather", "board", "extract", "submit", "queue", "status", "watch", "audit", "trace", "help"]) {
       expect(text).toContain(`  ${name}`);
       expect(isCommand(name)).toBe(true);
     }
-    expect(text.match(/example: ov /g)?.length).toBe(8);
+    expect(text.match(/example: ov /g)?.length).toBe(9);
     for (const line of EXIT_CODES) expect(text).toContain(line);
     expect(helpText("watch")).toContain("usage: ov watch <claim id, claim link or queue id> [--for <duration>] [--since <sequence>] [--verbose]");
     expect(helpText("audit")).toContain("exit codes: 0 every check passed or was unavailable, 1 any FAIL, 2 input or fetch error");
+    expect(helpText("trace")).toContain("usage: ov trace <claim id or link> [--juror <n>] [--round 1|2] [--full]");
+    expect(helpText("trace")).toContain("--full adds the pinned system prompt once and every message verbatim, page texts included.");
     expect(isCommand("swarm")).toBe(false);
     expect(text).not.toContain("\u2014");
   });

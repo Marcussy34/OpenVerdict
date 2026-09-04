@@ -29,6 +29,7 @@ import {
   weatherLines,
   weatherSummary,
 } from "./render";
+import { printTrace, trace } from "./trace";
 import { DEFAULT_WATCH_BUDGET_MS, watch, type WatchTarget } from "./watch";
 
 /** GonkaRouter answers extraction in 10 to 60 s; give it room. */
@@ -60,6 +61,8 @@ export type CommandEnv = {
   timeoutMs?: number;
   /** Colour codes allowed on stderr notes. */
   color?: boolean;
+  /** Terminal columns, for the prose `trace` wraps. */
+  width?: number;
 };
 
 function printJson(env: CommandEnv, value: unknown): void {
@@ -348,7 +351,15 @@ export async function watchCommand(env: CommandEnv, input: WatchInput): Promise<
 // audit: the same flags and exit codes as `pnpm audit:claim`
 // ---------------------------------------------------------------------------
 
-export type AuditInput = { target: string; jsonPath?: string; outPath?: string; run?: string; quiet: boolean };
+export type AuditInput = {
+  target: string;
+  jsonPath?: string;
+  outPath?: string;
+  run?: string;
+  quiet: boolean;
+  /** --trace: print the research trail after the verdict. */
+  trace?: TraceFlags;
+};
 
 export async function auditCommand(env: CommandEnv, input: AuditInput): Promise<number> {
   const typed = input.target.trim();
@@ -372,8 +383,48 @@ export async function auditCommand(env: CommandEnv, input: AuditInput): Promise<
   });
   const outPath = writeFile(input.outPath ?? `.audit/${result.claim.claimId}.md`, markdown);
   env.io.out((input.quiet ? renderVerdictCard(result) : markdown).trimEnd());
+  // The trail is one command away; the dossier file format stays untouched.
+  env.io.out(`research trail: ov trace ${result.claim.claimId}`);
+  if (input.trace) {
+    env.io.out("");
+    printTrace(result, {
+      ...input.trace,
+      json: false,
+      out: env.io.out,
+      ...(env.width === undefined ? {} : { width: env.width }),
+    });
+  }
   env.io.err(`audit: dossier written to ${outPath}${jsonPath ? `, JSON to ${jsonPath}` : ""}`);
   return result.exitCode;
+}
+
+// ---------------------------------------------------------------------------
+// trace: what every juror searched, opened, cited and answered
+// ---------------------------------------------------------------------------
+
+/** The flags `trace` shares with `audit --trace`. */
+export type TraceFlags = { juror?: number; round?: 1 | 2; full: boolean };
+
+export type TraceCommandInput = TraceFlags & { target: string };
+
+export async function traceCommand(env: CommandEnv, input: TraceCommandInput): Promise<number> {
+  const target = await resolveTarget(env, input.target);
+  if (target.kind === "queue") {
+    throw new OvError(`${target.id} is a queued submission: there is no jury yet, try ov queue ${target.id}`);
+  }
+  return trace({
+    base: env.api.base,
+    claimId: target.id,
+    fetch: withTimeout(env),
+    now: env.now,
+    full: input.full,
+    json: env.json,
+    ...(input.juror === undefined ? {} : { juror: input.juror }),
+    ...(input.round === undefined ? {} : { round: input.round }),
+    ...(env.width === undefined ? {} : { width: env.width }),
+    out: env.io.out,
+    err: env.io.err,
+  });
 }
 
 /** --run accepts a bare run id or a run link. */
@@ -439,9 +490,14 @@ const COMMAND_HELP: Record<string, { usage: string; about: string; example: stri
     example: "ov watch 0x273220b56d87edea0a6db35f85c0fc8f36591461ee6be6962e86bb4586ee4ac6 --for 9m --since 45",
   },
   audit: {
-    usage: "ov audit <claim id or link> [--json <file>] [--out <file>] [--run <runId>] [--quiet]",
+    usage: "ov audit <claim id or link> [--json <file>] [--out <file>] [--run <runId>] [--quiet] [--trace]",
     about: "Rebuild and check the whole public record of a verdict (same flags and exit codes as pnpm audit:claim).",
     example: "ov audit 0x273220b56d87edea0a6db35f85c0fc8f36591461ee6be6962e86bb4586ee4ac6 --quiet",
+  },
+  trace: {
+    usage: "ov trace <claim id or link> [--juror <n>] [--round 1|2] [--full]",
+    about: "The research trail: every juror's searches, opened pages, quotes, answer and gateway receipt, turn by turn.",
+    example: "ov trace 0x273220b56d87edea0a6db35f85c0fc8f36591461ee6be6962e86bb4586ee4ac6 --juror 1",
   },
 };
 
@@ -459,6 +515,13 @@ export function helpText(command?: string): string {
     const entry = COMMAND_HELP[command];
     lines.push(`usage: ${entry.usage}`, "", entry.about, "", `example: ${entry.example}`);
     if (command === "audit") lines.push("", "exit codes: 0 every check passed or was unavailable, 1 any FAIL, 2 input or fetch error");
+    if (command === "trace") {
+      lines.push(
+        "",
+        "--full adds the pinned system prompt once and every message verbatim, page texts included.",
+        "--json prints the same trail as one JSON document. Exit codes: 0 success, 2 unknown claim or fetch error.",
+      );
+    }
     return lines.join("\n");
   }
   lines.push("usage: ov <command> [options]", "", "commands:");

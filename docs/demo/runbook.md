@@ -334,7 +334,11 @@ against the recorded model, or opened through Seal after the deadline.
    the verdict card, an eight-sentence timeline, one line on what the audit
    proves and does not, and "Ask me anything about this verdict": hand the
    questions to the judges (model answers for the three likely ones are in
-   the same section). Without Claude, `pnpm audit:claim <link>` prints the
+   the same section). When a judge asks "show me the reasoning", Claude runs
+   `ov trace <claimId>` (or `pnpm ov trace <claimId> --juror N --full`
+   without Claude), which prints every juror's searches, opened pages,
+   quotes, answer and gateway receipt, and with `--full` the exact prompt
+   and output. Without Claude, `pnpm audit:claim <link>` prints the
    same dossier. Use a settled claim; rehearsal claim on the upgraded
    package: `0x273220b56d87edea0a6db35f85c0fc8f36591461ee6be6962e86bb4586ee4ac6`
    ("Humans use only ten percent of their brains.", NO, truth score 2.00,

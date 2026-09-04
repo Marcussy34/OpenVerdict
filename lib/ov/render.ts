@@ -164,6 +164,44 @@ export function modelName(modelId: string | undefined): string {
   return modelId;
 }
 
+/** "DeepSeek V4 Flash" for deepseek-ai/DeepSeek-V4-Flash-0731: the exact model, readable. */
+export function modelLabel(modelId: string | undefined): string {
+  if (!modelId) return "unknown model";
+  const tail = modelId.slice(modelId.lastIndexOf("/") + 1);
+  // The trailing group is a build date, not part of the model's name.
+  return tail.replace(/-\d{3,}$/, "").replace(/-/g, " ") || modelId;
+}
+
+/**
+ * `text` wrapped to `width`, the first line behind `prefix` and every later
+ * line behind `continuation` (spaces of the same width by default). Words are
+ * never broken, so a long url overflows rather than becoming unclickable.
+ */
+export function wrapText(
+  text: string,
+  options: { width: number; prefix?: string; continuation?: string },
+): string[] {
+  const prefix = options.prefix ?? "";
+  const continuation = options.continuation ?? " ".repeat(prefix.length);
+  const flat = text.replace(/\s+/g, " ").trim();
+  if (flat.length === 0) return [];
+  const lines: string[] = [];
+  let indent = prefix;
+  let current = "";
+  for (const word of flat.split(" ")) {
+    const candidate = current.length === 0 ? word : `${current} ${word}`;
+    if (current.length > 0 && indent.length + candidate.length > options.width) {
+      lines.push(`${indent}${current}`);
+      indent = continuation;
+      current = word;
+    } else {
+      current = candidate;
+    }
+  }
+  lines.push(`${indent}${current}`);
+  return lines;
+}
+
 /** "2.00 (200 bps)": basis points over 100 with two decimals, as the board and the audit card print it. */
 export function formatScore(bps: number | null | undefined): string {
   if (bps === null || bps === undefined) return "-";

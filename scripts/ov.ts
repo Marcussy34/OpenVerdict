@@ -4,7 +4,7 @@
  *
  *   pnpm ov <command> [options]      (or .claude/skills/openverdict-audit/ov.sh)
  *
- * Commands: weather, board, extract, submit, queue, status, watch, audit, help.
+ * Commands: weather, board, extract, submit, queue, status, watch, audit, trace, help.
  * Global options: --base <url>, --json, --no-banner, --no-color, --timeout <duration>.
  * Exit codes: 0 success, 2 input or request error, 3 the claim voided or gave
  * up (watch), 4 watch stopped before the end, 5 rate limited or writes disabled.
@@ -21,6 +21,7 @@ import {
   queueCommand,
   statusCommand,
   submitCommand,
+  traceCommand,
   watchCommand,
   weatherCommand,
   type CommandEnv,
@@ -49,6 +50,10 @@ type CliOptions = {
   out?: string;
   run?: string;
   quiet: boolean;
+  juror?: number;
+  round?: 1 | 2;
+  full: boolean;
+  trace: boolean;
 };
 
 function parseArgs(argv: string[]): CliOptions {
@@ -61,6 +66,8 @@ function parseArgs(argv: string[]): CliOptions {
     urls: [],
     verbose: false,
     quiet: false,
+    full: false,
+    trace: false,
   };
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index]!;
@@ -135,6 +142,24 @@ function parseArgs(argv: string[]): CliOptions {
       case "--quiet":
         options.quiet = true;
         break;
+      case "--juror": {
+        const juror = whole("--juror");
+        if (juror < 1) throw new OvError("--juror expects a juror number from 1 up");
+        options.juror = juror;
+        break;
+      }
+      case "--round": {
+        const round = whole("--round");
+        if (round !== 1 && round !== 2) throw new OvError("--round expects 1 or 2");
+        options.round = round;
+        break;
+      }
+      case "--full":
+        options.full = true;
+        break;
+      case "--trace":
+        options.trace = true;
+        break;
       default:
         if (argument.startsWith("--")) throw new OvError(`unknown option ${argument}`);
         if (options.command === undefined) options.command = argument;
@@ -189,6 +214,22 @@ async function run(options: CliOptions, env: CommandEnv): Promise<number> {
         ...(options.out === undefined ? {} : { outPath: options.out }),
         ...(options.run === undefined ? {} : { run: options.run }),
         quiet: options.quiet,
+        ...(options.trace
+          ? {
+              trace: {
+                full: options.full,
+                ...(options.juror === undefined ? {} : { juror: options.juror }),
+                ...(options.round === undefined ? {} : { round: options.round }),
+              },
+            }
+          : {}),
+      });
+    case "trace":
+      return traceCommand(env, {
+        target: one(options, "a claim id or link"),
+        full: options.full,
+        ...(options.juror === undefined ? {} : { juror: options.juror }),
+        ...(options.round === undefined ? {} : { round: options.round }),
       });
     default:
       throw new OvError(`unknown command ${options.command}; try ov help`);
@@ -224,6 +265,7 @@ async function main(argv: string[]): Promise<number> {
     now: Date.now,
     sleep: realSleep,
     color,
+    ...(process.stdout.columns ? { width: process.stdout.columns } : {}),
     ...(options.timeoutMs === undefined ? {} : { timeoutMs: options.timeoutMs }),
   };
   return run(options, commandEnv);

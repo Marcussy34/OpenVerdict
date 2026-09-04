@@ -1,6 +1,6 @@
 ---
 name: openverdict-audit
-description: Audit, verify, explain and answer questions about an OpenVerdict verdict from public data only, and drive a new verification end to end through the public ov CLI (weather, extract, submit, watch, audit); use whenever the user pastes an OpenVerdict claim, run, report or queue link (app.openverdict.info/claims/... or /fact-check/queue/...) or a bare 0x claim id, asks to audit, verify, explain or question a verdict, resolution certificate, jury, juror run, vote commitment or truth score, says "verify this claim", "fact-check this", "submit a claim", "is the jury healthy", "check the weather" or "watch this claim", or pastes an article URL or a paragraph to verify.
+description: Audit, verify, explain and answer questions about an OpenVerdict verdict from public data only, and drive a new verification end to end through the public ov CLI (weather, extract, submit, watch, audit, trace); use whenever the user pastes an OpenVerdict claim, run, report or queue link (app.openverdict.info/claims/... or /fact-check/queue/...) or a bare 0x claim id, asks to audit, verify, explain or question a verdict, resolution certificate, jury, juror run, vote commitment or truth score, says "verify this claim", "fact-check this", "submit a claim", "is the jury healthy", "check the weather" or "watch this claim", or pastes an article URL or a paragraph to verify.
 ---
 
 # OpenVerdict audit
@@ -34,7 +34,7 @@ Exit 1 still leaves the full dossier and JSON to read; exit 2 leaves nothing. Re
 Two launchers live in the skill folder. Both are symlink-safe (each resolves its physical directory with `pwd -P` and finds the repo three levels up), both start the repo's own tsx through `node` directly (no pnpm needed on the judge's machine), and both exit 2 with a plain message when `node` or `node_modules` is missing ("run pnpm install in <repo>"): relay that message and stop.
 
 - `run.sh`: the audit, as above (`scripts/audit-claim.ts`).
-- `ov.sh`: everything else. It runs the public CLI `scripts/ov.ts` from the repo root (the same program as `pnpm ov`): `bash "<skill dir>/ov.sh" <command> [options]`. Commands: `weather`, `board`, `extract`, `submit`, `queue`, `status`, `watch`, `audit`, `help`. Global options: `--base <url>` (default `https://app.openverdict.info`), `--json` (one JSON document on stdout, no prose; `watch` prints one JSON line per event plus a final summary), `--no-banner`, `--no-color`, `--timeout <duration>` where relevant (durations accept `30s`, `9m`, `1h`). The banner (the OpenVerdict wordmark, the tagline, the base host and the command) goes to stderr, never to stdout, so `--json` output stays parseable; skip it with `--no-banner` or `OV_NO_BANNER=1`. Before each command, tell the user in one line what you are about to run.
+- `ov.sh`: everything else. It runs the public CLI `scripts/ov.ts` from the repo root (the same program as `pnpm ov`): `bash "<skill dir>/ov.sh" <command> [options]`. Commands: `weather`, `board`, `extract`, `submit`, `queue`, `status`, `watch`, `audit`, `trace`, `help`. Global options: `--base <url>` (default `https://app.openverdict.info`), `--json` (one JSON document on stdout, no prose; `watch` prints one JSON line per event plus a final summary), `--no-banner`, `--no-color`, `--timeout <duration>` where relevant (durations accept `30s`, `9m`, `1h`). The banner (the OpenVerdict wordmark, the tagline, the base host and the command) goes to stderr, never to stdout, so `--json` output stays parseable; skip it with `--no-banner` or `OV_NO_BANNER=1`. Before each command, tell the user in one line what you are about to run.
 
 `ov.sh` exit codes (the CLI's own):
 
@@ -56,6 +56,10 @@ What to pass for each kind of input:
 
 ## How to present
 
+Progressive disclosure: tier 1 is the default answer, tier 2 opens the research trail when the user asks for the reasoning, tier 3 shows the exact bytes. Never jump a tier unasked; never withhold one that was asked for.
+
+### Tier 1: the verdict card and the eight sentences (the default)
+
 Always in this order.
 
 1. The verdict card, as one compact block. Copy every value from the dossier's `## Verdict card` section; do not retype hashes from memory.
@@ -74,7 +78,44 @@ Take the skipped count from `.summary.skipped` when the dossier's card omits it.
 
 3. One line on what the audit proves and what it does not, condensed from the dossier's `## What this audit proves and what it does not`. The shape: "This audit proves the record is unchanged and evidence-bound (every commitment and run hash recomputes to what Sui holds, and the certificate carries the recomputed score); it does not prove the claim is true, and it does not prove byte for byte what the model received (GonkaRouter's public receipt corroborates the call; a gateway-signed receipt is the disclosed gap)."
 
-4. End with exactly: "Ask me anything about this verdict."
+4. End with three concrete offers, each mapped to a command, then the invitation as the last line. The shape (adapt the three to the claim: on a two-round claim offer the debate and the table votes, on a voided attempt offer the earlier attempts):
+
+```
+Next, I can show the research trail of every juror (ov trace <claimId>), the exact prompt and answer of one seat (ov trace <claimId> --juror 3 --full), or walk one check with its on-chain values (the dossier's Votes and commitments section). Which one?
+Ask me anything about this verdict.
+```
+
+Offer only what the record holds: no trail before the reveals exist, no table votes on a one-round claim.
+
+### Tier 2: the research trail (when the user asks for the reasoning)
+
+Triggers: "show me the reasoning", "everything", "explain in full", "what did they find", "what did juror 3 do", or any question about what a juror searched, opened or cited.
+
+```bash
+bash "<skill dir>/ov.sh" trace <id> [--juror N] [--round 1|2]
+```
+
+It takes about ten seconds (it rebuilds the same public record as the audit) and exits 0, or 2 with one `error: ...` line on an unknown id. Present it per juror, in seat order, from the command's own output:
+
+- what it searched: the intent (support or challenge) and the exact query, then the domains it got back;
+- what it opened: the page urls with their evidence ids and how much of each page it read;
+- what it cited: the quotes, verbatim, with the site;
+- its answer: the outcome and confidence, the reasoning in full, and each entry of the public reasoning trace (the check, the assessment, the finding);
+- its receipt line: the GonkaRouter request id, the devshard, the tokens and the time.
+
+On a two-round claim, continue with the debate turns in ordinal order (who spoke, in which exchange, what they argued, which evidence ids they cited, which turns were skipped) and then each juror's table vote, which has no searches: one answer turn over the frozen record and the transcript.
+
+Never invent a step that is not in the trail. A seat with no revealed run prints why ("no revealed run (the seat failed: TIMEOUT)"); say that plainly instead of guessing what it would have found.
+
+### Tier 3: the exact input and output
+
+For "show me the prompt", "what exactly did the model receive", "show me the raw answer":
+
+```bash
+bash "<skill dir>/ov.sh" trace <id> --juror N --full
+```
+
+`--full` prints the pinned system prompt once (it is identical for every juror of a round, with its hash), then the claim JSON the juror received, then every turn's assistant message and tool result verbatim with the page texts, then the raw completion. Present the system prompt in summary first (its rules: one JSON action per turn, the three actions, the method, the output contract, the budgets), then the input JSON, then the turns, then the raw answer. Say that the prompt hash is what the run hash binds, so the prompt shown is the prompt that was hashed on chain.
 
 Vocabulary, always: juror (an AI model occupying a seat), seat, committee (the five), quorum (four matching reveals of five), cascade (round one, then debate, then table vote), debate (round two cross-examination), table vote (the second sealed ballot, no new research), attempt (one all-or-nothing verification), certificate (the resolution certificate on Sui), truth score. Say "adversarial AI jury protocol". Never say "swarm". Never say "the agents voted" as if they were people; say "the jurors revealed" or "seat 3 voted NO". Never say a vote is "correct" or "right"; say it is proven unchanged and evidence-bound. Say the result "settled" or "finalized", not "won".
 
@@ -90,7 +131,18 @@ First commands after a run:
 jq '.summary' "<scratch>/audit.json"
 jq '[.votes[].checks[], .runs[].checks[], .claimChecks[]] | map(select(.status != "PASS"))' "<scratch>/audit.json"
 jq '.sources.failures' "<scratch>/audit.json"
+
+# every juror's searches and opens, one line each (run, action, intent, query or urls)
+jq -r '.sources.proofs[] | .runId as $r | .bundle.transcript.steps[] | select(.action.action != "answer")
+       | [$r[0:10], .action.action, (.action.intent // "-"), (.action.query // ((.action.urls // [.action.url]) | join(", ")))]
+       | @tsv' "<scratch>/audit.json" | uniq
+
+# one juror's parsed answer (outcome, confidence, reasoning, trace, citations)
+jq --argjson n 1 '. as $a | $a.runs[] | select(.jurorIndex == $n)
+       | $a.sources.proofs[.runId].bundle.validatedOutput' "<scratch>/audit.json"
 ```
+
+The transcript expands one `open` action into one step per page, which is why the first recipe ends with `uniq`; `ov trace` rejoins them into one turn.
 
 | Question | Dossier section | JSON path |
 | --- | --- | --- |
@@ -98,6 +150,7 @@ jq '.sources.failures' "<scratch>/audit.json"
 | Who were the jurors? | `## Jury` | `.jury[]`: `.jurorIndex`, `.modelId`, `.role`, `.owner`, `.seats` ("1" and "2"); the same juror keeps its number in round two |
 | What did juror N cite? | `## Juror runs` (key citations, first two) | `.runs[] \| select(.jurorIndex == N)`: `.citations` (first two), then the full list in `.sources.proofs[<runId>].bundle.validatedOutput.citations[]` and `.sources.proofs[<runId>].bundle.transcript.opened[]` |
 | What did juror N search for? | `## Juror runs` | `.sources.proofs[<runId>].bundle.transcript.steps[]` (`.action.action`, `.action.intent` support or challenge) |
+| What did juror N actually do, step by step? | run `ov trace <id> --juror N` (add `--full` for the exact prompt and answer) | `.sources.proofs[<runId>].bundle.request.messages[]` (each assistant message is one turn, the user message after it is its result) and `.transcript.steps[]` |
 | Did the model really run on Gonka? | `## Juror runs` (receipt fields, R17) | `.runs[]`: `.gateway` (requestId, devshardId, model, servedModel), `.receipt` (the raw GonkaRouter receipt), `.receiptUrl`, `.window` |
 | Is the run what was committed? | `## Juror runs` (R13 run hash, R16 run hash on chain) | `.runs[]`: `.hashes` (promptHash, inputHash, outputHash, runHash, toolTranscriptHash, evidenceRoot), `.checks[]` (R1 to R18), `.kind` (research, table-vote, legacy, none) |
 | Are the bytes still on Walrus? | `## Juror runs` (R18), `## Timeline` (S4) | `.runs[].revealedBlobId`, `.runs[].sealedBlobId`, `.runs[].blobUrl`, `.sources.walrus[<blobId>].status` |
