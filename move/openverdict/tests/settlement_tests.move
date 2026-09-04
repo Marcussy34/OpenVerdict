@@ -519,10 +519,10 @@ module openverdict::settlement_tests {
     }
 
     #[test]
-    fun committee_acceptance_window_is_one_minute_capped_at_the_commit_deadline() {
-        assert!(jury::acceptance_deadline_for_testing(1_000, 1_000_000) == 61_000);
+    fun committee_acceptance_window_is_twenty_seconds_capped_at_the_commit_deadline() {
+        assert!(jury::acceptance_deadline_for_testing(1_000, 1_000_000) == 21_000);
         assert!(jury::acceptance_deadline_for_testing(990_000, 1_000_000) == 1_000_000);
-        assert!(jury::acceptance_deadline_for_testing(940_000, 1_000_000) == 1_000_000);
+        assert!(jury::acceptance_deadline_for_testing(980_000, 1_000_000) == 1_000_000);
     }
 
     #[test]

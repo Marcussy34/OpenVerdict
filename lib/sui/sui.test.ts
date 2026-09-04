@@ -269,6 +269,50 @@ describe("SignerRegistry", () => {
     expect(registry.operatorAddress()).toBe(operator.toSuiAddress());
     expect(registry.getOperator().toSuiAddress()).toBe(operator.toSuiAddress());
   });
+
+  it("derives four Walrus writer lanes, distinct from every other role", () => {
+    const env = { OPENVERDICT_AGENT_SEED: "writer-test-seed" };
+    const first = SignerRegistry.fromEnv(env);
+    const second = SignerRegistry.fromEnv(env);
+
+    const addresses = first.listWalrusWriters().map((writer) => writer.address);
+    expect(addresses).toHaveLength(4);
+    expect(new Set(addresses).size).toBe(4);
+    // Funding follows the address, so a restart must derive the same lanes.
+    expect(addresses).toEqual(
+      second.listWalrusWriters().map((writer) => writer.address),
+    );
+    expect(first.listWalrusWriters().map((writer) => writer.index)).toEqual([0, 1, 2, 3]);
+    for (const address of addresses) {
+      expect(first.listAgentAddresses()).not.toContain(address);
+      expect(address).not.toBe(first.challengerAddress());
+    }
+  });
+
+  it("takes the writer count from the env and disables the pool at zero", () => {
+    expect(
+      SignerRegistry.fromEnv({
+        OPENVERDICT_AGENT_SEED: "writer-count-seed",
+        OPENVERDICT_WALRUS_WRITERS: "2",
+      }).listWalrusWriters(),
+    ).toHaveLength(2);
+    expect(
+      SignerRegistry.fromEnv({
+        OPENVERDICT_AGENT_SEED: "writer-count-seed",
+        OPENVERDICT_WALRUS_WRITERS: "0",
+      }).listWalrusWriters(),
+    ).toHaveLength(0);
+    expect(() =>
+      SignerRegistry.fromEnv({
+        OPENVERDICT_AGENT_SEED: "writer-count-seed",
+        OPENVERDICT_WALRUS_WRITERS: "-1",
+      }),
+    ).toThrow(/non-negative integer/);
+  });
+
+  it("has no writer lanes without a seed", () => {
+    expect(SignerRegistry.fromEnv({}).listWalrusWriters()).toEqual([]);
+  });
 });
 
 function transactionCases(): Array<{

@@ -34,7 +34,7 @@ module openverdict::jury {
     const E_INVALID_RESERVE: u64 = 19;
     const E_DEADLINE_NOT_REACHED: u64 = 20;
     /// How long offered seats have to accept or decline before the committee can lock.
-    const ACCEPTANCE_WINDOW_MS: u64 = 60_000;
+    const ACCEPTANCE_WINDOW_MS: u64 = 20_000;
     const E_EVIDENCE_NOT_BOUND: u64 = 21;
     const E_CONSENSUS_REACHED: u64 = 22;
     const E_RETENTION_EXPIRED: u64 = 23;
@@ -918,7 +918,7 @@ module openverdict::jury {
         let now = clock::timestamp_ms(clock);
         let commit_deadline = claim::first_commit_deadline_ms(claim);
         assert!(now <= commit_deadline, E_DEADLINE_PASSED);
-        // Seats have one minute to accept or decline; the lock, and with it
+        // Seats have twenty seconds to accept or decline; the lock, and with it
         // the commits and the certificate, can follow as soon as the jurors
         // finish. The window used to run to the midpoint of the commit
         // window, which held every fast round for minutes.
@@ -1442,7 +1442,7 @@ module openverdict::jury {
         id.delete();
     }
 
-    /// One minute after selection, never past the commit deadline.
+    /// Twenty seconds after selection, never past the commit deadline.
     fun acceptance_deadline(now: u64, commit_deadline: u64): u64 {
         if (now + ACCEPTANCE_WINDOW_MS < commit_deadline) {
             now + ACCEPTANCE_WINDOW_MS

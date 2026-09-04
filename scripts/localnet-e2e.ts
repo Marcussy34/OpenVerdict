@@ -720,7 +720,7 @@ async function runJuryAndCommit(
   }
 
   if (input.phase === 1) {
-    // jury.move acceptance_deadline: one minute after selection, capped at the commit deadline.
+    // jury.move acceptance_deadline: twenty seconds after selection, capped at the commit deadline.
     const acceptanceDeadline = Math.min(
       input.commitDeadlineMs,
       input.selectedAt + COMMITTEE_ACCEPTANCE_WINDOW_MS,

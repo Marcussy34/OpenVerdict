@@ -8,8 +8,15 @@ import {
 import type { Signer } from "@mysten/sui/cryptography";
 import { SuiGrpcClient } from "@mysten/sui/grpc";
 import type { Transaction } from "@mysten/sui/transactions";
+import { normalizeSuiAddress } from "@mysten/sui/utils";
 import { executeAndWait, waitForGasIndex } from "../sui/execute";
-import { runOnOperatorLane } from "../sui/operator-lane";
+import {
+  WRITER_SUI_FLOOR_MIST,
+  WRITER_WAL_FLOOR_FROST,
+  walCoinType,
+  writerBalances,
+} from "./funding";
+import { WriteLanes, type WriteLaneSigner } from "./lanes";
 import {
   assertValidWalrusEpoch,
   assertValidWalrusObjectId,
@@ -33,6 +40,13 @@ export interface RealWalrusStoreConfig {
   storageNodeClientOptions?: StorageNodeClientOptions;
   wasmUrl?: string;
   sleep?: (milliseconds: number) => Promise<void>;
+  /**
+   * Writer keys that sign their own register and certify transactions, one
+   * lane each. Empty (the default) keeps every write on the operator lane.
+   */
+  writers?: readonly WriteLaneSigner[];
+  /** Reports a writer lane leaving the pool; defaults to a stderr line. */
+  onLaneUnusable?: (address: string, reason: string) => void;
 }
 
 /** Create a signer-backed Walrus store using the current Sui client extension. */
@@ -58,6 +72,54 @@ export function createRealWalrusStore(
     | { value: { currentEpoch: number; epochDurationMs: number }; fetchedAtMs: number }
     | undefined;
 
+  // The WAL coin type is a per-network runtime lookup, so memoize it across
+  // every writer's balance probe and clear it if the lookup ever fails.
+  let walType: Promise<string> | undefined;
+  const resolveWalType = (): Promise<string> => {
+    walType ??= walCoinType(client, config.network).catch((error: unknown) => {
+      walType = undefined;
+      throw error;
+    });
+    return walType;
+  };
+  const lanes = new WriteLanes({
+    writers: config.writers ?? [],
+    operator: config.signer,
+    isFunded: async (address) => {
+      const balances = await writerBalances(client, address, await resolveWalType());
+      return (
+        balances.sui >= WRITER_SUI_FLOOR_MIST && balances.wal >= WRITER_WAL_FLOOR_FROST
+      );
+    },
+    onLaneUnusable:
+      config.onLaneUnusable ??
+      ((address, reason): void => {
+        process.stderr.write(`walrus writer ${address} unusable: ${reason}\n`);
+      }),
+  });
+  // A writer owns the blobs it registers, so a later extend_blob has to be
+  // signed by that same writer; everything else stays with the operator.
+  const writerByAddress = new Map(
+    (config.writers ?? []).map((writer) => [
+      normalizeSuiAddress(writer.address),
+      writer.keypair,
+    ]),
+  );
+  const signerForObject = async (objectId: string): Promise<Signer> => {
+    if (writerByAddress.size === 0) return config.signer;
+    try {
+      const { object } = await client.core.getObject({ objectId, include: {} });
+      const owner =
+        object.owner.$kind === "AddressOwner"
+          ? normalizeSuiAddress(object.owner.AddressOwner)
+          : undefined;
+      return (owner === undefined ? undefined : writerByAddress.get(owner)) ?? config.signer;
+    } catch {
+      // Unreadable ownership only means the operator tries, as it always did.
+      return config.signer;
+    }
+  };
+
   return {
     async put(bytes, options) {
       const stableBytes = Uint8Array.from(bytes);
@@ -70,17 +132,18 @@ export function createRealWalrusStore(
       // not the artifact, so a verifier hashing "the blob" would get a hash
       // that matches nothing on chain. writeBlob's blobId is derived from
       // the content itself, which is what content addressing needs.
-      // Hosts share the operator signer. This SDK path bypasses the gateway
-      // retry, so each writeBlob retry rebuilds with fresh object versions.
-      // One operator-signed operation at a time per process (shared with the
-      // Sui gateway): every write spends from the same gas and WAL coins,
-      // and five seats writing and approving together made the validators
-      // reject each other's transactions. Uploads that wait here are
-      // already off the model's critical path.
-      const result = await runOnOperatorLane(async () => {
+      // This SDK path bypasses the gateway retry, so each writeBlob retry
+      // rebuilds with fresh object versions. One write at a time per lane:
+      // every write on a lane spends from that signer's gas and WAL coins,
+      // and two in flight made the validators reject each other's
+      // transactions. Writer lanes run K wide; without them (or when a
+      // writer cannot pay) the write falls back to the operator lane, one at
+      // a time, exactly as before. Uploads that wait here are already off
+      // the model's critical path.
+      const result = await lanes.run(async (signer) => {
         const written = await retryStaleWalrusWrite(
           () =>
-            writeBlobPinned(client, config.signer, stableBytes, {
+            writeBlobPinned(client, signer, stableBytes, {
               epochs,
               deletable: options?.deletable ?? config.deletable ?? false,
               owner: options?.owner,
@@ -91,7 +154,7 @@ export function createRealWalrusStore(
         );
         // The SDK's certify just spent the gas coin; let the owned-object
         // index catch up before the next lane operation selects gas from it.
-        await waitForGasIndex(client, config.signer.toSuiAddress());
+        await waitForGasIndex(client, signer.toSuiAddress());
         return written;
       });
       return {
@@ -155,7 +218,7 @@ export function createRealWalrusStore(
       const { digest } = await client.walrus.executeExtendBlobTransaction({
         blobObjectId: objectId,
         endEpoch: targetEndEpoch,
-        signer: config.signer,
+        signer: await signerForObject(objectId),
       });
       const blobObject = await client.walrus.getBlobObject(objectId);
       if (blobObject.blob_id !== blobId) {

@@ -869,6 +869,53 @@ describe("headless engine", () => {
     }
   });
 
+  it("attaches integer timing_ms to every event that closes a step", async () => {
+    const setup = await engineSetup(new FakeSuiGateway(), 5);
+    const { claimId } = await setup.engine.factCheckStart({
+      claim: "Every step that closes must report what it cost in milliseconds.",
+      urls: [],
+    });
+    await setup.engine.selectCommittee(claimId);
+    await setup.engine.evidenceFreeze(claimId, 1);
+    await setup.engine.juryRun(claimId, 1);
+    await setup.engine.votesCommit(claimId, 1);
+    await setup.engine.advance(claimId);
+    await setup.engine.votesReveal(claimId, 1);
+    await setup.engine.finalize(claimId);
+
+    const repository = createRepository(setup.db);
+    const events = await repository.listResolutionEvents(claimId);
+    const timings = (kind: string): Array<Record<string, unknown>> =>
+      events
+        .filter((event) => event.kind === kind)
+        .map((event) => event.payload.timing_ms as Record<string, unknown>);
+    const expected: Record<string, string[]> = {
+      committee_selected: ["draw"],
+      evidence_frozen: ["archive", "freeze"],
+      run_approved: ["model", "seal", "escrow", "upload", "approve"],
+      vote_committed: ["commit"],
+      vote_revealed: ["upload", "reveal"],
+      claim_finalized: ["finalize", "total_from_created"],
+    };
+    for (const [kind, legs] of Object.entries(expected)) {
+      const measured = timings(kind);
+      expect(measured.length, `${kind} events`).toBeGreaterThan(0);
+      for (const timing of measured) {
+        expect(Object.keys(timing).sort(), `${kind} legs`).toEqual([...legs].sort());
+        for (const leg of legs) {
+          const value = timing[leg];
+          // Milliseconds, integers, never negative: the console prints them raw.
+          expect(Number.isInteger(value), `${kind}.${leg} is an integer`).toBe(true);
+          expect(value as number).toBeGreaterThanOrEqual(0);
+        }
+      }
+    }
+    // Five seats, five approvals, five commits and five reveals all measured.
+    expect(timings("run_approved")).toHaveLength(5);
+    expect(timings("vote_committed")).toHaveLength(5);
+    expect(timings("vote_revealed")).toHaveLength(5);
+  });
+
   it("resumes a committee selection that crashed mid seat write", async () => {
     const setup = await engineSetup(new FakeSuiGateway(), 5);
     const { claimId } = await setup.engine.factCheckStart({
@@ -996,6 +1043,22 @@ describe("headless engine", () => {
       expect(values.some((value) => value.includes(statement))).toBe(false);
       expect(values.some((value) => /https?:\/\//i.test(value))).toBe(false);
     }
+
+    // The live feed rides the same callback and adds the answer step, which
+    // RESEARCH_TICK deliberately never carried.
+    const steps = events.filter((event) => event.kind === "research_step");
+    expect(steps.length).toBeGreaterThan(ticks.length);
+    expect(steps.every((event) => event.visibility === "PUBLIC_NOW")).toBe(true);
+    expect(new Set(steps.map((event) => event.payload.kind))).toEqual(
+      new Set(["search", "open", "answer"]),
+    );
+    expect(
+      steps.every(
+        (event) =>
+          typeof event.payload.jury_seat_id === "string" &&
+          Number.isInteger(event.payload.ordinal),
+      ),
+    ).toBe(true);
   });
 
   it("uses a typed error when evidence freeze has no accepted artifact", async () => {
@@ -2517,8 +2580,71 @@ describe("public deliberation", () => {
     expect(manifest?.sortedLeaves).toContain(
       `deliberation-transcript:${setup.claimId}`,
     );
+    // The freeze the worker asked for is the only one, even though the debate
+    // it ran would otherwise freeze on settling.
+    expect(phaseTwoFreezes(await repository.listResolutionEvents(setup.claimId))).toBe(1);
+  });
+
+  it("freezes phase two as soon as the debate converges", async () => {
+    const setup = await discussionSetup(2, {
+      0: [deliberationResponse("Seat 0 opening", [], "YES", 8_200)],
+      1: [deliberationResponse("Seat 1 opening", [], "YES", 7_900)],
+    });
+    const repository = createRepository(setup.db);
+    await expect(
+      repository.getEvidenceManifest(setup.claimId, 2),
+    ).resolves.toBeUndefined();
+
+    // No evidenceFreeze call: converging is enough, so round two no longer
+    // waits for the evidence worker's next tick.
+    await setup.engine.runDeliberation(setup.claimId);
+
+    const manifest = await repository.getEvidenceManifest(setup.claimId, 2);
+    expect(manifest?.evidenceBundleId).toEqual(expect.any(String));
+    expect(manifest?.sortedLeaves).toContain(
+      `deliberation-transcript:${setup.claimId}`,
+    );
+    const events = await repository.listResolutionEvents(setup.claimId);
+    expect(phaseTwoFreezes(events)).toBe(1);
+
+    // The evidence worker's later tick finds it frozen and freezes nothing.
+    await setup.engine.evidenceFreeze(setup.claimId, 2);
+    expect(
+      phaseTwoFreezes(await repository.listResolutionEvents(setup.claimId)),
+    ).toBe(1);
+  });
+
+  it("leaves the freeze to the worker when the discussion window has closed", async () => {
+    const setup = await discussionSetup(2);
+    const repository = createRepository(setup.db);
+    const claim = await repository.getClaim(setup.claimId);
+    if (!claim) throw new Error("expected a discussion claim");
+    await repository.saveClaim({
+      ...claim,
+      deadlines: { ...claim.deadlines, discussionDeadlineMs: setup.now() - 1 },
+      updatedAt: new Date(setup.now()).toISOString(),
+    });
+
+    await setup.engine.runDeliberation(setup.claimId);
+
+    // A closed window costs no Walrus write here, exactly as in evidenceFreeze.
+    await expect(
+      repository.getEvidenceManifest(setup.claimId, 2),
+    ).resolves.toBeUndefined();
+    expect(
+      phaseTwoFreezes(await repository.listResolutionEvents(setup.claimId)),
+    ).toBe(0);
   });
 });
+
+/** How many phase-two evidence freezes actually landed on chain. */
+function phaseTwoFreezes(
+  events: readonly import("./contract").ResolutionEvent[],
+): number {
+  return events.filter(
+    (event) => event.kind === "evidence_frozen" && event.payload.phase === 2,
+  ).length;
+}
 
 describe("agent backing status", () => {
   it("maps only explicitly known verification providers", () => {

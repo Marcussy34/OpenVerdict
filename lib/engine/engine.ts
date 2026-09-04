@@ -171,6 +171,7 @@ import {
   parseAgentManifestDocument,
 } from "./agentManifestDocument";
 import { rosterAdmitsDraw, rosterCanSeat } from "./draw-feasibility";
+import { researchStepEvent } from "./research-feed";
 import {
   buildRunBundleCore,
   buildTableVoteBundleCore,
@@ -212,7 +213,10 @@ const ROUND_ONE_PUBLIC_RECORD_SOURCE_URL =
 const DELIBERATION_TRANSCRIPT_SOURCE_URL =
   "urn:openverdict:deliberation-transcript";
 const PER_TURN_BUDGET_MS = 60_000;
-const DEFAULT_EVIDENCE_FREEZE_LEAD_MS = 120_000;
+// Only the fallback bound now: a settled debate freezes as soon as it
+// converges (runDeliberation), so this reserve matters only for a debate
+// still taking turns when the discussion window runs out.
+const DEFAULT_EVIDENCE_FREEZE_LEAD_MS = 30_000;
 const MAX_DELIBERATION_CITATIONS = 8;
 const MAX_DELIBERATION_ALLOWED_CITATIONS = 60;
 /** Three exchanges bound the public debate before the table vote. */
@@ -527,6 +531,9 @@ class OpenVerdictEngine implements Engine {
   readonly #commitQueues = new Map<string, Promise<void>>();
   /** One debate runner per claim prevents overlapping worker ticks from duplicating turns. */
   readonly #pendingDeliberations = new Map<string, Promise<void>>();
+  /** Claims whose phase-two freeze is already running, so the debate's own
+   * freeze-on-settle never re-enters evidenceFreeze. */
+  readonly #freezingPhaseTwo = new Set<string>();
   /** Weather survives worker ticks so pending claims share the same short probe window. */
   #weatherProbeCache: {
     probedAtMs: number;
@@ -1176,7 +1183,9 @@ class OpenVerdictEngine implements Engine {
       throw new EngineStateError("committee selection requires REVIEW_REQUESTED");
     }
 
+    const drawStartedAt = performance.now();
     const result = await this.#gateway.selectCommittee(claimId);
+    const drawMs = since(drawStartedAt);
     const timestamp = this.isoNow();
     const committee: CommitteeRecord = {
       committeeId: result.committeeId,
@@ -1230,6 +1239,7 @@ class OpenVerdictEngine implements Engine {
         agent_profile_ids: committee.agentProfileIds,
         jury_seat_ids: committee.jurySeatIds,
         transaction_digest: result.digest,
+        timing_ms: { draw: drawMs },
       },
     });
     await this.acceptOfferedSeats(claimId, 1);
@@ -1269,8 +1279,15 @@ class OpenVerdictEngine implements Engine {
     }
 
     if (phase === 2) {
-      // The transcript must be final before its hash enters the phase-two root.
-      await this.runDeliberation(claimId);
+      // The transcript must be final before its hash enters the phase-two
+      // root. The flag tells that debate's own freeze-on-settle to stand
+      // down: this call freezes as soon as the turns are done.
+      this.#freezingPhaseTwo.add(claimId);
+      try {
+        await this.runDeliberation(claimId);
+      } finally {
+        this.#freezingPhaseTwo.delete(claimId);
+      }
     }
 
     let publicRecordArtifact: EvidenceArtifactRecord | undefined;
@@ -1300,12 +1317,15 @@ class OpenVerdictEngine implements Engine {
     }
     const manifestItems = artifacts.map(toEvidenceManifestItem);
     const built = buildEvidenceManifest(manifestItems);
+    const archiveStartedAt = performance.now();
     const manifestUpload = await this.#walrus.put(
       new TextEncoder().encode(built.manifestJson),
       { identifier: `evidence-${claimId}-${phase}.json` },
     );
+    const archiveMs = since(archiveStartedAt);
     const root = toHex(built.root);
     const policyId = evidencePolicyId(this.#manifest);
+    const freezeStartedAt = performance.now();
     const result = await this.#gateway.freezeEvidence({
       claimId,
       phase,
@@ -1316,6 +1336,7 @@ class OpenVerdictEngine implements Engine {
       policyId: fromHex(policyId),
       walrusEndEpoch: await this.chainRetentionEpoch(manifestUpload.endEpoch),
     });
+    const freezeMs = since(freezeStartedAt);
     const timestamp = this.isoNow();
     const record: EvidenceManifestRecord = {
       manifestId: deterministicId(`manifest:${claimId}:${phase}`),
@@ -1359,6 +1380,7 @@ class OpenVerdictEngine implements Engine {
         root,
         manifest_blob_id: manifestUpload.blobId,
         transaction_digest: result.digest,
+        timing_ms: { archive: archiveMs, freeze: freezeMs },
       },
     });
     return result;
@@ -1373,6 +1395,35 @@ class OpenVerdictEngine implements Engine {
       await run;
     } finally {
       this.#pendingDeliberations.delete(claimId);
+    }
+    await this.freezeSettledDebate(claimId);
+  }
+
+  /**
+   * The transcript is final the moment the debate converges or its last
+   * exchange completes, so freeze phase two here instead of waiting for the
+   * evidence worker's next tick. The freeze lead stays the fallback bound for
+   * a debate still taking turns, and the worker still freezes claims this
+   * process never deliberated.
+   */
+  private async freezeSettledDebate(claimId: string): Promise<void> {
+    // evidenceFreeze runs the debate itself; it freezes when that returns.
+    if (this.#freezingPhaseTwo.has(claimId)) return;
+    try {
+      const claim = await this.claim(claimId);
+      if (claim.state !== CLAIM_STATE.DISCUSSION) return;
+      if (this.#now() > claim.deadlines.discussionDeadlineMs) return;
+      const existing = await this.#repository.getEvidenceManifest(claimId, 2);
+      if (existing?.evidenceBundleId) return;
+      await this.evidenceFreeze(claimId, 2);
+    } catch (error) {
+      // The evidence worker retries every tick; a failed freeze must never
+      // fail the debate that produced the transcript.
+      process.stderr.write(
+        `deliberation freeze: claim ${claimId}: ${
+          error instanceof Error ? error.message : String(error)
+        }\n`,
+      );
     }
   }
 
@@ -1645,6 +1696,7 @@ class OpenVerdictEngine implements Engine {
           salt,
         }),
       );
+      const commitStartedAt = performance.now();
       const result = await this.#gateway.commitVote({
         jurySeatId: run.jurySeatId,
         roundTallyId: tally.roundTallyId,
@@ -1652,6 +1704,7 @@ class OpenVerdictEngine implements Engine {
         runApprovalId: approval.runApprovalId,
         commitment: fromHex(commitment),
       });
+      const commitMs = since(commitStartedAt);
       const timestamp = this.isoNow();
       // TODO: V1 local recovery stores plaintext hex. Encrypt salts before production.
       const votePackage: VotePackageRecord = {
@@ -1696,6 +1749,7 @@ class OpenVerdictEngine implements Engine {
           agent_profile_id: run.agentProfileId,
           jury_seat_id: run.jurySeatId,
           transaction_digest: result.digest,
+          timing_ms: { commit: commitMs },
         },
       });
       results.push(result);
@@ -1747,16 +1801,23 @@ class OpenVerdictEngine implements Engine {
       return [{ votePackage, run, output: run.output, bundle }];
     });
     const uploads = await Promise.all(
-      pending.map(async ({ run, bundle }): Promise<WalrusPutResult | undefined> => {
-        try {
-          return await this.#walrus.put(canonicalJsonBytes(bundle), {
-            identifier: `${run.runId}-run-bundle.json`,
-          });
-        } catch {
-          // A failed publication must not consume the on-chain reveal opportunity.
-          return undefined;
-        }
-      }),
+      pending.map(
+        async ({ run, bundle }): Promise<{
+          upload?: WalrusPutResult;
+          uploadMs: number;
+        }> => {
+          const startedAt = performance.now();
+          try {
+            const upload = await this.#walrus.put(canonicalJsonBytes(bundle), {
+              identifier: `${run.runId}-run-bundle.json`,
+            });
+            return { upload, uploadMs: since(startedAt) };
+          } catch {
+            // A failed publication must not consume the on-chain reveal opportunity.
+            return { uploadMs: since(startedAt) };
+          }
+        },
+      ),
     );
 
     // Reveal on chain in parallel: every seat transaction is signed and paid
@@ -1765,11 +1826,15 @@ class OpenVerdictEngine implements Engine {
     // siblings; the shared bookkeeping below runs in order afterwards.
     type RevealWork = (typeof pending)[number] & {
       upload: WalrusPutResult | undefined;
+      uploadMs: number;
+      revealMs: number;
       result?: Awaited<ReturnType<SuiGateway["revealVote"]>>;
     };
     const work: RevealWork[] = pending.map((entry, index) => ({
       ...entry,
-      upload: uploads[index],
+      upload: uploads[index]?.upload,
+      uploadMs: uploads[index]?.uploadMs ?? 0,
+      revealMs: 0,
     }));
     const byAgent = new Map<string, RevealWork[]>();
     for (const item of work) {
@@ -1784,6 +1849,7 @@ class OpenVerdictEngine implements Engine {
         for (const item of items) {
           const { votePackage, upload } = item;
           if (!upload) continue;
+          const revealStartedAt = performance.now();
           try {
             item.result = await this.#gateway.revealVote({
               jurySeatId: votePackage.jurySeatId,
@@ -1800,12 +1866,22 @@ class OpenVerdictEngine implements Engine {
             });
           } catch (error) {
             failures.push(error);
+          } finally {
+            item.revealMs = since(revealStartedAt);
           }
         }
       }),
     );
 
-    for (const { votePackage, run, output, upload: argumentUpload, result } of work) {
+    for (const {
+      votePackage,
+      run,
+      output,
+      upload: argumentUpload,
+      uploadMs,
+      revealMs,
+      result,
+    } of work) {
       if (!argumentUpload || !result) continue;
       const timestamp = this.isoNow();
       await this.#repository.saveInferenceRun({
@@ -1862,6 +1938,7 @@ class OpenVerdictEngine implements Engine {
           confidence_bps: votePackage.confidenceBps,
           valid: true,
           transaction_digest: result.digest,
+          timing_ms: { upload: uploadMs, reveal: revealMs },
         },
       });
       await this.emit({
@@ -2007,12 +2084,14 @@ class OpenVerdictEngine implements Engine {
     const existing = await this.#repository.getResolutionCertificate(claimId);
     if (existing) return certificateToFinalizeReport(existing);
     if (claim.state === CLAIM_STATE.PROPOSED && claim.proposedOutcome !== undefined) {
+      const unchallengedStartedAt = performance.now();
       const chain = await this.#gateway.finalizeUnchallenged(claimId);
+      const finalizeMs = since(unchallengedStartedAt);
       const result =
         claim.proposedOutcome === OUTCOME.UNSURE
           ? "UNRESOLVED"
           : outcomeLabel(claim.proposedOutcome);
-      return this.persistFinalization(claim, chain, result, null, 1, []);
+      return this.persistFinalization(claim, chain, result, null, 1, [], finalizeMs);
     }
     const phase = claim.state === CLAIM_STATE.REVEAL_1 ? 1 : claim.state === CLAIM_STATE.REVEAL_2 ? 2 : null;
     if (phase === null) throw new EngineStateError("claim is not in a finalizable reveal phase");
@@ -2035,6 +2114,7 @@ class OpenVerdictEngine implements Engine {
     const committee = await this.requiredCommittee(claimId);
     const evidence = await this.requiredEvidenceManifest(claimId, phase);
     if (!evidence.evidenceBundleId) throw new EngineStateError("evidence bundle is missing");
+    const finalizeStartedAt = performance.now();
     const chain = await this.#gateway.finalize({
       claimId,
       committeeId: committee.committeeId,
@@ -2048,6 +2128,7 @@ class OpenVerdictEngine implements Engine {
       truthScoreBps,
       phase,
       reveals.map((reveal) => reveal.revealedVoteId),
+      since(finalizeStartedAt),
     );
   }
 
@@ -2583,6 +2664,8 @@ class OpenVerdictEngine implements Engine {
       runHash: HexString,
     ) => PublicRunBundleCore;
     commitFloorMs: number;
+    /** What the model calls for this seat cost, for the run_approved timings. */
+    modelMs: number;
   }): Promise<void> {
     const adapterAudit = await this.#gonka.buildRunAudit(params.runResult);
     const normalized = {
@@ -2643,8 +2726,12 @@ class OpenVerdictEngine implements Engine {
     );
     const core = params.buildCore(audit, runHash);
     const bundleCore = new TextDecoder().decode(canonicalCoreBytes(core));
+    const sealStartedAt = performance.now();
     const { sealed, seal } = sealRunBundle(core, { runId: audit.runId });
+    const sealMs = since(sealStartedAt);
     let sealedDocument = sealed;
+    let escrowMs = 0;
+    const escrowStartedAt = performance.now();
     if (this.#sealEscrow) {
       const deadlineMs =
         params.seat.phase === 1
@@ -2668,16 +2755,20 @@ class OpenVerdictEngine implements Engine {
           }\n`,
         );
       }
+      escrowMs = since(escrowStartedAt);
     }
+    const uploadStartedAt = performance.now();
     const sealedUpload = await this.#walrus.put(
       canonicalJsonBytes(sealedDocument),
       { identifier: `${runId}-sealed-run-bundle.json` },
     );
+    const uploadMs = since(uploadStartedAt);
     const retainedUntil = endEpoch(sealedUpload) ?? MAX_LOCAL_WALRUS_EPOCH;
     // The database keeps the Walrus epoch (renewals); the chain gets Sui epochs.
     const chainRetainedUntil = await this.chainRetentionEpoch(
       endEpoch(sealedUpload),
     );
+    const approveStartedAt = performance.now();
     const approval = await this.#gateway.approveRun({
       claimId: params.claim.claimId,
       committeeId: params.committee.committeeId,
@@ -2692,6 +2783,7 @@ class OpenVerdictEngine implements Engine {
       toolBlobObjectId: sealedUpload.objectId ?? ZERO_OBJECT_ID,
       walrusEndEpoch: chainRetainedUntil,
     });
+    const approveMs = since(approveStartedAt);
     const timestamp = this.isoNow();
     const storedAudit: InferenceRunRecord["audit"] = {
       ...audit,
@@ -2762,7 +2854,13 @@ class OpenVerdictEngine implements Engine {
       status: "RUN_APPROVED",
       runHash,
     });
-    await this.emitRunApproval(params.claim.claimId, run, approvalRecord);
+    await this.emitRunApproval(params.claim.claimId, run, approvalRecord, {
+      model: params.modelMs,
+      seal: sealMs,
+      escrow: escrowMs,
+      upload: uploadMs,
+      approve: approveMs,
+    });
     // A finished seat commits immediately once the chain accepts the lock.
     if (this.#now() >= params.commitFloorMs) {
       await this.queueCommit(params.claim.claimId, params.seat.phase);
@@ -3241,6 +3339,9 @@ class OpenVerdictEngine implements Engine {
       failureInput = input;
       const messages = buildTableVoteMessages(TABLE_VOTE_PROMPT_SPEC_V1, input);
       const attempts: GonkaAttemptRecord[] = [];
+      // Every model call for this seat, retries included, is the "model" leg
+      // of the run_approved timings.
+      const modelStartedAt = performance.now();
       let lastError: unknown = new Error("table vote produced no valid output");
       for (let call = 0; call < 2; call += 1) {
         const remainingMs = seatDeadlineMs - this.#now();
@@ -3267,6 +3368,7 @@ class OpenVerdictEngine implements Engine {
           lastError = completion.error;
           continue;
         }
+        const modelMs = since(modelStartedAt);
         const validated = validateTableVote(completion.content, {
           frozenEvidenceIds: evidenceManifest.items.map(
             (item) => item.evidenceId,
@@ -3318,6 +3420,7 @@ class OpenVerdictEngine implements Engine {
           runResult,
           output: validated.output,
           transcript: null,
+          modelMs,
           promptHash: tableVotePromptHash,
           buildCore: (audit, runHash) =>
             buildTableVoteBundleCore({
@@ -3536,6 +3639,8 @@ class OpenVerdictEngine implements Engine {
           return ready;
         },
       };
+      // The research loop is this seat's model time: many calls, one budget.
+      const modelStartedAt = performance.now();
       const loop = await runResearchLoop({
         complete: (request) => this.#gonka.complete(request),
         provider: research,
@@ -3550,20 +3655,33 @@ class OpenVerdictEngine implements Engine {
         now: this.#now,
         sleep: this.#sleep,
         deadlineMs: seatDeadlineMs,
-        onStep: ({ kind, ordinal }) => {
-          // Public ticks expose activity shape only and cannot fail the seat.
-          void this.emit({
-            claimId: claim.claimId,
-            phase: `INFERENCE_${seat.phase}`,
-            kind: "RESEARCH_TICK",
-            source: "ENGINE",
-            visibility: "PUBLIC_NOW",
-            actorId: seat.agentProfileId,
-            runId: baseRunId,
-            payload: { jurySeatId: seat.jurySeatId, kind, ordinal },
-          }).catch(() => undefined);
+        onStep: (step) => {
+          // RESEARCH_TICK keeps its original shape for older clients: the two
+          // tool actions only, activity shape only. An allowlist, so a fourth
+          // step kind never leaks into the legacy event by default.
+          if (step.kind === "search" || step.kind === "open") {
+            void this.emit({
+              claimId: claim.claimId,
+              phase: `INFERENCE_${seat.phase}`,
+              kind: "RESEARCH_TICK",
+              source: "ENGINE",
+              visibility: "PUBLIC_NOW",
+              actorId: seat.agentProfileId,
+              runId: baseRunId,
+              payload: {
+                jurySeatId: seat.jurySeatId,
+                kind: step.kind,
+                ordinal: step.ordinal,
+              },
+            }).catch(() => undefined);
+          }
+          // The live feed: public web material only, and it cannot fail the seat.
+          void this.emit(
+            researchStepEvent({ claim, seat, runId: baseRunId, step }),
+          ).catch(() => undefined);
         },
       });
+      const modelMs = since(modelStartedAt);
       if (!loop.ok) {
         throw new ResearchLoopError(
           loop.status,
@@ -3615,6 +3733,7 @@ class OpenVerdictEngine implements Engine {
         runResult: response,
         output: loop.output,
         transcript: loop.transcript,
+        modelMs,
         promptHash: agent.manifest.promptHash,
         buildCore: (audit, runHash) => {
           const bundleParams = {
@@ -3822,6 +3941,13 @@ class OpenVerdictEngine implements Engine {
     claimId: string,
     run: InferenceRunRecord,
     approval: RunApprovalRecord,
+    timingMs: {
+      model: number;
+      seal: number;
+      escrow: number;
+      upload: number;
+      approve: number;
+    },
   ): Promise<void> {
     await this.emit({
       claimId,
@@ -3840,6 +3966,7 @@ class OpenVerdictEngine implements Engine {
         run_approval_id: approval.runApprovalId,
         run_hash: approval.runHash,
         transaction_digest: approval.transactionDigest,
+        timing_ms: timingMs,
       },
     });
     await this.emit({
@@ -3865,6 +3992,7 @@ class OpenVerdictEngine implements Engine {
     truthScoreBps: number | null,
     phase: 1 | 2,
     voteIds: string[],
+    finalizeMs: number,
   ): Promise<FinalizeReport> {
     const timestamp = this.isoNow();
     const certificate: ResolutionCertificateRecord = {
@@ -3941,6 +4069,12 @@ class OpenVerdictEngine implements Engine {
         reviewed: claim.state !== CLAIM_STATE.PROPOSED,
         truth_score_bps: truthScoreBps,
         transaction_digest: chain.digest,
+        timing_ms: {
+          finalize: finalizeMs,
+          // Wall clock from the claim row's creation, so the console can show
+          // what the whole verification took without replaying the events.
+          total_from_created: totalSinceCreated(claim.createdAt, this.#now()),
+        },
       },
     });
     // Fire-and-forget: warm and persist this claim's public run proofs so no
@@ -5580,12 +5714,29 @@ function sleep(milliseconds: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
 
-/** Mirrors jury.move ACCEPTANCE_WINDOW_MS: seats have a minute to accept. */
-export const COMMITTEE_ACCEPTANCE_WINDOW_MS = 60_000;
+/**
+ * Integer milliseconds since a performance.now() mark. Every event that
+ * closes a step carries these as a `timing_ms` payload object, so a live
+ * claim says what each step actually cost
+ * (docs/superpowers/specs/2026-09-04-fast-path-design.md section 4).
+ */
+function since(startedAtMs: number): number {
+  return Math.max(0, Math.round(performance.now() - startedAtMs));
+}
+
+/** Whole-claim wall clock for claim_finalized; 0 when the row has no usable date. */
+function totalSinceCreated(createdAt: string, nowMs: number): number {
+  const startedAtMs = Date.parse(createdAt);
+  if (!Number.isFinite(startedAtMs)) return 0;
+  return Math.max(0, Math.round(nowMs - startedAtMs));
+}
+
+/** Mirrors jury.move ACCEPTANCE_WINDOW_MS: seats have twenty seconds to accept. */
+export const COMMITTEE_ACCEPTANCE_WINDOW_MS = 20_000;
 
 /**
- * Chain floor for lock_committee: one minute after selection, never past the
- * commit deadline (jury.move acceptance_deadline). The database timestamps
+ * Chain floor for lock_committee: twenty seconds after selection, never past
+ * the commit deadline (jury.move acceptance_deadline). The database timestamps
  * trail the chain by a few seconds, so this estimate is never early; an
  * unparsable timestamp defers to the worker's final votesCommit. Round two
  * has no floor: the committee is already locked and commit_vote has no time

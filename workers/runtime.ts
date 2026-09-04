@@ -1,7 +1,7 @@
 import { Client } from "pg";
 import type { ClaimInspection } from "../lib/engine/contract";
 import { wakeStamp } from "../lib/engine/wake";
-import { CLAIM_STATE, type ClaimState } from "../lib/protocol";
+import { CLAIM_STATE, blake2b256, type ClaimState } from "../lib/protocol";
 
 /** States a hosted claim passes through between submission and its certificate. */
 export const LIVE_CLAIM_STATES: readonly ClaimState[] = [
@@ -37,15 +37,35 @@ export async function listLiveClaims(
 // All workers share one Sui operator signer. Concurrent submissions equivocate
 // its gas coin ("objects reserved for another transaction") and starve jury
 // windows, so multi-process runs must be single-writer: with Postgres present,
-// a session-scoped advisory lock serializes ticks across worker processes.
-// The lock auto-releases if a worker dies; pglite runs are single-process
-// already and skip it.
-const TICK_LOCK_KEY = 1_869_640_753; // "ovt1"
+// an advisory lock serializes ticks across worker processes. The lock is now
+// per worker role, not global, so the resolution worker's draw no longer waits
+// behind the evidence worker's Walrus archive; each process also pins its own
+// operator gas coin (OPENVERDICT_OPERATOR_GAS_SLOT). Two replicas of the same
+// worker still exclude each other because the lock name, not the process,
+// decides. The lock auto-releases if a worker dies; pglite runs are
+// single-process already and skip it.
+const TICK_LOCK_CLASS = 1_869_640_753; // "ovt1"
+
+/** One Postgres advisory-lock key pair per worker role. */
+export function tickLockKey(name: string): { classId: number; objectId: number } {
+  const digest = blake2b256(new TextEncoder().encode(`openverdict-tick:${name}`));
+  // Four digest bytes as a signed int32, which is what the two-argument
+  // pg_advisory_xact_lock takes.
+  const objectId =
+    ((digest[0] ?? 0) << 24) |
+    ((digest[1] ?? 0) << 16) |
+    ((digest[2] ?? 0) << 8) |
+    (digest[3] ?? 0);
+  return { classId: TICK_LOCK_CLASS, objectId };
+}
 
 class TickSerializer {
   private client: Client | null = null;
 
-  constructor(private readonly url: string) {}
+  constructor(
+    private readonly url: string,
+    private readonly key: { classId: number; objectId: number },
+  ) {}
 
   private async connected(): Promise<Client> {
     if (this.client) return this.client;
@@ -70,7 +90,10 @@ class TickSerializer {
     // lock ends with the COMMIT, or with the connection if the worker dies.
     await client.query("BEGIN");
     try {
-      await client.query("SELECT pg_advisory_xact_lock($1)", [TICK_LOCK_KEY]);
+      await client.query("SELECT pg_advisory_xact_lock($1, $2)", [
+        this.key.classId,
+        this.key.objectId,
+      ]);
       return await fn();
     } finally {
       try {
@@ -111,7 +134,10 @@ export async function runWorker(options: WorkerRuntimeOptions): Promise<void> {
   const idleIntervalMs =
     options.idleIntervalMs ?? numberEnv("OPENVERDICT_WORKER_IDLE_POLL_MS", 15_000);
   const dbUrl = process.env.DATABASE_URL?.trim();
-  const serializer = dbUrl ? new TickSerializer(dbUrl) : null;
+  // OPENVERDICT_TICK_LOCK_NAME lets a deployment split or share locks without
+  // renaming the process; start-production.mjs sets one name per worker.
+  const lockName = process.env.OPENVERDICT_TICK_LOCK_NAME?.trim() || options.name;
+  const serializer = dbUrl ? new TickSerializer(dbUrl, tickLockKey(lockName)) : null;
 
   try {
     while (!controller.signal.aborted) {

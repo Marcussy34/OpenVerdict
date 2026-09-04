@@ -19,6 +19,7 @@ import {
   assertDeployedManifest,
   createSuiClients,
   loadReleaseManifest,
+  type BoundWriter,
   type ReleaseManifest,
 } from "../sui";
 import { createLocalWalrusStore } from "../walrus/local";
@@ -161,7 +162,11 @@ async function buildServerEngine(): Promise<Engine> {
   const walrus =
     manifest.walrus.mode === "local"
       ? createLocalWalrusStore(manifest.walrus.localDir ?? ".localnet/walrus-local")
-      : await createRuntimeRealWalrusStore(manifest, signers.getOperator());
+      : await createRuntimeRealWalrusStore(
+          manifest,
+          signers.getOperator(),
+          signers.listWalrusWriters(),
+        );
   const gonka = createServerGonkaAdapter(manifest);
   const research = manifest.gonka.mode === "live"
     ? createFirecrawlProvider({
@@ -239,6 +244,7 @@ function createServerGonkaAdapter(manifest: ReleaseManifest): GonkaRouterAdapter
 async function createRuntimeRealWalrusStore(
   manifest: ReleaseManifest,
   signer: Signer,
+  writers: readonly BoundWriter[],
 ): Promise<WalrusStore> {
   if (manifest.walrus.mode === "local") {
     throw new Error("real Walrus requires testnet or mainnet mode");
@@ -256,6 +262,9 @@ async function createRuntimeRealWalrusStore(
     // fullnode under its CNAME target, so it is an override, not a fallback.
     baseUrl: readEnv(process.env.OPENVERDICT_SUI_GRPC_URL, manifest.suiRpcUrl),
     signer,
+    // Writer lanes upload in parallel; an unfunded or empty pool falls back
+    // to the operator lane, which is what every write used before.
+    writers,
     epochs: manifest.walrus.epochs ?? 10,
     // Serverless functions cannot fan a blob out to ~100 storage nodes (the
     // SDK gives up once a third of the shards fail); an upload relay takes

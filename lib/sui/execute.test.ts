@@ -107,4 +107,121 @@ describe("executeAndWait", () => {
     expect(result.digest).toBe("settled");
     expect(execute).toHaveBeenCalledTimes(2);
   });
+
+  it("pins the coin at this process's gas slot, sorted so processes never share one", async () => {
+    const client = new SuiJsonRpcClient({
+      network: "testnet",
+      url: "http://127.0.0.1:9000",
+    });
+    const signer = new Ed25519Keypair();
+    // Deliberately out of order, and with one dust coin no slot may take.
+    vi.spyOn(client.core, "listCoins").mockResolvedValue({
+      objects: [
+        { objectId: "0xcc", balance: "2000000000" },
+        { objectId: "0xaa", balance: "2000000000" },
+        { objectId: "0x11", balance: "1000" },
+        { objectId: "0xbb", balance: "2000000000" },
+      ],
+      hasNextPage: false,
+      cursor: null,
+    } as never);
+    vi.spyOn(client.core, "getObject").mockResolvedValue({
+      object: { version: "42", digest: "coin-digest" },
+    } as never);
+    vi.spyOn(signer, "signAndExecuteTransaction").mockResolvedValue({
+      $kind: "Transaction",
+      Transaction: { digest: "submitted" },
+    } as never);
+    vi.spyOn(client.core, "waitForTransaction").mockResolvedValue({
+      $kind: "Transaction",
+      Transaction: {
+        digest: "settled",
+        effects: { changedObjects: [] },
+        objectTypes: {},
+        events: [],
+      },
+    } as never);
+    const transaction = new Transaction();
+    process.env.OPENVERDICT_OPERATOR_GAS_SLOT = "1";
+
+    try {
+      await executeAndWait(client, signer, transaction);
+    } finally {
+      delete process.env.OPENVERDICT_OPERATOR_GAS_SLOT;
+    }
+
+    expect(transaction.getData().gasData.payment).toEqual([
+      {
+        objectId: `0x${"00".repeat(31)}bb`,
+        version: "42",
+        digest: "coin-digest",
+      },
+    ]);
+  });
+
+  it("leaves gas selection to the builder when no slot is configured", async () => {
+    const client = new SuiJsonRpcClient({
+      network: "testnet",
+      url: "http://127.0.0.1:9000",
+    });
+    const signer = new Ed25519Keypair();
+    const listCoins = vi.spyOn(client.core, "listCoins");
+    vi.spyOn(signer, "signAndExecuteTransaction").mockResolvedValue({
+      $kind: "Transaction",
+      Transaction: { digest: "submitted" },
+    } as never);
+    vi.spyOn(client.core, "waitForTransaction").mockResolvedValue({
+      $kind: "Transaction",
+      Transaction: {
+        digest: "settled",
+        effects: { changedObjects: [] },
+        objectTypes: {},
+        events: [],
+      },
+    } as never);
+    const transaction = new Transaction();
+
+    await executeAndWait(client, signer, transaction);
+
+    expect(listCoins).not.toHaveBeenCalled();
+    expect(transaction.getData().gasData.payment).toBeNull();
+  });
+
+  it("keeps today's behaviour when the slot points past the coins that exist", async () => {
+    const client = new SuiJsonRpcClient({
+      network: "testnet",
+      url: "http://127.0.0.1:9000",
+    });
+    const signer = new Ed25519Keypair();
+    vi.spyOn(client.core, "listCoins").mockResolvedValue({
+      objects: [{ objectId: "0xaa", balance: "2000000000" }],
+      hasNextPage: false,
+      cursor: null,
+    } as never);
+    const getObject = vi.spyOn(client.core, "getObject");
+    vi.spyOn(signer, "signAndExecuteTransaction").mockResolvedValue({
+      $kind: "Transaction",
+      Transaction: { digest: "submitted" },
+    } as never);
+    vi.spyOn(client.core, "waitForTransaction").mockResolvedValue({
+      $kind: "Transaction",
+      Transaction: {
+        digest: "settled",
+        effects: { changedObjects: [] },
+        objectTypes: {},
+        events: [],
+      },
+    } as never);
+    const transaction = new Transaction();
+    process.env.OPENVERDICT_OPERATOR_GAS_SLOT = "3";
+
+    try {
+      await executeAndWait(client, signer, transaction);
+    } finally {
+      delete process.env.OPENVERDICT_OPERATOR_GAS_SLOT;
+    }
+
+    expect(getObject).not.toHaveBeenCalled();
+    expect(transaction.getData().gasData.payment).toBeNull();
+  });
 });

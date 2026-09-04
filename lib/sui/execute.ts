@@ -72,14 +72,62 @@ function staleObjectId(error: unknown): string | undefined {
 // transaction consumed; pinning from getObject (authoritative) avoids it.
 const gasCoinBySender = new Map<string, string>();
 
+const SUI_COIN_TYPE = "0x2::sui::SUI";
+/** Below this a coin is dust that would abort the first transaction to use it. */
+const GAS_SLOT_MIN_BALANCE_MIST = 100_000_000n;
+
+/**
+ * Which of the sender's SUI coins this process pays with. The three workers
+ * and the web run as separate processes on one operator key, so each pins a
+ * distinct coin (start-production.mjs sets 0, 1, 2 and 3) and their
+ * transactions never equivocate a shared one. Unset, or pointing past the
+ * coins that exist, keeps the previous behaviour: the builder selects gas.
+ * The slot applies to whichever key the process signs with; a Walrus writer
+ * holds one coin, so it either pins that coin or falls through unchanged.
+ */
+function operatorGasSlot(): number | undefined {
+  const raw = process.env.OPENVERDICT_OPERATOR_GAS_SLOT?.trim();
+  if (!raw) return undefined;
+  const slot = Number(raw);
+  return Number.isInteger(slot) && slot >= 0 ? slot : undefined;
+}
+
+/**
+ * The coin at this process's slot. Ordering has to agree across processes or
+ * two of them would pin the same coin, so coins are sorted by object id, not
+ * by balance or by whatever order the index returns.
+ */
+async function slotGasCoin(
+  client: OpenVerdictSuiClient,
+  sender: string,
+): Promise<string | undefined> {
+  const slot = operatorGasSlot();
+  if (slot === undefined) return undefined;
+  const listed = await client.core.listCoins({ owner: sender, coinType: SUI_COIN_TYPE });
+  const pinnable = listed.objects
+    .filter((coin) => BigInt(coin.balance) >= GAS_SLOT_MIN_BALANCE_MIST)
+    .map((coin) => coin.objectId)
+    .sort();
+  return pinnable[slot];
+}
+
 async function pinKnownGas(
   client: OpenVerdictSuiClient,
   sender: string,
   transaction: Transaction,
 ): Promise<void> {
-  const objectId = gasCoinBySender.get(sender);
-  if (objectId === undefined || (transaction.getData().gasData.payment ?? []).length > 0) {
-    return;
+  if ((transaction.getData().gasData.payment ?? []).length > 0) return;
+  let objectId = gasCoinBySender.get(sender);
+  if (objectId === undefined) {
+    // Nothing paid yet in this process: take the configured slot, so the very
+    // first transaction already avoids the other processes' coins.
+    try {
+      objectId = await slotGasCoin(client, sender);
+    } catch {
+      return;
+    }
+    if (objectId === undefined) return;
+    gasCoinBySender.set(sender, objectId);
   }
   try {
     const fresh = await client.core.getObject({ objectId, include: {} });
@@ -105,14 +153,18 @@ export async function waitForGasIndex(
   let objectId = gasCoinBySender.get(sender);
   if (objectId === undefined) {
     // Nothing built through executeAndWait yet in this process (a worker's
-    // first operations are Walrus writes): learn the coin from the index.
+    // first operations are Walrus writes): learn the coin this process will
+    // pay with, its configured slot when it has one, else the largest.
     try {
-      const listed = await client.core.listCoins({ owner: sender, coinType: "0x2::sui::SUI" });
-      const largest = [...listed.objects].sort((a, b) =>
-        BigInt(b.balance) > BigInt(a.balance) ? 1 : -1,
-      )[0];
-      if (largest === undefined) return;
-      objectId = largest.objectId;
+      objectId = await slotGasCoin(client, sender);
+      if (objectId === undefined) {
+        const listed = await client.core.listCoins({ owner: sender, coinType: SUI_COIN_TYPE });
+        const largest = [...listed.objects].sort((a, b) =>
+          BigInt(b.balance) > BigInt(a.balance) ? 1 : -1,
+        )[0];
+        if (largest === undefined) return;
+        objectId = largest.objectId;
+      }
       gasCoinBySender.set(sender, objectId);
     } catch {
       return;
