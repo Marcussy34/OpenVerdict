@@ -2916,3 +2916,15 @@ claim fires on the first clear probe.
   V4 debate, roles, docs host, Chat/Graph toggle; checkpoint 3as; MCP
   memory update; the first production V4 debate must be read before the
   demo (weather permitting).
+
+### 3ar progress, 19:48: viz batch LIVE
+
+- Deploys: 3fe822c0 (8424c6e, courtroom + conversation rendering) at
+  19:43; 33c7e666 (1eabcb7, includes 7f2be70 measured dock cap) at 19:47.
+  The second `railway up` in a row had silently created no deployment
+  (its output was filtered); re-ran with full output. Rule: after
+  `railway up`, confirm the newest deployment id changed before polling.
+- Verified on production: courtroom ring on the V3 claim 0x1d53f02c82...,
+  chat view with whole debate turns. Screenshots
+  scratchpad/production-graph-courtroom.jpg, production-chat-debate.jpg.
+- RUNNING: docs-site round 2, palette-sweep, docs-accuracy.
