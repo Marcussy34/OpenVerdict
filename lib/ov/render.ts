@@ -311,7 +311,8 @@ export function attemptWords(chain: AttemptChain | undefined): string {
 export function voidWords(chain: AttemptChain): string {
   const detail = chain.void;
   if (!detail) return `attempt ${chain.attempt} voided`;
-  const parts = [modelName(detail.modelId), detail.phase === undefined ? undefined : `phase ${detail.phase}`].filter(
+  // A void with no seat (MISSING_COMMITTEE) names no model.
+  const parts = [detail.modelId ? modelName(detail.modelId) : undefined, detail.phase === undefined ? undefined : `phase ${detail.phase}`].filter(
     (part): part is string => part !== undefined,
   );
   const where = parts.length > 0 ? ` (${parts.join(", ")})` : "";
