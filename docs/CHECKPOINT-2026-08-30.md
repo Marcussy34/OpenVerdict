@@ -3182,3 +3182,91 @@ unresolved claims at 1440 and 375). No worker can be dispatched before
 END-TO-END RUN: still queued at 00:35 (DeepSeek 429 on every probe).
 Queue 0x36d52a9c... expires 2026-09-04T21:04:48Z (05:04 local). Watchers
 bf3pw882b and b64wjsym0 alive.
+
+## 3aw. RESUME MAP 2026-09-05 02:00 (read 3au, 3av, then THIS; continue as if nothing happened)
+
+LIVE (HEAD 5806b6d + a587d83 docs, deploy fb467197 at 01:32): every
+explorable chip links (objects and accounts on SuiVision, digests on
+SuiVision at that deploy, blobs on Walrus, hashes marked), lean stake
+result with low-balance line, wallet menu with short address + copy icon
+and Sui balance row, claim canvas page fixed (no page scroll, inspector
+below the bar), report title across the column, copyable claim id on
+cards, console hero with the mark and no eyebrow.
+
+UNCOMMITTED IN THE WORKING TREE, ALL REVIEWED AND ACCEPTED (commit as
+"batch 2" with `git add -u` plus the untracked paths below, never
+`git add .`; then archive-typecheck, push, deploy, verify):
+- skill-universal: skills/openverdict/** (git mv from
+  .claude/skills/openverdict-audit, staged renames), symlinks
+  .claude/skills/openverdict-audit and .agents/skills/openverdict,
+  lib/skill/files.ts (+test), app/SKILL.md/route.ts,
+  app/skill/[...path]/route.ts, next.config.ts (outputFileTracing for
+  skills/**), components/verify/agent-handoff.tsx (one-line card "Set up
+  <origin>/SKILL.md and take it from there." with a dark ink CommandRow
+  tone), app/verify/page.tsx, lib/ov/* (+fixtures agents.json,
+  agent-manifest.json; ov agents, ov agent, ov claims; queue removed;
+  503 WEATHER_NOT_CLEAR handled with exit 5), scripts/ov.ts, README.md,
+  AGENTS.md, public/llms.txt, docs/site/agents.md, docs/site/audit-guide.md,
+  docs/STATUS.md.
+- no-queue: lib/engine/contract.ts (+engine.ts, engine.test.ts,
+  fact-checks-route.test.ts), lib/storage/* (fact_check_queue dropped by
+  migration), workers/resolution-worker.ts (+test), app/api/fact-checks/
+  route.ts (503 + Retry-After: 120), deleted app/api/fact-checks/queue/[id]/
+  route.ts and app/fact-check/queue/[id]/page.tsx, app/fact-check/page.tsx,
+  components/claim/use-claim-submission.ts, components/landing/claim-form.tsx,
+  components/weather/weather-strip.tsx, cli/src/index.ts (+test),
+  lib/web/weather-copy.ts (+test), docs/API.md, docs/site/{faq,glossary,
+  how-a-verdict-happens,trust-model,api,staking}.md.
+- docs-wide: components/docs/mermaid.tsx, app/docs/[[...slug]]/page.tsx
+  (data-docs-frame, data-docs-column).
+- explorer-split: lib/web/explorer.ts (+test; suiTransactionUrl on
+  suiscan.xyz/<network>/tx), lib/web/chip-link.ts (+test), lib/audit/
+  audit-claim.ts (+test; suiscanTx), config/release.testnet.json,
+  scripts/{deploy-testnet,exchange-wal,publish-openverdict-bytecode,
+  shinami-sponsor-check,upgrade-openverdict-bytecode}.ts, README.md,
+  public/llms.txt, docs/site/{audit-guide,contracts}.md, docs/demo/runbook.md,
+  skills/openverdict/{SKILL.md,references/faq.md}, comments in
+  components/agents/stake-seat-card.tsx and components/pool/position-panel.tsx.
+- explorable-links leftover: components/claim/claim-format.ts (shortClaimId
+  removed).
+
+IN FLIGHT AT 02:00:
+- explorer-split (Opus): four leftovers: lib/audit queue kind removal,
+  lib/verify/claim-link.ts wording, docs/site/audit-guide.md queue
+  mentions, docs/API.md line 930 tx row to Suiscan.
+- report-full (Opus, brief scratchpad/opus-report-full.md): truth score
+  gauge card (VerdictGauge) at the right of the verdict block; "Audit"
+  control replaced by "Full view" (?view=full) rendering the entire old
+  report restored from 4ea12fe into components/claim/full-report.tsx
+  (minus the market position panel), chips with kinds; "Summary" returns.
+
+THEN: commit batch 2 (+ explorer-split leftovers; report-full can be a
+separate batch 3), archive typecheck, push, pause seeder, railway-tree
+refresh (fetch, checkout --detach origin/main, checkout HEAD -- .,
+status must be empty), `railway up -s app -d`, confirm the new
+deployment id, unpause-after-deploy.sh in the background, verify on
+production (SKILL.md served, /verify card, a report Proof chip on Suiscan
+for the digest, POST /api/fact-checks in bad weather 503, docs sequence
+diagram whole). Then stop the queue watcher monitor bf3pw882b (its ov
+watch on the old queue id dies with the queue) and start
+scratchpad/e2e-submit.sh in the background (polls /api/weather, submits
+"The EU AI Act entered into force on 1 August 2024." on the first clear
+probe, then ov watch --verbose into scratchpad/e2e-run.log); board
+watcher b64wjsym0 stays. Then checkpoint 3ax + memory + the owner summary.
+
+OWNER DECISIONS SINCE 3av: no submission queue (bad weather refuses,
+503 WEATHER_NOT_CLEAR, Retry-After 120; relaunch ladder for voided
+attempts stays); transactions on Suiscan, objects and accounts on
+SuiVision; the skill is universal (Agent Skills format, skills/openverdict,
+served at /SKILL.md, one-line card "Set up https://app.openverdict.info/
+SKILL.md and take it from there.", any-agent framing everywhere); the
+report gets the gauge card back and a Full view (the whole old report);
+wallet menu address short with copy icon; stake result lean; claim id on
+cards copyable; docs diagrams break out of the column; console hero
+without eyebrow, with the mark.
+
+OPEN FOR THE OWNER: the report's two-line statements (a smaller display
+size would fit them on one line); the double vote pill on the graph; the
+legal "experimental" prose on Terms and Risk; the footer's relative
+"Agents" link on the docs host; the landing page does not carry the
+"Set up SKILL.md" line (owner decision pending).
