@@ -3077,3 +3077,62 @@ allowed domain for the Chrome tools (app. and docs. hosts are).
 
 NEXT: land fixes-batch; then wait for the run; then final owner summary.
 Leftovers unchanged from 3as.
+
+## 3au. 2026-09-05 00:10: TWO BATCHES LIVE, THREE WORKERS IN FLIGHT (read 3at then this)
+
+LIVE (deploy 2895436a at 00:04, HEAD e8ca88e): 3a32a6e (fixes-batch:
+docs-host console paths redirect to the app host except a slug that is
+also a docs page, DOCS_PAGE_CONSOLE_PATHS = ["/agents"], with a drift-guard
+test reading docs/site; the header takes a docsHost prop and builds
+absolute app links there through NavChip; the hash chain in
+docs/site/trust-model.md is a table plus a two-row diagram that fits
+the 84ch column; stake card copy cut to "You earn this seat's jury
+rewards. Unstake any time; the stake returns 24 hours later. OpenVerdict
+pays the gas when it can."; agents page max-w-6xl with no truncation;
+SUI balance in the wallet menu read on menu open, lib/web/format-sui.ts
+integer arithmetic with tests; the "open the app" control renders on the
+landing only, isLanding gate on both AppLink sites) and e8ca88e
+(chrome-cleanup: ExperimentalTag removed from eight pages and deleted;
+legal prose on Terms and Risk kept; Audit switch mx-auto; Audit and Learn
+use the console hero block, py-16 md:py-24, no icon tile, no eyebrow).
+
+VERIFIED ON PRODUCTION by curl: docs /claims 308 to app, docs /agents 200,
+docs /app 308 to app root, accent chip count 1 on the apex and 0 on app and
+docs hosts, no "experimental" on /status, the Audit hero and the stake copy
+served.
+
+IN FLIGHT (Opus workers, briefs in the scratchpad): graph-revert
+(opus-graph-revert.md: the force cloud from 6ffd1da back in the Graph view,
+draggable, every edge drawn, the claim node kept only as an invisible
+centre anchor; also the five Suiscan lines in app/claims/[id]/page.tsx to
+SuiVision); explorer-suivision (opus-explorer-suivision.md: every Suiscan
+link and word to SuiVision, testnet.suivision.xyz, across lib/web/explorer.ts,
+lib/ov, lib/audit, scripts, docs, llms.txt, the audit skill, config;
+lib/web/explorer.test.ts added); report-redesign (opus-report-redesign.md:
+the claim report as a certificate page after the owner's answers: statement
+as title, criteria small under it, verdict word + "68 / 100" + one jury
+sentence, Live view and Audit links, one row of five tiles with one trail
+open at a time, one collapsed Proof section; attempts panel only when more
+than one attempt, deadlines and market position gone).
+
+OWNER DECISIONS TONIGHT: report first screen = claim, verdict, score, jury
+line; jury = five tiles, one trail open; proofs = one collapsed section;
+drop attempts (unless >1), deadlines, market position; keep the resolution
+criteria. Explorer = SuiVision. Experimental pill gone everywhere. Audit
+and Learn headers match the console pages.
+
+OPS NOTES: the railway-tree worktree (scratchpad/railway-tree) was found
+with 39 tracked files missing on disk after the 23:21 deploy (cause
+unknown; production unaffected). Before every `railway up`: `git fetch`,
+`git checkout --detach origin/main`, `git checkout HEAD -- .`, and
+`git status --short` must be empty. Local `pnpm build` fails at HEAD with
+Next 16.3.3 "Invariant: Expected workStore to be initialized" on
+/_global-error (reproduced by fixes-batch with all changes reverted, Node 22
+and 24); Railway builds succeed, so the gate for a commit is typecheck +
+lint + vitest locally and the Railway build. Committing while workers edit
+a shared file: build the intended blob from HEAD plus the reviewed hunks
+(`git hash-object -w`, `git update-index --cacheinfo`) instead of `git add`.
+
+END-TO-END RUN: still queued (weather closed all night: DeepSeek 429 on
+every probe, MiniMax and Kimi intermittent). Watchers bf3pw882b and
+b64wjsym0 alive. Queue expires 2026-09-04T21:04:48Z (05:04 local).
