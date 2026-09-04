@@ -2769,3 +2769,32 @@ claim fires on the first clear probe.
 - Committing while workers edit: stage HEAD + own hunks via
   `git hash-object -w` + `git update-index --cacheinfo` when a shared file
   also holds a worker's unfinished hunks (done for page.tsx at 3ffafcd).
+
+### 3ar progress, 18:40: six workers, docs host wired
+
+- Shipped since 18:25: fc4e11b agents grid (three per row, no stake-kind
+  chip, role copy corrected; deploy c93f08dd), 5043a45 Status out of the
+  top nav (stays under the console home card and the footer; deploy
+  2afbbae7).
+- OWNER DIRECTIVES (binding): drop the debate-role picker, the engine
+  assigns roles (worker stake-role, brief opus-stake-role.md: least
+  represented role for the model, ties INVESTIGATOR > SKEPTIC >
+  SOURCE_AUTHENTICITY, explicit API role still accepted); /learn as simple
+  as possible, five short plain sections, one link to the docs (worker
+  learn-simple, brief opus-learn-simple.md); technical content moves to
+  docs.openverdict.info (worker docs-site, brief opus-docs-site.md:
+  docs/site/*.md rendered at /docs in the same app, docs. host rewrite in
+  lib/web/host-routing.ts + proxy.ts, NEXT_PUBLIC_DOCS_URL Dockerfile
+  ARG, footer Docs link).
+- DOCS HOST: Railway custom domain docs.openverdict.info added to service
+  app (id 684cb34a..., CNAME target 7jphmc6c.up.railway.app); Vercel DNS
+  (nameservers ns1/ns2.vercel-dns.com, CLI logged in as the owner) got
+  the CNAME docs -> 7jphmc6c.up.railway.app and the TXT
+  _railway-verify.docs. Before that, docs. fell into the wildcard ALIAS
+  to Vercel (DEPLOYMENT_NOT_FOUND). Until the docs section deploys the
+  host serves the landing. Railway must set NEXT_PUBLIC_DOCS_URL=
+  https://docs.openverdict.info on the app service when the docs land
+  (railway variables --set, then a deploy).
+- WORKERS RUNNING: courtroom-graph, debate-v4, verify-ux, stake-role,
+  learn-simple, docs-site. Queued: debate-ui (after courtroom-graph and
+  debate-v4), a palette sweep over the whole app, checkpoint 3as.
