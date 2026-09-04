@@ -227,6 +227,42 @@ describe("resolution worker triage", () => {
     expect(engine.advance).not.toHaveBeenCalled();
   });
 
+  it("voids a claim still waiting for its committee once the commit deadline has passed", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(NOW);
+    const waiting = claim({
+      state: CLAIM_STATE.REVIEW_REQUESTED,
+      round: { phase: 1, expected: 0, committed: 0, revealed: 0 },
+    });
+    waiting.deadlines.firstCommitDeadlineMs = NOW - 3_000;
+    const engine = resolutionEngine(waiting);
+
+    await resolveClaim(engine, waiting);
+
+    expect(engine.voidAttempt).toHaveBeenCalledWith(waiting.claimId, {
+      reason: "MISSING_COMMITTEE",
+      message: "no committee was drawn before the first commit deadline",
+      phase: 1,
+    });
+    expect(engine.selectCommittee).not.toHaveBeenCalled();
+  });
+
+  it("still draws the committee while the commit deadline is ahead", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(NOW);
+    const waiting = claim({
+      state: CLAIM_STATE.REVIEW_REQUESTED,
+      round: { phase: 1, expected: 0, committed: 0, revealed: 0 },
+    });
+    waiting.deadlines.firstCommitDeadlineMs = NOW + 60_000;
+    const engine = resolutionEngine(waiting);
+
+    await resolveClaim(engine, waiting);
+
+    expect(engine.selectCommittee).toHaveBeenCalledWith(waiting.claimId);
+    expect(engine.voidAttempt).not.toHaveBeenCalled();
+  });
+
   it("voids a partial commit round at its deadline", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(NOW);

@@ -170,6 +170,18 @@ export async function resolveClaim(
   claim: ClaimInspection,
 ): Promise<void> {
   if (claim.state === CLAIM_STATE.REVIEW_REQUESTED) {
+    // A committee can only be created before the first commit deadline
+    // (jury::create_first_round aborts E_DEADLINE_PASSED after it). A claim
+    // whose draw kept failing until then can never progress: void it so the
+    // attempt relaunches instead of sitting in REVIEW_REQUESTED forever.
+    if (reached(claim.deadlines.firstCommitDeadlineMs)) {
+      await engine.voidAttempt(claim.claimId, {
+        reason: "MISSING_COMMITTEE",
+        message: "no committee was drawn before the first commit deadline",
+        phase: 1,
+      });
+      return;
+    }
     await engine.selectCommittee(claim.claimId);
     return;
   }
