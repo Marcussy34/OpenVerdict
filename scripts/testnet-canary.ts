@@ -467,7 +467,7 @@ async function main(): Promise<void> {
       console.log(`  ${agent.modelId}  ${agent.gonkaRequestId}`);
     }
     console.log(
-      `explorer         https://suiscan.xyz/testnet/object/${finalize.certificateId}`,
+      `explorer         https://testnet.suivision.xyz/object/${finalize.certificateId}`,
     );
   } finally {
     if (db) await closeDb(db);

@@ -84,10 +84,13 @@ export function LandingFooter() {
     !reduce,
   );
 
+  // SuiVision keeps the network in the host, so mainnet is the bare domain.
+  const explorerHost =
+    network === "mainnet" ? "https://suivision.xyz" : "https://testnet.suivision.xyz";
   // Testnet and mainnet ids are browsable; a local chain's are not.
   const explorer =
     packageId && (network === "testnet" || network === "mainnet")
-      ? `https://suiscan.xyz/${network}/object/${packageId}`
+      ? `${explorerHost}/object/${packageId}`
       : null;
 
   const resources = [
@@ -97,7 +100,7 @@ export function LandingFooter() {
     { href: `${REPO}/blob/main/docs/demo/runbook.md`, label: "Demo runbook" },
     // Always one row: the link fills in when /api/status answers, so the
     // footer never grows after first paint (that growth was a 0.35 layout shift).
-    { href: explorer ?? "https://suiscan.xyz/testnet", label: "Sui explorer · package" },
+    { href: explorer ?? "https://testnet.suivision.xyz", label: "Sui explorer · package" },
     { href: "https://gonkarouter.io", label: "GonkaRouter" },
   ];
 

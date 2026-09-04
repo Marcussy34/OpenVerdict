@@ -387,7 +387,7 @@ describe("watch command and help", () => {
     const env: CommandEnv = { api: new Api({ base: BASE, fetch: net.fetch, sleep: clock.sleep }), io: output.io, json: false, now: clock.now, sleep: clock.sleep };
     expect(await watchCommand(env, { target: `${BASE}/claims/${FINALIZED.claimId}`, since: 77, verbose: false })).toBe(0);
     expect(output.out).toEqual([
-      "03:27:27Z  final              NO, score 2.00 (200 bps), certificate 0x42954c91… https://suiscan.xyz/testnet/object/0x42954c917d0b7e34cb4634091a5ece1921a89a931f4872f690971b62fdcee706",
+      "03:27:27Z  final              NO, score 2.00 (200 bps), certificate 0x42954c91… https://testnet.suivision.xyz/object/0x42954c917d0b7e34cb4634091a5ece1921a89a931f4872f690971b62fdcee706",
       `audit it: ov audit ${FINALIZED.claimId}`,
     ]);
   });

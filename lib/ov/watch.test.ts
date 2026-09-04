@@ -99,7 +99,7 @@ describe("watch: history replay", () => {
     expect(h.out).toContain("03:27:25Z  vote revealed      juror 2 (DeepSeek) revealed NO 9500 bps (1 of 5)");
     expect(h.out.some((line) => line.includes("run approved       juror 3 (MiniMax) run approved, hash 0xd87268f7"))).toBe(true);
     expect(h.out.at(-2)).toBe(
-      "03:27:27Z  final              NO, score 2.00 (200 bps), certificate 0x42954c91… https://suiscan.xyz/testnet/object/0x42954c917d0b7e34cb4634091a5ece1921a89a931f4872f690971b62fdcee706",
+      "03:27:27Z  final              NO, score 2.00 (200 bps), certificate 0x42954c91… https://testnet.suivision.xyz/object/0x42954c917d0b7e34cb4634091a5ece1921a89a931f4872f690971b62fdcee706",
     );
     expect(h.out.at(-1)).toBe(`audit it: ov audit ${FINALIZED_ID}`);
     // Research ticks stay hidden without --verbose; every line is dated.
@@ -339,7 +339,7 @@ describe("watch: live claims", () => {
     const result = await h.run();
 
     expect(result.exitCode).toBe(0);
-    expect(h.out.at(-2)).toMatch(/^final: NO, score 2\.00 \(200 bps\), certificate 0x42954c917d0b7e34cb4634091a5ece1921a89a931f4872f690971b62fdcee706 https:\/\/suiscan/);
+    expect(h.out.at(-2)).toMatch(/^final: NO, score 2\.00 \(200 bps\), certificate 0x42954c917d0b7e34cb4634091a5ece1921a89a931f4872f690971b62fdcee706 https:\/\/testnet\.suivision/);
     expect(h.out.at(-1)).toBe(`audit it: ov audit ${active.claimId}`);
   });
 

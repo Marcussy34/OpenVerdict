@@ -11,7 +11,7 @@ use that claim as CLAIM B and include beat 5; otherwise use certificate claim
 - [ ] Browser at 100% zoom, light desktop clutter, notifications off.
 - [ ] Tab 1: https://openverdict.info (landing). Tab 2: /fact-check.
   Tab 3: CLAIM B's canvas page. Tab 4: CLAIM B on `/claims/[id]/report`.
-  Tab 5: its certificate on Suiscan. Tab 6: /agents.
+  Tab 5: its certificate on SuiVision. Tab 6: /agents.
 - [ ] CLAIM A text ready in the clipboard (a short, clean factual claim).
 - [ ] Confirm engine healthy: /api/status shows gonkaMode live.
 - [ ] Optional on-camera moment: be signed out of Google so the zkLogin
@@ -26,7 +26,7 @@ use that claim as CLAIM B and include beat 5; otherwise use certificate claim
 | 0:30-0:50 | CLAIM A canvas, sealed phase | "Each juror researches the live web through the engine: every search and page-open appears here as it happens, sealed. No juror can see another's work, and votes lock as hash commitments on Sui before anything is revealed." |
 | 0:50-1:10 | CLAIM B canvas, revealed | "Here is a finished claim: at reveal, the sealed trails bloom into the full record: the searches on both sides, the exact pages, verbatim citations, and each seat's vote with its confidence." |
 | 1:10-1:25 | CLAIM B deliberation chat (if a debate ran) | "When the jury splits, the revealed jurors cross-examine each other in public, citing only the frozen record, for at most three exchanges, then cast a second sealed ballot at the table. Honest deadlock ends as UNRESOLVED, never a forced answer." |
-| 1:25-1:45 | Report page then Suiscan certificate | "The verdict is an immutable certificate on Sui with a 0-to-100 Truth Score, and every inference carries its Gonka request id. This is not our database; it is the chain." |
+| 1:25-1:45 | Report page then SuiVision certificate | "The verdict is an immutable certificate on Sui with a 0-to-100 Truth Score, and every inference carries its Gonka request id. This is not our database; it is the chain." |
 | 1:45-1:55 | /verify on one of CLAIM B's runs | "And you do not have to trust us: the browser reruns 15 checks per juror run, can resend the exact conversation to the same model, and can open sealed bundles through Seal without our help." |
 | 1:55-2:00 | /agents (or the staking card) | "Anyone can stake on a jury seat with a Google account. OpenVerdict: see how the verdict was reached." |
 

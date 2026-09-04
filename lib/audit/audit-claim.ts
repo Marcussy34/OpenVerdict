@@ -303,7 +303,7 @@ export const DEFAULT_RPC_URLS = [
 export const DEFAULT_WALRUS_AGGREGATOR =
   "https://aggregator.walrus-testnet.walrus.space";
 export const DEFAULT_RECEIPTS_BASE = "https://api.gonkarouter.io/v1/receipts/";
-const SUISCAN = "https://suiscan.xyz/testnet";
+const SUIVISION = "https://testnet.suivision.xyz";
 // publicnode answers 403 to Node's default user agent.
 const USER_AGENT = "Mozilla/5.0 (OpenVerdict audit)";
 const DEFAULT_TIMEOUT_MS = 20_000;
@@ -516,12 +516,13 @@ function outcomeCode(label: string | undefined): number | undefined {
   return entry === undefined ? undefined : Number(entry[0]);
 }
 
-function suiscanTx(digest: string): string {
-  return `${SUISCAN}/tx/${digest}`;
+// SuiVision calls a transaction page a "txblock".
+function suivisionTx(digest: string): string {
+  return `${SUIVISION}/txblock/${digest}`;
 }
 
-function suiscanObject(id: string): string {
-  return `${SUISCAN}/object/${id}`;
+function suivisionObject(id: string): string {
+  return `${SUIVISION}/object/${id}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -1604,7 +1605,7 @@ function auditVote(world: World, seat: Seat): VoteAudit {
     );
   } else if (!seat.commitTxData || !seat.commitTxData.ok) {
     const outcome = seat.commitTxData ?? { ok: false as const, kind: "unavailable" as const, reason: "not fetched", url: "" };
-    vote.checks.push(rpcFailure("C1", "votes", labels.C1, outcome, suiscanTx(seat.commitTx), "the commit transaction"));
+    vote.checks.push(rpcFailure("C1", "votes", labels.C1, outcome, suivisionTx(seat.commitTx), "the commit transaction"));
   } else {
     const event = parseCommitEvent(seat.commitTxData.result);
     if (!event) {
@@ -1612,7 +1613,7 @@ function auditVote(world: World, seat: Seat): VoteAudit {
         check("C1", "votes", labels.C1, "FAIL", {
           expected: seat.commitment,
           detail: "the transaction emits no VoteCommitted event",
-          url: suiscanTx(seat.commitTx),
+          url: suivisionTx(seat.commitTx),
         }),
       );
     } else {
@@ -1638,7 +1639,7 @@ function auditVote(world: World, seat: Seat): VoteAudit {
             expected: seat.commitment,
             actual: event.commitment,
             ...(notes.length > 0 ? { detail: notes.join("; ") } : {}),
-            url: suiscanTx(seat.commitTx),
+            url: suivisionTx(seat.commitTx),
           }),
         );
       }
@@ -1670,12 +1671,12 @@ function auditVote(world: World, seat: Seat): VoteAudit {
     );
   } else if (!seat.revealTxData || !seat.revealTxData.ok) {
     const outcome = seat.revealTxData ?? { ok: false as const, kind: "unavailable" as const, reason: "not fetched", url: "" };
-    vote.checks.push(rpcFailure("C2", "votes", labels.C2, outcome, suiscanTx(seat.revealTx), "the reveal transaction"));
+    vote.checks.push(rpcFailure("C2", "votes", labels.C2, outcome, suivisionTx(seat.revealTx), "the reveal transaction"));
   } else if (!seat.revealInputs) {
     vote.checks.push(
       check("C2", "votes", labels.C2, "FAIL", {
         detail: "the reveal_vote inputs could not be decoded from the transaction",
-        url: suiscanTx(seat.revealTx),
+        url: suivisionTx(seat.revealTx),
       }),
     );
   } else if (!root) {
@@ -1734,13 +1735,13 @@ function auditVote(world: World, seat: Seat): VoteAudit {
       }
     }
     if (failure !== undefined) {
-      vote.checks.push(check("C2", "votes", labels.C2, "FAIL", { detail: failure, url: suiscanTx(seat.revealTx) }));
+      vote.checks.push(check("C2", "votes", labels.C2, "FAIL", { detail: failure, url: suivisionTx(seat.revealTx) }));
     } else if (!expectedCommitment) {
       vote.checks.push(
         check("C2", "votes", labels.C2, "UNAVAILABLE", {
           actual: recomputed,
           detail: "neither the commit transaction nor the record supplied a commitment to compare with",
-          url: suiscanTx(seat.revealTx),
+          url: suivisionTx(seat.revealTx),
         }),
       );
     } else {
@@ -1756,7 +1757,7 @@ function auditVote(world: World, seat: Seat): VoteAudit {
           expected: expectedCommitment,
           actual: recomputed,
           ...(notes.length > 0 || !ok ? { detail: [...(ok ? [] : ["the recomputed commitment differs: the revealed vote is not the committed one"]), ...notes].join("; ") } : {}),
-          url: suiscanTx(seat.revealTx),
+          url: suivisionTx(seat.revealTx),
         }),
       );
     }
@@ -1769,7 +1770,7 @@ function auditVote(world: World, seat: Seat): VoteAudit {
       check("C3", "votes", labels.C3, status, {
         ...(reported ? { expected: `${outcomeLabel(reported.outcome)} ${reported.confidenceBps} bps` } : {}),
         detail: "the reveal transaction inputs are not available",
-        url: seat.revealTx ? suiscanTx(seat.revealTx) : claimUrl,
+        url: seat.revealTx ? suivisionTx(seat.revealTx) : claimUrl,
       }),
     );
   } else if (!reported) {
@@ -1793,7 +1794,7 @@ function auditVote(world: World, seat: Seat): VoteAudit {
         actual: `${outcomeLabel(chain.outcome)} ${chain.confidenceBps} bps`,
         ...(ok ? {} : { detail: eventAgrees ? "the reported vote differs from the on-chain reveal" : "the VoteRevealed event differs from the transaction inputs" }),
         ...(reported.valid === false ? { detail: "the report marks this reveal invalid (it does not enter the score)" } : {}),
-        url: seat.revealTx ? suiscanTx(seat.revealTx) : claimUrl,
+        url: seat.revealTx ? suivisionTx(seat.revealTx) : claimUrl,
       }),
     );
   }
@@ -1962,7 +1963,7 @@ async function auditRun(world: World, seat: Seat): Promise<RunAudit> {
               ? "approval and recomputation agree, but the reveal transaction was not found on Sui"
               : "approval and recomputation agree; the reveal transaction input could not be fetched to confirm the on-chain value"
             : "the approved run hash differs from the recomputed run hash",
-          url: seat.revealTx ? suiscanTx(seat.revealTx) : claimLink(world.base, world.claimId),
+          url: seat.revealTx ? suivisionTx(seat.revealTx) : claimLink(world.base, world.claimId),
         }),
       );
     } else {
@@ -1972,7 +1973,7 @@ async function auditRun(world: World, seat: Seat): Promise<RunAudit> {
           expected: approved,
           actual: `${recomputedRunHash ?? "-"} (recomputed), ${revealRunHash} (reveal input)`,
           ...(ok ? {} : { detail: "the approved, recomputed and revealed run hashes do not all agree" }),
-          url: seat.revealTx ? suiscanTx(seat.revealTx) : claimLink(world.base, world.claimId),
+          url: seat.revealTx ? suivisionTx(seat.revealTx) : claimLink(world.base, world.claimId),
         }),
       );
     }
@@ -2149,11 +2150,11 @@ function auditClaimChecks(world: World, score: AuditResult["score"], votes: Vote
     );
   } else if (!world.certificate || !world.certificate.ok) {
     const outcome = world.certificate ?? { ok: false as const, kind: "unavailable" as const, reason: "not fetched", url: "" };
-    checks.push(rpcFailure("S2", "chain", "Certificate on Sui", outcome, suiscanObject(certificateId), "the certificate object"));
+    checks.push(rpcFailure("S2", "chain", "Certificate on Sui", outcome, suivisionObject(certificateId), "the certificate object"));
   } else {
     const object = parseObjectFields(world.certificate.result);
     if (!object) {
-      checks.push(check("S2", "chain", "Certificate on Sui", "FAIL", { detail: "the object has no Move content", url: suiscanObject(certificateId) }));
+      checks.push(check("S2", "chain", "Certificate on Sui", "FAIL", { detail: "the object has no Move content", url: suivisionObject(certificateId) }));
     } else {
       const fields = parseCertificateFields(object.fields);
       const expectedCode = result === undefined ? undefined : RESULT_CODES[result];
@@ -2173,7 +2174,7 @@ function auditClaimChecks(world: World, score: AuditResult["score"], votes: Vote
           expected: `result ${result ?? "?"} (${expectedCode ?? "?"}), truth_score_bps ${score.certificateBps ?? "none"}`,
           actual: `result ${fields.result ?? "?"}, truth_score_bps ${fields.truthScoreBps ?? "none"}, ${fields.revealedVoteIds.length} revealed votes`,
           ...(issues.length === 0 ? {} : { detail: issues.join("; ") }),
-          url: suiscanObject(certificateId),
+          url: suivisionObject(certificateId),
         }),
       );
     }
@@ -2781,8 +2782,8 @@ export async function auditClaim(target: AuditTarget, options: AuditOptions): Pr
             ...(inspection.result?.digest ?? certificateObject?.previousTransaction
               ? { transactionDigest: inspection.result?.digest ?? certificateObject?.previousTransaction }
               : {}),
-            objectLink: suiscanObject(world.certificateId),
-            ...(inspection.result?.digest ? { transactionLink: suiscanTx(inspection.result.digest) } : {}),
+            objectLink: suivisionObject(world.certificateId),
+            ...(inspection.result?.digest ? { transactionLink: suivisionTx(inspection.result.digest) } : {}),
           },
         }
       : {}),
@@ -2941,7 +2942,7 @@ export function renderVerdictCard(result: AuditResult): string {
   lines.push(`- Claim id: ${claim.claimId}, link ${claim.link}, state ${claim.stateLabel}, mode ${claim.mode}, ${attempt}`);
   if (result.status === "FINALIZED") {
     lines.push(
-      `- Result: ${verdict.result ?? "-"}, truth score ${bpsToPercent(verdict.truthScoreBps)} (${verdict.truthScoreBps ?? "-"} bps), certificate ${verdict.certificateId ?? "-"}${verdict.certificateId ? ` (${suiscanObject(verdict.certificateId)})` : ""}${verdict.finalPhase === 2 ? ", settled in round two after the cascade" : ""}`,
+      `- Result: ${verdict.result ?? "-"}, truth score ${bpsToPercent(verdict.truthScoreBps)} (${verdict.truthScoreBps ?? "-"} bps), certificate ${verdict.certificateId ?? "-"}${verdict.certificateId ? ` (${suivisionObject(verdict.certificateId)})` : ""}${verdict.finalPhase === 2 ? ", settled in round two after the cascade" : ""}`,
     );
   } else {
     lines.push(`- Result: ${verdict.label} (no certificate yet)`);
@@ -3018,8 +3019,8 @@ function renderVotes(result: AuditResult): string {
     const facts = [
       `- Seat ${vote.jurySeatId}, agent ${vote.agentProfileId}${vote.modelId ? `, model ${vote.modelId}` : ""}`,
       `- Commitment (record): ${vote.commitment ?? "-"}; on chain: ${vote.onChainCommitment ?? "-"}`,
-      `- Commit tx: ${vote.commitTx ? `${vote.commitTx} (${suiscanTx(vote.commitTx)})` : "-"}`,
-      `- Reveal tx: ${vote.revealTx ? `${vote.revealTx} (${suiscanTx(vote.revealTx)})` : "-"}`,
+      `- Commit tx: ${vote.commitTx ? `${vote.commitTx} (${suivisionTx(vote.commitTx)})` : "-"}`,
+      `- Reveal tx: ${vote.revealTx ? `${vote.revealTx} (${suivisionTx(vote.revealTx)})` : "-"}`,
       `- Recomputed commitment: ${vote.recomputedCommitment ?? "-"}`,
     ];
     if (vote.preimage) {

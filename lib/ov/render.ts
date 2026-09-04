@@ -13,7 +13,7 @@ import { shortHex } from "../audit/audit-claim";
 import { CLAIM_STATE, OUTCOME } from "../protocol/constants";
 import { OvError, asArray, asNumber, asString, isRecord, type Json, type StreamEvent } from "./api";
 
-const SUISCAN = "https://suiscan.xyz/testnet";
+const SUIVISION = "https://testnet.suivision.xyz";
 /** Width of the "kind in words" column of a watch line. */
 const KIND_WIDTH = 17;
 const ARGUMENT_PREVIEW = 100;
@@ -227,8 +227,8 @@ export function queueLink(base: string, queueId: string): string {
   return `${base}/fact-check/queue/${queueId}`;
 }
 
-export function suiscanObject(id: string): string {
-  return `${SUISCAN}/object/${id}`;
+export function suivisionObject(id: string): string {
+  return `${SUIVISION}/object/${id}`;
 }
 
 export function truncate(text: string, max: number): string {
@@ -378,7 +378,7 @@ export function renderStatus(inspection: ClaimInspection, base: string, nowMs: n
   }
   if (inspection.result) {
     lines.push(`result     ${inspection.result.result}, truth score ${formatScore(inspection.result.truthScoreBps)}`);
-    lines.push(`certificate ${inspection.result.certificateId} ${suiscanObject(inspection.result.certificateId)}`);
+    lines.push(`certificate ${inspection.result.certificateId} ${suivisionObject(inspection.result.certificateId)}`);
   } else if (isFinalState(inspection.state)) {
     lines.push("result     not published yet");
   }
@@ -687,7 +687,7 @@ function renderEventLine(event: StreamEvent, context: EventContext): string | un
       return line(
         event,
         "final",
-        `${asString(payload.outcome) ?? "?"}, score ${formatScore(asNumber(payload.truth_score_bps))}, certificate ${shortHex(certificate)}${certificate ? ` ${suiscanObject(certificate)}` : ""}`,
+        `${asString(payload.outcome) ?? "?"}, score ${formatScore(asNumber(payload.truth_score_bps))}, certificate ${shortHex(certificate)}${certificate ? ` ${suivisionObject(certificate)}` : ""}`,
       );
     }
     case "attempt_voided":

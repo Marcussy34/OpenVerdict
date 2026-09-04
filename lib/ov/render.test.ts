@@ -189,7 +189,7 @@ describe("status block", () => {
     expect(lines).toContain("round one  5 of 5 seats committed, 5 of 5 revealed");
     expect(lines).toContain("result     NO, truth score 2.00 (200 bps)");
     expect(lines.at(-1)).toBe(
-      "certificate 0x42954c917d0b7e34cb4634091a5ece1921a89a931f4872f690971b62fdcee706 https://suiscan.xyz/testnet/object/0x42954c917d0b7e34cb4634091a5ece1921a89a931f4872f690971b62fdcee706",
+      "certificate 0x42954c917d0b7e34cb4634091a5ece1921a89a931f4872f690971b62fdcee706 https://testnet.suivision.xyz/object/0x42954c917d0b7e34cb4634091a5ece1921a89a931f4872f690971b62fdcee706",
     );
     expect(lines.some((line) => line.startsWith("next"))).toBe(false);
     expect(lines.some((line) => line.startsWith("gave up"))).toBe(false);
@@ -305,7 +305,7 @@ describe("event lines", () => {
       "03:21:06Z  output repaired    juror 3 (MiniMax) output repaired: citations",
     );
     expect(renderEvent(event("claim_finalized", { outcome: "YES", truth_score_bps: 9100, certificate_id: `0x${"ab".repeat(32)}` }), ctx)).toBe(
-      `03:21:06Z  final              YES, score 91.00 (9100 bps), certificate 0xabababab… https://suiscan.xyz/testnet/object/0x${"ab".repeat(32)}`,
+      `03:21:06Z  final              YES, score 91.00 (9100 bps), certificate 0xabababab… https://testnet.suivision.xyz/object/0x${"ab".repeat(32)}`,
     );
   });
 

@@ -80,7 +80,7 @@ committed, revealed and verified exactly like a research run, just without a res
    request: proof the inference ran on the Gonka network, not on a
    centralized server we control.
 3. Open the claim's full report for the on-chain record (claim, committee,
-   certificate and revealed-vote objects on Suiscan; sealed and revealed
+   certificate and revealed-vote objects on SuiVision; sealed and revealed
    bundles on Walrus), or use the Audit page to recompute every hash in
    your own browser.
 

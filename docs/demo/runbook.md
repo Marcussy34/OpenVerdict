@@ -244,7 +244,7 @@ against the recorded model, or opened through Seal after the deadline.
    the provenance strip (requested versus served model, devshard, vLLM
    fingerprint, gateway and Gonka request ids, tokens, latency, links to
    the run approval, commitment and reveal objects and transactions on
-   Suiscan, the sealed and revealed blobs on Walrus); the research trail
+   SuiVision, the sealed and revealed blobs on Walrus); the research trail
    with a support search and a challenge search, the pages opened on each
    side, and any engine refusal (`CHALLENGE_REQUIRED`,
    `CORROBORATION_REQUIRED`) shown as an event; per turn, "what the model
@@ -453,7 +453,7 @@ model families, 5 sealed commits, 5 reveals, deterministic finalize).
 | Committee / seats | 5 seats, 3 model families — selection digest `EDVnWpVFjtRTqJBgv3J9dj95zL9kqSgpJAvVreaXTWHk` |
 | Evidence bundle root | `0x66aeedcb8e3f633cbe5e347a5aa15e6e517d18492913ccaadd87e482432dbcfc` |
 | Gonka Request IDs | `devshard-63948-430` (DeepSeek), `devshard-63625-928` (MiniMax), `devshard-63948-432` (DeepSeek), `devshard-63939-297` (Kimi), `devshard-63610-968` (MiniMax) |
-| Certificate | `0x8efdabe0900a3e4da39210394d211123ec82be6d176a51175adef7b8f41a8634` — [suiscan](https://suiscan.xyz/testnet/object/0x8efdabe0900a3e4da39210394d211123ec82be6d176a51175adef7b8f41a8634) |
+| Certificate | `0x8efdabe0900a3e4da39210394d211123ec82be6d176a51175adef7b8f41a8634`, [SuiVision](https://testnet.suivision.xyz/object/0x8efdabe0900a3e4da39210394d211123ec82be6d176a51175adef7b8f41a8634) |
 | Finalize digest | `3FuF8jUCkHmqN19fyFNQhTE96DsiAb4sbS4yD72Uzic3` |
 | Truth Score | **YES — 9700 bps**, off-chain recompute == on-chain value |
 | Pool settle / payout digests | exercised on localnet by `pnpm e2e:localnet` (sponsored deposit + payout); not part of the testnet canary |

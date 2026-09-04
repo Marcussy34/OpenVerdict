@@ -1306,10 +1306,10 @@ describe("auditClaim when a source is down", () => {
     expect(result.exitCode).toBe(0);
     const c1 = find(result, "C1", "UNAVAILABLE");
     expect(c1).toHaveLength(5);
-    expect(c1[0]?.url).toMatch(/^https:\/\/suiscan\.xyz\/testnet\/tx\//);
-    expect(find(result, "S2", "UNAVAILABLE")[0]?.url).toMatch(/^https:\/\/suiscan\.xyz\/testnet\/object\//);
+    expect(c1[0]?.url).toMatch(/^https:\/\/testnet\.suivision\.xyz\/txblock\//);
+    expect(find(result, "S2", "UNAVAILABLE")[0]?.url).toMatch(/^https:\/\/testnet\.suivision\.xyz\/object\//);
     expect(find(result, "R16", "UNAVAILABLE")).toHaveLength(5);
-    expect(renderMarkdown(result)).toContain("check by hand: https://suiscan.xyz/testnet/tx/");
+    expect(renderMarkdown(result)).toContain("check by hand: https://testnet.suivision.xyz/txblock/");
   });
 
   it("fails a commit transaction that no endpoint knows", async () => {

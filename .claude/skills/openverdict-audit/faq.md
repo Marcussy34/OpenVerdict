@@ -4,7 +4,7 @@ Answers are drawn from the repository as of 2026-09-03 (README, PRD, runbook, ch
 
 ## 1. How do you know the vote was not changed?
 
-Each juror committed a blake2b-256 hash of its vote on Sui before any vote was revealed. The hash covers the outcome, the confidence, the run hash, the frozen evidence root, the claim id, the seat id, the juror's profile id, the phase and a secret salt. At reveal the Move contract rebuilt that hash from the revealed values and refused anything that did not match. The auditor recomputes the same hash from the reveal transaction's inputs, independently of the app server, and compares it to the `VoteCommitted` event in the commit transaction. Both transaction digests are in the dossier and open on Suiscan.
+Each juror committed a blake2b-256 hash of its vote on Sui before any vote was revealed. The hash covers the outcome, the confidence, the run hash, the frozen evidence root, the claim id, the seat id, the juror's profile id, the phase and a secret salt. At reveal the Move contract rebuilt that hash from the revealed values and refused anything that did not match. The auditor recomputes the same hash from the reveal transaction's inputs, independently of the app server, and compares it to the `VoteCommitted` event in the commit transaction. Both transaction digests are in the dossier and open on SuiVision.
 
 ## 2. Could the operator fake a verdict?
 

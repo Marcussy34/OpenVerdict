@@ -141,7 +141,7 @@ cryptographic argument:
 
 - Sui JSON-RPC at `https://sui-testnet-rpc.publicnode.com` or
   `https://fullnode.testnet.sui.io:443`.
-- The Sui explorer at `https://suiscan.xyz/testnet/tx/<digest>` and
+- The Sui explorer at `https://testnet.suivision.xyz/txblock/<digest>` and
   `/object/<id>`.
 - Walrus at `https://aggregator.walrus-testnet.walrus.space/v1/blobs/<blobId>`.
 - GonkaRouter at `https://api.gonkarouter.io/v1/receipts/<gatewayRequestId>`.

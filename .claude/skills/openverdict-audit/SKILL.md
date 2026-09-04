@@ -68,7 +68,7 @@ Always in this order.
 Claim: <statement>
 Result: <YES | NO | UNRESOLVED>, truth score <X.XX> (<bps> bps)
 Attempt: <n> of 3, <ACTIVE | SETTLED | VOIDED | GAVE_UP>
-Certificate: <certificate id> (<Suiscan link>)
+Certificate: <certificate id> (<SuiVision link>)
 Checks: <P> passed, <F> failed, <U> unavailable, <S> skipped (<group lines: votes, runs, receipts, walrus, chain>)
 ```
 
@@ -171,7 +171,7 @@ Live URLs (read-only `curl`, never anything else) when the user wants to see a s
 
 - Run proof: `<base>/api/claims/<claimId>/runs/<runId>/proof`
 - Claim and report: `<base>/api/claims/<claimId>` and `<base>/api/claims/<claimId>/report`
-- A transaction or object on Suiscan: `https://suiscan.xyz/testnet/tx/<digest>` and `https://suiscan.xyz/testnet/object/<objectId>` (give the link; the JSON-RPC read is what the auditor already did)
+- A transaction or object on SuiVision: `https://testnet.suivision.xyz/txblock/<digest>` and `https://testnet.suivision.xyz/object/<objectId>` (give the link; the JSON-RPC read is what the auditor already did)
 - A Walrus blob: `https://aggregator.walrus-testnet.walrus.space/v1/blobs/<blobId>` (use `curl -sI` for a HEAD; a 200 means the bytes are there)
 - A GonkaRouter receipt: `https://api.gonkarouter.io/v1/receipts/<gatewayRequestId>` (the `req-...` id, not the `devshard-...` id; no auth; 404 means the gateway has no record of that id, 429 means rate limited)
 - Weather: `<base>/api/weather`
@@ -340,7 +340,7 @@ Read aloud while the auditor runs (about 60 seconds):
 Three judge questions with model answers (adapt the numbers to the dossier):
 
 1. "How do you know a vote was not changed after the fact?"
-   "Each juror committed a blake2b-256 hash of its vote on Sui before any vote was revealed. The hash covers the outcome, the confidence, the run hash, the frozen evidence root, the claim, the seat and a secret salt. At reveal the Move contract recomputed that hash from the revealed values and refused anything that did not match. The auditor did the same recomputation from the reveal transaction's inputs, independently of our server: the dossier's Votes and commitments section shows MATCH for every seat, with the commit and reveal transaction digests you can open on Suiscan."
+   "Each juror committed a blake2b-256 hash of its vote on Sui before any vote was revealed. The hash covers the outcome, the confidence, the run hash, the frozen evidence root, the claim, the seat and a secret salt. At reveal the Move contract recomputed that hash from the revealed values and refused anything that did not match. The auditor did the same recomputation from the reveal transaction's inputs, independently of our server: the dossier's Votes and commitments section shows MATCH for every seat, with the commit and reveal transaction digests you can open on SuiVision."
 
 2. "Could you, the operator, have faked this verdict?"
    "Not without breaking hashes anyone can check. We do not pick the jurors (Sui's native randomness does), we cannot change a vote after its commitment, we cannot swap evidence after the root is frozen on chain, we cannot edit the certificate (an immutable Sui object), and we cannot invent a vote for a failed seat: a failed seat voids the whole attempt in public. What we still hold in this build is the pipeline upstream of the commitment: the engine runs the research and holds the run attestor and evidence freezer capabilities. That is disclosed in the README as detectable rather than impossible. The one open gap is byte-level proof of what the model received; GonkaRouter's public receipt corroborates the model, the node and the timing of every recorded request, and a gateway-signed receipt is on their roadmap."

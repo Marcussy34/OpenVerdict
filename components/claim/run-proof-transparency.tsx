@@ -23,6 +23,8 @@ import {
   CloseCircle,
 } from "@/components/icons";
 import { cn } from "@/lib/utils";
+// The one home for explorer URLs, so this panel follows the configured network.
+import { suiObjectUrl, suiTransactionUrl } from "@/lib/web/explorer";
 import {
   displayValue,
   isProofRecord,
@@ -82,14 +84,6 @@ function utcTime(value: number | undefined): string {
   if (value === undefined) return "Not recorded";
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? "Not recorded" : date.toISOString();
-}
-
-function suiObjectUrl(id: string): string {
-  return `https://suiscan.xyz/testnet/object/${encodeURIComponent(id)}`;
-}
-
-function suiTransactionUrl(digest: string): string {
-  return `https://suiscan.xyz/testnet/tx/${encodeURIComponent(digest)}`;
 }
 
 function ProvenanceValue({ label, value }: { label: string; value: string }) {

@@ -1111,18 +1111,18 @@ function NodeInspector({
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
           {certificateId !== undefined ? (
             <a
-              href={`https://suiscan.xyz/testnet/object/${certificateId}`}
+              href={suiObjectUrl(certificateId)}
               target="_blank"
               rel="noreferrer"
               className="inline-flex items-center gap-2 text-xs font-semibold text-chain hover:underline"
             >
               <ExportSquare size="14" variant="Bold" />
-              Certificate on Suiscan
+              Certificate on SuiVision
             </a>
           ) : null}
           {digest !== undefined ? (
             <a
-              href={`https://suiscan.xyz/testnet/tx/${digest}`}
+              href={suiTransactionUrl(digest)}
               target="_blank"
               rel="noreferrer"
               className="inline-flex items-center gap-2 text-xs font-semibold text-chain hover:underline"
@@ -1237,13 +1237,13 @@ function NodeInspector({
             />
           ) : null}
           <a
-            href={`https://suiscan.xyz/testnet/object/${claim.claimId}`}
+            href={suiObjectUrl(claim.claimId)}
             target="_blank"
             rel="noreferrer"
             className="inline-flex items-center gap-2 text-xs font-semibold text-chain hover:underline"
           >
             <ExportSquare size="14" variant="Bold" />
-            Open claim object in Suiscan
+            Open claim object in SuiVision
           </a>
         </div>
 

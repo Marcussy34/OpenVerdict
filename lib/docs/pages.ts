@@ -213,10 +213,11 @@ async function readReleaseTokens(root: string): Promise<Record<string, string>> 
   };
 
   const network = text("network");
+  // SuiVision keeps the network in the host; only testnet and mainnet exist.
+  const explorerHost =
+    network === "mainnet" ? "https://suivision.xyz" : "https://testnet.suivision.xyz";
   const explorer = (id: string) =>
-    id.startsWith("0x")
-      ? `https://suiscan.xyz/${network}/object/${id}`
-      : "https://suiscan.xyz/testnet";
+    id.startsWith("0x") ? `${explorerHost}/object/${id}` : explorerHost;
 
   const sealKeyServers = ((): string => {
     const seal = manifest.seal;

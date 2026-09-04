@@ -35,7 +35,7 @@ import {
   queueStatusWords,
   renderEvent,
   stateWords,
-  suiscanObject,
+  suivisionObject,
   voidWords,
   weatherInline,
   type EventContext,
@@ -569,7 +569,7 @@ class ClaimFollower {
       return;
     }
     this.#line(
-      `final: ${result.result}, score ${formatScore(result.truthScoreBps)}, certificate ${result.certificateId} ${suiscanObject(result.certificateId)}`,
+      `final: ${result.result}, score ${formatScore(result.truthScoreBps)}, certificate ${result.certificateId} ${suivisionObject(result.certificateId)}`,
     );
     this.#finalPrinted = true;
   }

@@ -424,7 +424,7 @@ stake and a diversity draw.
 Decentralization ladder: the team's seven demo jurors are the starting
 roster; anyone can now open a seat by staking on it (their stake, their
 bond, their earnings, our compute), and staked seats are already
-live on testnet (for example [profile `0xc32aa5db…`](https://suiscan.xyz/testnet/object/0xc32aa5db303d2d479133cd8476afedf1fa8f4eac1241bd90b57a3fb2723d6037), a MiniMax source-authenticity seat opened with 0.1 SUI through the public API, gas paid by Shinami); finally, self-hosted juror workers bring
+live on testnet (for example [profile `0xc32aa5db…`](https://testnet.suivision.xyz/object/0xc32aa5db303d2d479133cd8476afedf1fa8f4eac1241bd90b57a3fb2723d6037), a MiniMax source-authenticity seat opened with 0.1 SUI through the public API, gas paid by Shinami); finally, self-hosted juror workers bring
 their own GonkaRouter keys and pay their own inference, verified by the
 engine exactly as our own runs are (run hashes, receipts, re-execution).
 
@@ -512,7 +512,7 @@ and the chain does not get shorter; it breaks.
 | Sui is integral | Native `Random` jury selection, owned `JurySeat`s, Move capabilities, immutable certificates, coin settlement |
 | Ownership & identity | `AgentProfile` + `AgentCap`; every seat, approval, ticket is an owned object |
 | On-chain execution | Deadlines, commit-reveal, thresholds, payouts and seat stakes enforced in Move — 89 tests |
-| Working demo path | Localnet E2E exit 0 AND finalized LIVE testnet lifecycles on https://app.openverdict.info: NO certificate [`0x42954c91…`](https://suiscan.xyz/testnet/object/0x42954c917d0b7e34cb4634091a5ece1921a89a931f4872f690971b62fdcee706) ("Humans use only ten percent of their brains.", 5 of 5 seats, attempt 3 of 3, audited 110/110 by `pnpm ov audit`), YES certificate [`0xff3191bc…`](https://suiscan.xyz/testnet/object/0xff3191bcad4a645f44a6caccf2e6c661e8defcbf4943b44ec8b08d91b4f4133c) (claim #25, 5 of 5 seats, Seal escrows) and NO certificate [`0x975b3ae1…`](https://suiscan.xyz/testnet/object/0x975b3ae103c7832c4405714196528808af70ef975fe0d0db3ae70017191c00e4) (claim #26, hedged calls); see `docs/demo/runbook.md` |
+| Working demo path | Localnet E2E exit 0 AND finalized LIVE testnet lifecycles on https://app.openverdict.info: NO certificate [`0x42954c91…`](https://testnet.suivision.xyz/object/0x42954c917d0b7e34cb4634091a5ece1921a89a931f4872f690971b62fdcee706) ("Humans use only ten percent of their brains.", 5 of 5 seats, attempt 3 of 3, audited 110/110 by `pnpm ov audit`), YES certificate [`0xff3191bc…`](https://testnet.suivision.xyz/object/0xff3191bcad4a645f44a6caccf2e6c661e8defcbf4943b44ec8b08d91b4f4133c) (claim #25, 5 of 5 seats, Seal escrows) and NO certificate [`0x975b3ae1…`](https://testnet.suivision.xyz/object/0x975b3ae103c7832c4405714196528808af70ef975fe0d0db3ae70017191c00e4) (claim #26, hedged calls); see `docs/demo/runbook.md` |
 | Walrus evidence layer | Every fetched page, evidence manifest, sealed and revealed run bundle is a public Walrus blob; its hash is pinned on-chain, so blobs are content addresses a verifier can fetch |
 | Reveal-key escrow (Seal) | Mysten Seal time-lock policy on testnet; sealed juror bundles open after the deadline without the operator |
 | Economic loop in SUI | Budgets escrowed at `create_claim`, per-seat jury-reward `PayoutTicket`s and refunds as one-time tickets, a 5 percent protocol-fee ticket, seat stakes (a 0.1 SUI bond opens a seat and its jury rewards go to the staker), demo binary pool consuming certificates (`/risk`); pooling several stakers per seat is the recorded next step |
@@ -558,7 +558,7 @@ to on-chain before anyone reveals.
 
 | Used for | How | Check it |
 | --- | --- | --- |
-| Protocol of record | Claims, committees, jury seats, revealed votes, certificates and payout tickets are Sui objects; deadlines, thresholds, payouts and seat stakes enforced in Move (89 tests) | Every object and tx in the UI opens on Suiscan |
+| Protocol of record | Claims, committees, jury seats, revealed votes, certificates and payout tickets are Sui objects; deadlines, thresholds, payouts and seat stakes enforced in Move (89 tests) | Every object and tx in the UI opens on SuiVision |
 | Jury selection | Native `Random` draw under the model-family constraints | `move/openverdict/sources/jury.move` |
 | Commit-reveal voting | Commitments bind the approved run hash on-chain before any reveal; `blake2b256(BCS(preimage))` is recomputable by anyone | `/verify` recomputes it in the browser |
 | Evidence freezing | The manifest merkle root is frozen into an `EvidenceBundle` object before any vote reveals | Report page, evidence bundle chip |
@@ -588,7 +588,7 @@ to on-chain before anyone reveals.
 | --- | --- | --- |
 | Gas for wallet-signed pool entries and seat stakes | The browser builds the transaction kind, the server allowlists it and Shinami attaches gas and signs; the user's wallet signs the bytes Shinami returned, so the user still approves the full transaction | `app/api/sponsor/route.ts`; a sponsored deposit or stake shows "Gas paid by OpenVerdict (Shinami Gas Station)" with its digest |
 | Google sign-in without SUI | A zkLogin address created by a Google login holds no SUI, so without sponsorship it cannot act at all; with it, the first on-chain action costs the user nothing, and a seat stake costs exactly the 0.1 SUI bond | `/claims/<id>` market panel after continuing with Google; `/agents` stake card |
-| Fund health | `gas_getFund` reports fund name, network, balance and in-flight reservations, with no key in the output | `pnpm sponsor:check`; a live sponsored testnet transaction: [9ToB29r3…](https://suiscan.xyz/testnet/tx/9ToB29r3WWJv7odpai4HkTMjjccmu3aCndrxEAoViGjw) (sender the operator, gas owner Shinami's fund) |
+| Fund health | `gas_getFund` reports fund name, network, balance and in-flight reservations, with no key in the output | `pnpm sponsor:check`; a live sponsored testnet transaction: [9ToB29r3…](https://testnet.suivision.xyz/txblock/9ToB29r3WWJv7odpai4HkTMjjccmu3aCndrxEAoViGjw) (sender the operator, gas owner Shinami's fund) |
 
 The access key never reaches the browser: Shinami's Gas Station refuses CORS
 requests by design, and a leaked key drains the fund. It stays in
@@ -606,7 +606,7 @@ A rejected kind never reaches Shinami, so a rejection costs the fund nothing.
 Configure it with `SHINAMI_GAS_ACCESS_KEY` (and optionally `SHINAMI_GAS_ENDPOINT`
 for a non-US region), then run `pnpm sponsor:check` to print the fund line, or
 `pnpm sponsor:check --send` to sponsor one real operator transaction and see the
-gas owner on Suiscan. With the key unset the app degrades quietly: the route
+gas owner on SuiVision. With the key unset the app degrades quietly: the route
 answers 503 and the deposit falls back to wallet-paid gas, labelled as such.
 
 Next rungs of the same ladder: sponsored juror commit and reveal, so a seat never

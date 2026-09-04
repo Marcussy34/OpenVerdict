@@ -949,8 +949,8 @@ lowercase hex. Transaction digests are base58; Walrus blob ids are base64url.
 | Evidence page | `https://app.openverdict.info/evidence/<evidenceId>` |
 | Agent page | `https://app.openverdict.info/agents/<agentProfileId>` |
 | Board, submit, verify, agents, risk | `/claims`, `/fact-check`, `/verify`, `/agents`, `/risk` |
-| Sui object | `https://suiscan.xyz/testnet/object/<objectId>` |
-| Sui transaction | `https://suiscan.xyz/testnet/tx/<digest>` |
+| Sui object | `https://testnet.suivision.xyz/object/<objectId>` |
+| Sui transaction | `https://testnet.suivision.xyz/txblock/<digest>` |
 | Walrus blob | `https://aggregator.walrus-testnet.walrus.space/v1/blobs/<blobId>` |
 | GonkaRouter receipt | `https://api.gonkarouter.io/v1/receipts/<gatewayRequestId>` |
 

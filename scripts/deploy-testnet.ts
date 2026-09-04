@@ -141,7 +141,7 @@ async function main(): Promise<void> {
     console.log(`published ${ids.packageId}`);
     console.log(`registry  ${ids.registryObjectId}`);
     console.log(`digest    ${digest}`);
-    console.log(`explorer  https://suiscan.xyz/testnet/tx/${digest}`);
+    console.log(`explorer  https://testnet.suivision.xyz/txblock/${digest}`);
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

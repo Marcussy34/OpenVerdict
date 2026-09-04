@@ -43,7 +43,7 @@
       }
     ]
   },
-  "explorerTxTemplate": "https://suiscan.xyz/testnet/tx/{digest}",
+  "explorerTxTemplate": "https://testnet.suivision.xyz/txblock/{digest}",
   "adminCapObjectId": "0x30d1986921d399a3fe4b42559021042f4499c8e6373612286ad3d02ba3ae0637",
   "pauseCapObjectId": "0x3d38995c3070d9ae9bb7e2827f286be0b2179de0348d3d44b94bc8a174f18810",
   "evidenceCapObjectId": "0xa8a5a0f5a2bede5961cecefda10f77a64517195da4c3d3c387c591278a86c190",

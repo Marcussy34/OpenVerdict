@@ -60,7 +60,7 @@ schema strips them, so they never reach the running engine
 | `gonka` | `{ mode, baseUrl, models[] }` | gateway and model catalogue |
 | `committee` | `{ size, threshold, maxSeatsPerModel, minDistinctModels }` | mirrored from `jury.move` |
 | `seal` | `{ packageId, threshold, keyServers[] }`, optional | the reveal-key escrow policy |
-| `explorerTxTemplate` | string | e.g. `https://suiscan.xyz/testnet/tx/{digest}` |
+| `explorerTxTemplate` | string | e.g. `https://testnet.suivision.xyz/txblock/{digest}` |
 
 Source: the schema at `lib/sui/manifest.ts:13-83`. Cross-field validation at
 `:96-116` requires a local Walrus mode to name a directory, `walrus.mode` to
@@ -363,16 +363,20 @@ These `u8` codes are a shared wire contract between the Move modules and
 ## Explorer links
 
 `lib/web/explorer.ts` builds every link from `NEXT_PUBLIC_SUI_NETWORK`, and
-anything other than the exact string `mainnet` resolves to testnet.
+anything other than the exact string `mainnet` resolves to testnet. SuiVision
+keeps the network in the host, so the base is `https://testnet.suivision.xyz`
+on testnet and `https://suivision.xyz` on mainnet.
 
 | Target | Shape |
 | --- | --- |
-| Object, including a package | `https://suiscan.xyz/{{network}}/object/<id>` |
-| Address | `https://suiscan.xyz/{{network}}/account/<address>` |
-| Transaction | `https://suiscan.xyz/{{network}}/tx/<digest>` |
+| Object, including a package | `<base>/object/<id>` |
+| Address | `<base>/account/<address>` |
+| Transaction | `<base>/txblock/<digest>` |
 | Walrus blob | `https://aggregator.walrus-testnet.walrus.space/v1/blobs/<blobId>` |
 
 A Sui package is an object, so a package link uses the object shape.
+SuiVision also serves `<base>/package/<packageId>`, but the object page is
+the one the app links to.
 
 ## Upgrades
 

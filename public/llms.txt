@@ -55,7 +55,7 @@ Check it against sources that are not ours:
 - Sui JSON-RPC: `https://sui-testnet-rpc.publicnode.com` or
   `https://fullnode.testnet.sui.io:443` (`sui_getObject`,
   `sui_getTransactionBlock`).
-- Sui explorer: `https://suiscan.xyz/testnet/tx/<digest>` and `/object/<id>`.
+- Sui explorer: `https://testnet.suivision.xyz/txblock/<digest>` and `/object/<id>`.
 - Walrus: `https://aggregator.walrus-testnet.walrus.space/v1/blobs/<blobId>`.
 - GonkaRouter: `https://api.gonkarouter.io/v1/receipts/<gatewayRequestId>`.
 
