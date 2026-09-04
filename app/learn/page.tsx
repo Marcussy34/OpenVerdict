@@ -3,14 +3,15 @@ import type { Metadata } from "next";
 import { PageHeader } from "@/components/viz/page-header";
 import { Hairline, NumberChip, SplitButton } from "@/components/landing/primitives";
 import { Judge } from "@/components/icons";
+import { DOCS_URL } from "@/lib/web/site-urls";
 
 export const metadata: Metadata = {
   title: "Learn",
 };
 
 // Everything technical (the protocol, the API, the audit checks) lives on the
-// docs site, which is what keeps this page in plain words.
-const DOCS_URL = "https://docs.openverdict.info";
+// docs site, which is what keeps this page in plain words. DOCS_URL is the
+// docs host when NEXT_PUBLIC_DOCS_URL is set and the in-app /docs otherwise.
 
 /** How a verdict happens: five steps, one line each, in the reader's words. */
 const STEPS = [

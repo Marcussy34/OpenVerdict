@@ -13,6 +13,15 @@ const nextConfig: NextConfig = {
   // route reaches the engine through getServerEngine, so trace it globally.
   outputFileTracingIncludes: {
     "/*": ["./config/*.json"],
+    // The docs site reads its Markdown from disk at request time, plus the
+    // three repository files it renders in place of copying them.
+    "/docs/[[...slug]]": [
+      "./docs/site/*.md",
+      "./docs/API.md",
+      "./docs/GONKA-INTEGRATION.md",
+      "./AGENTS.md",
+    ],
+    "/sitemap.xml": ["./docs/site/*.md"],
   },
   // CSP is omitted because wallet extensions and the Enoki sign-in popup
   // inject scripts.

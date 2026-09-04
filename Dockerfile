@@ -20,11 +20,15 @@ ARG NEXT_PUBLIC_SUI_NETWORK=testnet
 # hand-off and the client bundles read these; the proxy reads them at runtime).
 ARG NEXT_PUBLIC_APP_URL
 ARG NEXT_PUBLIC_SITE_URL
+# The documentation origin (docs.openverdict.info). Unset keeps the docs
+# in-app at /docs, so the same build serves a one-host deployment.
+ARG NEXT_PUBLIC_DOCS_URL
 ENV NEXT_PUBLIC_ENOKI_API_KEY=$NEXT_PUBLIC_ENOKI_API_KEY \
     NEXT_PUBLIC_GOOGLE_CLIENT_ID=$NEXT_PUBLIC_GOOGLE_CLIENT_ID \
     NEXT_PUBLIC_SUI_NETWORK=$NEXT_PUBLIC_SUI_NETWORK \
     NEXT_PUBLIC_APP_URL=$NEXT_PUBLIC_APP_URL \
-    NEXT_PUBLIC_SITE_URL=$NEXT_PUBLIC_SITE_URL
+    NEXT_PUBLIC_SITE_URL=$NEXT_PUBLIC_SITE_URL \
+    NEXT_PUBLIC_DOCS_URL=$NEXT_PUBLIC_DOCS_URL
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN pnpm build
 

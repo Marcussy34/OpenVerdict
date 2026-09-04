@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useReducedMotion } from "motion/react";
 import { CornerPin, GridGuides, Hairline, ArrowUp, Eyebrow } from "./primitives";
 import { SuiMark, GonkaMark } from "@/components/brand/logos";
+import { DOCS_URL } from "@/lib/web/site-urls";
 import { useScrollFrame, clamp01 } from "./scroll-driver";
 
 const NAVIGATION = [
@@ -85,6 +86,8 @@ export function LandingFooter() {
       : null;
 
   const resources = [
+    // Its own host when NEXT_PUBLIC_DOCS_URL names one, otherwise /docs here.
+    { href: DOCS_URL, label: "Docs" },
     { href: REPO, label: "GitHub repository" },
     { href: `${REPO}/blob/main/docs/demo/runbook.md`, label: "Demo runbook" },
     // Always one row: the link fills in when /api/status answers, so the
@@ -142,8 +145,11 @@ export function LandingFooter() {
                 <li key={item.label}>
                   <a
                     href={item.href}
-                    target="_blank"
-                    rel="noreferrer"
+                    // Docs stay in the tab when they are served from this
+                    // deployment; every other resource is another site.
+                    {...(item.href.startsWith("http")
+                      ? { target: "_blank", rel: "noreferrer" }
+                      : {})}
                     className="transition-opacity hover:opacity-70"
                   >
                     {item.label}

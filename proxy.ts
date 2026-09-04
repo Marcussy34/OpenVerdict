@@ -7,9 +7,11 @@ import {
 
 /**
  * Next.js 16 proxy: redirects www to the apex, sends apex console paths to the
- * app host, and rewrites the app-host root to /app. Two-host redirects are
- * no-ops when NEXT_PUBLIC_APP_URL is unset. Railway supplies the original host
- * through x-forwarded-host.
+ * app host, rewrites the app-host root to /app, and rewrites every docs-host
+ * path to /docs. Two-host redirects are no-ops when NEXT_PUBLIC_APP_URL is
+ * unset; the docs rewrite only fires on a `docs.` host, so /docs keeps serving
+ * the same pages on the landing and console hosts. Railway supplies the
+ * original host through x-forwarded-host.
  */
 export function proxy(request: NextRequest) {
   const host =

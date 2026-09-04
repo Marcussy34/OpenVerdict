@@ -1,11 +1,14 @@
 /**
- * Host-based routing: openverdict.info is the landing page and
- * app.openverdict.info opens the dashboard directly. Only the root path of an
- * `app.` host is rewritten; every other path is served as requested, so the
- * same deployment serves both hostnames.
+ * Host-based routing: openverdict.info is the landing page,
+ * app.openverdict.info opens the dashboard directly and docs.openverdict.info
+ * serves the technical documentation. Only the root path of an `app.` host is
+ * rewritten; every other path is served as requested, so the same deployment
+ * serves all three hostnames.
  */
 export const APP_HOST_PREFIX = "app.";
+export const DOCS_HOST_PREFIX = "docs.";
 export const DASHBOARD_PATH = "/app";
+export const DOCS_PATH = "/docs";
 export const CONSOLE_PATHS: readonly string[] = [
   "/app",
   "/claims",
@@ -25,8 +28,26 @@ export function rewritePathForHost(
   if (!host) return null;
   // Hosts may arrive with a port (local runs, some proxies); compare the name.
   const hostname = host.split(":")[0]?.trim().toLowerCase() ?? "";
+  // The docs host serves nothing but the documentation, so every path it is
+  // asked for is one of its pages: "/" is the index and "/trust-model" is
+  // "/docs/trust-model". A path that already names /docs passes straight
+  // through, so a link copied from another host never doubles the prefix.
+  if (hostname.startsWith(DOCS_HOST_PREFIX)) return docsPathForRequest(pathname);
   if (!hostname.startsWith(APP_HOST_PREFIX)) return null;
   return pathname === "/" ? DASHBOARD_PATH : null;
+}
+
+/** True when this request arrived on the documentation host. */
+export function isDocsHost(host: string | null | undefined): boolean {
+  if (!host) return false;
+  const hostname = host.split(":")[0]?.trim().toLowerCase() ?? "";
+  return hostname.startsWith(DOCS_HOST_PREFIX);
+}
+
+/** The /docs path a docs-host request maps to, or null when it already is one. */
+function docsPathForRequest(pathname: string): string | null {
+  if (pathname === DOCS_PATH || pathname.startsWith(`${DOCS_PATH}/`)) return null;
+  return pathname === "/" ? DOCS_PATH : `${DOCS_PATH}${pathname}`;
 }
 
 /** Matches a console route itself or one of its nested paths. */

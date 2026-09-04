@@ -1,8 +1,17 @@
 import type { MetadataRoute } from "next";
-import { SITE_URL, APP_URL } from "@/lib/web/site-urls";
+import { loadDocNav } from "@/lib/docs/pages";
+import { SITE_URL, APP_URL, DOCS_URL } from "@/lib/web/site-urls";
 
-// Static sitemap covering the landing site and console application routes.
-export default function sitemap(): MetadataRoute.Sitemap {
+// Static sitemap covering the landing site, console routes and the docs.
+export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
+  // The docs list is read from docs/site, so a new page is listed by adding it.
+  const docsOrigin = DOCS_URL.startsWith("http")
+    ? DOCS_URL
+    : `${SITE_URL}${DOCS_URL}`;
+  const docs = (await loadDocNav()).map((page) => ({
+    url: page.slug ? `${docsOrigin}/${page.slug}` : `${docsOrigin}/`,
+  }));
+
   return [
     {
       url: `${SITE_URL}/`,
@@ -38,5 +47,6 @@ export default function sitemap(): MetadataRoute.Sitemap {
     {
       url: `${APP_URL}/fact-check`,
     },
+    ...docs,
   ];
 }
