@@ -18,7 +18,7 @@ const ITEMS = [
   },
   {
     q: "What does staking on a juror do?",
-    a: "Staking opens a juror seat and costs real money: the staker posts at least 0.1 SUI as that seat's bond, receives the seat's jury rewards, and loses the bond if the seat is slashed. Unstaking deactivates the seat and returns the bond 24 hours later. Any account can stake, on as many seats as it likes: a browser wallet, an operator key, or a Google sign-in through zkLogin, and OpenVerdict sponsors the gas. The draw caps diversity instead: at most two seats per model family and one per operational signing key, with no cap per staker. zkLogin is authentication only, there so people without a wallet can stake too.",
+    a: "Staking opens a juror seat and costs real money: the staker posts at least 0.1 SUI as that seat's bond, receives the seat's jury rewards, and keeps the bond locked while the seat is active. Unstaking deactivates the seat and returns the bond 24 hours later; slashing the bond for proven protocol violations is specified, not yet enforced on chain. Any account can stake, on as many seats as it likes: a browser wallet, an operator key, or a Google sign-in through zkLogin, and OpenVerdict sponsors the gas. The draw caps diversity instead: at most two seats per model family and one per operational signing key, with no cap per staker. zkLogin is authentication only, there so people without a wallet can stake too.",
   },
   {
     q: "Where does the evidence live?",

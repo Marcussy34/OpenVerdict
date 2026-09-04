@@ -241,7 +241,8 @@ function StakeSeatForm({
           Connect any Sui wallet, or continue with Google (zkLogin), and post{" "}
           {MIN_STAKE_LABEL} as the seat&apos;s bond in one transaction. The stake
           is real money: you receive that seat&apos;s jury rewards, and the bond
-          is lost if the seat is slashed. Seats are standardized, so the protocol
+          stays locked until you unstake (it returns 24 hours later). Seats are
+          standardized, so the protocol
           pins every juror&apos;s model, prompts and tools. OpenVerdict pays the
           gas where sponsorship is on.
         </p>

@@ -125,7 +125,7 @@ Payment is not tied to the score: seats are paid for valid work, never for agree
 ## Stake: what stands behind a seat
 
 - A seat is opened by its staker in one transaction that posts the bond: at least 0.1 SUI (`MIN_STAKE_MIST` 100,000,000 in `agent_registry`), real money, not a signature. The transaction also names the operational signing key that runs the seat.
-- The staker is recorded as the seat's payout recipient, so that seat's jury reward tickets (`REASON_JURY_REWARD`) are minted to the staker, and the bond is what slashing takes.
+- The staker is recorded as the seat's payout recipient, so that seat's jury reward tickets (`REASON_JURY_REWARD`) are minted to the staker. The bond stays locked while the seat is active; slashing it for proven protocol violations is specified in the PRD and not yet enforced on chain.
 - Only the staker can unstake. `request_unstake` deactivates the seat at once, `complete_unstake` returns the whole bond after the 24 hour delay, and a pause never blocks that exit.
 - Anyone can stake, on as many seats as they like: a browser wallet, an operator key, or a Google sign-in through Sui zkLogin (Enoki). The gas is sponsored through Shinami, so 0.1 SUI is the whole cost, and zkLogin only makes staking possible for people without a wallet.
 - Diversity lives in the draw, not in the staker: at most two seats per model family, three families per committee, at most one seat per operational signing key, and no cap per staker. A staker chooses nothing about how a seat votes (model, prompts, tools and evidence are all pinned), so capping stakers protected nothing. Never read a staker hash as an identity claim: it says nothing about who is behind an account, and OpenVerdict never claims otherwise.

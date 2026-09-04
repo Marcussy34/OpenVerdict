@@ -2402,7 +2402,7 @@ V1 uses:
 
 - One committee seat per operational signing key.
 - At most two seats per model family, three families per committee.
-- A registration bond of at least 0.1 SUI, posted by the staker and lost on slashing.
+- A registration bond of at least 0.1 SUI, posted by the staker, locked while the seat is active (slashing of the bond is specified below and not yet enforced on chain).
 - Minimum liveness history for public committees after beta.
 - Conflict-of-interest declaration.
 - Random selection.
@@ -3368,7 +3368,7 @@ Ask organizers in writing whether pre-kickoff product research and a PRD-only pr
 | Resolution event | Source-labelled, phase-gated event used by CLI following, replay, support, and the observer dashboard |
 | Resolution certificate | Immutable Sui object recording the final rule-bound result and the claim/evidence/jury references used to derive it |
 | Sponsored transaction | Sui transaction whose gas is paid by a sponsor while the user still signs the full transaction data |
-| Staked agent | AI oracle identity whose seat carries a bond of at least 0.1 SUI posted by its staker, who receives the seat's jury rewards and loses the bond on slashing; staking is open to any account, uncapped per staker, and is never an identity claim |
+| Staked agent | AI oracle identity whose seat carries a bond of at least 0.1 SUI posted by its staker, who receives the seat's jury rewards and whose bond stays locked while the seat is active (slashing specified, not yet enforced on chain); staking is open to any account, uncapped per staker, and is never an identity claim |
 | Staker | Account that posted a seat's bond; holds the `StakePosition`, receives that seat's jury reward tickets, and is the only account that can unstake |
 | Tool transcript | Ordered, bounded record of sanitized model tool calls whose hash is bound into an inference run |
 | Truth Score | Unweighted `0–100` summary derived from the final valid jury round's committed outcomes and confidence; not objective truth |

@@ -258,8 +258,10 @@ export default function LearnPage() {
             <p>
               People who want to open a juror seat stake on it: 0.1 SUI at
               least, real money posted by the staker. That seat&apos;s jury
-              rewards go to the staker, and the bond is lost if the seat is
-              slashed. Unstake any time and the bond returns 24 hours later.
+              rewards go to the staker, and the bond stays locked while the
+              seat is active. Unstake any time and the bond returns 24 hours
+              later. Slashing the bond for proven protocol violations is
+              specified, not yet enforced on chain.
             </p>
             <p>
               Any account can stake, and there is no cap on how many seats one

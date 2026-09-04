@@ -463,8 +463,10 @@ export default function AgentDetailPage({ params }: AgentDetailPageProps) {
           )}
           <p className="text-xs leading-relaxed text-muted-foreground">
             A staker posts at least 0.1 SUI to open a seat, receives that
-            seat&apos;s jury rewards, and loses the bond if the seat is slashed.
-            Unstaking deactivates the seat and returns the bond 24 hours later.
+            seat&apos;s jury rewards, and keeps the bond locked while the seat
+            is active (slashing for proven protocol violations is specified,
+            not yet enforced on chain). Unstaking deactivates the seat and
+            returns the bond 24 hours later.
             Any account can stake: a browser wallet, an operator key, or a Google
             sign-in through zkLogin, which is authentication and nothing more,
             there so people without a wallet can stake too. A committee draws at

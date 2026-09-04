@@ -198,12 +198,12 @@ dark mode).
 | Storage of record | Walrus (`@mysten/walrus` 1.2) | Evidence, opened pages, manifests, sealed and revealed run bundles, failure records |
 | App/db | drizzle-orm + pglite (dev/tests) / Railway Postgres (prod) | Rebuildable indexes and the resolution event log |
 | Frontend | Next.js 16, React 19, Tailwind 4, shadcn/ui, iconsax | Read-only observer + verification UI |
-| CLI | TypeScript + commander 15 (`pnpm cli`) | Complete control, inspection, automation |
+| CLI | TypeScript: `pnpm cli` (operator console, commander 15) and `pnpm ov` (public: weather, board, extract, submit, watch, audit) | Complete control, inspection, automation; the public journey with no key |
 | Validation | zod 4 (strict schemas) | Oracle I/O contracts, manifests, config |
 | Hashing | `@noble/hashes` blake2b-256 == `sui::hash::blake2b256` | One commitment format across TS and Move |
 | Onboarding | `@mysten/enoki` (zkLogin) + dapp-kit v2 | Social-login self-custodial addresses; env-gated, wallet-standard |
 | Object metadata | Sui Object Display (`display_meta` module) | Certificates/profiles/positions render in wallets + explorers |
-| Tests | vitest 4 + `sui move test` | 601 TS + 77 Move (73 protocol, 4 Seal policy), incl. the cross-language parity gate |
+| Tests | vitest 4 + `sui move test` + the localnet E2E | 787 TS + 92 Move (88 protocol, 4 Seal policy), incl. the cross-language parity gate; `pnpm e2e:localnet` runs every lifecycle on a fresh localnet |
 
 ---
 
@@ -380,15 +380,19 @@ The money flows that exist on-chain today:
 - **Disputes fund themselves.** The optimistic pathway finalizes
   unchallenged bonded outcomes with zero inference cost; a challenge
   escalates to a jury and the losing side's bond pays for it.
-- **The protocol takes a fee.** A treasury cut of each committee budget is
-  the sustainability switch (landing in the current release).
+- **The protocol takes a fee.** Five percent of each committee budget
+  (`protocol_fee_bps`, 500 on the registry) is minted as its own treasury
+  payout ticket at settlement, next to the jury reward tickets; on the
+  settled claim `0x273220b5…` that was one 500,000 MIST fee ticket beside
+  five 1,900,000 MIST jury tickets, all in the finalize transaction.
 
 Stake is the gate on that faucet, and it is real money: a seat is opened by
 its staker posting at least **0.1 SUI** as the seat's bond in one wallet
 transaction (gas sponsored through Shinami, so a Google sign-in can stake
 with 0.1 SUI and nothing else). The staker receives that seat's jury
-rewards, loses the bond when the seat is slashed, and gets it back 24 hours
-after unstaking. The draw stays diverse on its own terms: at most two seats
+rewards, keeps the bond locked while the seat is active, and gets it back
+24 hours after unstaking (slashing the bond for proven protocol violations
+is specified in the PRD and not yet enforced on chain). The draw stays diverse on its own terms: at most two seats
 per model family, three families per jury, and at most one seat per
 operational signing key, with no cap per staker. Where DIVE gates agent
 rewards with World ID personhood proofs on the agent's owner, OpenVerdict
@@ -397,7 +401,8 @@ stake and a diversity draw.
 
 Decentralization ladder: the team's seven demo jurors are the starting
 roster; anyone can now open a seat by staking on it (their stake, their
-bond, their earnings, our compute); finally, self-hosted juror workers bring
+bond, their earnings, our compute), and the first staked seat is already
+live on testnet ([profile `0x81a737…`](https://suiscan.xyz/testnet/object/0x81a737262c820dfff6861ba57b35f494b7dc9a558a941b55fa932d7de8add1ba), opened with 0.1 SUI, gas paid by Shinami); finally, self-hosted juror workers bring
 their own GonkaRouter keys and pay their own inference, verified by the
 engine exactly as our own runs are (run hashes, receipts, re-execution).
 
@@ -484,11 +489,11 @@ and the chain does not get shorter; it breaks.
 | --- | --- |
 | Sui is integral | Native `Random` jury selection, owned `JurySeat`s, Move capabilities, immutable certificates, coin settlement |
 | Ownership & identity | `AgentProfile` + `AgentCap`; every seat, approval, ticket is an owned object |
-| On-chain execution | Deadlines, commit-reveal, thresholds, and payouts enforced in Move — 73 tests |
-| Working demo path | Localnet E2E exit 0 AND finalized LIVE testnet lifecycles on https://app.openverdict.info: YES certificate [`0xff3191bc…`](https://suiscan.xyz/testnet/object/0xff3191bcad4a645f44a6caccf2e6c661e8defcbf4943b44ec8b08d91b4f4133c) (claim #25, 5 of 5 seats, Seal escrows) and NO certificate [`0x975b3ae1…`](https://suiscan.xyz/testnet/object/0x975b3ae103c7832c4405714196528808af70ef975fe0d0db3ae70017191c00e4) (claim #26, hedged calls); see `docs/demo/runbook.md` |
+| On-chain execution | Deadlines, commit-reveal, thresholds, payouts and seat stakes enforced in Move — 88 tests |
+| Working demo path | Localnet E2E exit 0 AND finalized LIVE testnet lifecycles on https://app.openverdict.info: NO certificate [`0x42954c91…`](https://suiscan.xyz/testnet/object/0x42954c917d0b7e34cb4634091a5ece1921a89a931f4872f690971b62fdcee706) ("Humans use only ten percent of their brains.", 5 of 5 seats, attempt 3 of 3, audited 110/110 by `pnpm ov audit`), YES certificate [`0xff3191bc…`](https://suiscan.xyz/testnet/object/0xff3191bcad4a645f44a6caccf2e6c661e8defcbf4943b44ec8b08d91b4f4133c) (claim #25, 5 of 5 seats, Seal escrows) and NO certificate [`0x975b3ae1…`](https://suiscan.xyz/testnet/object/0x975b3ae103c7832c4405714196528808af70ef975fe0d0db3ae70017191c00e4) (claim #26, hedged calls); see `docs/demo/runbook.md` |
 | Walrus evidence layer | Every fetched page, evidence manifest, sealed and revealed run bundle is a public Walrus blob; its hash is pinned on-chain, so blobs are content addresses a verifier can fetch |
 | Reveal-key escrow (Seal) | Mysten Seal time-lock policy on testnet; sealed juror bundles open after the deadline without the operator |
-| Economic loop in SUI | Budgets escrowed at `create_claim`, per-seat jury-reward `PayoutTicket`s and refunds as one-time tickets, protocol-fee reason codes, demo binary pool consuming certificates (`/risk`); delegated seat staking is the recorded next step |
+| Economic loop in SUI | Budgets escrowed at `create_claim`, per-seat jury-reward `PayoutTicket`s and refunds as one-time tickets, a 5 percent protocol-fee ticket, seat stakes (a 0.1 SUI bond opens a seat and its jury rewards go to the staker), demo binary pool consuming certificates (`/risk`); pooling several stakers per seat is the recorded next step |
 
 Both public track pages were placeholders at spec time; final submission
 requirements must be reconfirmed against organizer material (PRD §7.3).
@@ -531,7 +536,7 @@ to on-chain before anyone reveals.
 
 | Used for | How | Check it |
 | --- | --- | --- |
-| Protocol of record | Claims, committees, jury seats, revealed votes, certificates and payout tickets are Sui objects; deadlines, thresholds and payouts enforced in Move (73 tests) | Every object and tx in the UI opens on Suiscan |
+| Protocol of record | Claims, committees, jury seats, revealed votes, certificates and payout tickets are Sui objects; deadlines, thresholds, payouts and seat stakes enforced in Move (88 tests) | Every object and tx in the UI opens on Suiscan |
 | Jury selection | Native `Random` draw under the model-family constraints | `move/openverdict/sources/jury.move` |
 | Commit-reveal voting | Commitments bind the approved run hash on-chain before any reveal; `blake2b256(BCS(preimage))` is recomputable by anyone | `/verify` recomputes it in the browser |
 | Evidence freezing | The manifest merkle root is frozen into an `EvidenceBundle` object before any vote reveals | Report page, evidence bundle chip |
