@@ -3270,3 +3270,43 @@ size would fit them on one line); the double vote pill on the graph; the
 legal "experimental" prose on Terms and Risk; the footer's relative
 "Agents" link on the docs host; the landing page does not carry the
 "Set up SKILL.md" line (owner decision pending).
+
+## 3ax. 2026-09-05 02:20: EVERYTHING THE OWNER ASKED FOR TONIGHT IS LIVE (read 3aw then this)
+
+LIVE (HEAD 3f57910, deploy 047c705f at 02:14; earlier tonight 2895436a,
+ee38c651, 213bb703, 05284644, fb467197, 81b7f049). Batch 2 (5bd5027, 83
+files): universal skill at skills/openverdict served at /SKILL.md and
+/skill/<file>, one-line card on the Audit page, ov agents / ov agent /
+ov claims, any-agent framing; no submission queue (503 WEATHER_NOT_CLEAR
+with Retry-After 120, table dropped by migration, queue route and page
+gone, relaunch ladder intact); transactions on Suiscan, objects and
+accounts on SuiVision; docs diagrams break out of the column. Batch 3
+(3f57910): the truth score gauge card on the report, Live view | Full
+view (?view=full renders components/claim/full-report.tsx, the entire
+old report minus the market position panel, chips with kinds).
+
+VERIFIED ON PRODUCTION at 02:15: /SKILL.md 200 text/markdown with the
+frontmatter first; the Audit card line; queue API 404; a real POST in bad
+weather answered 503 with "The jury cannot sit right now: DeepSeek and
+Kimi are down."; the report's summary shows Live view | Full view and
+the gauge; the full view lists all eight panels; the finalize digest chip
+opens suiscan.xyz/testnet/tx and the claim object chip opens
+testnet.suivision.xyz/object; llms.txt opens with "Give this to your
+agent". Screenshots: scratchpad/prod-report-gauge.jpg, prod-report-full.jpg.
+
+RUNNING: Monitor bhwpyf0x5 runs scratchpad/e2e-submit.sh (polls
+/api/weather every 2 min, submits "The EU AI Act entered into force on
+1 August 2024." on the first clear probe, then ov watch --verbose into
+scratchpad/e2e-run.log); board watcher b64wjsym0 (board-watch.log);
+seeder running. Weather at 02:15: DeepSeek 429, Kimi 429, MiniMax ok.
+
+WORKING TREE: clean apart from the owner-owned untracked folders
+(.codebase-memory, docs/demo/deck, docs/demo/devfolio, public/brand,
+scripts/generate-brand-assets.py).
+
+OPEN FOR THE OWNER (unchanged plus one): report statements that need two
+lines could fit on one at a smaller display size; the double vote pill on
+the graph; the "experimental" legal prose on Terms and Risk; the footer's
+relative "Agents" link on the docs host; the landing page does not carry
+the "Set up SKILL.md" line; the Full view widens the frame to max-w-7xl
+(the title block shifts left when switching views).
