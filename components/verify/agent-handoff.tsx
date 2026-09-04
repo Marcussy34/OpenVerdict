@@ -7,8 +7,9 @@ import { cn } from "@/lib/utils";
 /** The literal the prompt carries until a claim link is pasted; the reader replaces it. */
 const PLACEHOLDER = "<claim link>";
 
-/** One command line: the text, and one button that copies it. */
-function CommandRow({
+/** One command line: the text, and one button that copies it. Exported so the
+ *  claim report can carry the same instruction without a second copy of it. */
+export function CommandRow({
   text,
   ready,
   label,

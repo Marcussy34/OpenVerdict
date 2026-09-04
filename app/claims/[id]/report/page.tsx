@@ -1,64 +1,296 @@
 "use client";
 
-import { useState, useEffect, use, useCallback, useMemo, useRef } from "react";
+import {
+  Fragment,
+  use,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { StateBadge } from "@/components/claim/state-badge";
-import { isStrandedDiscussion } from "@/lib/engine/claim-lifecycle";
-import { useNow } from "@/components/use-now";
+import { truthScoreOf } from "@/components/claim/claim-format";
+import { CommandRow } from "@/components/verify/agent-handoff";
 import { useClaimEvents } from "@/components/use-claim-events";
-import { VerdictGauge } from "@/components/viz/verdict-gauge";
-import { ClaimTimeline } from "@/components/claim/timeline";
-import { TimeDisplay } from "@/components/time-display";
-import { PositionPanel } from "@/components/pool/position-panel";
-import { PageHeader, MetaTag } from "@/components/viz/page-header";
-import { Panel, FieldLabel, Well } from "@/components/viz/panel";
-import { HashChip } from "@/components/viz/hash-chip";
-import { suiObjectUrl, suiTransactionUrl, walrusBlobUrl } from "@/lib/web/explorer";
-import { SeatSeal, outcomeLabel, seatStateOf } from "@/components/viz/seat-seal";
-import { ModelBadge } from "@/components/viz/model-badge";
-import { logoFamily } from "@/components/viz/model-logo";
-import { Reveal } from "@/components/viz/reveal";
-import { RunProof } from "@/components/claim/run-proof";
-import { cn } from "@/lib/utils";
-import { deriveRunId } from "@/lib/verify/run-proof";
-import { researchFeed } from "@/lib/viz/research-feed";
-import { computeTruthScoreBps, agentProbabilityBps } from "@/lib/protocol/truthScore";
-import { OUTCOME } from "@/lib/protocol/constants";
-import type { ClaimInspection, FactCheckReport } from "@/lib/engine/contract";
+import { useNow } from "@/components/use-now";
+import { Hairline } from "@/components/landing/primitives";
 import {
-  DocumentText,
-  Eye,
-  ShieldTick,
-  Warning2,
-  Clock,
-  Judge,
-  Award,
-  DocumentDownload,
-  ArrowDown2,
-  Refresh,
-  Link21,
-  Global,
-  Cpu,
-  InfoCircle,
-} from "@/components/icons";
+  DebateTurnBubble,
+  debateSeatsOf,
+  debateTurnViews,
+  type DebateTurnView,
+} from "@/components/viz/debate-turn";
+import { HashChip } from "@/components/viz/hash-chip";
+import { JurorTrailPanel } from "@/components/viz/juror-card";
+import { ModelLogo, modelVariantFor } from "@/components/viz/model-logo";
+import { isStrandedDiscussion } from "@/lib/engine/claim-lifecycle";
+import { OUTCOME } from "@/lib/protocol/constants";
+import { cn } from "@/lib/utils";
+import { deriveRunId, type BrowserRunProof } from "@/lib/verify/run-proof";
+import { debateStanding } from "@/lib/viz/debate-standing";
+import { buildTranscript, jurorAt, type TranscriptJuror } from "@/lib/viz/transcript";
+import { suiObjectUrl, walrusBlobUrl } from "@/lib/web/explorer";
+import type {
+  ClaimInspection,
+  DeliberationTurnPublic,
+  FactCheckReport,
+  ResolutionEvent,
+} from "@/lib/engine/contract";
+import { ArrowDown2, ArrowLeft2, ExportSquare, Refresh, Warning2 } from "@/components/icons";
 
-interface ClaimDetailPageProps {
+interface ClaimReportPageProps {
   params: Promise<{ id: string }>;
 }
 
-export default function ClaimDetailPage({ params }: ClaimDetailPageProps) {
+/** The public console, for a page rendered before the browser reports its origin. */
+const FALLBACK_ORIGIN = "https://app.openverdict.info";
+
+/** The origin never changes while the page is open, so nothing to subscribe to. */
+const NEVER_CHANGES = () => () => {};
+const readOrigin = () => window.location.origin;
+const readFallbackOrigin = () => FALLBACK_ORIGIN;
+
+/** The only hues on this page: a verdict, a vote, a failure. */
+const OUTCOME_TEXT: Record<string, string> = {
+  YES: "text-yes",
+  NO: "text-no",
+  UNSURE: "text-unsure",
+};
+
+/** Where a running claim has got to, in as few words as the state allows. */
+const PHASE_WORD: Record<number, string> = {
+  0: "jury forming",
+  1: "jury forming",
+  2: "jury forming",
+  3: "jury forming",
+  4: "round one, sealed",
+  5: "round one, reveal",
+  6: "discussion",
+  7: "round two, sealed",
+  8: "round two, reveal",
+};
+
+/** The milestones the record lists; every other event kind is engine detail. */
+const MILESTONE: Record<string, string> = {
+  claim_created: "Claim created",
+  committee_selected: "Committee drawn",
+  evidence_frozen: "Evidence frozen",
+  run_approved: "Run approved",
+  vote_committed: "Vote sealed",
+  phase_changed: "Phase change",
+  vote_revealed: "Vote revealed",
+  DELIBERATION_TURN: "Debate turn",
+  debate_converged: "Debate ended",
+  output_repaired: "Output repaired",
+  inference_failed: "Seat failed",
+  claim_finalized: "Finalized",
+  verification_voided: "Attempt voided",
+  verification_relaunched: "Relaunched",
+  verification_gave_up: "Gave up",
+};
+
+/** The shared u8 vote outcome as its label. */
+function outcomeOf(value: number | undefined): "YES" | "NO" | "UNSURE" | undefined {
+  if (value === OUTCOME.YES) return "YES";
+  if (value === OUTCOME.NO) return "NO";
+  if (value === OUTCOME.UNSURE) return "UNSURE";
+  return undefined;
+}
+
+/** "PROVIDER_ERROR" reads as "Provider error" in a line of its own. */
+function reasonSentence(reason: string): string {
+  const words = reason.replace(/_/g, " ").trim().toLowerCase();
+  return words.length === 0 ? "" : `${words[0]!.toUpperCase()}${words.slice(1)}.`;
+}
+
+/** UTC, the clock the whole public record prints. */
+function stamp(atMs: number): string {
+  if (!Number.isFinite(atMs) || atMs <= 0) return "";
+  const iso = new Date(atMs).toISOString();
+  return `${iso.slice(0, 10)} ${iso.slice(11, 19)}Z`;
+}
+
+/** The verdict word and the colour it earns, for every state the page serves. */
+function verdictOf(
+  claim: ClaimInspection,
+  stranded: boolean,
+): { word: string; className: string; phase?: string } {
+  const attempt = claim.attemptChain?.status;
+  if (attempt === "VOIDED") return { word: "Voided", className: "text-ocean" };
+  if (attempt === "GAVE_UP") return { word: "Gave up", className: "text-ocean" };
+  if (claim.state === 12) return { word: "Cancelled", className: "text-ocean" };
+  if (claim.state === 11) return { word: "Unresolved", className: "text-ocean" };
+  if (claim.state >= 9) {
+    const outcome = claim.result?.result;
+    return {
+      word: outcome ?? "Finalized",
+      className: (outcome && OUTCOME_TEXT[outcome]) ?? "text-ocean",
+    };
+  }
+  // The discussion window closed without a second round: a stop, not progress.
+  if (stranded) return { word: "Expired", className: "text-ocean" };
+  return {
+    word: "In progress",
+    className: "text-primary",
+    ...(PHASE_WORD[claim.state] === undefined ? {} : { phase: PHASE_WORD[claim.state] }),
+  };
+}
+
+/** One seat as the jury line and the tiles read it. */
+type FinalVote = {
+  outcome?: "YES" | "NO" | "UNSURE";
+  revealed: boolean;
+  committed: boolean;
+  failed: boolean;
+};
+
+/** "4 of 5 jurors said YES, 1 failed." One line, whatever the claim's state. */
+function jurySentence(votes: readonly FinalVote[], settled?: string): string {
+  const total = votes.length;
+  if (total === 0) return "The jury is not drawn yet.";
+  const failed = votes.filter((vote) => vote.failed).length;
+  const revealed = votes.filter((vote) => vote.outcome !== undefined);
+  const sealed = votes.filter(
+    (vote) => vote.committed && !vote.revealed && !vote.failed,
+  ).length;
+
+  if (revealed.length === 0) {
+    if (failed === total) return `${total} jurors failed closed.`;
+    if (sealed > 0) return `${sealed} of ${total} votes sealed.`;
+    return `${total} jurors drawn, no votes yet.`;
+  }
+
+  const counts = new Map<string, number>();
+  for (const vote of revealed) {
+    counts.set(vote.outcome!, (counts.get(vote.outcome!) ?? 0) + 1);
+  }
+  const top = Math.max(...counts.values());
+  const leaders = [...counts.entries()].filter(([, count]) => count === top);
+  // The settled outcome is what the jurors are counted against; without one,
+  // the largest group speaks, and a tie is reported as the split it is.
+  const target =
+    settled !== undefined && counts.has(settled)
+      ? settled
+      : leaders.length === 1
+        ? leaders[0]![0]
+        : undefined;
+
+  const extras = [
+    sealed > 0 ? `${sealed} sealed` : "",
+    failed > 0 ? `${failed} failed` : "",
+  ].filter((part) => part.length > 0);
+  const tail = extras.length === 0 ? "" : `, ${extras.join(", ")}`;
+
+  if (target === undefined) return `${revealed.length} jurors split${tail}.`;
+  return `${counts.get(target)} of ${total} jurors said ${target}${tail}.`;
+}
+
+/** The claim's deliberation, snapshot and live stream merged by ordinal. */
+function mergeTurns(
+  claim: ClaimInspection,
+  events: readonly ResolutionEvent[],
+): DeliberationTurnPublic[] {
+  const byOrdinal = new Map<number, DeliberationTurnPublic>();
+  for (const turn of claim.deliberation ?? []) byOrdinal.set(turn.ordinal, turn);
+  for (const event of events) {
+    if (event.kind !== "DELIBERATION_TURN") continue;
+    const payload = event.payload as Partial<DeliberationTurnPublic>;
+    if (typeof payload.ordinal !== "number" || typeof payload.jurySeatId !== "string") continue;
+    const existing = byOrdinal.get(payload.ordinal);
+    byOrdinal.set(
+      payload.ordinal,
+      existing === undefined
+        ? (payload as DeliberationTurnPublic)
+        : { ...existing, ...payload },
+    );
+  }
+  return [...byOrdinal.values()].sort((left, right) => left.ordinal - right.ordinal);
+}
+
+/** The audit bundle is opaque JSON; read only the field the proof rows need. */
+function manifestBlobIds(report: FactCheckReport | null): Map<number, string> {
+  const found = new Map<number, string>();
+  const entries = report === null ? undefined : report.auditBundle.evidence;
+  if (!Array.isArray(entries)) return found;
+  for (const entry of entries) {
+    if (typeof entry !== "object" || entry === null) continue;
+    const record = entry as Record<string, unknown>;
+    if (typeof record.phase === "number" && typeof record.manifestBlobId === "string") {
+      found.set(record.phase, record.manifestBlobId);
+    }
+  }
+  return found;
+}
+
+/** One milestone line, with the repeats of a round folded into a count. */
+type TimelineRow = { key: string; label: string; count: number; atMs: number };
+
+function timelineRows(events: readonly ResolutionEvent[]): TimelineRow[] {
+  const rows: TimelineRow[] = [];
+  for (const event of events) {
+    if (event.visibility !== "PUBLIC_NOW") continue;
+    const label = MILESTONE[event.kind];
+    if (label === undefined) continue;
+    const last = rows.at(-1);
+    // Five sealed votes in a row are one line with a count, not five lines.
+    if (last !== undefined && last.label === label) {
+      last.count += 1;
+      continue;
+    }
+    const atMs = Date.parse(event.publishedAt ?? event.occurredAt);
+    rows.push({
+      key: `${event.kind}:${event.sequence}`,
+      label,
+      count: 1,
+      atMs: Number.isFinite(atMs) ? atMs : 0,
+    });
+  }
+  return rows;
+}
+
+/** One line of the Proof section: a label, and what proves it. */
+function ProofRow({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="flex min-h-9 flex-wrap items-center justify-between gap-x-4 gap-y-1 border-b border-border/60 py-1.5 last:border-b-0">
+      <span className="text-[13px] text-muted-foreground">{label}</span>
+      <span className="flex min-w-0 flex-wrap items-center gap-1.5">{children}</span>
+    </div>
+  );
+}
+
+/** The two quiet ways out of this page. */
+function SideLink({ href, children }: { href: string; children: React.ReactNode }) {
+  return (
+    <Link
+      href={href}
+      className="ov-micro ov-micro-sm inline-flex min-h-10 items-center border border-border px-3 text-muted-foreground transition-colors hover:border-sea/40 hover:text-primary focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+    >
+      {children}
+    </Link>
+  );
+}
+
+export default function ClaimReportPage({ params }: ClaimReportPageProps) {
   // Hooks run before the loading and error returns below (rules of hooks).
   const now = useNow();
   const { id } = use(params);
   const { events } = useClaimEvents(id);
   const hasClaimRef = useRef(false);
+  const requestedProofsRef = useRef(new Set<string>());
+  const origin = useSyncExternalStore(NEVER_CHANGES, readOrigin, readFallbackOrigin);
 
   const [claim, setClaim] = useState<ClaimInspection | null>(null);
   const [report, setReport] = useState<FactCheckReport | null>(null);
   const [loading, setLoading] = useState(true);
   const [engineOffline, setEngineOffline] = useState(false);
   const [notFound, setNotFound] = useState(false);
+  // One trail open at a time, the pattern the claim page uses.
+  const [openJuror, setOpenJuror] = useState<number | null>(null);
+  const [proofsByRunId, setProofsByRunId] = useState<Record<string, BrowserRunProof>>({});
+  const [loadingRunIds, setLoadingRunIds] = useState<ReadonlySet<string>>(new Set());
 
   const loadData = useCallback(async () => {
     try {
@@ -148,7 +380,7 @@ export default function ClaimDetailPage({ params }: ClaimDetailPageProps) {
   }, [id]);
 
   // Live: any new engine event refetches the inspection (debounced), so the
-  // page follows the claim without the Refresh button.
+  // page follows the claim without a refresh button.
   const eventCount = events.length;
   useEffect(() => {
     if (eventCount === 0) return;
@@ -158,125 +390,83 @@ export default function ClaimDetailPage({ params }: ClaimDetailPageProps) {
     return () => clearTimeout(timer);
   }, [eventCount, loadData]);
 
-  /** Merge on-chain seat state with the post-reveal agent card for each seat. */
-  const seats = useMemo(() => {
-    if (!claim) return [];
-    return (claim.commitments ?? []).map((c, i) => {
-      const card = report?.agents.find((a) => a.agentProfileId === c.agentProfileId);
-      // The engine stores five ordered seats per phase.
-      const phase = i < 5 ? 1 : 2;
-      return {
-        index: i + 1,
-        phase,
-        runId: deriveRunId(claim.claimId, c.jurySeatId, phase),
-        state: seatStateOf(c),
-        // Present only for a seat that failed before committing.
-        failureStatus: c.failureStatus,
-        outcome: outcomeLabel(c.outcome ?? card?.outcome),
-        confidenceBps: c.confidenceBps ?? card?.confidenceBps,
-        agentProfileId: c.agentProfileId,
-        jurySeatId: c.jurySeatId,
-        modelId: card?.modelId,
-        role: card?.role,
-        reasoning: card?.reasoning,
-        gonkaRequestId: card?.gonkaRequestId,
-      };
+  /** Fetch a juror's run proofs the first time its tile is opened. */
+  const requestProofs = useCallback((runIds: readonly string[]) => {
+    const pending = runIds.filter((runId) => !requestedProofsRef.current.has(runId));
+    if (pending.length === 0) return;
+    for (const runId of pending) requestedProofsRef.current.add(runId);
+    setLoadingRunIds((current) => new Set([...current, ...pending]));
+    void Promise.all(
+      pending.map(async (runId) => {
+        try {
+          const response = await fetch(
+            `/api/claims/${encodeURIComponent(id)}/runs/${encodeURIComponent(runId)}/proof`,
+            { cache: "no-store" },
+          );
+          if (!response.ok) return null;
+          return [runId, (await response.json()) as BrowserRunProof] as const;
+        } catch {
+          return null;
+        }
+      }),
+    ).then((loaded) => {
+      setLoadingRunIds((current) => {
+        const next = new Set(current);
+        for (const runId of pending) next.delete(runId);
+        return next;
+      });
+      setProofsByRunId((current) => {
+        const next = { ...current };
+        for (const entry of loaded) {
+          if (entry === null) continue;
+          next[entry[0]] = entry[1];
+        }
+        return next;
+      });
     });
-  }, [claim, report]);
+  }, [id]);
 
-  /** The live research feed, per seat: this lane's public tool calls in order. */
-  const researchSteps = useMemo(() => researchFeed(events), [events]);
+  // The same record the Live view reads: one juror per agent, across both
+  // rounds, with the research trail a fetched proof fills in for older claims.
+  const transcript = useMemo(
+    () =>
+      claim === null
+        ? { entries: [], jurors: [] as TranscriptJuror[] }
+        : buildTranscript({ claim, events, proofs: Object.values(proofsByRunId) }),
+    [claim, events, proofsByRunId],
+  );
 
-  /** Compute outcome agreement and spread across valid final-round votes. */
-  const agreementSummary = useMemo(() => {
-    if (!report || !report.finalRoundVotes || report.finalRoundVotes.length === 0) {
-      return null;
-    }
-    const validVotes = report.finalRoundVotes.filter((v) => v.valid);
-    if (validVotes.length === 0) return null;
-
-    // Count outcomes among valid votes
-    const counts: Record<"YES" | "NO" | "UNSURE", number> = {
-      YES: 0,
-      NO: 0,
-      UNSURE: 0,
-    };
-    for (const v of validVotes) {
-      counts[v.outcome] = (counts[v.outcome] || 0) + 1;
-    }
-
-    const maxCount = Math.max(counts.YES, counts.NO, counts.UNSURE);
-    // Find outcomes with max count to detect ties
-    const topOutcomes = (Object.keys(counts) as Array<"YES" | "NO" | "UNSURE">).filter(
-      (k) => counts[k] === maxCount,
-    );
-
-    const total = validVotes.length;
-    const outcomeText =
-      topOutcomes.length === 1
-        ? `${maxCount} of ${total} ${topOutcomes[0]}`
-        : `${total} votes, split`;
-
-    // Min and max mapped probabilities on a 0 to 100 scale with two decimals
-    const mappedProbs = validVotes.map(
-      (v) => agentProbabilityBps(OUTCOME[v.outcome], v.confidenceBps) / 100,
-    );
-    const minProb = Math.min(...mappedProbs).toFixed(2);
-    const maxProb = Math.max(...mappedProbs).toFixed(2);
-
-    return `${outcomeText} · spread ${minProb} to ${maxProb}`;
-  }, [report]);
-
-  /** Compute valid vote sum and mean for the score derivation breakdown table. */
-  const scoreDerivation = useMemo(() => {
-    if (
-      !report ||
-      report.truthScore === null ||
-      !report.finalRoundVotes ||
-      report.finalRoundVotes.length === 0
-    ) {
-      return null;
-    }
-    const validVotes = report.finalRoundVotes.filter((v) => v.valid);
-    const sumBps = validVotes.reduce(
-      (total, v) => total + agentProbabilityBps(OUTCOME[v.outcome], v.confidenceBps),
-      0,
-    );
-    const meanBps = computeTruthScoreBps(
-      validVotes.map((v) => ({
-        outcome: OUTCOME[v.outcome],
-        confidenceBps: v.confidenceBps,
-      })),
-    );
-    const score = meanBps !== null ? meanBps / 100 : null;
-
-    return {
-      validVotes,
-      sumBps,
-      meanBps,
-      score,
-    };
-  }, [report]);
-
-  const downloadAuditBundle = () => {
-    if (!report?.auditBundle) return;
-    const blob = new Blob([JSON.stringify(report.auditBundle, null, 2)], {
-      type: "application/json",
+  // The debate, numbered the way the record numbers it, keyed by the seat that
+  // spoke, so an opened juror shows its own turns and nobody else's.
+  const debateBySeat = useMemo(() => {
+    const bySeat = new Map<string, DebateTurnView[]>();
+    if (claim === null) return bySeat;
+    const turns = mergeTurns(claim, events);
+    if (turns.length === 0) return bySeat;
+    const seats = debateSeatsOf(claim);
+    const standing = debateStanding({
+      seats,
+      turns,
+      running: claim.state <= 6,
+      convergedAfterExchange: claim.debateConvergedAfterExchange ?? null,
     });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `openverdict-audit-${id.slice(0, 10)}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
+    for (const view of debateTurnViews({ turns, seats, standing })) {
+      const list = bySeat.get(view.turn.jurySeatId) ?? [];
+      list.push(view);
+      bySeat.set(view.turn.jurySeatId, list);
+    }
+    return bySeat;
+  }, [claim, events]);
+
+  const timeline = useMemo(() => timelineRows(events), [events]);
 
   if (loading) {
     return (
-      <div className="space-y-6 px-5 py-16 md:px-7">
-        <div className="h-9 w-52 animate-pulse rounded-lg bg-surface-2" />
-        <div className="h-56 animate-pulse rounded-2xl bg-surface" />
-        <div className="h-72 animate-pulse rounded-2xl bg-surface" />
+      <div className="mx-auto max-w-4xl space-y-6 px-5 py-10 md:px-7 lg:py-14">
+        <div className="h-12 animate-pulse bg-surface" />
+        <div className="h-4 w-2/3 animate-pulse bg-surface" />
+        <div className="h-16 w-1/2 animate-pulse bg-surface" />
+        <div className="h-24 animate-pulse bg-surface" />
       </div>
     );
   }
@@ -309,9 +499,7 @@ export default function ClaimDetailPage({ params }: ClaimDetailPageProps) {
     return (
       <div className="mx-auto flex max-w-2xl flex-col items-center gap-3 px-4 py-24 text-center">
         <h1 className="text-xl font-semibold text-ocean">Claim not found</h1>
-        <p className="text-sm text-muted-foreground">
-          No claim exists with this object id.
-        </p>
+        <p className="text-sm text-muted-foreground">No claim exists with this object id.</p>
         <HashChip value={id} full className="max-w-md" />
         <Button asChild size="sm" className="mt-2 min-h-[40px]">
           <Link href="/claims">Back to claims directory</Link>
@@ -320,736 +508,417 @@ export default function ClaimDetailPage({ params }: ClaimDetailPageProps) {
     );
   }
 
-  const isTerminal = claim.state >= 9;
-  const isDirectReview = claim.mode === 1;
-  const revealedCount = claim.commitments?.filter((c) => c.revealed).length ?? 0;
-  const sealedCount = claim.commitments?.filter((c) => c.committed).length ?? 0;
-  const verification = claim.verification;
+  // --- the verdict, from the record alone ---------------------------------
   const stranded = now !== null && isStrandedDiscussion(claim, now);
-  const attemptStopped = claim.attemptChain?.status === "VOIDED"
-    || claim.attemptChain?.status === "GAVE_UP";
-  const attemptRows = claim.attemptChain === undefined
-    ? []
-    : [
-        ...claim.attemptChain.previousAttempts,
-        {
-          claimId: claim.claimId,
-          attempt: claim.attemptChain.attempt,
-          status: claim.attemptChain.status,
-          voidReason: claim.attemptChain.gaveUpReason ?? claim.attemptChain.void?.reason,
-        },
-      ];
+  const verdict = verdictOf(claim, stranded);
+  const score = truthScoreOf(claim);
+  const seatById = new Map(claim.commitments.map((seat) => [seat.jurySeatId, seat]));
+  const jurors = transcript.jurors;
+  // A juror's last seat is its final-round seat, which is the vote that counted.
+  const finalVotes: FinalVote[] = jurors.map((juror) => {
+    const seat = seatById.get(juror.seats.at(-1)?.seatId ?? "");
+    const outcome = outcomeOf(seat?.outcome);
+    return {
+      ...(outcome === undefined ? {} : { outcome }),
+      revealed: seat?.revealed ?? false,
+      committed: seat?.committed ?? false,
+      failed: seat?.failureStatus !== undefined,
+    };
+  });
+  const juryLine = jurySentence(finalVotes, claim.result?.result);
+  const hasRoundTwo = jurors.some((juror) => juror.seats.length > 1);
+  const spokeInDebate = (claim.deliberation ?? []).some((turn) => turn.status === "SPOKEN");
+  const chain = claim.attemptChain;
+  const stopped = chain?.status === "VOIDED" || chain?.status === "GAVE_UP";
+  const stoppedReason = !stopped
+    ? null
+    : reasonSentence(chain?.gaveUpReason ?? chain?.void?.reason ?? "no reason recorded");
+  // The attempts line replaces the old panel, and only a chain of more than
+  // one attempt earns it.
+  const manyAttempts =
+    chain !== undefined
+    && (chain.attempt > 1 || chain.previousAttempts.length > 0 || chain.relaunchedAs !== undefined);
+  const failedChecks =
+    claim.verification === undefined
+      ? []
+      : [
+          claim.verification.commitmentsRecomputed ? "" : "commitments",
+          claim.verification.truthScoreRecomputed ? "" : "truth score",
+          claim.verification.evidenceRootsRecomputed ? "" : "evidence roots",
+        ].filter((part) => part.length > 0);
+
+  const certificateId = report?.sui.certificateId ?? claim.result?.certificateId;
+  const manifests = manifestBlobIds(report);
+  const claimLink = `${origin}/claims/${id}`;
+  // Seats of the same model wear different tints, keyed on committee order.
+  const seatTints = jurors.map((juror) => ({
+    id: String(juror.index),
+    modelId: juror.modelId,
+  }));
 
   return (
-    <div className="space-y-8 px-5 py-10 md:px-7 lg:py-12">
-      <PageHeader
-        backHref="/claims"
-        backLabel="All claims"
-        eyebrow={isDirectReview ? "Direct review" : "Optimistic settlement"}
-        title="Claim report"
-        icon={Judge}
-        badges={
-          <div>
-            <div className="flex flex-wrap items-center gap-2">
-              <StateBadge
-                state={claim.state}
-                stranded={stranded}
-                attemptStatus={claim.attemptChain?.status}
-              />
-            </div>
-            {stranded && !attemptStopped && (
-              <p className="mt-1 text-xs text-muted-foreground">
-                The discussion window closed without a second round, so this claim can no longer resolve.
-              </p>
-            )}
-          </div>
-        }
-        actions={
-          <>
-            <Button asChild size="sm" className="min-h-[40px] px-4 font-semibold shadow-xs">
-              <Link href={`/claims/${encodeURIComponent(claim.claimId)}/observe`}>
-                <Eye size="15" variant="Bold" />
-                Live observer
-              </Link>
-            </Button>
-            <Button asChild variant="outline" size="sm" className="min-h-[40px] font-semibold">
-              <Link href="/verify">
-                <ShieldTick size="15" variant="Bold" />
-                Verify proofs
-              </Link>
-            </Button>
-          </>
-        }
-      />
-
-      <Link
-        href={`/claims/${id}`}
-        className="ov-micro ov-micro-sm inline-flex font-semibold text-muted-foreground transition-colors hover:text-primary hover:underline"
-      >
-        Back to the canvas
-      </Link>
-
-      {claim.attemptChain !== undefined ? (
-        <Panel
-          label="Verification attempts"
-          icon={Refresh}
-          tone={attemptStopped ? "default" : "chain"}
-          action={
-            <MetaTag
-              tone={attemptStopped ? "default" : "chain"}
-              className={attemptStopped ? "border-no/30 bg-no/8 text-no" : undefined}
-            >
-              Attempt {claim.attemptChain.attempt} of {claim.attemptChain.maxAttempts}
-            </MetaTag>
-          }
+    <div className="mx-auto max-w-4xl space-y-8 px-5 py-10 md:px-7 lg:py-14">
+      <header className="space-y-4">
+        <Link
+          href="/claims"
+          className="ov-micro ov-micro-sm inline-flex items-center gap-1.5 text-muted-foreground transition-colors hover:text-primary focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
         >
-          <ul className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-surface">
-            {attemptRows.map((attempt) => (
-              <li
-                key={attempt.claimId}
-                className="grid gap-2 px-3 py-3 sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:items-center"
-              >
-                <span className="ov-micro ov-micro-sm text-muted-foreground">
-                  Attempt {attempt.attempt}
-                </span>
-                <Link
-                  href={`/claims/${attempt.claimId}`}
-                  className="inline-flex min-h-10 min-w-0 items-center break-all font-mono text-[11px] font-semibold text-ocean transition-colors hover:text-primary hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-                >
-                  {attempt.claimId}
-                </Link>
-                <span className={cn(
-                  // ACTIVE is "in progress", so it takes the accent rather than
-                  // amber, which the palette keeps for the UNSURE verdict.
-                  "w-fit px-2 py-0.5 text-[10px] font-bold",
-                  attempt.status === "SETTLED"
-                    ? "bg-yes/10 text-yes"
-                    : attempt.status === "ACTIVE"
-                      ? "bg-sea/12 text-primary"
-                      : "bg-no/10 text-no",
-                )}>
-                  {attempt.status}
-                </span>
-                <p className="text-xs text-muted-foreground sm:col-start-2 sm:col-span-2">
-                  {attempt.voidReason ?? "No void reason"}
-                </p>
-              </li>
-            ))}
-          </ul>
-          {claim.attemptChain.relaunchedAs !== undefined ? (
-            <Link
-              href={`/claims/${claim.attemptChain.relaunchedAs}`}
-              className="mt-3 inline-flex min-h-10 items-center gap-2 text-xs font-semibold text-primary transition-colors hover:text-ocean hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-            >
-              <Refresh size="14" variant="Bold" />
-              View relaunched attempt {Math.min(
-                claim.attemptChain.attempt + 1,
-                claim.attemptChain.maxAttempts,
-              )}
-            </Link>
-          ) : null}
-        </Panel>
-      ) : null}
+          <ArrowLeft2 size="13" variant="Bold" />
+          All claims
+        </Link>
 
-      {/* ------------------------------------------------ Assertion + verdict */}
-      <div className="grid gap-5 lg:grid-cols-3">
-        <Panel
-          label="Claim assertion"
-          icon={DocumentText}
-          tone="primary"
-          className="lg:col-span-2"
-          action={
-            <MetaTag tone="chain">
-              Mode {isDirectReview ? "1 · direct" : "2 · optimistic"}
-            </MetaTag>
-          }
-        >
-          <div className="space-y-4">
-            <p className="text-lg leading-snug font-semibold text-ocean sm:text-xl">
-              {claim.statement}
+        {/* The statement is the title: nothing above it explains the page. */}
+        <h1 className="ov-display text-4xl text-ocean md:text-5xl">{claim.statement}</h1>
+
+        {claim.resolutionCriteria && (
+          <p className="max-w-[78ch] text-[13px] leading-[1.6] text-muted-foreground">
+            {claim.resolutionCriteria}
+          </p>
+        )}
+      </header>
+
+      <Hairline />
+
+      {/* ------------------------------------------------------- The verdict */}
+      <section className="flex flex-wrap items-start justify-between gap-x-8 gap-y-5">
+        <div className="min-w-0 space-y-2">
+          <div className="flex flex-wrap items-baseline gap-x-5 gap-y-2">
+            <p className={cn("ov-display text-4xl md:text-5xl", verdict.className)}>
+              {verdict.word}
             </p>
-
-            {claim.resolutionCriteria && (
-              <Well>
-                <FieldLabel className="mb-1">Resolution criteria</FieldLabel>
-                <p className="text-xs leading-relaxed text-foreground/85">
-                  {claim.resolutionCriteria}
-                </p>
-              </Well>
+            {verdict.phase && (
+              <p className="text-[15px] text-muted-foreground">{verdict.phase}</p>
             )}
-
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div className="space-y-1">
-                <FieldLabel>Claim object</FieldLabel>
-                <HashChip value={claim.claimId} tone="chain" head={10} tail={8} href={suiObjectUrl(claim.claimId)} />
-              </div>
-              <div className="space-y-1">
-                <FieldLabel>Committee object</FieldLabel>
-                <HashChip value={claim.committeeId} tone="sealed" head={10} tail={8} href={claim.committeeId ? suiObjectUrl(claim.committeeId) : undefined} />
-              </div>
-              <div className="space-y-1">
-                <FieldLabel>Proposed outcome</FieldLabel>
-                <p className="text-sm font-semibold text-ocean">
-                  {claim.proposedOutcome ?? "None recorded"}
-                </p>
-              </div>
-              <div className="space-y-1">
-                <FieldLabel>Seat progress</FieldLabel>
-                <p className="text-sm font-semibold text-ocean tabular-nums">
-                  {revealedCount} revealed · {sealedCount} sealed / {claim.commitments?.length ?? 0}
-                </p>
-              </div>
-            </div>
-
-            {/* Independent recomputation report (verify=1) */}
-            {verification && (
-              <div className="grid gap-2 rounded-xl border border-border bg-surface p-3 sm:grid-cols-3">
-                {(
-                  [
-                    ["Commitments", verification.commitmentsRecomputed],
-                    ["Truth Score", verification.truthScoreRecomputed],
-                    ["Evidence roots", verification.evidenceRootsRecomputed],
-                  ] as const
-                ).map(([label, ok]) => (
-                  <div key={label} className="flex items-center gap-1.5">
-                    <span
-                      className={cn(
-                        // A failed check is a failure, not an UNSURE verdict.
-                        "grid size-5 place-items-center rounded-full",
-                        ok ? "bg-yes/12 text-yes" : "bg-destructive/12 text-destructive",
-                      )}
-                    >
-                      <ShieldTick size="12" variant="Bold" />
-                    </span>
-                    <span className="ov-micro ov-micro-sm text-muted-foreground">
-                      {label} {ok ? "recomputed" : "unverified"}
-                    </span>
-                  </div>
-                ))}
-                {verification.issues.length > 0 && (
-                  <p className="text-[11px] text-no sm:col-span-3">
-                    Issues: {verification.issues.join("; ")}
-                  </p>
-                )}
-              </div>
-            )}
-          </div>
-        </Panel>
-
-        <Panel label="Consensus truth score" icon={Award}>
-          <div className="flex flex-col items-center gap-4">
-            <VerdictGauge
-              scoreBps={claim.result?.truthScoreBps ?? null}
-              size={208}
-              emptyTitle={sealedCount > 0 ? "•••" : "N/A"}
-              emptyLabel={
-                sealedCount > 0
-                  ? "Sealed until\nthe reveal phase"
-                  : "Not independently\nreviewed"
-              }
-              emptyChip={sealedCount > 0 ? "Commitments sealed" : "No jury round"}
-            />
-            <div className="w-full space-y-2 border-t border-border pt-3">
-              <p className="text-center text-[11px] leading-relaxed text-muted-foreground">
-                Computed by deterministic integer arithmetic over the terminal valid jury
-                round. A model never rates the result.
+            {score !== null && (
+              <p className="flex items-baseline gap-2">
+                <span className="font-mono text-2xl text-ocean tabular-nums md:text-3xl">
+                  {score} / 100
+                </span>
+                <span className="ov-micro ov-micro-sm text-muted-foreground">Truth score</span>
               </p>
-              <Link
-                href="/learn"
-                className="block text-center text-[11px] font-semibold text-primary hover:underline"
-              >
-                Read the scoring formula
-              </Link>
-            </div>
+            )}
           </div>
-        </Panel>
-      </div>
 
-      {/* Wallet-gated economic actions; claim reading remains anonymous. */}
-      <PositionPanel />
+          <p className="text-[15px] leading-[1.55] text-muted-foreground">{juryLine}</p>
 
-      {/* --------------------------------------------------------- Deadlines */}
-      {claim.deadlines && (
-        <Panel label="Epoch deadlines (UTC & local)" icon={Clock} tone="chain">
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            {(
-              [
-                ["Challenge deadline", claim.deadlines.challengeDeadlineMs],
-                ["Phase 1 commit cutoff", claim.deadlines.firstCommitDeadlineMs],
-                ["Phase 1 reveal cutoff", claim.deadlines.firstRevealDeadlineMs],
-                ["Discussion cutoff", claim.deadlines.discussionDeadlineMs],
-              ] as const
-            ).map(([label, ms]) => (
-              <div key={label} className="rounded-xl border border-border bg-surface p-3">
-                <FieldLabel className="mb-1.5">{label}</FieldLabel>
-                <TimeDisplay timestampMs={ms} />
-              </div>
-            ))}
-          </div>
-        </Panel>
-      )}
+          {hasRoundTwo && (
+            <p className="text-[13px] leading-[1.55] text-muted-foreground">
+              Round two after {spokeInDebate ? "cross-examination" : "a split vote"}.
+            </p>
+          )}
 
-      {/* ---------------------------------------------------------- Evidence */}
-      <Panel
-        label="Admitted evidence manifests"
-        icon={DocumentText}
-        action={
-          <MetaTag>
-            {claim.evidenceRoots?.length ?? 0} bundle
-            {(claim.evidenceRoots?.length ?? 0) === 1 ? "" : "s"} frozen
-          </MetaTag>
-        }
-      >
-        {!claim.evidenceRoots || claim.evidenceRoots.length === 0 ? (
-          <p className="text-xs text-muted-foreground italic">
-            No evidence bundles frozen yet. Evidence retrieval is pending.
+          {stoppedReason && (
+            <p className="text-[13px] leading-[1.55] text-muted-foreground">{stoppedReason}</p>
+          )}
+
+          {manyAttempts && chain !== undefined && (
+            <p className="text-[13px] leading-[1.55] text-muted-foreground">
+              Attempt {chain.attempt} of {chain.maxAttempts}.{" "}
+              {chain.previousAttempts.map((previous) => (
+                <Fragment key={previous.claimId}>
+                  <Link
+                    href={`/claims/${previous.claimId}/report`}
+                    className="text-primary hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                  >
+                    Attempt {previous.attempt}
+                  </Link>{" "}
+                  was voided: {(previous.voidReason ?? "no reason recorded")
+                    .replace(/_/g, " ")
+                    .toLowerCase()}.{" "}
+                </Fragment>
+              ))}
+              {chain.relaunchedAs !== undefined && (
+                <Link
+                  href={`/claims/${chain.relaunchedAs}/report`}
+                  className="text-primary hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                >
+                  Relaunched attempt
+                </Link>
+              )}
+            </p>
+          )}
+
+          {/* A failed recomputation is the one thing this page may never hide. */}
+          {failedChecks.length > 0 && (
+            <p className="text-[13px] leading-[1.55] text-no">
+              Recompute failed: {failedChecks.join(", ")}.
+            </p>
+          )}
+        </div>
+
+        <div className="flex shrink-0 items-center gap-2">
+          <SideLink href={`/claims/${id}`}>Live view</SideLink>
+          <SideLink href="/verify">Audit</SideLink>
+        </div>
+      </section>
+
+      {/* ---------------------------------------------------------- The jury */}
+      <section>
+        <h2 className="ov-micro ov-micro-sm text-muted-foreground">Jury</h2>
+        <Hairline className="mt-3" />
+
+        {jurors.length === 0 ? (
+          <p className="mt-4 text-[13px] text-muted-foreground">
+            The jury appears here once Sui&apos;s randomness draws it.
           </p>
         ) : (
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-            {claim.evidenceRoots.map((bundle, idx) => (
-              <div
-                key={idx}
-                className="ov-lift space-y-2.5 rounded-xl border border-border bg-surface p-3.5"
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-sm font-semibold text-ocean">
-                    Phase {bundle.phase} evidence bundle
-                  </span>
-                  <MetaTag tone="chain">Merkle frozen</MetaTag>
-                </div>
-                <div className="space-y-1.5">
-                  <FieldLabel>Merkle root</FieldLabel>
-                  <HashChip value={bundle.root} tone="chain" full />
-                  <FieldLabel className="pt-1">Bundle id</FieldLabel>
-                  <HashChip value={bundle.bundleId} tone="muted" full href={suiObjectUrl(bundle.bundleId)} />
-                </div>
-                <Link
-                  href={`/evidence/${encodeURIComponent(bundle.bundleId)}`}
-                  className="inline-flex items-center gap-1 text-[11px] font-semibold text-primary hover:underline"
-                >
-                  View artifact metadata &amp; blob hashes
-                  <Link21 size="12" variant="Bold" />
-                </Link>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Retrieved artifacts, only present once the public report exists. */}
-        {report && report.evidence.length > 0 && (
-          <div className="mt-4 space-y-2 border-t border-border pt-4">
-            <FieldLabel>Retrieved artifacts</FieldLabel>
-            <ul className="space-y-2">
-              {report.evidence.map((item) => (
-                <li
-                  key={item.evidenceId}
-                  className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-surface px-3 py-2"
-                >
-                  <Global size="13" variant="Bold" className="shrink-0 text-primary" />
-                  <span className="min-w-0 flex-1 truncate text-[11px] text-foreground/85">
-                    {item.sourceUrl || "Pasted text submission"}
-                  </span>
-                  <HashChip value={item.evidenceId} label="id" tone="muted" />
-                  <HashChip value={item.blobId} label="blob" tone="muted" href={item.blobId ? walrusBlobUrl(item.blobId) : null} />
-                  <HashChip value={item.contentHash} label="hash" tone="muted" />
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-
-        {report && report.submittedUrls.length > 0 && (
-          <div className="mt-4 space-y-1.5 border-t border-border pt-4">
-            <FieldLabel>Submitted source URLs</FieldLabel>
-            <ul className="space-y-1">
-              {report.submittedUrls.map((url) => (
-                <li key={url} className="truncate font-mono text-[11px] text-muted-foreground">
-                  {url}
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-      </Panel>
-
-      {/* ------------------------------------------------------- Jury seats */}
-      <Panel
-        label="Jury commit-reveal seats"
-        icon={Judge}
-        tone={revealedCount > 0 ? "yes" : "sealed"}
-        action={
-          <MetaTag tone={revealedCount > 0 ? "yes" : "sealed"}>
-            {revealedCount} / {claim.commitments?.length ?? 5} revealed
-          </MetaTag>
-        }
-      >
-        <p className="mb-4 text-xs leading-relaxed text-muted-foreground">
-          Strict pre-reveal redaction: each seat&apos;s vote preimage stays sealed on-chain
-          until the reveal phase opens it. Nothing here is inferred by the observer.
-        </p>
-
-        {seats.length === 0 ? (
-          <div className="rounded-xl border border-dashed border-border bg-surface p-5 text-center text-xs text-muted-foreground">
-            Awaiting committee selection through Sui native randomness.
-          </div>
-        ) : (
           <>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
-              {seats.map((seat) => (
-                <SeatSeal
-                  key={seat.jurySeatId}
-                  seatIndex={seat.index}
-                  state={seat.state}
-                  outcome={seat.outcome}
-                  confidenceBps={seat.confidenceBps}
-                  agentProfileId={seat.agentProfileId}
-                  jurySeatId={seat.jurySeatId}
-                  modelId={seat.modelId}
-                  role={seat.role}
-                  reasoning={seat.reasoning}
-                  gonkaRequestId={seat.gonkaRequestId}
-                  failureStatus={seat.failureStatus}
-                  researchSteps={researchSteps.get(seat.jurySeatId)}
-                />
-              ))}
+            <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
+              {jurors.map((juror) => {
+                const finalSeat = juror.seats.at(-1);
+                const seat = seatById.get(finalSeat?.seatId ?? "");
+                const outcome = outcomeOf(seat?.outcome);
+                const failed = seat?.failureStatus !== undefined;
+                const roundTwo = juror.seats.length > 1;
+                const open = openJuror === juror.index;
+                const word = failed
+                  ? "Failed"
+                  : (outcome ?? (seat?.committed ? "Sealed" : "Waiting"));
+                const wordClass = failed
+                  ? "text-no"
+                  : outcome !== undefined
+                    ? OUTCOME_TEXT[outcome]
+                    : seat?.committed
+                      ? "text-sealed"
+                      : "text-muted-foreground";
+                return (
+                  <button
+                    key={juror.index}
+                    type="button"
+                    onClick={() => {
+                      if (!open) {
+                        requestProofs(
+                          juror.seats.map((entry) =>
+                            deriveRunId(claim.claimId, entry.seatId, entry.phase),
+                          ),
+                        );
+                      }
+                      setOpenJuror((current) => (current === juror.index ? null : juror.index));
+                    }}
+                    aria-expanded={open}
+                    {...(open ? { "aria-controls": `juror-trail-${juror.index}` } : {})}
+                    className={cn(
+                      "flex flex-col gap-2 border bg-card p-3 text-left transition-colors",
+                      "focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
+                      open ? "border-sea" : "border-border hover:border-sea/40",
+                    )}
+                  >
+                    <span className="flex items-center gap-2">
+                      <ModelLogo
+                        modelId={juror.modelId}
+                        variant={modelVariantFor(seatTints, String(juror.index))}
+                        size={22}
+                      />
+                      <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-foreground">
+                        Juror {juror.index}
+                      </span>
+                      {roundTwo && (
+                        <span className="ov-micro ov-micro-sm shrink-0 border border-border px-1 text-muted-foreground">
+                          R2
+                        </span>
+                      )}
+                    </span>
+                    <span className="flex items-baseline gap-1.5">
+                      <span className={cn("text-[15px] font-semibold", wordClass)}>{word}</span>
+                      {seat?.confidenceBps !== undefined && outcome !== undefined && (
+                        <span className="font-mono text-[11px] text-muted-foreground tabular-nums">
+                          {Math.round(seat.confidenceBps / 100)}%
+                        </span>
+                      )}
+                    </span>
+                  </button>
+                );
+              })}
             </div>
 
-            <div className="mt-5 space-y-2 border-t border-border pt-4">
-              <FieldLabel>Juror run proofs</FieldLabel>
-              {seats.map((seat) => (
-                <RunProof
-                  key={`proof-${seat.jurySeatId}`}
-                  claimId={claim.claimId}
-                  runId={seat.runId}
-                  seatLabel={`Seat ${seat.index}, phase ${seat.phase}`}
-                />
-              ))}
-            </div>
+            {/* One trail open at a time, full width under the row. */}
+            {jurors.map((juror) => {
+              if (openJuror !== juror.index) return null;
+              const runIds = juror.seats.map((entry) =>
+                deriveRunId(claim.claimId, entry.seatId, entry.phase),
+              );
+              const proof = runIds
+                .map((runId) => proofsByRunId[runId])
+                .filter((entry): entry is BrowserRunProof => entry !== undefined)
+                .at(-1);
+              const roundTwo = juror.seats.length > 1;
+              const firstSeat = seatById.get(juror.seats[0]?.seatId ?? "");
+              const firstOutcome = outcomeOf(firstSeat?.outcome);
+              const turns = debateBySeat.get(juror.seats[0]?.seatId ?? "") ?? [];
+              const variant = modelVariantFor(seatTints, String(juror.index));
+              const onToggle = () => setOpenJuror(null);
+              return (
+                <div key={juror.index} className="mt-3">
+                  {roundTwo && (firstOutcome !== undefined || turns.length > 0) && (
+                    <div className="space-y-3 border border-b-0 border-sea bg-card px-4 py-3.5">
+                      {firstOutcome !== undefined && (
+                        <p className="text-[13px] text-muted-foreground">
+                          Round one:{" "}
+                          <span className={cn("font-semibold", OUTCOME_TEXT[firstOutcome])}>
+                            {firstOutcome}
+                          </span>
+                          {firstSeat?.confidenceBps !== undefined && (
+                            <span className="ml-1.5 font-mono tabular-nums">
+                              {Math.round(firstSeat.confidenceBps / 100)}%
+                            </span>
+                          )}
+                        </p>
+                      )}
+                      {turns.map((view) => (
+                        <DebateTurnBubble key={view.turn.ordinal} {...view} density="compact" />
+                      ))}
+                    </div>
+                  )}
+                  <JurorTrailPanel
+                    juror={juror}
+                    view={jurorAt(juror, Number.POSITIVE_INFINITY)}
+                    onToggle={onToggle}
+                    panelId={`juror-trail-${juror.index}`}
+                    variant={variant}
+                    {...(proof === undefined ? {} : { proof })}
+                    loadingProof={runIds.some((runId) => loadingRunIds.has(runId))}
+                    className={cn(roundTwo && turns.length > 0 && "border-t-0")}
+                  />
+                </div>
+              );
+            })}
           </>
         )}
-      </Panel>
+      </section>
 
-      {/* --------------------------------------------------------- Timeline */}
-      <Panel label="Resolution lifecycle" icon={Clock}>
-        <ClaimTimeline claim={claim} />
-      </Panel>
+      {/* --------------------------------------------------------- The proof */}
+      <details className="group border border-border bg-card">
+        <summary className="ov-micro ov-micro-sm flex min-h-11 cursor-pointer list-none items-center gap-2 px-4 text-muted-foreground transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none">
+          <ArrowDown2
+            size="12"
+            variant="Bold"
+            className="shrink-0 transition-transform group-open:rotate-180"
+          />
+          Proof
+        </summary>
 
-      {/* -------------------------------------- Certificate & audit bundle */}
-      {isTerminal && report && (
-        <Reveal>
-          <Panel
-            label="Public verification report & audit bundle"
-            icon={Award}
-            action={
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={downloadAuditBundle}
-                className="min-h-[36px] font-semibold"
-              >
-                <DocumentDownload size="14" variant="Bold" />
-                Download JSON
-              </Button>
-            }
-          >
-            <div className="space-y-5">
-              <div className="grid gap-3 sm:grid-cols-3">
-                <div className="rounded-xl border border-yes/25 bg-yes/6 p-3">
-                  <FieldLabel className="mb-1">Settled label</FieldLabel>
-                  <p className="text-xl font-semibold text-yes">{report.label}</p>
-                </div>
-                <div className="rounded-xl border border-border bg-surface p-3">
-                  <FieldLabel className="mb-1">Truth score</FieldLabel>
-                  <p className="text-xl font-semibold text-ocean tabular-nums">
-                    {report.truthScore === null ? "N/A" : report.truthScore}
-                    <span className="ml-1 text-xs text-muted-foreground">/100</span>
-                  </p>
-                  {agreementSummary && (
-                    <p className="mt-1 text-xs text-muted-foreground tabular-nums">
-                      {agreementSummary}
-                    </p>
+        <div className="space-y-5 border-t border-border px-4 py-4">
+          <div>
+            <ProofRow label="Claim object">
+              <HashChip
+                value={claim.claimId}
+                tone="muted"
+                href={suiObjectUrl(claim.claimId)}
+              />
+            </ProofRow>
+
+            {claim.committeeId && (
+              <ProofRow label="Committee">
+                <HashChip
+                  value={claim.committeeId}
+                  tone="muted"
+                  href={suiObjectUrl(claim.committeeId)}
+                />
+              </ProofRow>
+            )}
+
+            {certificateId && (
+              <ProofRow label="Certificate">
+                <HashChip value={certificateId} tone="muted" href={suiObjectUrl(certificateId)} />
+              </ProofRow>
+            )}
+
+            {claim.evidenceRoots.map((bundle) => {
+              const blobId = manifests.get(bundle.phase);
+              return (
+                <ProofRow key={bundle.bundleId} label={`Evidence, phase ${bundle.phase}`}>
+                  <HashChip value={bundle.root} label="root" tone="muted" />
+                  {blobId === undefined ? (
+                    <HashChip
+                      value={bundle.bundleId}
+                      label="manifest"
+                      tone="muted"
+                      href={suiObjectUrl(bundle.bundleId)}
+                    />
+                  ) : (
+                    <HashChip
+                      value={blobId}
+                      label="manifest"
+                      tone="muted"
+                      href={walrusBlobUrl(blobId)}
+                    />
                   )}
-                </div>
-                <div className="rounded-xl border border-border bg-surface p-3">
-                  <FieldLabel className="mb-1">Final round votes</FieldLabel>
-                  <div className="flex flex-wrap gap-1">
-                    {report.finalRoundVotes.map((v, i) => (
-                      <span
-                        key={i}
-                        className={cn(
-                          "rounded px-1.5 py-0.5 font-mono text-[10px] font-semibold",
-                          v.outcome === "YES"
-                            ? "bg-yes/10 text-yes"
-                            : v.outcome === "NO"
-                              ? "bg-no/10 text-no"
-                              : "bg-unsure/10 text-unsure",
-                        )}
-                      >
-                        {v.outcome} {Math.round(v.confidenceBps / 100)}%
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              </div>
+                </ProofRow>
+              );
+            })}
 
-              <Well className="space-y-4">
-                {scoreDerivation && (
-                  <div className="space-y-2">
-                    <FieldLabel>How the score is computed</FieldLabel>
-                    <div className="overflow-x-auto">
-                      <table className="w-full min-w-[480px] text-left text-xs">
-                        <thead className="border-b border-border text-[11px] font-medium text-muted-foreground">
-                          <tr>
-                            <th className="pb-2 pr-3 font-medium">Seat</th>
-                            <th className="pb-2 pr-3 font-medium">Vote</th>
-                            <th className="pb-2 pr-3 font-medium">Confidence</th>
-                            <th className="pb-2 font-medium text-right">Mapped probability</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-border/40">
-                          {report.finalRoundVotes.map((v, i) => {
-                            // Map revealed outcome and confidence into basis-point probability
-                            const mappedProbBps = agentProbabilityBps(
-                              OUTCOME[v.outcome],
-                              v.confidenceBps,
-                            );
-                            return (
-                              <tr
-                                key={v.jurySeatId || i}
-                                className={cn(!v.valid && "opacity-50")}
-                              >
-                                <td className="py-2.5 pr-3 align-top font-mono text-xs">
-                                  <span>{v.jurySeatId.slice(0, 10)}</span>
-                                  {!v.valid && (
-                                    <span className="mt-0.5 block font-sans text-[10px] italic text-muted-foreground">
-                                      excluded: reveal did not match its commitment
-                                    </span>
-                                  )}
-                                </td>
-                                <td className="py-2.5 pr-3 align-top">
-                                  <span
-                                    className={cn(
-                                      "inline-block rounded px-1.5 py-0.5 font-mono text-[10px] font-semibold",
-                                      v.outcome === "YES"
-                                        ? "bg-yes/10 text-yes"
-                                        : v.outcome === "NO"
-                                          ? "bg-no/10 text-no"
-                                          : "bg-unsure/10 text-unsure",
-                                    )}
-                                  >
-                                    {v.outcome}
-                                  </span>
-                                </td>
-                                <td className="py-2.5 pr-3 align-top tabular-nums">
-                                  <span className="font-semibold text-foreground">
-                                    {v.confidenceBps / 100}%
-                                  </span>
-                                  <span className="ml-1.5 font-mono text-[11px] text-muted-foreground">
-                                    {v.confidenceBps} bps
-                                  </span>
-                                </td>
-                                <td className="py-2.5 align-top text-right tabular-nums">
-                                  <div className="font-mono font-semibold text-foreground">
-                                    {(mappedProbBps / 100).toFixed(2)}
-                                  </div>
-                                  <div className="font-mono text-[10px] text-muted-foreground">
-                                    {v.outcome === "YES"
-                                      ? "= confidence"
-                                      : v.outcome === "NO"
-                                        ? `10000 - ${v.confidenceBps}`
-                                        : "fixed 5000"}
-                                  </div>
-                                </td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                        <tfoot className="border-t border-border text-xs">
-                          <tr className="border-b border-border/40">
-                            <td colSpan={2} className="py-2 font-semibold text-muted-foreground">
-                              Sum
-                            </td>
-                            <td
-                              colSpan={2}
-                              className="py-2 text-right font-mono font-semibold tabular-nums text-foreground"
-                            >
-                              {scoreDerivation.sumBps} bps
-                            </td>
-                          </tr>
-                          <tr>
-                            <td colSpan={2} className="py-2 font-semibold text-muted-foreground">
-                              Mean
-                            </td>
-                            <td
-                              colSpan={2}
-                              className="py-2 text-right font-mono font-semibold tabular-nums text-foreground"
-                            >
-                              {scoreDerivation.sumBps} / {scoreDerivation.validVotes.length} ={" "}
-                              {scoreDerivation.meanBps} bps, score{" "}
-                              {scoreDerivation.score !== null ? scoreDerivation.score : "N/A"}
-                            </td>
-                          </tr>
-                        </tfoot>
-                      </table>
-                    </div>
-                  </div>
-                )}
-
-                <div className={cn(scoreDerivation && "border-t border-border/60 pt-3")}>
-                  <FieldLabel className="mb-1">Truth score formula</FieldLabel>
-                  <p className="text-[13px] leading-relaxed text-foreground/85">
-                    {report.truthScoreFormula}
-                  </p>
-                </div>
-              </Well>
-
-              {/* Public reasoning traces: every check the jurors published. */}
-              <div className="space-y-2">
-                <FieldLabel>Public reasoning traces</FieldLabel>
-                {report.agents.map((agent, index) => (
-                  <details
-                    key={agent.agentProfileId}
-                    className="group rounded-xl border border-border bg-card open:bg-surface"
+            {jurors.flatMap((juror) =>
+              juror.seats.map((seat) => {
+                const runId = deriveRunId(claim.claimId, seat.seatId, seat.phase);
+                return (
+                  <ProofRow
+                    key={runId}
+                    label={
+                      juror.seats.length > 1
+                        ? `Juror ${juror.index} run, round ${seat.phase}`
+                        : `Juror ${juror.index} run`
+                    }
                   >
-                    <summary className="flex cursor-pointer list-none flex-wrap items-center gap-2 px-3 py-2.5 text-xs transition-colors hover:bg-surface">
-                      <ArrowDown2
-                        size="13"
-                        variant="Bold"
-                        className="shrink-0 text-muted-foreground transition-transform group-open:rotate-180"
-                      />
-                      <Cpu size="13" variant="Bold" className="shrink-0 text-primary" />
-                      <ModelBadge
-                        modelId={agent.modelId}
-                        variant={report.agents
-                          .slice(0, index)
-                          .filter((other) => logoFamily(other.modelId) === logoFamily(agent.modelId))
-                          .length}
-                      />
-                      <span
-                        className={cn(
-                          "ml-auto rounded px-1.5 py-0.5 font-mono text-[10px] font-bold",
-                          agent.outcome === "YES"
-                            ? "bg-yes/10 text-yes"
-                            : agent.outcome === "NO"
-                              ? "bg-no/10 text-no"
-                              : "bg-unsure/10 text-unsure",
-                        )}
-                      >
-                        {agent.outcome} · {agent.confidenceBps} bps
-                      </span>
-                    </summary>
+                    <HashChip
+                      value={runId}
+                      tone="muted"
+                      href={`/api/claims/${encodeURIComponent(id)}/runs/${encodeURIComponent(runId)}/proof`}
+                    />
+                  </ProofRow>
+                );
+              }),
+            )}
 
-                    <div className="space-y-2.5 border-t border-border px-3 py-3">
-                      <p className="text-[11px] leading-relaxed text-foreground/80 italic">
-                        “{agent.reasoning}”
-                      </p>
-                      <ol className="space-y-1.5">
-                        {agent.publicReasoningTrace.map((trace, i) => (
-                          <li
-                            key={i}
-                            className="rounded-lg border border-border bg-card px-2.5 py-2 text-[11px]"
-                          >
-                            <p className="font-semibold text-ocean">{trace.check}</p>
-                            <p className="text-muted-foreground">{trace.finding}</p>
-                            <div className="mt-1 flex flex-wrap items-center gap-1">
-                              <span
-                                className={cn(
-                                  "ov-micro ov-micro-sm rounded px-1 py-px",
-                                  trace.assessment === "SUPPORTS"
-                                    ? "bg-yes/10 text-yes"
-                                    : trace.assessment === "CONTRADICTS"
-                                      ? "bg-no/10 text-no"
-                                      : "bg-unsure/10 text-unsure",
-                                )}
-                              >
-                                {trace.assessment}
-                              </span>
-                              {trace.evidenceIds?.map((eid) => (
-                                <HashChip key={eid} value={eid} label="ev" tone="muted" />
-                              ))}
-                            </div>
-                          </li>
-                        ))}
-                      </ol>
-                      <div className="flex flex-wrap gap-1 border-t border-border pt-2">
-                        <HashChip value={agent.agentProfileId} label="agent" tone="muted" href={suiObjectUrl(agent.agentProfileId)} />
-                        <HashChip value={agent.owner} label="owner" tone="muted" />
-                        <HashChip value={agent.gonkaRequestId} label="gonka" tone="muted" />
-                      </div>
-                    </div>
-                  </details>
-                ))}
-              </div>
+            {report !== null && (
+              <ProofRow label="Audit bundle">
+                <a
+                  href={`/api/claims/${encodeURIComponent(id)}/report`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1 font-mono text-[11px] text-primary hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                >
+                  JSON
+                  <ExportSquare size="11" className="shrink-0 opacity-70" />
+                </a>
+              </ProofRow>
+            )}
+          </div>
 
-              {/* Sui Move objects */}
-              <div className="space-y-2 rounded-xl border border-border bg-surface p-3.5">
-                <FieldLabel>Sui Move protocol objects</FieldLabel>
-                <div className="grid gap-2 sm:grid-cols-2">
-                  <div className="space-y-1">
-                    <span className="ov-micro ov-micro-sm text-muted-foreground">
-                      Claim object
-                    </span>
-                    <HashChip value={report.sui.claimObjectId} tone="chain" full href={suiObjectUrl(report.sui.claimObjectId)} />
-                  </div>
-                  {report.sui.committeeId && (
-                    <div className="space-y-1">
-                      <span className="ov-micro ov-micro-sm text-muted-foreground">
-                        Committee object
+          {timeline.length > 0 && (
+            <ul className="space-y-1">
+              {timeline.map((row) => (
+                <li key={row.key} className="flex items-baseline justify-between gap-4">
+                  <span className="text-[13px] text-muted-foreground">
+                    {row.label}
+                    {row.count > 1 && (
+                      <span className="ml-1.5 font-mono text-[11px] tabular-nums">
+                        &times;{row.count}
                       </span>
-                      <HashChip value={report.sui.committeeId} tone="sealed" full href={suiObjectUrl(report.sui.committeeId)} />
-                    </div>
-                  )}
-                  {report.sui.certificateId && (
-                    <div className="space-y-1">
-                      <span className="ov-micro ov-micro-sm text-muted-foreground">
-                        Certificate object
-                      </span>
-                      <HashChip value={report.sui.certificateId} tone="chain" full href={suiObjectUrl(report.sui.certificateId)} />
-                    </div>
-                  )}
-                  {report.evidenceRoot && (
-                    <div className="space-y-1">
-                      <span className="ov-micro ov-micro-sm text-muted-foreground">
-                        Evidence root
-                      </span>
-                      <HashChip value={report.evidenceRoot} tone="chain" full />
-                    </div>
-                  )}
-                </div>
-                <div className="space-y-1 border-t border-border pt-2">
-                  <span className="ov-micro ov-micro-sm text-muted-foreground">
-                    Revealed vote objects ({report.sui.revealedVoteIds?.length ?? 0})
+                    )}
                   </span>
-                  <div className="flex flex-wrap gap-1">
-                    {report.sui.revealedVoteIds?.map((vid) => (
-                      <HashChip key={vid} value={vid} tone="muted" href={suiObjectUrl(vid)} />
-                    ))}
-                  </div>
-                </div>
-                {claim.result?.digest && (
-                  <div className="space-y-1 border-t border-border pt-2">
-                    <span className="ov-micro ov-micro-sm text-muted-foreground">
-                      Finalization transaction
-                    </span>
-                    <HashChip value={claim.result.digest} tone="chain" full href={suiTransactionUrl(claim.result.digest)} />
-                  </div>
-                )}
-              </div>
-            </div>
-          </Panel>
-        </Reveal>
-      )}
+                  <span className="shrink-0 font-mono text-[11px] text-muted-foreground/80 tabular-nums">
+                    {stamp(row.atMs)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
 
-      {/* -------------------------------------------- Security boundary note */}
-      <div className="flex items-start gap-2.5 rounded-2xl border border-border bg-surface p-4">
-        <InfoCircle size="16" variant="Bold" className="mt-0.5 shrink-0 text-primary" />
-        <p className="text-xs leading-relaxed text-muted-foreground">
-          <strong className="font-semibold text-ocean">Read-only projection.</strong> This page
-          holds no signer and cannot advance protocol state, trigger inference, or derive
-          unrevealed votes. Every value above is read from on-chain Move objects, Walrus blobs
-          and public resolution events.
-        </p>
-      </div>
+          {/* The agent path of the Audit page, in one line. */}
+          <CommandRow
+            text={`Read ${origin}/llms.txt, then audit ${claimLink} and explain the verdict.`}
+            ready
+            label="the agent prompt"
+          />
+
+          <Link
+            href="/learn"
+            className="inline-flex text-[13px] font-medium text-primary hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+          >
+            How the score is computed
+          </Link>
+        </div>
+      </details>
     </div>
   );
 }
