@@ -423,6 +423,30 @@ export default function VerifyPage() {
 
       {/* ---------------------------------------------- The one input ---- */}
       <div className="space-y-3">
+        {/* Two paths, one switch: the claim page's segmented control. */}
+        <div className="flex w-fit items-center gap-1 border border-border bg-card p-1 text-foreground">
+          <ToggleGroup
+            type="single"
+            value={path}
+            onValueChange={(next) => {
+              if (next === "agent" || next === "manual") setPath(next);
+            }}
+            aria-label="How to audit"
+          >
+            <ToggleGroupItem value="agent" className={SEGMENT_SKIN}>
+              <MessageProgramming size="13" variant="Bold" />
+              With an agent
+            </ToggleGroupItem>
+            <ToggleGroupItem value="manual" className={SEGMENT_SKIN}>
+              <Code1 size="13" variant="Bold" />
+              By hand
+            </ToggleGroupItem>
+          </ToggleGroup>
+        </div>
+        {/* The link field belongs to the by-hand path only: the agent prompt
+            carries a placeholder the reader replaces (owner). */}
+        {path === "manual" && (
+          <>
         <div className="space-y-1.5">
           <label htmlFor="claim-link" className="ov-micro ov-micro-sm block text-muted-foreground">
             Paste a claim link or id
@@ -462,7 +486,6 @@ export default function VerifyPage() {
             <>
               <Warning2 size="14" variant="Bold" aria-hidden className="shrink-0" />
               {recordError}
-              {path === "agent" && " The commands still work."}
             </>
           ) : record ? (
             <>
@@ -476,27 +499,8 @@ export default function VerifyPage() {
             <>Reading the public record…</>
           )}
         </p>
-
-        {/* Two paths, one switch: the claim page's segmented control. */}
-        <div className="flex w-fit items-center gap-1 border border-border bg-card p-1 text-foreground">
-          <ToggleGroup
-            type="single"
-            value={path}
-            onValueChange={(next) => {
-              if (next === "agent" || next === "manual") setPath(next);
-            }}
-            aria-label="How to audit"
-          >
-            <ToggleGroupItem value="agent" className={SEGMENT_SKIN}>
-              <MessageProgramming size="13" variant="Bold" />
-              With an agent
-            </ToggleGroupItem>
-            <ToggleGroupItem value="manual" className={SEGMENT_SKIN}>
-              <Code1 size="13" variant="Bold" />
-              By hand
-            </ToggleGroupItem>
-          </ToggleGroup>
-        </div>
+          </>
+        )}
       </div>
 
       {path === "agent" ? (
