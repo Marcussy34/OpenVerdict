@@ -2832,3 +2832,27 @@ claim fires on the first clear probe.
 - RUNNING: courtroom-graph (round 1), debate-v4 (round 2), verify-ux,
   docs-site, debate-ui. Done and awaiting commit: stake-role, learn-simple
   (committed).
+
+### 3ar progress, 19:25: Audit page and Learn live, courtroom accepted
+
+- Deployed 6dc85a0e at 19:12: cc6fb18 Learn in plain words + f302759 Audit
+  page (claim link + "With an agent" | "By hand", lib/verify/claim-link.ts
+  and report-prefill.ts with 42 tests, components/verify/agent-handoff.tsx,
+  llms.txt "How to audit a claim"). d660252 tab title "Audit a verdict"
+  (not yet deployed). The vote salt is not in any public API (only in the
+  reveal tx), so the by-hand prefill leaves it empty and says where it is.
+- courtroom-graph ACCEPTED after round 1 (ring radius 250 at 1512x787 with
+  the dock collapsed, 85% of the shorter side; the canvas measures the
+  open dock and keeps the ring above it; 26 courtroom tests, 61 viz tests
+  green). Its files are frozen: lib/viz/courtroom-layout.ts (+test),
+  components/viz/deliberation-canvas.tsx, the mini ring in
+  live-transcript.tsx, seatNumbers plumbing in page.tsx,
+  use-force-layout.ts deleted. NOT committed yet: page.tsx and
+  live-transcript.tsx also hold debate-ui's in-progress hunks, so the viz
+  batch (courtroom + debate-ui) commits together when debate-ui reports.
+- debate-ui told: cap the dock at ~45% of the stage height (min 280 px,
+  scroll inside) so the ring keeps ~two thirds of its size when open;
+  dock numbered by the phase-1 order; render the record's seat numbers
+  verbatim (option A) which become 1-based after debate-v4's round 2.
+- Screenshots: scratchpad/courtroom-closed.jpg, courtroom-open.jpg,
+  production-learn.jpg, production-audit.jpg.
