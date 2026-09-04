@@ -63,6 +63,8 @@ export type AuditOptions = {
   rpcUrls?: string[];
   /** Per network call, default 20 s. */
   timeoutMs?: number;
+  /** Pause before the one retry each RPC endpoint gets on a network failure. */
+  rpcRetryDelayMs?: number;
   walrusAggregator?: string;
   receiptsBase?: string;
   /** Stop reading the event stream after this much silence, default 8 s. */
@@ -305,6 +307,8 @@ const DEFAULT_EVENTS_IDLE_MS = 8_000;
 // Never read a stream for longer than this, whatever arrives.
 const EVENTS_MAX_MS = 90_000;
 const RPC_CONCURRENCY = 4;
+/** Public nodes drop a request now and then; one retry keeps a check from going UNAVAILABLE. */
+const DEFAULT_RPC_RETRY_DELAY_MS = 300;
 const WALRUS_CONCURRENCY = 2;
 const RECEIPT_WINDOW_SLACK_MS = 60_000;
 const QUORUM = 4;
@@ -594,12 +598,14 @@ class Net {
   readonly #rpcCache = new Map<string, Promise<RpcOutcome>>();
   readonly #fetch: typeof fetch;
   readonly #timeoutMs: number;
+  readonly #rpcRetryDelayMs: number;
   readonly #rpcUrls: string[];
   readonly #log: (line: string) => void;
 
   constructor(options: AuditOptions) {
     this.#fetch = options.fetch;
     this.#timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+    this.#rpcRetryDelayMs = options.rpcRetryDelayMs ?? DEFAULT_RPC_RETRY_DELAY_MS;
     this.#rpcUrls = options.rpcUrls ?? DEFAULT_RPC_URLS;
     this.#log = options.log ?? (() => {});
   }
@@ -670,11 +676,14 @@ class Net {
     let lastUrl = this.#rpcUrls[0] ?? "";
     for (const url of this.#rpcUrls) {
       lastUrl = url;
-      const outcome = await this.request(url, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body,
-      });
+      const init = { method: "POST", headers: { "content-type": "application/json" }, body };
+      let outcome = await this.request(url, init);
+      // A dropped connection (no HTTP status) gets one retry on the same
+      // endpoint before the next one is tried: the fallback node may be worse.
+      if (!outcome.ok && outcome.status === null) {
+        await new Promise((resolve) => setTimeout(resolve, this.#rpcRetryDelayMs));
+        outcome = await this.request(url, init);
+      }
       if (!outcome.ok) {
         lastReason = outcome.reason;
         this.fail(`sui ${method}`, url, outcome.reason);
