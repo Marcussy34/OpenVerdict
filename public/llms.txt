@@ -1,0 +1,38 @@
+# OpenVerdict
+
+A decentralized adversarial AI jury protocol for factual disputes. Five juror
+seats are drawn on-chain from three model families (DeepSeek, Kimi, MiniMax,
+all served through GonkaRouter); each juror researches the claim alone, then
+casts a commit-reveal secret ballot, and a deadlock goes to a bounded
+cross-examination over frozen evidence. Verdicts settle on Sui as immutable
+resolution certificates anyone can recompute, with every opened page, run
+bundle and evidence manifest public on Walrus. Live on Sui testnet. Anyone can
+stake 0.1 SUI on a juror seat and earn that seat's jury rewards.
+
+## Docs
+
+Paths below are relative to the repository root; no public repository URL is
+published yet.
+
+- `README.md`: the product, the architecture, the honest limits.
+- `AGENTS.md`: how a coding or chat agent uses OpenVerdict.
+- `docs/API.md`: every public API route, with limits and status codes.
+- `docs/PRD.md`: complete protocol semantics.
+- `docs/GONKA-INTEGRATION.md`: model pinning, per-turn request ids, receipts.
+
+## Live
+
+- App: https://app.openverdict.info
+- API base: https://app.openverdict.info/api
+- The board: https://app.openverdict.info/claims
+- Submit a claim: https://app.openverdict.info/fact-check
+- Recompute a verdict in the browser: https://app.openverdict.info/verify
+
+## Optional
+
+- `.claude/skills/openverdict-audit/`: Claude Code skill that audits a verdict
+  or runs a verification end to end from chat.
+- `docs/demo/runbook.md`: preserved live testnet claim ids.
+- Terminal: `pnpm install && pnpm ov help` gives the public CLI (weather,
+  board, extract, submit, queue, status, watch, audit, trace). No key, no
+  wallet, no database.
