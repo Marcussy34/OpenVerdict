@@ -13,8 +13,14 @@ import type {
   DeliberationTurnPublic,
   ResolutionEvent,
 } from "../engine/contract";
+import {
+  runCompletedAtMs,
+  runTrail,
+  trailTurnTimes,
+  type TrailTurn,
+} from "../research/trail";
 import { familyOfModelId, type JurorFamily } from "./deliberation-graph";
-import { researchFeed, type ResearchFeedStep } from "./research-feed";
+import { feedDomain, researchFeed, type ResearchFeedStep } from "./research-feed";
 
 export type TranscriptTone =
   | "neutral"
@@ -144,6 +150,93 @@ function stringsAt(value: UnknownRecord | undefined, key: string): string[] {
 function eventTime(event: ResolutionEvent): number | undefined {
   const parsed = Date.parse(event.publishedAt ?? event.occurredAt);
   return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function distinctDomains(urls: readonly string[]): string[] {
+  const sites: string[] = [];
+  for (const url of urls) {
+    const site = feedDomain(url);
+    if (site !== undefined && !sites.includes(site)) sites.push(site);
+  }
+  return sites;
+}
+
+/** One trail turn as a feed step, or nothing for an action with no public shape. */
+function stepOfTurn(
+  turn: TrailTurn,
+  base: { seatId: string; atMs: number; runId?: string },
+): ResearchFeedStep | undefined {
+  const ordinal = turn.ordinal - 1;
+  const common = {
+    seatId: base.seatId,
+    ordinal,
+    atMs: base.atMs,
+    ...(base.runId === undefined ? {} : { runId: base.runId }),
+  };
+  if (turn.action === "search") {
+    return {
+      ...common,
+      kind: "search",
+      ...(turn.intent === "support" || turn.intent === "challenge"
+        ? { intent: turn.intent }
+        : {}),
+      ...(turn.query === undefined ? {} : { query: turn.query }),
+      domains: distinctDomains((turn.results ?? []).map((result) => result.url)),
+    };
+  }
+  if (turn.action === "open") {
+    const urls = turn.urls ?? (turn.pages ?? []).map((page) => page.url);
+    return {
+      ...common,
+      kind: "open",
+      domains: distinctDomains(urls),
+      pageCount: turn.pages?.length ?? urls.length,
+    };
+  }
+  if (turn.action === "answer") return { ...common, kind: "answer", domains: [] };
+  return undefined;
+}
+
+/**
+ * One seat's steps rebuilt from its revealed run proof, for the claims that
+ * ran before the live feed existed. The same trail `ov trace` prints: the
+ * conversation in the bundle, or the sealed transcript for a legacy bundle.
+ */
+export function stepsFromRunProof(
+  proof: unknown,
+  context: { seatId: string },
+): ResearchFeedStep[] {
+  const parsed = record(proof);
+  const bundle = parsed?.bundle;
+  if (bundle === undefined || bundle === null) return [];
+  const times = trailTurnTimes(bundle);
+  const completedAtMs = runCompletedAtMs(bundle) ?? 0;
+  const runId = stringAt(parsed, "runId");
+  const base = (turn: TrailTurn) => ({
+    seatId: context.seatId,
+    atMs: times.get(turn.ordinal) ?? completedAtMs,
+    ...(runId === undefined ? {} : { runId }),
+  });
+  const steps = runTrail(bundle).flatMap((turn) => {
+    const step = stepOfTurn(turn, base(turn));
+    return step === undefined ? [] : [step];
+  });
+  // The bundle records the conversation as it was sent, so the final answer
+  // is in validatedOutput rather than in a message: `ov trace` appends that
+  // turn too, and the card ends on the same step a live run ends on.
+  const answered = record(bundle)?.validatedOutput !== undefined;
+  const last = steps.at(-1);
+  if (answered && last?.kind !== "answer") {
+    steps.push({
+      seatId: context.seatId,
+      ordinal: steps.length,
+      kind: "answer",
+      domains: [],
+      atMs: completedAtMs,
+      ...(runId === undefined ? {} : { runId }),
+    });
+  }
+  return steps;
 }
 
 /** "DeepSeek" for deepseek-ai/DeepSeek-V4-Flash-0731; the id when unknown. */
@@ -302,6 +395,9 @@ export function buildTranscript(input: {
   claim: ClaimInspection;
   events: readonly ResolutionEvent[];
   agents?: ReadonlyMap<string, { modelId?: string; role?: string }>;
+  /** Revealed run proofs the page has fetched; a seat with no live steps
+   *  rebuilds its trail from the one that carries its jury seat id. */
+  proofs?: readonly unknown[];
 }): Transcript {
   const { claim, events } = input;
   const facts = seatFacts(claim);
@@ -348,10 +444,26 @@ export function buildTranscript(input: {
       juror.seats.push({ seatId, phase: seat.phase });
     }
   }
+  const proofBySeat = new Map<string, unknown>();
+  for (const proof of input.proofs ?? []) {
+    const seatId = stringAt(record(proof), "jurySeatId");
+    if (seatId !== undefined) proofBySeat.set(seatId, proof);
+  }
+
   for (const juror of jurors.values()) {
     juror.seats.sort((left, right) => left.phase - right.phase);
     for (const seat of juror.seats) {
-      juror.steps.push(...(feed.get(seat.seatId) ?? []));
+      // Live steps win; the run proof only fills a seat the feed never saw,
+      // so nothing is ever counted twice.
+      const live = feed.get(seat.seatId) ?? [];
+      if (live.length > 0) {
+        juror.steps.push(...live);
+        continue;
+      }
+      const proof = proofBySeat.get(seat.seatId);
+      if (proof !== undefined) {
+        juror.steps.push(...stepsFromRunProof(proof, { seatId: seat.seatId }));
+      }
     }
     for (const step of juror.steps) {
       juror.timeline.push({

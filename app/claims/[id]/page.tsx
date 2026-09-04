@@ -1530,12 +1530,18 @@ function ClaimCanvasContent({ params }: ClaimCanvasPageProps) {
   // The live research feed, per seat: one lane's public tool calls in order.
   const researchSteps = useMemo(() => researchFeed(events), [events]);
 
-  // The same record read as a conversation, with one card per juror.
+  // The same record read as a conversation, with one card per juror. The
+  // fetched proofs fill the steps of claims that ran before the live feed.
   const transcript = useMemo(
     () => claim === null
       ? { entries: [], jurors: [] }
-      : buildTranscript({ claim, events, agents }),
-    [agents, claim, events],
+      : buildTranscript({
+          claim,
+          events,
+          agents,
+          proofs: Object.values(proofsByRunId),
+        }),
+    [agents, claim, events, proofsByRunId],
   );
 
   const graph = useMemo(() => {

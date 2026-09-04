@@ -1,8 +1,15 @@
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 import type { ClaimInspection, ResolutionEvent } from "../engine/contract";
 import { CLAIM_MODE, CLAIM_STATE } from "../protocol/constants";
-import { buildTranscript, jurorAt, visibleEntriesAt } from "./transcript";
+import {
+  buildTranscript,
+  jurorAt,
+  stepsFromRunProof,
+  visibleEntriesAt,
+} from "./transcript";
 
 const START_MS = Date.parse("2026-09-04T00:00:00.000Z");
 const SEAT_IDS = Array.from({ length: 5 }, (_, index) => `seat-${index + 1}`);
@@ -245,5 +252,217 @@ describe("live transcript", () => {
     ]);
     expect(entries.at(-1)?.text).toBe("Juror 3 (MiniMax) sealed its vote (1 of 1, round two).");
     expect(jurorAt(jurors[2]!, Number.POSITIVE_INFINITY).status).toBe("table vote sealed");
+  });
+});
+
+/** A bundle shaped like the engine writes one: the conversation as sent. */
+function messageProof(overrides: Record<string, unknown> = {}) {
+  return {
+    runId: "run-seat-3",
+    jurySeatId: SEAT_IDS[2],
+    revealed: true,
+    bundle: {
+      request: {
+        messages: [
+          { role: "system", content: "the pinned prompt" },
+          { role: "user", content: JSON.stringify({ claim: "the claim" }) },
+          {
+            role: "assistant",
+            content: JSON.stringify({
+              action: "search",
+              intent: "challenge",
+              query: "ten percent brain myth",
+            }),
+          },
+          {
+            role: "user",
+            content: JSON.stringify({
+              tool: "search",
+              results: [
+                { n: 1, url: "https://mcgovern.mit.edu/a", title: "MIT" },
+                { n: 2, url: "https://www.apa.org/b", title: "APA" },
+              ],
+            }),
+          },
+          {
+            role: "assistant",
+            content: JSON.stringify({
+              action: "open",
+              urls: ["https://mcgovern.mit.edu/a", "https://www.apa.org/b"],
+            }),
+          },
+          {
+            role: "user",
+            content: JSON.stringify({
+              tool: "open_many",
+              pages: [
+                { url: "https://mcgovern.mit.edu/a", ref: "p1" },
+                { url: "https://www.apa.org/b", ref: "p2" },
+              ],
+            }),
+          },
+        ],
+      },
+      transcript: {
+        steps: [
+          { turn: 1, completedAtMs: START_MS + 11_000, action: { action: "search" }, result: {} },
+          { turn: 2, completedAtMs: START_MS + 21_000, action: { action: "open" }, result: {} },
+          { turn: 2, completedAtMs: START_MS + 22_000, action: { action: "open" }, result: {} },
+        ],
+      },
+      audit: { completedAtMs: START_MS + 30_000 },
+      validatedOutput: { outcome: "NO", confidenceBps: 9_500 },
+    },
+    ...overrides,
+  };
+}
+
+describe("steps rebuilt from a run proof", () => {
+  it("reads the conversation the bundle recorded, with the transcript's times", () => {
+    expect(stepsFromRunProof(messageProof(), { seatId: SEAT_IDS[2]! })).toEqual([
+      {
+        seatId: SEAT_IDS[2],
+        ordinal: 0,
+        kind: "search",
+        intent: "challenge",
+        query: "ten percent brain myth",
+        domains: ["mcgovern.mit.edu", "apa.org"],
+        atMs: START_MS + 11_000,
+        runId: "run-seat-3",
+      },
+      {
+        seatId: SEAT_IDS[2],
+        ordinal: 1,
+        kind: "open",
+        domains: ["mcgovern.mit.edu", "apa.org"],
+        pageCount: 2,
+        // A batched open keeps the last of its steps' times.
+        atMs: START_MS + 22_000,
+        runId: "run-seat-3",
+      },
+      {
+        seatId: SEAT_IDS[2],
+        ordinal: 2,
+        kind: "answer",
+        domains: [],
+        // The answer lives in validatedOutput, so it takes the run's own time.
+        atMs: START_MS + 30_000,
+        runId: "run-seat-3",
+      },
+    ]);
+  });
+
+  it("falls back to the sealed transcript for a bundle with no messages", () => {
+    const proof = {
+      runId: "run-legacy",
+      jurySeatId: SEAT_IDS[0],
+      bundle: {
+        transcript: {
+          steps: [
+            {
+              turn: 1,
+              completedAtMs: START_MS + 5_000,
+              action: { action: "search", intent: "support", query: "a query" },
+              result: { results: [{ url: "https://mit.edu/x" }] },
+            },
+            {
+              turn: 2,
+              completedAtMs: START_MS + 6_000,
+              action: { action: "open", urls: ["https://mit.edu/x", "https://apa.org/y"] },
+              result: { url: "https://mit.edu/x" },
+            },
+            {
+              turn: 2,
+              completedAtMs: START_MS + 7_000,
+              action: { action: "open", urls: ["https://mit.edu/x", "https://apa.org/y"] },
+              result: { url: "https://apa.org/y" },
+            },
+          ],
+        },
+        audit: { completedAtMs: START_MS + 9_000 },
+      },
+    };
+
+    // The transcript records one step per page; the trail is one open again.
+    expect(stepsFromRunProof(proof, { seatId: SEAT_IDS[0]! })).toEqual([
+      {
+        seatId: SEAT_IDS[0],
+        ordinal: 0,
+        kind: "search",
+        intent: "support",
+        query: "a query",
+        domains: ["mit.edu"],
+        atMs: START_MS + 5_000,
+        runId: "run-legacy",
+      },
+      {
+        seatId: SEAT_IDS[0],
+        ordinal: 1,
+        kind: "open",
+        domains: ["mit.edu", "apa.org"],
+        pageCount: 2,
+        atMs: START_MS + 7_000,
+        runId: "run-legacy",
+      },
+    ]);
+  });
+
+  it("says nothing for a sealed run, a table vote or a missing bundle", () => {
+    expect(stepsFromRunProof({ bundle: null }, { seatId: "seat-1" })).toEqual([]);
+    expect(stepsFromRunProof(undefined, { seatId: "seat-1" })).toEqual([]);
+    expect(
+      stepsFromRunProof({ bundle: { request: {}, audit: {} } }, { seatId: "seat-1" }),
+    ).toEqual([]);
+  });
+
+  it("rebuilds the demo claim's trail from its real run proof", () => {
+    const path = fileURLToPath(new URL("../ov/__fixtures__/trace-proof-research.json", import.meta.url));
+    const proof: unknown = JSON.parse(readFileSync(path, "utf8"));
+
+    expect(
+      stepsFromRunProof(proof, { seatId: "seat-1" }).map((step) => [
+        step.kind,
+        step.intent ?? step.pageCount,
+        step.domains.join(", "),
+      ]),
+    ).toEqual([
+      ["search", "challenge", "mcgovern.mit.edu, psychologicalscience.org, en.wikipedia.org"],
+      ["open", 3, "mcgovern.mit.edu, psychologicalscience.org, en.wikipedia.org"],
+      ["search", "support", "pmc.ncbi.nlm.nih.gov, today.duke.edu, apa.org"],
+      ["open", 2, "apa.org, pmc.ncbi.nlm.nih.gov"],
+      ["answer", undefined, ""],
+    ]);
+  });
+
+  it("fills a card from the proof only when the feed saw nothing", () => {
+    const withProof = buildTranscript({
+      claim: inspection(),
+      events: stream(),
+      proofs: [messageProof()],
+    });
+    // Seat 3 has live steps: the proof adds nothing on top of them.
+    expect(withProof.jurors[2]?.steps.map((step) => step.kind)).toEqual([
+      "search",
+      "open",
+      "answer",
+    ]);
+    // The live search carries the sites the event named, not the bundle's.
+    expect(withProof.jurors[2]?.steps[0]?.domains).toEqual(["mit.edu"]);
+
+    const noEvents = buildTranscript({
+      claim: inspection(),
+      events: stream().filter((event) => event.kind !== "research_step"),
+      proofs: [messageProof()],
+    });
+    expect(noEvents.jurors[2]?.steps.map((step) => step.kind)).toEqual([
+      "search",
+      "open",
+      "answer",
+    ]);
+    expect(noEvents.jurors[2]?.steps[0]?.domains).toEqual(["mcgovern.mit.edu", "apa.org"]);
+    // The rebuilt steps drive the status line the same way live ones do.
+    expect(jurorAt(noEvents.jurors[2]!, START_MS + 21_500).status).toBe(
+      "searching for evidence against the claim",
+    );
   });
 });

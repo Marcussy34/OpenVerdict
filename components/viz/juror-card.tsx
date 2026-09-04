@@ -251,8 +251,12 @@ export function JurorCard({
         <div className="mt-2 space-y-3 border-t border-white/10 pt-3">
           {view.steps.length > 0 ? (
             <ResearchFeed steps={view.steps} />
-          ) : (
-            <p className="text-[11px] text-white/45">No research step has landed yet.</p>
+          ) : revealed || failed ? null : (
+            // A seat still working says what will appear; a finished one whose
+            // proof carries no trail (a table vote) says nothing at all.
+            <p className="text-[11px] text-white/45">
+              Research steps appear here as they happen.
+            </p>
           )}
 
           {failed && juror.failureStatus && (

@@ -18,6 +18,13 @@ import {
   type RunAudit,
 } from "../audit/audit-claim";
 import { OvError, asArray, asNumber, asString, isRecord, type Json } from "./api";
+import {
+  trailFromMessages,
+  trailFromSteps,
+  type TrailPage,
+  type TrailSearchResult,
+  type TrailTurn,
+} from "../research/trail";
 import { domainOf, modelLabel, timingWords, wrapText } from "./render";
 
 /** Terminal columns when stdout is not a TTY. */
@@ -32,36 +39,13 @@ const DETAIL_INDENT = "       ";
 // The model
 // ---------------------------------------------------------------------------
 
-export type TraceSearchResult = { n?: number; title?: string; url: string; snippet?: string };
+export type TraceSearchResult = TrailSearchResult;
+export type TracePage = TrailPage;
 
-export type TracePage = {
-  url: string;
-  evidenceId?: string;
-  ref?: string;
-  from?: number;
-  chars?: number;
-  totalChars?: number;
-  truncated?: boolean;
-  error?: string;
-};
-
-export type TraceTurn = {
-  ordinal: number;
-  /** search, open, answer, or whatever the bundle recorded. */
-  action: string;
-  intent?: string;
-  query?: string;
-  results?: TraceSearchResult[];
-  urls?: string[];
-  pages?: TracePage[];
-  /** What the tool answered instead of a result (an exhausted budget, a fetch failure). */
-  error?: string;
+/** A trail turn plus the validated output the answer turn carries. */
+export type TraceTurn = TrailTurn & {
   /** The validated output of the run, on the answer turn. */
   answer?: Json;
-  /** The verbatim assistant message, for --full. */
-  assistant?: string;
-  /** The verbatim user result message (page texts included), for --full. */
-  result?: string;
 };
 
 export type TraceRound = {
@@ -127,155 +111,6 @@ export type TraceFilter = { juror?: number; round?: ClaimPhase };
 // ---------------------------------------------------------------------------
 // Building the trace from an audit result
 // ---------------------------------------------------------------------------
-
-function parseJson(text: string): Json | undefined {
-  try {
-    const parsed: unknown = JSON.parse(text);
-    return isRecord(parsed) ? parsed : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
-/** Message contents are JSON strings in the bundle; be forgiving about both. */
-function parseContent(content: unknown): Json | undefined {
-  if (isRecord(content)) return content;
-  const text = asString(content);
-  if (text === undefined) return undefined;
-  const direct = parseJson(text);
-  if (direct) return direct;
-  // Reasoning models wrap the action in a <think> block; take the object itself.
-  const start = text.indexOf("{");
-  const end = text.lastIndexOf("}");
-  return start >= 0 && end > start ? parseJson(text.slice(start, end + 1)) : undefined;
-}
-
-/** The message content as text, for --full and for the input block. */
-function contentText(content: unknown): string | undefined {
-  if (isRecord(content)) return JSON.stringify(content);
-  return asString(content);
-}
-
-function searchResults(result: Json | undefined): TraceSearchResult[] | undefined {
-  if (!result) return undefined;
-  const rows = asArray(result.results).filter(isRecord);
-  if (rows.length === 0) return undefined;
-  return rows.map((row) => ({
-    ...(asNumber(row.n) === undefined ? {} : { n: asNumber(row.n)! }),
-    ...(asString(row.title) ? { title: asString(row.title)! } : {}),
-    url: asString(row.url) ?? "",
-    ...(asString(row.snippet) ? { snippet: asString(row.snippet)! } : {}),
-  }));
-}
-
-function openedPages(result: Json | undefined): TracePage[] | undefined {
-  if (!result) return undefined;
-  const rows = asArray(result.pages).filter(isRecord);
-  if (rows.length > 0) return rows.map(pageOf);
-  // A single-url open answers with one flat page object, not a pages array.
-  if (asString(result.url) !== undefined) return [pageOf(result)];
-  return undefined;
-}
-
-function pageOf(row: Json): TracePage {
-  return {
-    url: asString(row.url) ?? "",
-    ...(asString(row.evidenceId) ? { evidenceId: asString(row.evidenceId)! } : {}),
-    ...(asString(row.ref) ? { ref: asString(row.ref)! } : {}),
-    ...(asNumber(row.from) === undefined ? {} : { from: asNumber(row.from)! }),
-    ...(asNumber(row.chars) === undefined ? {} : { chars: asNumber(row.chars)! }),
-    ...(asNumber(row.totalChars) === undefined ? {} : { totalChars: asNumber(row.totalChars)! }),
-    ...(row.truncated === true ? { truncated: true } : {}),
-    ...(asString(row.error) ? { error: asString(row.error)! } : {}),
-  };
-}
-
-function urlsOf(action: Json): string[] | undefined {
-  const many = asArray(action.urls)
-    .map((url) => asString(url))
-    .filter((url): url is string => url !== undefined);
-  if (many.length > 0) return many;
-  const one = asString(action.url);
-  return one ? [one] : undefined;
-}
-
-/** One turn per assistant message, its result taken from the user message after it. */
-function turnsFromMessages(messages: Json[]): { turns: TraceTurn[]; system?: string; input?: string } {
-  const turns: TraceTurn[] = [];
-  let system: string | undefined;
-  let input: string | undefined;
-  for (let index = 0; index < messages.length; index += 1) {
-    const message = messages[index]!;
-    const role = asString(message.role);
-    if (role === "system") {
-      system ??= contentText(message.content);
-      continue;
-    }
-    if (role === "user" && turns.length === 0) {
-      input ??= contentText(message.content);
-      continue;
-    }
-    if (role !== "assistant") continue;
-    const action = parseContent(message.content) ?? {};
-    const next = messages[index + 1];
-    const isResult = next !== undefined && asString(next.role) === "user";
-    const result = isResult ? parseContent(next.content) : undefined;
-    turns.push({
-      ordinal: turns.length + 1,
-      action: asString(action.action) ?? "unknown",
-      ...(asString(action.intent) ? { intent: asString(action.intent)! } : {}),
-      ...(asString(action.query) ? { query: asString(action.query)! } : {}),
-      ...(searchResults(result) ? { results: searchResults(result)! } : {}),
-      ...(urlsOf(action) ? { urls: urlsOf(action)! } : {}),
-      ...(openedPages(result) ? { pages: openedPages(result)! } : {}),
-      ...(result && asString(result.error) ? { error: asString(result.error)! } : {}),
-      ...(contentText(message.content) ? { assistant: contentText(message.content)! } : {}),
-      ...(isResult && contentText(next.content) ? { result: contentText(next.content)! } : {}),
-    });
-  }
-  return { turns, ...(system ? { system } : {}), ...(input ? { input } : {}) };
-}
-
-/**
- * Legacy bundles carry no messages. The transcript expands one `open` action
- * into one step per page, so consecutive open steps over the same urls are one
- * turn again.
- */
-function turnsFromSteps(steps: Json[]): TraceTurn[] {
-  const turns: TraceTurn[] = [];
-  let openKey: string | undefined;
-  for (const step of steps) {
-    const action = isRecord(step.action) ? step.action : {};
-    const result = isRecord(step.result) ? step.result : {};
-    const name = asString(action.action) ?? "unknown";
-    if (name === "answer") continue;
-    if (name === "open") {
-      const urls = urlsOf(action) ?? [];
-      const key = urls.join(" ");
-      const previous = turns.at(-1);
-      const sameTurn = key.length > 0 && key === openKey && previous?.action === "open";
-      // The pages of one open action arrive in url order, one step each.
-      const index = sameTurn ? previous!.pages?.length ?? 0 : 0;
-      const page = pageOf({ ...result, url: asString(result.url) ?? urls[index] ?? "" });
-      if (sameTurn) {
-        previous!.pages = [...(previous!.pages ?? []), page];
-        continue;
-      }
-      openKey = key;
-      turns.push({ ordinal: turns.length + 1, action: "open", ...(urls.length > 0 ? { urls } : {}), pages: [page] });
-      continue;
-    }
-    openKey = undefined;
-    turns.push({
-      ordinal: turns.length + 1,
-      action: name,
-      ...(asString(action.intent) ? { intent: asString(action.intent)! } : {}),
-      ...(asString(action.query) ? { query: asString(action.query)! } : {}),
-      ...(searchResults(result) ? { results: searchResults(result)! } : {}),
-    });
-  }
-  return turns;
-}
 
 /** The raw completion text of the answer, for --full. */
 function rawAnswerOf(bundle: Json): string | undefined {
@@ -348,12 +183,12 @@ function roundOf(result: AuditResult, run: RunAudit): TraceRound {
   const messages = asArray(request.messages).filter(isRecord);
   const transcript = isRecord(bundle.transcript) ? bundle.transcript : undefined;
   if (messages.length > 0) {
-    const built = turnsFromMessages(messages);
+    const built = trailFromMessages(messages);
     round.turns = built.turns;
     if (built.system) round.systemPrompt = built.system;
     if (built.input) round.input = built.input;
   } else if (transcript) {
-    round.turns = turnsFromSteps(asArray(transcript.steps).filter(isRecord));
+    round.turns = trailFromSteps(asArray(transcript.steps).filter(isRecord));
   }
   const validatedOutput = isRecord(bundle.validatedOutput) ? bundle.validatedOutput : undefined;
   const last = round.turns.at(-1);
