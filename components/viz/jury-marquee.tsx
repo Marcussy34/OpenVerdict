@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Cpu, ArrowRight } from "@/components/icons";
 import { cn } from "@/lib/utils";
 import { shortModel } from "@/components/globe/network";
+import { ModelLogo, logoFamily } from "@/components/viz/model-logo";
 
 export type JuryMember = {
   id: string;
@@ -13,23 +14,24 @@ export type JuryMember = {
   active: boolean;
 };
 
-/** Model family → identity hue, matched to the globe's node colours. */
-function familyClass(modelId: string) {
-  const id = modelId.toLowerCase();
-  if (id.includes("deepseek")) return "bg-family-a";
-  if (id.includes("kimi") || id.includes("moonshot")) return "bg-family-b";
-  return "bg-family-c";
+/** The tint a member wears: its position among the members of the same model. */
+function variantOf(members: readonly JuryMember[], index: number): number {
+  const family = logoFamily(members[index]?.model);
+  let count = 0;
+  for (let i = 0; i < index; i += 1) {
+    if (logoFamily(members[i]?.model) === family) count += 1;
+  }
+  return count;
 }
 
-function MemberChip({ member }: { member: JuryMember }) {
+function MemberChip({ member, variant }: { member: JuryMember; variant: number }) {
   return (
-    <span className="flex shrink-0 items-center gap-2 border border-border bg-card px-3 py-1.5 shadow-2xs">
-      <span
-        className={cn(
-          "size-1.5 shrink-0 rounded-full",
-          member.active ? familyClass(member.model) : "bg-muted-foreground/40",
-        )}
-        aria-hidden
+    <span className="flex shrink-0 items-center gap-2 border border-border bg-card py-1.5 pr-3 pl-1.5 shadow-2xs">
+      <ModelLogo
+        modelId={member.model}
+        variant={variant}
+        size={18}
+        className={cn(!member.active && "opacity-45")}
       />
       <span className="font-mono text-[11px] font-medium text-ocean">
         {shortModel(member.model)}
@@ -67,12 +69,16 @@ export function JuryMarquee({
 
       <div className="ov-fade-x relative min-w-0 flex-1 overflow-hidden">
         <div className="ov-marquee flex w-max items-center gap-2.5">
-          {members.map((member) => (
-            <MemberChip key={member.id} member={member} />
+          {members.map((member, index) => (
+            <MemberChip key={member.id} member={member} variant={variantOf(members, index)} />
           ))}
           <span aria-hidden className="flex items-center gap-2.5">
-            {members.map((member) => (
-              <MemberChip key={`dup-${member.id}`} member={member} />
+            {members.map((member, index) => (
+              <MemberChip
+                key={`dup-${member.id}`}
+                member={member}
+                variant={variantOf(members, index)}
+              />
             ))}
           </span>
         </div>

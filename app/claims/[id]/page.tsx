@@ -15,7 +15,7 @@ import {
 
 import { motion } from "motion/react";
 
-import { JurorAvatar } from "@/components/agents/avatar";
+import { ModelLogo } from "@/components/viz/model-logo";
 import { RunProof } from "@/components/claim/run-proof";
 import { StateBadge } from "@/components/claim/state-badge";
 import { WeatherStrip } from "@/components/weather/weather-strip";
@@ -41,7 +41,7 @@ import { Separator } from "@/components/ui/separator";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { useClaimEvents, type EventStreamStatus } from "@/components/use-claim-events";
 import { useNow } from "@/components/use-now";
-import { Hairline, SplitButton } from "@/components/landing/primitives";
+import { Hairline } from "@/components/landing/primitives";
 import { CanvasHighlightProvider } from "@/components/viz/canvas-highlight";
 import { DeliberationCanvas } from "@/components/viz/deliberation-canvas";
 import { DeliberationChat } from "@/components/viz/deliberation-chat";
@@ -64,7 +64,6 @@ import {
   familyOfModelId,
   type DeliberationGraph,
   type GraphNode,
-  type JurorFamily,
 } from "@/lib/viz/deliberation-graph";
 import {
   researchFeed,
@@ -90,21 +89,6 @@ type AgentDirectory = ReadonlyMap<string, { modelId?: string; role?: string }>;
 const TRANSCRIPT_REPLAY_SPEED = 20;
 
 const EMPTY_GRAPH: DeliberationGraph = { nodes: [], edges: [] };
-const JUROR_AVATARS: Partial<Record<JurorFamily, string[]>> = {
-  deepseek: [
-    "/media/agents/deepseek-1.png",
-    "/media/agents/deepseek-2.png",
-    "/media/agents/deepseek-3.png",
-  ],
-  kimi: [
-    "/media/agents/kimi-1.png",
-    "/media/agents/kimi-2.png",
-  ],
-  minimax: [
-    "/media/agents/minimax-1.png",
-    "/media/agents/minimax-2.png",
-  ],
-};
 
 const DEADLINE_LABELS: Array<{
   key: keyof ClaimInspection["deadlines"];
@@ -216,15 +200,15 @@ const FAILURE_EXPLANATIONS: Record<string, string> = {
     "This seat failed before committing a valid vote and was excluded from settlement.",
 };
 
-// Paper chip with a hairline in the stage's own colour: the tone is carried by
-// the mark and the words, never by a filled ground.
+// A paper chip with a hairline in the stage's own colour: the tone is carried
+// by the mark and the words, never by a filled ground.
 const STAGE_TONE: Record<StageTone, string> = {
-  form: "border-chain/35 bg-card/95 text-chain",
-  research: "border-chain/35 bg-card/95 text-chain",
-  reveal: "border-sealed/35 bg-card/95 text-sealed",
-  discuss: "border-unsure/35 bg-card/95 text-unsure",
-  yes: "border-yes/35 bg-card/95 text-yes",
-  no: "border-no/35 bg-card/95 text-no",
+  form: "border-chain/40 bg-card text-chain",
+  research: "border-chain/40 bg-card text-chain",
+  reveal: "border-sealed/40 bg-card text-sealed",
+  discuss: "border-unsure/40 bg-card text-unsure",
+  yes: "border-yes/40 bg-card text-yes",
+  no: "border-no/40 bg-card text-no",
 };
 
 function earliestAt(
@@ -396,7 +380,7 @@ function StageBanner({
         animate={{ opacity: 1, y: 0, scale: 1 }}
         transition={{ duration: 0.35, ease: "easeOut" }}
         className={cn(
-          "flex items-center gap-2.5 border px-3.5 py-2 backdrop-blur-md",
+          "flex items-center gap-2.5 border px-3.5 py-2",
           STAGE_TONE[stage.tone],
         )}
       >
@@ -505,7 +489,9 @@ function LeftRail({
   const revealedCount = claim.commitments.filter((commitment) => commitment.revealed).length;
 
   return (
-    <div className="flex min-h-full flex-col gap-7 p-5 md:p-6">
+    // Paper, like the rest of the page. The accent appears only where it acts:
+    // the replay button and the report link.
+    <div className="flex min-h-full flex-col gap-7 bg-card p-5 md:p-6">
       <div className="relative space-y-3">
         <Link
           href="/claims"
@@ -528,7 +514,7 @@ function LeftRail({
           attemptStatus={claim.attemptChain?.status}
         />
         <p className="flex items-center gap-2 text-[13px] text-muted-foreground tabular-nums">
-          <Clock size="14" variant="Bold" className="text-chain" />
+          <Clock size="14" variant="Bold" className="text-[var(--ov-accent)]" />
           {nextDeadlineLine(claim, now)}
         </p>
       </div>
@@ -574,10 +560,11 @@ function LeftRail({
                 </p>
               )}
             </div>
+            {/* One of the two accent-filled controls on the page. */}
             <button
               type="button"
               onClick={replay.toggle}
-              className="ov-micro ov-micro-sm inline-flex min-h-9 items-center gap-2 bg-primary px-3 text-primary-foreground transition-colors hover:bg-[var(--ov-accent)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ov-accent)]"
+              className="ov-micro ov-micro-sm inline-flex min-h-9 items-center gap-2 bg-primary px-3 text-white transition-colors hover:bg-[var(--ov-accent)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ov-accent)]"
             >
               {replay.playing ? (
                 <Pause size="14" variant="Bold" />
@@ -607,7 +594,7 @@ function LeftRail({
                 className={cn(
                   "ov-micro ov-micro-sm min-h-9 border transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ov-accent)]",
                   replay.speed === speed
-                    ? "border-transparent bg-primary text-primary-foreground"
+                    ? "border-[var(--ov-accent)] bg-sea/10 text-primary"
                     : "border-border bg-card text-muted-foreground hover:text-foreground",
                 )}
               >
@@ -618,14 +605,21 @@ function LeftRail({
         </div>
       ) : null}
 
-      <div className="mt-auto pt-2">
-        <SplitButton href={`/claims/${claim.claimId}/report`} tone="muted" stretch>
-          Full report
-        </SplitButton>
-      </div>
+      {/* The rail's primary action: the accent, filled. */}
+      <Link
+        href={`/claims/${claim.claimId}/report`}
+        className="ov-micro ov-micro-sm mt-auto inline-flex min-h-11 items-center justify-center gap-2 bg-primary text-white transition-colors hover:bg-[var(--ov-accent)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ov-accent)]"
+      >
+        <DocumentText size="15" variant="Bold" />
+        Full report
+      </Link>
     </div>
   );
 }
+
+/** Ink on paper, with the accent filling only the segment you are on. */
+const SEGMENT_SKIN =
+  "text-muted-foreground hover:text-foreground data-[state=on]:bg-primary data-[state=on]:text-white";
 
 /**
  * The stage's control cluster: the segmented Live / Graph switcher, and on the
@@ -658,11 +652,11 @@ function StageControls({
           if (next === "live" || next === "graph") onChange(next);
         }}
       >
-        <ToggleGroupItem value="live">
+        <ToggleGroupItem value="live" className={SEGMENT_SKIN}>
           <Radar size="13" variant="Bold" />
           {view === "graph" ? "Back to live" : "Live"}
         </ToggleGroupItem>
-        <ToggleGroupItem value="graph">
+        <ToggleGroupItem value="graph" className={SEGMENT_SKIN}>
           <Hierarchy size="13" variant="Bold" />
           Graph
         </ToggleGroupItem>
@@ -744,40 +738,38 @@ function SeatInspector({
   return (
     <div className="space-y-5">
       <div className="flex items-center gap-3">
-        <JurorAvatar
-          family={family}
-          ordinal={familyOrdinal < 0 ? seatIndex : familyOrdinal}
-          avatarKey={commitment.agentProfileId}
+        <ModelLogo
+          modelId={modelId}
+          variant={familyOrdinal < 0 ? seatIndex : familyOrdinal}
           size={56}
-          className="ring-2 ring-white/15"
         />
         <div className="min-w-0">
-          <p className="text-sm font-semibold text-white">
+          <p className="text-sm font-semibold text-foreground">
             Juror {seatIndex + 1}
           </p>
-          <p className="mt-1 break-all text-[11px] leading-relaxed text-white/70">
+          <p className="mt-1 break-all text-[11px] leading-relaxed text-muted-foreground">
             {modelId ?? "Model id unavailable"}
           </p>
-          <p className="mt-1 font-mono text-[10px] tracking-tight text-white/45">
+          <p className="mt-1 font-mono text-[10px] tracking-tight text-muted-foreground">
             Seat {seatId.slice(0, 8)}…{seatId.slice(-6)}
           </p>
         </div>
       </div>
 
       <dl className="grid grid-cols-2 gap-2">
-        <div className="rounded-xl border border-white/10 bg-white/[0.04] p-3">
-          <dt className="text-[10px] tracking-[0.12em] text-white/40 uppercase">
+        <div className="rounded-xl border border-border bg-surface p-3">
+          <dt className="text-[10px] tracking-[0.12em] text-muted-foreground uppercase">
             Outcome
           </dt>
-          <dd className="mt-1 text-sm font-semibold text-white">
+          <dd className="mt-1 text-sm font-semibold text-foreground">
             {outcome ?? "Pending"}
           </dd>
         </div>
-        <div className="rounded-xl border border-white/10 bg-white/[0.04] p-3">
-          <dt className="text-[10px] tracking-[0.12em] text-white/40 uppercase">
+        <div className="rounded-xl border border-border bg-surface p-3">
+          <dt className="text-[10px] tracking-[0.12em] text-muted-foreground uppercase">
             Confidence
           </dt>
-          <dd className="mt-1 text-sm font-semibold text-white tabular-nums">
+          <dd className="mt-1 text-sm font-semibold text-foreground tabular-nums">
             {confidenceBps === undefined
               ? "Pending"
               : `${confidenceBps} bps`}
@@ -786,8 +778,8 @@ function SeatInspector({
       </dl>
 
       {steps.length > 0 && (
-        <div className="space-y-2 rounded-xl border border-white/10 bg-white/[0.04] p-3">
-          <p className="text-[10px] tracking-[0.12em] text-white/40 uppercase">
+        <div className="space-y-2 rounded-xl border border-border bg-surface p-3">
+          <p className="text-[10px] tracking-[0.12em] text-muted-foreground uppercase">
             Research feed
           </p>
           {/* Live public tool calls; the vote stays sealed until reveal. */}
@@ -805,7 +797,7 @@ function SeatInspector({
             : `Seat ${seatIndex + 1}, phase ${phase}`}
         />
       ) : (
-        <p className="rounded-xl border border-white/10 bg-white/[0.04] p-3 text-xs leading-relaxed text-white/45">
+        <p className="rounded-xl border border-border bg-surface p-3 text-xs leading-relaxed text-muted-foreground">
           The public run proof will appear here after this seat is revealed.
         </p>
       )}
@@ -832,8 +824,8 @@ function NodeInspector({
     return (
       <div className="grid min-h-52 place-items-center p-6 text-center">
         <div className="space-y-2">
-          <InfoCircle size="22" variant="Bold" className="mx-auto text-white/35" />
-          <p className="text-sm text-white/55">Click any node</p>
+          <InfoCircle size="22" variant="Bold" className="mx-auto text-muted-foreground" />
+          <p className="text-sm text-muted-foreground">Click any node</p>
         </div>
       </div>
     );
@@ -864,18 +856,18 @@ function NodeInspector({
       ?.find((step) => step.ordinal === node.stepIndex && step.kind !== "answer");
     return (
       <div className="space-y-4">
-        <span className="inline-flex rounded-full border border-white/20 bg-white/[0.06] px-2 py-1 text-[10px] font-semibold text-white/75 uppercase">
+        <span className="inline-flex rounded-full border border-border bg-surface px-2 py-1 text-[10px] font-semibold text-muted-foreground uppercase">
           {liveStep === undefined ? "Sealed" : "Live"} {kind}
         </span>
         {liveStep !== undefined ? (
-          <p className="text-sm leading-relaxed text-white/85">
+          <p className="text-sm leading-relaxed text-foreground/85">
             At this point in its research, this juror{" "}
             {researchStepWords(liveStep)}. The step itself is public as it
             happens; the answer it draws, its vote and its reasoning stay
             sealed until the reveal.
           </p>
         ) : (
-          <p className="text-sm leading-relaxed text-white/85">
+          <p className="text-sm leading-relaxed text-foreground/85">
             This juror performed a {kind} at this point in its research. What was
             {kind === "search" ? " searched" : " opened"} stays sealed inside the
             juror&apos;s run bundle so no other juror can copy the research and no
@@ -883,23 +875,23 @@ function NodeInspector({
           </p>
         )}
         {seatFailure !== undefined ? (
-          <p className="rounded-xl border border-white/10 bg-white/[0.04] p-3 text-xs leading-relaxed text-white/70">
+          <p className="rounded-xl border border-border bg-surface p-3 text-xs leading-relaxed text-muted-foreground">
             This seat later failed ({seatFailure}) and never revealed, so the
             step&apos;s content remains sealed. The seat&apos;s recorded attempt
             log is public on its failure record: click the juror avatar for it.
           </p>
         ) : (
-          <p className="rounded-xl border border-white/10 bg-white/[0.04] p-3 text-xs leading-relaxed text-white/70">
+          <p className="rounded-xl border border-border bg-surface p-3 text-xs leading-relaxed text-muted-foreground">
             It unlocks automatically the moment this juror reveals: the sealed
             tick is then replaced by the real step, checkable against the
             bundle&apos;s hashes.
           </p>
         )}
         {node.stepIndex !== undefined ? (
-          <p className="font-mono text-[10px] text-white/45">Step {node.stepIndex + 1}</p>
+          <p className="font-mono text-[10px] text-muted-foreground">Step {node.stepIndex + 1}</p>
         ) : null}
         {node.seatId !== undefined ? (
-          <p className="font-mono text-[10px] text-white/45">
+          <p className="font-mono text-[10px] text-muted-foreground">
             Seat {node.seatId.slice(0, 8)}…{node.seatId.slice(-6)}
           </p>
         ) : null}
@@ -913,27 +905,27 @@ function NodeInspector({
     return (
       <div className="space-y-5">
         <div className="space-y-2">
-          <p className="text-[10px] font-semibold tracking-[0.14em] text-white/40 uppercase">
+          <p className="text-[10px] font-semibold tracking-[0.14em] text-muted-foreground uppercase">
             Search query
           </p>
-          <p className="text-sm leading-relaxed text-white/90">{query}</p>
+          <p className="text-sm leading-relaxed text-foreground/85">{query}</p>
           <span
             className={cn(
               "inline-flex rounded-full border px-2 py-1 text-[10px] font-semibold uppercase",
               node.intent === "challenge"
-                ? "border-[#ff8f3f]/40 bg-[#ff8f3f]/15 text-[#ffb077]"
-                : "border-[#0e76ff]/40 bg-[#0e76ff]/15 text-[#72b6ff]",
+                ? "border-unsure/40 bg-unsure/12 text-unsure"
+                : "border-chain/35 bg-sea/10 text-chain",
             )}
           >
             {node.intent ?? "support"}
           </span>
         </div>
         <div className="space-y-2">
-          <p className="text-[10px] font-semibold tracking-[0.14em] text-white/40 uppercase">
+          <p className="text-[10px] font-semibold tracking-[0.14em] text-muted-foreground uppercase">
             Results
           </p>
           {urls.length === 0 ? (
-            <p className="text-xs text-white/45">No result URLs recorded.</p>
+            <p className="text-xs text-muted-foreground">No result URLs recorded.</p>
           ) : (
             <ul className="space-y-2">
               {urls.map((url) => (
@@ -942,7 +934,7 @@ function NodeInspector({
                     href={url}
                     target="_blank"
                     rel="noreferrer"
-                    className="flex items-start gap-2 break-all text-xs leading-relaxed text-[#72b6ff] hover:underline"
+                    className="flex items-start gap-2 break-all text-xs leading-relaxed text-chain hover:underline"
                   >
                     <ExportSquare size="13" className="mt-0.5 shrink-0" />
                     {url}
@@ -967,17 +959,17 @@ function NodeInspector({
     return (
       <div className="space-y-5">
         <div className="space-y-2">
-          <p className="text-[10px] font-semibold tracking-[0.14em] text-white/40 uppercase">
+          <p className="text-[10px] font-semibold tracking-[0.14em] text-muted-foreground uppercase">
             Opened page
           </p>
           {node.url === undefined ? (
-            <p className="text-xs text-white/45">No URL recorded.</p>
+            <p className="text-xs text-muted-foreground">No URL recorded.</p>
           ) : (
             <a
               href={node.url}
               target="_blank"
               rel="noreferrer"
-              className="flex items-start gap-2 break-all text-xs leading-relaxed text-[#72b6ff] hover:underline"
+              className="flex items-start gap-2 break-all text-xs leading-relaxed text-chain hover:underline"
             >
               <ExportSquare size="13" className="mt-0.5 shrink-0" />
               {node.url}
@@ -985,14 +977,14 @@ function NodeInspector({
           )}
         </div>
         <div className="space-y-2">
-          <p className="text-[10px] font-semibold tracking-[0.14em] text-white/40 uppercase">
+          <p className="text-[10px] font-semibold tracking-[0.14em] text-muted-foreground uppercase">
             Content hash
           </p>
           <HashChip
             value={contentHash}
             label="hash"
             full
-            className="max-w-full bg-white/5 text-white/75"
+            className="max-w-full bg-surface text-muted-foreground"
           />
         </div>
         <span
@@ -1000,7 +992,7 @@ function NodeInspector({
             "inline-flex items-center gap-1.5 rounded-full border px-2 py-1 text-[10px] font-semibold uppercase",
             cited
               ? "border-yes/35 bg-yes/10 text-yes"
-              : "border-white/10 bg-white/[0.04] text-white/45",
+              : "border-border bg-surface text-muted-foreground",
           )}
         >
           <ShieldTick size="12" variant="Bold" />
@@ -1020,23 +1012,23 @@ function NodeInspector({
         <span className="inline-flex rounded-full border border-no/35 bg-no/10 px-2 py-1 text-[10px] font-semibold text-no uppercase">
           {status}
         </span>
-        <p className="text-sm leading-relaxed text-white/85">{explanation}</p>
+        <p className="text-sm leading-relaxed text-foreground/85">{explanation}</p>
         {message !== undefined ? (
-          <p className="rounded-xl border border-white/10 bg-white/[0.04] p-3 text-xs leading-relaxed whitespace-pre-wrap text-white/70">
+          <p className="rounded-xl border border-border bg-surface p-3 text-xs leading-relaxed whitespace-pre-wrap text-muted-foreground">
             {message}
           </p>
         ) : null}
-        <div className="rounded-xl border border-white/10 bg-white/[0.04] p-3 text-xs leading-relaxed text-white/60">
+        <div className="rounded-xl border border-border bg-surface p-3 text-xs leading-relaxed text-muted-foreground">
           A failed seat never becomes a vote: the engine fails closed and the
           claim settles on the seats that did reveal. The seat keeps its full
           attempt log and research trail on the public record.
         </div>
         {node.seatId !== undefined ? (
-          <p className="font-mono text-[10px] text-white/45">
+          <p className="font-mono text-[10px] text-muted-foreground">
             Seat {node.seatId.slice(0, 8)}…{node.seatId.slice(-6)}
           </p>
         ) : null}
-        <p className="text-[11px] leading-relaxed text-white/50">
+        <p className="text-[11px] leading-relaxed text-muted-foreground">
           Click the juror avatar connected to this node for the full proof
           and attempt-by-attempt log.
         </p>
@@ -1057,53 +1049,53 @@ function NodeInspector({
         .map((candidate) => candidate.family),
     ).size;
     const tone = outcome === "YES"
-      ? { frame: "border-[#43e5a0]/40 ring-[#43e5a0]/15", text: "text-[#43e5a0]", badge: "bg-[#0e7a4b]/35 text-[#43e5a0]" }
+      ? { frame: "border-yes/40 ring-yes/15", text: "text-yes", badge: "bg-yes/10 text-yes" }
       : outcome === "NO"
-        ? { frame: "border-[#ff8d84]/40 ring-[#ff8d84]/15", text: "text-[#ff8d84]", badge: "bg-[#a02121]/35 text-[#ff8d84]" }
-        : { frame: "border-[#ffc65c]/40 ring-[#ffc65c]/15", text: "text-[#ffc65c]", badge: "bg-[#8a5a00]/40 text-[#ffc65c]" };
+        ? { frame: "border-no/40 ring-no/15", text: "text-no", badge: "bg-no/10 text-no" }
+        : { frame: "border-unsure/40 ring-unsure/15", text: "text-unsure", badge: "bg-unsure/12 text-unsure" };
     return (
       <div className="space-y-4">
         {/* The certificate itself: a framed document, not a bare hash. */}
         <div
           className={cn(
-            "relative overflow-hidden rounded-2xl border-2 bg-[#071a36] p-5 ring-4 ring-inset",
+            "relative overflow-hidden rounded-2xl border-2 bg-card p-5 ring-4 ring-inset",
             tone.frame,
           )}
         >
-          <div aria-hidden className="pointer-events-none absolute inset-2 rounded-xl border border-white/10" />
+          <div aria-hidden className="pointer-events-none absolute inset-2 rounded-xl border border-border" />
           <div className="relative space-y-4 text-center">
             <span className={cn("mx-auto grid size-12 place-items-center rounded-full", tone.badge)}>
               <ShieldTick size="26" variant="Bold" />
             </span>
             <div>
-              <p className="text-[9px] font-bold tracking-[0.3em] text-white/45 uppercase">
+              <p className="text-[9px] font-bold tracking-[0.3em] text-muted-foreground uppercase">
                 OpenVerdict
               </p>
-              <p className="mt-1 text-[11px] font-bold tracking-[0.2em] text-white/80 uppercase">
+              <p className="mt-1 text-[11px] font-bold tracking-[0.2em] text-foreground/80 uppercase">
                 Resolution certificate
               </p>
             </div>
             <div>
               <p className={cn("text-3xl font-bold tracking-tight", tone.text)}>{outcome}</p>
-              <p className="mt-1 font-mono text-sm text-white/80">
+              <p className="mt-1 font-mono text-sm text-foreground/80">
                 Truth Score {truthScoreLabel(result?.truthScoreBps)}
               </p>
             </div>
-            <p className="mx-auto max-w-[30ch] text-xs leading-relaxed text-white/70">
+            <p className="mx-auto max-w-[30ch] text-xs leading-relaxed text-muted-foreground">
               “{claim.statement}”
             </p>
-            <p className="text-[10px] text-white/50">
+            <p className="text-[10px] text-muted-foreground">
               {revealedCount}/{claim.commitments.length} jurors revealed
               {familyCount > 0 ? ` · ${familyCount} model families` : ""} · equal weight
             </p>
-            <p className="text-[10px] text-white/40 tabular-nums">
+            <p className="text-[10px] text-muted-foreground tabular-nums">
               Finalized {new Date(node.atMs).toLocaleString()} · Sui testnet
             </p>
           </div>
         </div>
 
         <div className="space-y-2">
-          <p className="text-[10px] font-semibold tracking-[0.14em] text-white/40 uppercase">
+          <p className="text-[10px] font-semibold tracking-[0.14em] text-muted-foreground uppercase">
             On-chain record
           </p>
           <HashChip
@@ -1111,20 +1103,20 @@ function NodeInspector({
             label="certificate"
             tone={outcome === "YES" ? "yes" : "default"}
             href={certificateId ? suiObjectUrl(certificateId) : undefined}
-            className="max-w-full bg-white/5"
+            className="max-w-full bg-surface"
           />
           <HashChip
             value={claim.claimId}
             label="claim"
             href={suiObjectUrl(claim.claimId)}
-            className="max-w-full bg-white/5 text-white/75"
+            className="max-w-full bg-surface text-muted-foreground"
           />
           {digest !== undefined ? (
             <HashChip
               value={digest}
               label="finalize tx"
               href={suiTransactionUrl(digest)}
-              className="max-w-full bg-white/5 text-white/75"
+              className="max-w-full bg-surface text-muted-foreground"
             />
           ) : null}
           {claim.committeeId !== undefined ? (
@@ -1132,7 +1124,7 @@ function NodeInspector({
               value={claim.committeeId}
               label="committee"
               href={suiObjectUrl(claim.committeeId)}
-              className="max-w-full bg-white/5 text-white/75"
+              className="max-w-full bg-surface text-muted-foreground"
             />
           ) : null}
         </div>
@@ -1143,7 +1135,7 @@ function NodeInspector({
               href={`https://suiscan.xyz/testnet/object/${certificateId}`}
               target="_blank"
               rel="noreferrer"
-              className="inline-flex items-center gap-2 text-xs font-semibold text-[#72b6ff] hover:underline"
+              className="inline-flex items-center gap-2 text-xs font-semibold text-chain hover:underline"
             >
               <ExportSquare size="14" variant="Bold" />
               Certificate on Suiscan
@@ -1154,7 +1146,7 @@ function NodeInspector({
               href={`https://suiscan.xyz/testnet/tx/${digest}`}
               target="_blank"
               rel="noreferrer"
-              className="inline-flex items-center gap-2 text-xs font-semibold text-[#72b6ff] hover:underline"
+              className="inline-flex items-center gap-2 text-xs font-semibold text-chain hover:underline"
             >
               <ExportSquare size="14" variant="Bold" />
               Finalize transaction
@@ -1175,16 +1167,16 @@ function NodeInspector({
     return (
       <div className="space-y-5">
         <div className="space-y-2">
-          <p className="text-[10px] font-semibold tracking-[0.14em] text-white/40 uppercase">
+          <p className="text-[10px] font-semibold tracking-[0.14em] text-muted-foreground uppercase">
             Claim on trial
           </p>
-          <p className="text-sm leading-relaxed text-white/90">{claim.statement}</p>
+          <p className="text-sm leading-relaxed text-foreground/85">{claim.statement}</p>
         </div>
 
         {result !== undefined ? (
           <div className="space-y-3 rounded-xl border border-yes/25 bg-yes/8 p-4">
             <div className="flex items-center justify-between gap-3">
-              <p className="text-[10px] font-semibold tracking-[0.12em] text-white/45 uppercase">
+              <p className="text-[10px] font-semibold tracking-[0.12em] text-muted-foreground uppercase">
                 Verdict · Truth Score
               </p>
               <span className="rounded-full bg-yes/20 px-2 py-0.5 text-[11px] font-bold text-yes">
@@ -1199,77 +1191,77 @@ function NodeInspector({
               label="certificate"
               tone="yes"
               href={suiObjectUrl(result.certificateId)}
-              className="max-w-full bg-white/5"
+              className="max-w-full bg-surface"
             />
           </div>
         ) : null}
 
         <div className="space-y-2">
-          <p className="text-[10px] font-semibold tracking-[0.14em] text-white/40 uppercase">
+          <p className="text-[10px] font-semibold tracking-[0.14em] text-muted-foreground uppercase">
             Resolution criteria
           </p>
-          <p className="text-xs leading-relaxed text-white/75">
+          <p className="text-xs leading-relaxed text-muted-foreground">
             {claim.resolutionCriteria}
           </p>
         </div>
 
         <dl className="grid grid-cols-2 gap-2">
-          <div className="rounded-xl border border-white/10 bg-white/[0.04] p-3">
-            <dt className="text-[10px] tracking-[0.12em] text-white/40 uppercase">Jury</dt>
-            <dd className="mt-1 text-sm font-semibold text-white">
+          <div className="rounded-xl border border-border bg-surface p-3">
+            <dt className="text-[10px] tracking-[0.12em] text-muted-foreground uppercase">Jury</dt>
+            <dd className="mt-1 text-sm font-semibold text-foreground">
               {revealedCount}/{claim.commitments.length} revealed
             </dd>
-            <dd className="mt-0.5 text-[11px] text-white/55">
+            <dd className="mt-0.5 text-[11px] text-muted-foreground">
               {sealedCount} sealed{failedCount > 0 ? `, ${failedCount} failed` : ""}
             </dd>
           </div>
-          <div className="rounded-xl border border-white/10 bg-white/[0.04] p-3">
-            <dt className="text-[10px] tracking-[0.12em] text-white/40 uppercase">Mode</dt>
-            <dd className="mt-1 text-sm font-semibold text-white">
+          <div className="rounded-xl border border-border bg-surface p-3">
+            <dt className="text-[10px] tracking-[0.12em] text-muted-foreground uppercase">Mode</dt>
+            <dd className="mt-1 text-sm font-semibold text-foreground">
               {claim.mode === CLAIM_MODE.DIRECT_REVIEW ? "Direct review" : "Optimistic"}
             </dd>
-            <dd className="mt-0.5 text-[11px] text-white/55">
+            <dd className="mt-0.5 text-[11px] text-muted-foreground">
               3 model families, equal weight
             </dd>
           </div>
         </dl>
 
         <div className="space-y-2">
-          <p className="text-[10px] font-semibold tracking-[0.14em] text-white/40 uppercase">
+          <p className="text-[10px] font-semibold tracking-[0.14em] text-muted-foreground uppercase">
             Evidence cutoff
           </p>
-          <p className="text-xs text-white/75 tabular-nums">
+          <p className="text-xs text-muted-foreground tabular-nums">
             {new Date(claim.deadlines.evidenceCutoffMs).toLocaleString()}
           </p>
-          <p className="text-[11px] leading-relaxed text-white/45">
+          <p className="text-[11px] leading-relaxed text-muted-foreground">
             Jurors judge the statement as of this moment; later coverage does
             not count.
           </p>
         </div>
 
         <div className="space-y-2">
-          <p className="text-[10px] font-semibold tracking-[0.14em] text-white/40 uppercase">
+          <p className="text-[10px] font-semibold tracking-[0.14em] text-muted-foreground uppercase">
             On chain
           </p>
           <HashChip
             value={claim.claimId}
             label="claim"
             href={suiObjectUrl(claim.claimId)}
-            className="max-w-full bg-white/5 text-white/75"
+            className="max-w-full bg-surface text-muted-foreground"
           />
           {claim.committeeId !== undefined ? (
             <HashChip
               value={claim.committeeId}
               label="committee"
               href={suiObjectUrl(claim.committeeId)}
-              className="max-w-full bg-white/5 text-white/75"
+              className="max-w-full bg-surface text-muted-foreground"
             />
           ) : null}
           <a
             href={`https://suiscan.xyz/testnet/object/${claim.claimId}`}
             target="_blank"
             rel="noreferrer"
-            className="inline-flex items-center gap-2 text-xs font-semibold text-[#72b6ff] hover:underline"
+            className="inline-flex items-center gap-2 text-xs font-semibold text-chain hover:underline"
           >
             <ExportSquare size="14" variant="Bold" />
             Open claim object in Suiscan
@@ -1278,7 +1270,7 @@ function NodeInspector({
 
         <Link
           href={`/claims/${claim.claimId}/report`}
-          className="inline-flex min-h-9 items-center gap-2 rounded-lg border border-white/15 bg-white/[0.04] px-3 text-xs font-semibold text-white/80 transition-colors hover:bg-white/10 hover:text-white"
+          className="inline-flex min-h-9 items-center gap-2 rounded-lg border border-border bg-surface px-3 text-xs font-semibold text-foreground/80 transition-colors hover:bg-surface hover:text-foreground"
         >
           <DocumentText size="14" variant="Bold" />
           Full audit report
@@ -1289,10 +1281,10 @@ function NodeInspector({
 
   return (
     <div className="space-y-2">
-      <p className="text-[10px] font-semibold tracking-[0.14em] text-white/40 uppercase">
+      <p className="text-[10px] font-semibold tracking-[0.14em] text-muted-foreground uppercase">
         {node.kind}
       </p>
-      <p className="text-sm leading-relaxed text-white/80">{node.label}</p>
+      <p className="text-sm leading-relaxed text-foreground/80">{node.label}</p>
     </div>
   );
 }
@@ -1300,23 +1292,14 @@ function NodeInspector({
 function MobileSheet({
   title,
   onClose,
-  dark = false,
   children,
 }: {
   title: string;
   onClose: () => void;
-  /** The graph inspector keeps the canvas's dark scope; everything else is paper. */
-  dark?: boolean;
   children: ReactNode;
 }) {
   return (
-    <div
-      className={cn(
-        "fixed inset-x-0 bottom-0 z-50 max-h-[70vh] overflow-auto border-t bg-card lg:hidden",
-        dark && "ov-inspector-dark",
-        "border-border",
-      )}
-    >
+    <div className="fixed inset-x-0 bottom-0 z-50 max-h-[70vh] overflow-auto border-t border-border bg-card lg:hidden">
       <div className="sticky top-0 z-10 flex items-center justify-between border-b border-border bg-card/95 px-5 py-3 backdrop-blur">
         <p className="ov-micro ov-micro-sm text-muted-foreground">{title}</p>
         <button
@@ -1690,7 +1673,7 @@ function ClaimCanvasContent({ params }: ClaimCanvasPageProps) {
             control and the protocol stage. Paper ground and a hairline, and in
             the flow rather than over it, so the record scrolls beneath it
             instead of under a floating pill. */}
-        <div className="relative z-40 flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-border bg-background px-4 py-3">
+        <div className="relative z-40 flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-border bg-card px-4 py-3">
           <StageControls
             view={resolvedView}
             onChange={setView}
@@ -1728,7 +1711,6 @@ function ClaimCanvasContent({ params }: ClaimCanvasPageProps) {
               graph={replay.visible}
               selectedId={selectedId}
               onSelect={handleSelect}
-              avatars={JUROR_AVATARS}
               externalHighlightId={trailHighlightId}
             />
 
@@ -1779,14 +1761,14 @@ function ClaimCanvasContent({ params }: ClaimCanvasPageProps) {
       {resolvedView === "graph" && selectedNode !== null && (
         <aside
           style={{ width: inspectorWidth }}
-          className="ov-inspector-dark @container absolute inset-y-0 right-0 z-30 hidden overflow-hidden max-w-[calc(100vw-28rem)] border-l border-white/12 bg-[#061532]/95 shadow-[-28px_0_60px_rgba(1,8,22,0.55)] backdrop-blur-md lg:block"
+          className="@container absolute inset-y-0 right-0 z-30 hidden overflow-hidden max-w-[calc(100vw-28rem)] border-l border-border bg-card shadow-[-28px_0_60px_rgb(0_0_0/8%)] lg:block"
         >
           {/* Drag this edge to widen or narrow the panel. */}
           <div
             role="separator"
             aria-orientation="vertical"
             aria-label="Resize inspector"
-            className="absolute inset-y-0 left-0 z-10 w-1.5 cursor-col-resize touch-none hover:bg-[#0e76ff]/50 active:bg-[#0e76ff]/70"
+            className="absolute inset-y-0 left-0 z-10 w-1.5 cursor-col-resize touch-none hover:bg-sea/40 active:bg-sea/60"
             onPointerDown={(event) => {
               event.preventDefault();
               event.stopPropagation();
@@ -1850,7 +1832,7 @@ function ClaimCanvasContent({ params }: ClaimCanvasPageProps) {
       ) : null}
 
       {inspectorOpen && resolvedView === "graph" ? (
-        <MobileSheet title="Node inspector" onClose={() => setInspectorOpen(false)} dark>
+        <MobileSheet title="Node inspector" onClose={() => setInspectorOpen(false)}>
           <div className="@container p-5">
             <CanvasHighlightProvider onHighlight={setTrailHighlightId}>
               <NodeInspector

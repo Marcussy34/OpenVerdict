@@ -17,6 +17,7 @@ import { HashChip } from "@/components/viz/hash-chip";
 import { suiObjectUrl, suiTransactionUrl, walrusBlobUrl } from "@/lib/web/explorer";
 import { SeatSeal, outcomeLabel, seatStateOf } from "@/components/viz/seat-seal";
 import { ModelBadge } from "@/components/viz/model-badge";
+import { logoFamily } from "@/components/viz/model-logo";
 import { Reveal } from "@/components/viz/reveal";
 import { RunProof } from "@/components/claim/run-proof";
 import { cn } from "@/lib/utils";
@@ -904,7 +905,7 @@ export default function ClaimDetailPage({ params }: ClaimDetailPageProps) {
               {/* Public reasoning traces: every check the jurors published. */}
               <div className="space-y-2">
                 <FieldLabel>Public reasoning traces</FieldLabel>
-                {report.agents.map((agent) => (
+                {report.agents.map((agent, index) => (
                   <details
                     key={agent.agentProfileId}
                     className="group rounded-xl border border-border bg-card open:bg-surface"
@@ -916,7 +917,13 @@ export default function ClaimDetailPage({ params }: ClaimDetailPageProps) {
                         className="shrink-0 text-muted-foreground transition-transform group-open:rotate-180"
                       />
                       <Cpu size="13" variant="Bold" className="shrink-0 text-primary" />
-                      <ModelBadge modelId={agent.modelId} />
+                      <ModelBadge
+                        modelId={agent.modelId}
+                        variant={report.agents
+                          .slice(0, index)
+                          .filter((other) => logoFamily(other.modelId) === logoFamily(agent.modelId))
+                          .length}
+                      />
                       <span
                         className={cn(
                           "ml-auto rounded px-1.5 py-0.5 font-mono text-[10px] font-bold",

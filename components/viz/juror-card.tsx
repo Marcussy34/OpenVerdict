@@ -5,7 +5,7 @@ import { Progress } from "@/components/ui/progress";
 import { HashChip } from "@/components/viz/hash-chip";
 import { LiveDot } from "@/components/viz/live-dot";
 import { ResearchFeed } from "@/components/viz/research-feed";
-import { modelFamily } from "@/components/viz/model-badge";
+import { ModelLogo } from "@/components/viz/model-logo";
 import {
   ArrowDown2,
   ExportSquare,
@@ -236,20 +236,9 @@ function shortStatus(status: string): string {
   return status;
 }
 
-/** The family tile: one monochrome initial tinted by the seat's model family. */
-function SeatGlyph({ juror }: { juror: TranscriptJuror }) {
-  const family = modelFamily(juror.modelId);
-  return (
-    <span
-      aria-hidden
-      className={cn(
-        "grid size-6 shrink-0 place-items-center border text-[11px] font-semibold",
-        family.chip,
-      )}
-    >
-      {family.key === "other" ? "?" : family.name.charAt(0)}
-    </span>
-  );
+/** The seat's provider mark, tinted by its variant among same-model seats. */
+function SeatGlyph({ juror, variant }: { juror: TranscriptJuror; variant: number }) {
+  return <ModelLogo modelId={juror.modelId} variant={variant} size={24} />;
 }
 
 /** "Juror 3  Kimi" on one line; a long model id ellipsises rather than wraps. */
@@ -352,6 +341,7 @@ export function JurorCard({
   expanded,
   onToggle,
   panelId,
+  variant = 0,
   className,
 }: {
   juror: TranscriptJuror;
@@ -359,6 +349,8 @@ export function JurorCard({
   expanded: boolean;
   onToggle: () => void;
   panelId: string;
+  /** Tint index among the seats holding the same model. */
+  variant?: number;
   className?: string;
 }) {
   return (
@@ -372,7 +364,7 @@ export function JurorCard({
       )}
     >
       <div className="flex items-start gap-2">
-        <SeatGlyph juror={juror} />
+        <SeatGlyph juror={juror} variant={variant} />
         <div className="min-w-0 flex-1">
           <SeatName juror={juror} />
           {juror.role && (
@@ -405,6 +397,7 @@ export function JurorTrailPanel({
   view,
   onToggle,
   panelId,
+  variant = 0,
   proof,
   loadingProof,
   className,
@@ -413,6 +406,8 @@ export function JurorTrailPanel({
   view: TranscriptJurorView;
   onToggle: () => void;
   panelId: string;
+  /** Tint index among the seats holding the same model. */
+  variant?: number;
   proof?: BrowserRunProof;
   loadingProof?: boolean;
   className?: string;
@@ -431,7 +426,7 @@ export function JurorTrailPanel({
       )}
     >
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-border px-4 py-2.5">
-        <SeatGlyph juror={juror} />
+        <SeatGlyph juror={juror} variant={variant} />
         <SeatName juror={juror} />
         {juror.role && <RoleChip role={juror.role.replace(/_/g, " ")} />}
         <StatusLine view={view} className="min-w-0" />

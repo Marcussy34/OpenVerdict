@@ -239,46 +239,6 @@
 }
 
 /* ---------------------------------------------------------------------------
-   Canvas inspector dark scope
-   The node inspector on the deliberation canvas reuses the light-theme proof
-   components; remapping the theme tokens inside this scope restyles all of
-   them for the navy stage without forking a single component.
---------------------------------------------------------------------------- */
-.ov-inspector-dark {
-    --background: #04122b;
-    --foreground: #e9eff8;
-    --card: #0a1c38;
-    --card-foreground: #e9eff8;
-    --popover: #0a1c38;
-    --popover-foreground: #e9eff8;
-    --surface: #0d2145;
-    --surface-2: #123061;
-    --muted: rgb(243 243 243 / 7%);
-    --muted-foreground: #9db0ca;
-    --secondary: rgb(243 243 243 / 9%);
-    --secondary-foreground: #e9eff8;
-    --accent: rgb(14 118 255 / 18%);
-    --accent-foreground: #eaf3ff;
-    --border: rgb(243 243 243 / 14%);
-    --input: rgb(243 243 243 / 20%);
-    --ring: rgb(122 181 255 / 55%);
-    --primary: #2f8bff;
-    --destructive: #e04848;
-    --brand-ocean: #f3f7fd;
-    --brand-sea-ink: #7ab5ff;
-    --brand-aqua: #14335f;
-    --signal-yes: #3ddc97;
-    --signal-no: #ff8d84;
-    --signal-unsure: #ffc65c;
-    --signal-sealed: #b3a7ff;
-    --signal-chain: #7ab5ff;
-    /* Slim dark scrollbars for every scroll area inside the panel
-       (scrollbar-color inherits, so nested pres match the panel itself). */
-    scrollbar-width: thin;
-    scrollbar-color: rgb(243 243 243 / 28%) transparent;
-}
-
-/* ---------------------------------------------------------------------------
    Ambient surfaces
 --------------------------------------------------------------------------- */
 

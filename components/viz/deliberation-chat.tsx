@@ -3,7 +3,7 @@
 import { Fragment, useEffect, useRef, useState } from "react";
 import { motion, useReducedMotion } from "motion/react";
 
-import { JurorAvatar } from "@/components/agents/avatar";
+import { ModelLogo, modelVariantFor } from "@/components/viz/model-logo";
 import { OUTCOME_CHIP } from "@/components/claim/claim-format";
 import { Judge } from "@/components/icons";
 import type {
@@ -16,7 +16,9 @@ import { cn } from "@/lib/utils";
 type SeatMeta = {
   seatTag: string;
   family: JurorFamily;
-  avatarKey?: string;
+  modelId?: string;
+  /** Tint index among the seats holding the same model. */
+  variant: number;
 };
 
 /** Human labels for the reasons a debater's turn was skipped. */
@@ -32,11 +34,16 @@ function seatMetaByJurySeat(
   commitments: ClaimInspection["commitments"],
 ): Map<string, SeatMeta> {
   const meta = new Map<string, SeatMeta>();
+  const seats = commitments.map((commitment) => ({
+    id: commitment.jurySeatId,
+    modelId: commitment.modelId,
+  }));
   for (const [index, commitment] of commitments.entries()) {
     meta.set(commitment.jurySeatId, {
       seatTag: `Seat ${index + 1}`,
       family: familyOfModelId(commitment.modelId),
-      avatarKey: commitment.agentProfileId,
+      ...(commitment.modelId === undefined ? {} : { modelId: commitment.modelId }),
+      variant: modelVariantFor(seats, commitment.jurySeatId),
     });
   }
   return meta;
@@ -52,14 +59,14 @@ function CitationChip({ value }: { value: string }) {
         href={value}
         target="_blank"
         rel="noreferrer"
-        className="max-w-56 truncate rounded-full bg-[#0e76ff]/20 px-2 py-0.5 font-mono text-[9px] font-medium text-[#9ecbff] hover:bg-[#0e76ff]/35"
+        className="max-w-56 truncate rounded-full border border-chain/25 bg-sea/8 px-2 py-0.5 font-mono text-[10px] font-medium text-chain hover:bg-sea/15"
       >
         {label}
       </a>
     );
   }
   return (
-    <span className="max-w-56 truncate rounded-full bg-white/10 px-2 py-0.5 font-mono text-[9px] font-medium text-white/70">
+    <span className="max-w-56 truncate rounded-full border border-border bg-surface px-2 py-0.5 font-mono text-[10px] font-medium text-muted-foreground">
       {label}
     </span>
   );
@@ -100,32 +107,30 @@ export function DeliberationChat({
   return (
     <div className="pointer-events-none absolute inset-x-0 bottom-5 z-20 flex justify-center px-4">
       {open ? (
-        <div className="pointer-events-auto flex w-[min(620px,100%)] flex-col overflow-hidden rounded-2xl border border-white/15 bg-[#07162f]/95 shadow-2xl backdrop-blur-md">
-          <div className="flex items-center gap-2 border-b border-white/10 px-3.5 py-2">
-            <Judge size="14" variant="Bold" />
-            <span className="text-[10px] font-bold tracking-[0.18em] text-[#ffd98c] uppercase">
-              Deliberation
-            </span>
+        <div className="pointer-events-auto flex w-[min(620px,100%)] flex-col overflow-hidden border border-border bg-card shadow-lg">
+          <div className="flex items-center gap-2 border-b border-border px-4 py-2.5">
+            <Judge size="14" variant="Bold" className="text-unsure" />
+            <span className="ov-micro ov-micro-sm text-unsure">Deliberation</span>
             {live ? (
               <span aria-hidden className="relative flex size-1.5">
-                <span className="absolute inline-flex size-full animate-ping rounded-full bg-[#ffc65c] opacity-70 motion-reduce:hidden" />
-                <span className="relative inline-flex size-1.5 rounded-full bg-[#ffc65c]" />
+                <span className="absolute inline-flex size-full animate-ping rounded-full bg-unsure opacity-70 motion-reduce:hidden" />
+                <span className="relative inline-flex size-1.5 rounded-full bg-unsure" />
               </span>
             ) : null}
-            <span className="text-[10px] font-medium text-white/50 tabular-nums">
+            <span className="font-mono text-[11px] text-muted-foreground tabular-nums">
               {turnCount} {turnCount === 1 ? "turn" : "turns"}
             </span>
             <button
               type="button"
               onClick={() => setOpen(false)}
-              className="ml-auto rounded-full px-2 py-0.5 text-[10px] font-semibold text-white/60 hover:bg-white/10 hover:text-white"
+              className="ml-auto min-h-8 px-2 text-[13px] font-medium text-foreground/70 transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ov-accent)]"
             >
               Hide
             </button>
           </div>
-          <div ref={scrollRef} className="flex max-h-[36vh] flex-col gap-2.5 overflow-y-auto px-3.5 py-2.5">
+          <div ref={scrollRef} className="ov-scroll flex max-h-[36vh] flex-col gap-3 overflow-y-auto px-4 py-3">
             {turnCount === 0 ? (
-              <p className="py-2 text-center text-[11px] text-white/45">
+              <p className="py-2 text-center text-[13px] text-muted-foreground">
                 Jurors are preparing their arguments…
               </p>
             ) : (
@@ -150,24 +155,24 @@ export function DeliberationChat({
                       transition={{ duration: 0.25, ease: "easeOut" }}
                       className={cn("flex gap-2.5", skipped && "opacity-60")}
                     >
-                      <JurorAvatar
-                        family={seat?.family ?? "unknown"}
-                        ordinal={turn.ordinal}
-                        avatarKey={seat?.avatarKey}
+                      <ModelLogo
+                        modelId={seat?.modelId}
+                        variant={seat?.variant ?? 0}
                         size={26}
-                        className={cn("mt-0.5", skipped && "grayscale")}
+                        round
+                        className={cn("mt-0.5", skipped && "opacity-60")}
                       />
                       <div className="min-w-0 flex-1">
                         <div className="flex items-baseline gap-1.5">
-                          <span className="text-[11px] font-bold text-white/90">
+                          <span className="text-[13px] font-semibold text-foreground">
                             {seat?.seatTag ?? "Seat ?"}
                           </span>
-                          <span className="rounded-full bg-white/10 px-1.5 py-px text-[8px] font-bold tracking-wide text-white/55">
+                          <span className="ov-micro ov-micro-sm border border-border px-1.5 text-muted-foreground">
                             R1 · E{turn.exchange}
                           </span>
                         </div>
                         {skipped ? (
-                          <p className="mt-0.5 text-[11px] text-white/45 italic">
+                          <p className="mt-1 text-[13px] text-muted-foreground italic">
                             did not speak
                             {turn.failureStatus === undefined
                               ? ""
@@ -175,21 +180,21 @@ export function DeliberationChat({
                           </p>
                         ) : (
                           <>
-                            <p className="mt-0.5 text-[12px] leading-relaxed break-words text-white/90">
+                            <p className="mt-1 text-[13px] leading-relaxed break-words text-foreground/85">
                               {turn.argument}
                             </p>
                             {turn.stance !== undefined || turn.confidenceBps !== undefined ? (
                               <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
                                 {turn.stance !== undefined ? (
                                   <span className={cn(
-                                    "rounded-full px-2 py-0.5 text-[9px] font-bold",
+                                    "ov-micro ov-micro-sm rounded-full px-2",
                                     OUTCOME_CHIP[turn.stance],
                                   )}>
                                     {turn.stance}
                                   </span>
                                 ) : null}
                                 {turn.confidenceBps !== undefined ? (
-                                  <span className="text-[10px] font-medium text-white/55 tabular-nums">
+                                  <span className="font-mono text-[11px] text-muted-foreground tabular-nums">
                                     confidence {turn.confidenceBps / 100}%
                                   </span>
                                 ) : null}
@@ -207,10 +212,10 @@ export function DeliberationChat({
                       </div>
                     </motion.div>
                     {convergenceCopy !== null ? (
-                      <div className="flex items-center gap-2 py-1 text-center text-[10px] font-semibold text-[#ffd98c]">
-                        <span className="h-px flex-1 bg-white/10" />
+                      <div className="ov-micro ov-micro-sm flex items-center gap-2 py-1 text-center text-unsure">
+                        <span className="h-px flex-1 bg-border" />
                         <span>{convergenceCopy}</span>
-                        <span className="h-px flex-1 bg-white/10" />
+                        <span className="h-px flex-1 bg-border" />
                       </div>
                     ) : null}
                   </Fragment>
@@ -223,14 +228,14 @@ export function DeliberationChat({
         <button
           type="button"
           onClick={() => setOpen(true)}
-          className="pointer-events-auto inline-flex min-h-9 items-center gap-2 rounded-full border border-white/15 bg-[#07162f]/90 px-4 text-xs font-semibold text-white shadow-xl backdrop-blur"
+          className="ov-micro ov-micro-sm pointer-events-auto inline-flex min-h-10 items-center gap-2 border border-border bg-card px-4 text-foreground shadow-lg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ov-accent)]"
         >
-          <Judge size="14" variant="Bold" />
+          <Judge size="14" variant="Bold" className="text-unsure" />
           Deliberation · {turnCount} {turnCount === 1 ? "turn" : "turns"}
           {live ? (
             <span aria-hidden className="relative flex size-1.5">
-              <span className="absolute inline-flex size-full animate-ping rounded-full bg-[#ffc65c] opacity-70 motion-reduce:hidden" />
-              <span className="relative inline-flex size-1.5 rounded-full bg-[#ffc65c]" />
+              <span className="absolute inline-flex size-full animate-ping rounded-full bg-unsure opacity-70 motion-reduce:hidden" />
+              <span className="relative inline-flex size-1.5 rounded-full bg-unsure" />
             </span>
           ) : null}
         </button>

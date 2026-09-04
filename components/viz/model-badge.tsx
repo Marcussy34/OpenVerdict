@@ -1,6 +1,7 @@
 "use client";
 
 import { cn } from "@/lib/utils";
+import { ModelLogo } from "@/components/viz/model-logo";
 
 export type FamilyKey = "deepseek" | "kimi" | "minimax" | "other";
 
@@ -71,10 +72,13 @@ export function ModelDot({ modelId, className }: { modelId?: string | null; clas
 
 export function ModelBadge({
   modelId,
+  variant = 0,
   className,
   showFamily = true,
 }: {
   modelId?: string | null;
+  /** Tint index among the seats holding the same model. */
+  variant?: number;
   className?: string;
   showFamily?: boolean;
 }) {
@@ -88,7 +92,7 @@ export function ModelBadge({
         className,
       )}
     >
-      <span className={cn("size-1.5 shrink-0 rounded-full", fam.dot)} />
+      <ModelLogo modelId={modelId} variant={variant} size={14} className="-ml-0.5" />
       {showFamily && (
         <span className="shrink-0 font-semibold tracking-[0.08em] uppercase">{fam.name}</span>
       )}

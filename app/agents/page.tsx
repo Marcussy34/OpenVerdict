@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { JurorAvatar } from "@/components/agents/avatar";
+import { ModelLogo, modelVariantFor } from "@/components/viz/model-logo";
 import { StakeSeatCard } from "@/components/agents/stake-seat-card";
 import {
   stakeKindLabel,
@@ -12,15 +12,7 @@ import {
 } from "@/components/agents/stake-line";
 import { modelFamily } from "@/components/viz/model-badge";
 import { cn } from "@/lib/utils";
-import type { JurorFamily } from "@/lib/viz/deliberation-graph";
 import { Warning2, Refresh, ArrowRight2 } from "@/components/icons";
-
-const KNOWN_FAMILIES = new Set(["deepseek", "kimi", "minimax"]);
-
-function jurorFamilyOf(modelId: string): JurorFamily {
-  const key = modelFamily(modelId).key;
-  return (KNOWN_FAMILIES.has(key) ? key : "unknown") as JurorFamily;
-}
 
 function shortId(id: string): string {
   return id.length <= 14 ? id : `${id.slice(0, 8)}…${id.slice(-4)}`;
@@ -108,6 +100,13 @@ export default function AgentsPage() {
     [activeAgents, familyFilter],
   );
 
+  // Tints run over the whole registry, not the filtered view, so an agent
+  // keeps its tone when the family filter changes.
+  const agentSeats = useMemo(
+    () => activeAgents.map((agent) => ({ id: agent.agentProfileId, modelId: agent.modelId })),
+    [activeAgents],
+  );
+
   const activeCount = activeAgents.length;
 
   return (
@@ -169,7 +168,8 @@ export default function AgentsPage() {
           </p>
         ) : (
           <ul className="ov-edge divide-y divide-border overflow-hidden rounded-2xl border border-border bg-card">
-            {filteredAgents.map((agent, index) => {
+            {/* Tints are keyed on registry order, so a model's seats differ. */}
+            {filteredAgents.map((agent) => {
               const fam = modelFamily(agent.modelId);
               const staked = stakeSentence(agent);
               return (
@@ -178,12 +178,10 @@ export default function AgentsPage() {
                     href={`/agents/${agent.agentProfileId}`}
                     className="flex items-center gap-3 px-4 py-3 transition-colors hover:bg-surface focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset focus-visible:outline-none"
                   >
-                    <JurorAvatar
-                      family={jurorFamilyOf(agent.modelId)}
-                      ordinal={index}
-                      avatarKey={agent.agentProfileId}
+                    <ModelLogo
+                      modelId={agent.modelId}
+                      variant={modelVariantFor(agentSeats, agent.agentProfileId)}
                       size={36}
-                      className="shrink-0"
                     />
                     <div className="min-w-0 flex-1">
                       <p className="flex items-center gap-1.5 text-sm font-medium text-ocean">

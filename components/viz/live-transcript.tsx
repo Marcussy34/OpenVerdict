@@ -5,6 +5,7 @@ import { motion, useReducedMotion } from "motion/react";
 
 import { CornerPin, Hairline, SplitButton } from "@/components/landing/primitives";
 import { JurorCard, JurorTrailPanel } from "@/components/viz/juror-card";
+import { modelVariantFor } from "@/components/viz/model-logo";
 import { ExportSquare, Judge } from "@/components/icons";
 import { cn } from "@/lib/utils";
 import { suiObjectUrl, suiTransactionUrl } from "@/lib/web/explorer";
@@ -191,6 +192,12 @@ export function LiveTranscript({
   const afterJury = drawn ? stream.slice(drawIndex + 1) : [];
   const shouldAnimate = (entry: TranscriptEntry) => replay.active || !seen.has(entry.id);
 
+  // Seats of the same model wear different tints, keyed on committee order.
+  const seatTints = jurors.map((juror) => ({
+    id: String(juror.index),
+    modelId: juror.modelId,
+  }));
+
   const jurySection = (
     <section className="@container/jury">
       <div className="flex items-baseline justify-between gap-3">
@@ -216,6 +223,7 @@ export function LiveTranscript({
             .filter((entry): entry is BrowserRunProof => entry !== undefined)
             .at(-1);
           const view = jurorAt(juror, t);
+          const variant = modelVariantFor(seatTints, String(juror.index));
           const isOpen = expanded.has(juror.index);
           const panelId = `juror-trail-${juror.index}`;
           const onToggle = () => {
@@ -230,6 +238,7 @@ export function LiveTranscript({
                 expanded={isOpen}
                 onToggle={onToggle}
                 panelId={panelId}
+                variant={variant}
                 className="@xl/jury:order-1"
               />
               {isOpen && (
@@ -238,6 +247,7 @@ export function LiveTranscript({
                   view={view}
                   onToggle={onToggle}
                   panelId={panelId}
+                  variant={variant}
                   {...(proof === undefined ? {} : { proof })}
                   loadingProof={runIds.some((runId) => loadingRunIds.has(runId))}
                   className="@xl/jury:order-2 @xl/jury:col-span-full"

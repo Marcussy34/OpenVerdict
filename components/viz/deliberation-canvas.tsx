@@ -21,7 +21,7 @@ import {
   ShieldTick,
   TickCircle,
 } from "@/components/icons";
-import { avatarAssetNumber } from "@/components/agents/avatar";
+import { ModelLogo, type LogoFamily } from "@/components/viz/model-logo";
 import { cn } from "@/lib/utils";
 import type {
   DeliberationGraph,
@@ -47,34 +47,33 @@ const FAMILY_STYLE: Record<JurorFamily, {
   ring: string;
 }> = {
   deepseek: {
-    disc: "bg-[#0e76ff] text-white",
+    disc: "bg-family-a text-white",
     initial: "D",
-    ring: "ring-[#0e76ff]",
+    ring: "ring-family-a",
   },
   kimi: {
-    disc: "bg-[#e2b93b] text-[#04122b]",
+    disc: "bg-family-b text-white",
     initial: "K",
-    ring: "ring-[#e2b93b]",
+    ring: "ring-family-b",
   },
   minimax: {
-    disc: "bg-[#ff6f61] text-white",
+    disc: "bg-family-c text-white",
     initial: "M",
-    ring: "ring-[#ff6f61]",
+    ring: "ring-family-c",
   },
   unknown: {
-    disc: "bg-white/15 text-white/80",
+    disc: "bg-surface text-muted-foreground",
     initial: "?",
-    ring: "ring-white/30",
+    ring: "ring-border",
   },
 };
 
-// Bright dark-stage variants: the light-theme signal tokens are tuned for
-// white paper and read too dim on the navy canvas, so the chips carry their
-// own high-contrast values.
+// The same semantic chips the Live view uses: a tinted ground, a hairline and
+// the signal colour, all straight from the tokens.
 const OUTCOME_STYLE = {
-  YES: "bg-[#0e7a4b]/35 text-[#43e5a0]",
-  NO: "bg-[#a02121]/35 text-[#ff8d84]",
-  UNSURE: "bg-[#8a5a00]/40 text-[#ffc65c]",
+  YES: "border border-yes/35 bg-yes/10 text-yes",
+  NO: "border border-no/35 bg-no/10 text-no",
+  UNSURE: "border border-unsure/35 bg-unsure/12 text-unsure",
 } as const;
 const NODE_ENTRY_DURATION_SECONDS = 0.24;
 const NODE_ENTRY_EASE: [number, number, number, number] = [0.33, 1, 0.68, 1];
@@ -118,24 +117,25 @@ function outgoingSubtree(
   return visited;
 }
 
-// Edge palette: the wires carry meaning too. Citations glow verdict green,
-// juror actions carry brand blue, search results stay a quiet paper blue.
+// Edge palette: the wires carry meaning too, drawn as muted ink on paper.
+// Citations take the verdict green, juror actions the brand blue, search
+// results a quiet grey.
 type EdgeStyle = { stroke: string; lo: number; hi: number; width: number };
-const DEFAULT_EDGE_STYLE: EdgeStyle = { stroke: "#ffffff", lo: 0.12, hi: 0.3, width: 1 };
+const DEFAULT_EDGE_STYLE: EdgeStyle = { stroke: "#0b1b28", lo: 0.16, hi: 0.4, width: 1 };
 const EDGE_STYLE: Record<string, EdgeStyle> = {
-  round: { stroke: "#b3a7ff", lo: 0.3, hi: 0.62, width: 1.4 },
-  citation: { stroke: "#43e5a0", lo: 0.38, hi: 0.75, width: 1.4 },
-  action: { stroke: "#7db4ff", lo: 0.2, hi: 0.5, width: 1 },
-  result: { stroke: "#9ecbff", lo: 0.16, hi: 0.45, width: 1 },
+  round: { stroke: "#5145cd", lo: 0.3, hi: 0.65, width: 1.4 },
+  citation: { stroke: "#0e7a4b", lo: 0.32, hi: 0.7, width: 1.4 },
+  action: { stroke: "#0a5ccc", lo: 0.22, hi: 0.55, width: 1 },
+  result: { stroke: "#5a6b7e", lo: 0.2, hi: 0.5, width: 1 },
 };
 
 function nodeClassName(node: GraphNode, selected: boolean): string {
-  const selectedRing = selected ? "ring-2 ring-white/70" : undefined;
+  const selectedRing = selected ? "ring-2 ring-sea" : undefined;
 
   switch (node.kind) {
     case "claim":
       return cn(
-        "size-[92px] rounded-full border-2 border-[#0e76ff]/70 bg-[#0a1f3d] text-white shadow-2xl",
+        "size-[92px] rounded-full border border-sea/40 bg-card text-foreground",
         selectedRing,
       );
     case "juror": {
@@ -144,8 +144,9 @@ function nodeClassName(node: GraphNode, selected: boolean): string {
         // A satellite is the SAME agent serving round 2: a smaller disc, so
         // the agent's identity stays with its round-1 node on the ring.
         node.satellite === true ? "size-10" : "size-14",
-        "rounded-full ring-2",
-        selected ? "ring-white/70" : FAMILY_STYLE[family].ring,
+        // The avatar sits on a white tile, so a photo keeps its own edge.
+        "rounded-full bg-card ring-2",
+        selected ? "ring-sea" : FAMILY_STYLE[family].ring,
         node.state === "sealed" && "opacity-80",
       );
     }
@@ -154,22 +155,22 @@ function nodeClassName(node: GraphNode, selected: boolean): string {
       // tint plus dashed border say "sealed search" vs "sealed page" at a glance.
       const kind = typeof node.detail?.kind === "string" ? node.detail.kind : undefined;
       return cn(
-        "size-[22px] rounded-md border border-dashed border-white/30 text-white/90 opacity-90",
-        kind === "search" ? "bg-[#0e76ff]/25" : kind === "open" ? "bg-[#173a68]/70" : "bg-white/10",
+        "size-[22px] rounded-md border border-dashed border-foreground/25 text-muted-foreground",
+        kind === "search" ? "bg-sea/12" : kind === "open" ? "bg-surface-2" : "bg-surface",
         "after:absolute after:-inset-2.5 after:content-['']",
         selectedRing,
       );
     }
     case "search":
       return cn(
-        "size-[26px] rounded-full text-[#bcd9ff]",
+        "size-[26px] rounded-full border border-chain/30 bg-sea/12 text-chain",
         "after:absolute after:-inset-2.5 after:content-['']",
-        node.intent === "challenge" ? "bg-[#ff8f3f]/30 text-[#ffc79b]" : "bg-[#0e76ff]/30",
+        node.intent === "challenge" && "border-unsure/35 bg-unsure/15 text-unsure",
         selectedRing,
       );
     case "page":
       return cn(
-        "size-6 rounded-md bg-[#173a68] text-[#a6cdff]",
+        "size-6 rounded-md border border-border bg-surface text-muted-foreground",
         "after:absolute after:-inset-2.5 after:content-['']",
         selectedRing,
       );
@@ -183,48 +184,53 @@ function nodeClassName(node: GraphNode, selected: boolean): string {
     }
     case "failure":
       return cn(
-        "size-[30px] rounded-md bg-no/15 text-no",
+        "size-[30px] rounded-md border border-no/35 bg-no/10 text-no",
         "after:absolute after:-inset-2.5 after:content-['']",
         selectedRing,
       );
     case "certificate":
       return cn(
-        "size-16 rounded-2xl border border-[#43e5a0]/45 bg-[#0e7a4b]/25 text-[#43e5a0]",
+        "size-16 rounded-2xl border border-yes/40 bg-yes/10 text-yes",
         selectedRing,
       );
   }
 }
 
-function jurorAvatar(
-  node: GraphNode,
-  avatars: Partial<Record<JurorFamily, string[]>>,
-): string | undefined {
-  const family = node.family ?? "unknown";
-  const available = avatars[family];
-  if (available === undefined || available.length === 0) return undefined;
-  // The AGENT is the stable identity: the shared picker keeps this face in
-  // lockstep with the inspector's JurorAvatar for the same juror.
-  const agentProfileId = node.detail?.agentProfileId;
-  const key = typeof agentProfileId === "string" && agentProfileId.length > 0
-    ? agentProfileId
-    : node.seatId ?? node.id;
-  const assetNumber = avatarAssetNumber(family, key);
-  return assetNumber === undefined ? undefined : available[assetNumber - 1];
+/** The graph speaks JurorFamily; the logo speaks its own key. */
+function logoFamilyOf(family: JurorFamily | undefined): LogoFamily {
+  return family === undefined || family === "unknown" ? "other" : family;
+}
+
+/**
+ * Tint index per juror node: its position among the nodes of the same model
+ * family, in seat order, so two seats of one model never wear the same tone.
+ */
+function variantsByNode(graph: DeliberationGraph): Map<string, number> {
+  const jurors = graph.nodes
+    .filter((node) => node.kind === "juror")
+    .sort((left, right) => (left.seatIndex ?? 0) - (right.seatIndex ?? 0));
+  const seen = new Map<string, number>();
+  const variants = new Map<string, number>();
+  for (const node of jurors) {
+    const key = logoFamilyOf(node.family);
+    const next = seen.get(key) ?? 0;
+    variants.set(node.id, next);
+    seen.set(key, next + 1);
+  }
+  return variants;
 }
 
 function JurorContent({
   node,
-  avatars,
+  variant,
   verdict,
   reduceMotion,
 }: {
   node: GraphNode;
-  avatars: Partial<Record<JurorFamily, string[]>>;
+  variant: number;
   verdict?: GraphNode;
   reduceMotion: boolean;
 }) {
-  const family = node.family ?? "unknown";
-  const avatar = jurorAvatar(node, avatars);
   const outcome = node.outcome ?? verdict?.outcome;
   const confidenceBps = node.confidenceBps ?? verdict?.confidenceBps;
   const seatTag = shortSeatId(node.seatId);
@@ -240,37 +246,27 @@ function JurorContent({
           )}
         />
       ) : null}
-      {avatar === undefined ? (
-        <span
-          className={cn(
-            "grid size-full place-items-center rounded-full text-sm font-bold",
-            FAMILY_STYLE[family].disc,
-          )}
-        >
-          {FAMILY_STYLE[family].initial}
-        </span>
-      ) : (
-        <img
-          src={avatar}
-          alt=""
-          draggable={false}
-          className="size-full rounded-full object-cover"
-        />
-      )}
+      <ModelLogo
+        family={logoFamilyOf(node.family)}
+        variant={variant}
+        size={node.satellite === true ? 40 : 56}
+        round
+        className="size-full border-0"
+      />
       {(node.seatIndex ?? 0) >= 5 ? (
         // Round-2 seats joined at escalation; the tag separates them from
         // the round-1 panel at a glance.
-        <span className="absolute -top-1 -left-1 rounded-full bg-[#231d55] px-1 py-px text-[8px] font-extrabold tracking-wide text-[#cdc5ff] ring-1 ring-[#b3a7ff]/50">
+        <span className="absolute -top-1 -left-1 rounded-full bg-card px-1 py-px text-[8px] font-extrabold tracking-wide text-sealed ring-1 ring-sealed/40">
           R2
         </span>
       ) : null}
       {node.state === "sealed" ? (
-        <span className="absolute -top-1 -right-1 grid size-5 place-items-center rounded-full bg-[#04122b] text-white">
+        <span className="absolute -top-1 -right-1 grid size-5 place-items-center rounded-full bg-card text-sealed ring-1 ring-border">
           <Lock size="11" variant="Bold" />
         </span>
       ) : null}
       {node.state === "failed" ? (
-        <span className="absolute -right-1 -bottom-1 grid size-5 place-items-center rounded-full bg-[#04122b] text-no">
+        <span className="absolute -right-1 -bottom-1 grid size-5 place-items-center rounded-full bg-card text-no ring-1 ring-border">
           <CloseCircle size="13" variant="Bold" />
         </span>
       ) : null}
@@ -279,7 +275,6 @@ function JurorContent({
           <span
             className={cn(
               "rounded-full px-2 py-0.5 text-[10px] font-semibold whitespace-nowrap tabular-nums",
-              "drop-shadow-[0_1px_4px_rgba(2,8,20,0.9)]",
               OUTCOME_STYLE[outcome],
             )}
           >
@@ -288,7 +283,7 @@ function JurorContent({
           </span>
         ) : null}
         {seatTag === undefined ? null : (
-          <span className="rounded-full bg-[#04122b]/85 px-2 py-0.5 font-mono text-[9px] font-medium tracking-tight text-white/80">
+          <span className="rounded-full bg-card/85 px-2 py-0.5 font-mono text-[9px] font-medium tracking-tight text-muted-foreground ring-1 ring-border">
             {seatTag}
           </span>
         )}
@@ -300,7 +295,7 @@ function JurorContent({
 function nodeContent(
   node: GraphNode,
   options: {
-    avatars: Partial<Record<JurorFamily, string[]>>;
+    variant: number;
     cited: boolean;
     jurorVerdict?: GraphNode;
     reduceMotion: boolean;
@@ -314,10 +309,10 @@ function nodeContent(
             <ShieldSearch size="26" variant="Bold" />
           </span>
           <span className="pointer-events-none absolute top-[calc(100%+10px)] left-1/2 w-64 -translate-x-1/2 text-center">
-            <span className="text-[10px] font-bold tracking-[0.16em] text-[#a8cbff] drop-shadow-[0_1px_4px_rgba(2,8,20,0.9)]">
-              CLAIM ON TRIAL
+            <span className="ov-micro ov-micro-sm text-muted-foreground">
+              Claim on trial
             </span>
-            <span className="mt-1 block text-[13px] leading-snug font-medium break-words text-white drop-shadow-[0_2px_10px_rgba(2,8,20,0.85)]">
+            <span className="mt-1 block text-[13px] leading-snug font-medium break-words text-foreground">
               {labelAtMost(node.label, 300)}
             </span>
           </span>
@@ -327,7 +322,7 @@ function nodeContent(
       return (
         <JurorContent
           node={node}
-          avatars={options.avatars}
+          variant={options.variant}
           verdict={options.jurorVerdict}
           reduceMotion={options.reduceMotion}
         />
@@ -344,7 +339,7 @@ function nodeContent(
       return (
         <>
           <SearchNormal1 size="13" variant="Bold" />
-          <span className="pointer-events-none absolute top-[calc(100%+5px)] left-1/2 w-28 -translate-x-1/2 truncate text-center text-[10px] font-medium text-white/85 drop-shadow-[0_1px_4px_rgba(2,8,20,0.9)]">
+          <span className="pointer-events-none absolute top-[calc(100%+5px)] left-1/2 w-28 -translate-x-1/2 truncate text-center text-[10px] font-medium text-muted-foreground">
             {node.label}
           </span>
         </>
@@ -377,7 +372,7 @@ function nodeContent(
       return (
         <>
           <CloseCircle size="16" variant="Bold" />
-          <span className="pointer-events-none absolute top-[calc(100%+5px)] left-1/2 w-28 -translate-x-1/2 truncate text-center text-[9px] font-semibold text-[#ff8d84] drop-shadow-[0_1px_4px_rgba(2,8,20,0.9)]">
+          <span className="pointer-events-none absolute top-[calc(100%+5px)] left-1/2 w-28 -translate-x-1/2 truncate text-center text-[9px] font-semibold text-no">
             {node.label}
           </span>
         </>
@@ -398,7 +393,7 @@ function CanvasNode({
   selected,
   highlighted,
   highlightActive,
-  avatars,
+  variant,
   cited,
   jurorVerdict,
   reduceMotion,
@@ -414,7 +409,7 @@ function CanvasNode({
   selected: boolean;
   highlighted: boolean;
   highlightActive: boolean;
-  avatars: Partial<Record<JurorFamily, string[]>>;
+  variant: number;
   cited: boolean;
   jurorVerdict?: GraphNode;
   reduceMotion: boolean;
@@ -454,8 +449,8 @@ function CanvasNode({
             aria-label={`Select ${node.kind}: ${node.label}`}
             className={cn(
               "relative grid cursor-grab place-items-center focus-visible:outline-none active:cursor-grabbing",
-              "focus-visible:ring-2 focus-visible:ring-white/90 focus-visible:ring-offset-2",
-              "focus-visible:ring-offset-[#04122b]",
+              "focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+              "focus-visible:ring-offset-background",
               nodeClassName(node, selected),
             )}
             initial={reduceMotion ? false : { scale: 0 }}
@@ -531,7 +526,7 @@ function CanvasNode({
             }}
           >
             {nodeContent(node, {
-              avatars,
+              variant,
               cited,
               jurorVerdict,
               reduceMotion,
@@ -547,14 +542,12 @@ export function DeliberationCanvas({
   graph,
   selectedId,
   onSelect,
-  avatars,
   externalHighlightId,
   reducedMotion,
 }: {
   graph: DeliberationGraph;
   selectedId: string | null;
   onSelect: (node: GraphNode | null) => void;
-  avatars: Partial<Record<JurorFamily, string[]>>;
   /** A node id lit from outside the canvas (the inspector's research trail). */
   externalHighlightId?: string | null;
   reducedMotion?: boolean;
@@ -627,6 +620,9 @@ export function DeliberationCanvas({
     ),
     [graph.nodes],
   );
+  // Tints are stable per claim: the same seat keeps its tone across renders.
+  const nodeVariants = useMemo(() => variantsByNode(graph), [graph]);
+
   const verdictBySeat = useMemo(() => {
     const verdicts = new Map<string, GraphNode>();
     for (const node of graph.nodes) {
@@ -738,27 +734,22 @@ export function DeliberationCanvas({
       ref={containerRef}
       role="application"
       aria-label="Deliberation graph canvas"
-      className="relative h-full w-full touch-none cursor-grab overflow-hidden bg-[#04122b] select-none active:cursor-grabbing"
+      className="relative h-full w-full touch-none cursor-grab overflow-hidden bg-background select-none active:cursor-grabbing"
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={finishPointer}
       onPointerCancel={cancelPointer}
       onWheel={handleWheel}
     >
-      {/* Ground texture: the faint dot lattice only; the owner asked for the
-          colour washes to go, so the stage stays a flat navy. */}
+      {/* Ground texture: a barely-there hairline dot lattice on the same paper
+          the rest of the page is printed on. No washes, no vignette. */}
       <div
         aria-hidden
         className="pointer-events-none absolute inset-0"
         style={{
-          backgroundImage:
-            "radial-gradient(rgba(158,203,255,0.11) 1px, transparent 1px)",
+          backgroundImage: "radial-gradient(rgb(0 0 0 / 7%) 1px, transparent 1px)",
           backgroundSize: "26px 26px",
         }}
-      />
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_35%,rgba(0,0,0,0.42)_100%)]"
       />
       <div
         className="absolute inset-0 origin-top-left"
@@ -815,7 +806,7 @@ export function DeliberationCanvas({
               selected={selectedId === node.id}
               highlighted={nodeHighlighted}
               highlightActive={highlightedIds !== null}
-              avatars={avatars}
+              variant={nodeVariants.get(node.id) ?? 0}
               cited={cited}
               jurorVerdict={
                 node.seatId === undefined ? undefined : verdictBySeat.get(node.seatId)
