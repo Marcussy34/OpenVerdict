@@ -418,7 +418,6 @@ export default function VerifyPage() {
         description="Recompute what Sui holds, in your browser or with your agent."
         icon={ShieldTick}
         badges={<ExperimentalTag />}
-        actions={<MetaTag tone="chain">Core checks run client-side</MetaTag>}
       />
 
       {/* ---------------------------------------------- The one input ---- */}
