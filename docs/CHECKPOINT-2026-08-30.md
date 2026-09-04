@@ -2474,3 +2474,12 @@ not to be demoed with a DeepSeek SKEPTIC.
 
 BOARD: attempt 2 of the minimum wage claim relaunches on the next clear
 probe (engine relaunchTick); seeder armed; watcher and ov watch streaming.
+
+DRAW FIX SHIPPED 13:40: 9249422 (jury.move resample after 8 stalls,
+MAX_SELECTION_DRAWS 160; lib/engine/draw-feasibility.ts rosterAdmitsDraw +
+rosterCanSeat; prepareStake refuses a seat no committee could seat, 400
+with a probed suggestion). 89 Move tests, 158 engine tests, full localnet
+E2E green. Testnet upgrade tx CDcEop1RtneqZdBsFwFsygH78PurXZ29JRWhPpnB9chh,
+packageId 0x0e990f3e4f39692b2ba38c59a68187b75fc9dee7f87691512a5e151bfd53afbc
+(a5f482d), deployed 13:38 while the weather was closed. Live check of the
+guard recorded below.
