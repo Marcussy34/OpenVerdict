@@ -2871,3 +2871,24 @@ claim fires on the first clear probe.
   must be read (ov trace) before the demo.
 - Still uncommitted in the tree: the viz batch (courtroom-graph accepted +
   debate-ui in progress) and the docs site (docs-site in progress).
+
+### 3ar progress, 19:32: DOCS SITE LIVE at docs.openverdict.info
+
+- 6cd34b7 committed and deployed (Railway 69ed2777 SUCCESS 19:30):
+  docs/site/*.md (10 pages, 14.4k words), lib/docs/pages.ts, components/
+  docs (markdown, nav), app/docs/[[...slug]], host routing for the docs.
+  host (rewrite / and /x to /docs/x, no redirects), NEXT_PUBLIC_DOCS_URL
+  set on Railway (https://docs.openverdict.info) and as a Dockerfile ARG,
+  footer Docs link, sitemap, Learn page uses the shared DOCS_URL.
+  Verified: docs.openverdict.info/ and /trust-model serve the docs,
+  app.openverdict.info/docs/api too.
+- docs-site ROUND 2 in progress (the owner's addenda were not applied in
+  round 1): Mermaid diagrams via the mermaid npm package in a client
+  component (state machine, end-to-end sequence, commit-reveal, draw,
+  debate order, hash chain, attempt ladder, stake lifecycle, host
+  routing), reuse docs/diagrams images, glossary page, FAQ page, depth
+  check (env vars, event kinds and payloads, bundle and manifest
+  schemas, Move abort codes, worked Truth Score example from
+  0x273220b56d...). Commit as a follow-up when it reports.
+- Still uncommitted: the viz batch (courtroom accepted + debate-ui in
+  progress; page.tsx and live-transcript.tsx shared).
