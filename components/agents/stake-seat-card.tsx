@@ -389,7 +389,7 @@ function StakeSeatForm({
               )}
 
               <fieldset className="space-y-2">
-                <legend className="text-sm font-semibold text-ocean">Role label</legend>
+                <legend className="text-sm font-semibold text-ocean">Debate role</legend>
                 <div className="flex flex-wrap gap-1.5">
                   {ZKLOGIN_AGENT_ROLES.map((candidate) => (
                     <Chip
@@ -401,8 +401,12 @@ function StakeSeatForm({
                   ))}
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  A recorded manifest label with no behavioral effect: every
-                  juror runs the same protocol prompts and tools.
+                  Research is the same for every seat. The role is written into
+                  the seat&apos;s manifest and, when a jury goes to a round-two
+                  debate, it sets the juror&apos;s instructions: the Skeptic attacks
+                  the weakest link in the majority reasoning even when it shares
+                  the vote, Source authenticity weighs how reliable the cited
+                  sources are, the Investigator argues only from the record.
                 </p>
               </fieldset>
             </div>

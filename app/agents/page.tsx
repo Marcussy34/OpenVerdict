@@ -6,7 +6,6 @@ import { Button } from "@/components/ui/button";
 import { ModelLogo, modelVariantFor } from "@/components/viz/model-logo";
 import { StakeSeatCard } from "@/components/agents/stake-seat-card";
 import {
-  stakeKindLabel,
   stakeSentence,
   type StakedAgentEntry,
 } from "@/components/agents/stake-line";
@@ -144,7 +143,7 @@ export default function AgentsPage() {
       )}
 
       {/* One row per juror; the full dossier lives behind the click. */}
-      <section className="mx-auto w-full max-w-3xl">
+      <section className="mx-auto w-full max-w-5xl">
         {loading ? (
           <div className="space-y-2">
             {[0, 1, 2].map((index) => (
@@ -167,16 +166,18 @@ export default function AgentsPage() {
             No agents in this family yet.
           </p>
         ) : (
-          <ul className="ov-edge divide-y divide-border overflow-hidden rounded-2xl border border-border bg-card">
-            {/* Tints are keyed on registry order, so a model's seats differ. */}
+          <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {/* Three seats per row so the whole registry is in view at once
+                (owner). Tints are keyed on registry order, so a model's seats
+                differ. */}
             {filteredAgents.map((agent) => {
               const fam = modelFamily(agent.modelId);
               const staked = stakeSentence(agent);
               return (
-                <li key={agent.agentProfileId}>
+                <li key={agent.agentProfileId} className="ov-edge rounded-2xl border border-border bg-card">
                   <Link
                     href={`/agents/${agent.agentProfileId}`}
-                    className="flex items-center gap-3 px-4 py-3 transition-colors hover:bg-surface focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset focus-visible:outline-none"
+                    className="flex h-full items-center gap-3 rounded-2xl px-4 py-3 transition-colors hover:bg-surface focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset focus-visible:outline-none"
                   >
                     <ModelLogo
                       modelId={agent.modelId}
@@ -206,19 +207,6 @@ export default function AgentsPage() {
                         </p>
                       )}
                     </div>
-                    <span
-                      className={cn(
-                        "shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold",
-                        agent.backing?.kind === "ZKLOGIN" ||
-                        agent.backing?.kind === "WALLET"
-                          ? "bg-yes/10 text-yes"
-                          : agent.backing?.kind === "ALLOWLIST"
-                            ? "bg-sea/10 text-primary"
-                            : "bg-muted text-muted-foreground",
-                      )}
-                    >
-                      {stakeKindLabel(agent)}
-                    </span>
                     <ArrowRight2 size="14" className="shrink-0 text-muted-foreground" />
                   </Link>
                 </li>
