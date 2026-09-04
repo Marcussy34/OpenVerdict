@@ -10,7 +10,6 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { FieldLabel } from "@/components/viz/panel";
 import { PIPELINE_STAGES } from "@/components/viz/pipeline";
 import { StateBadge } from "@/components/claim/state-badge";
-import { WeatherStrip } from "@/components/weather/weather-strip";
 import {
   useClaimSubmission,
   MAX_CLAIM,
@@ -550,12 +549,6 @@ function FactCheckContent() {
           </div>
         )}
 
-        <div className="space-y-2 pt-2">
-          <WeatherStrip />
-          <p className="text-center text-[11px] text-muted-foreground">
-            If one family is down, your claim queues and starts on the first clear probe.
-          </p>
-        </div>
       </div>
 
       <RecentFactChecks />

@@ -162,7 +162,7 @@
     --signal-yes: #0e7a4b;
     --signal-no: #ce2c2c;
     --signal-unsure: #8a5600; /* Darkened from #a56800 to pass 4.5:1 WCAG AA on #f8f3eb (5.57:1) and #ffffff (6.16:1) */
-    --signal-sealed: #5145cd;
+    --signal-sealed: #5a6b7e; /* sealed reads as quiet ink with the lock icon: one palette, no extra hue (owner, 2026-09-04) */
     --signal-chain: var(--brand-sea-ink);
     --signal-live: #0e7a4b;
 

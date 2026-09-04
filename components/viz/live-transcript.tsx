@@ -147,7 +147,9 @@ export function LiveTranscript({
   onRequestProof: (runIds: string[]) => void;
   loadingRunIds: ReadonlySet<string>;
 }) {
-  const [expanded, setExpanded] = useState<ReadonlySet<number>>(new Set());
+  // One trail open at a time: opening a juror closes the one that was open
+  // (owner: "if you open another one, the previous one will be closed").
+  const [expanded, setExpanded] = useState<number | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const reduceMotion = useReducedMotion() ?? false;
   // Entries present on the first render are already history: only the ones
@@ -174,12 +176,7 @@ export function LiveTranscript({
   }, [count]);
 
   const toggle = useCallback((index: number) => {
-    setExpanded((current) => {
-      const next = new Set(current);
-      if (next.has(index)) next.delete(index);
-      else next.add(index);
-      return next;
-    });
+    setExpanded((current) => (current === index ? null : index));
   }, []);
 
   const statement = visible.find((entry) => entry.kind === "statement");
@@ -224,7 +221,7 @@ export function LiveTranscript({
             .at(-1);
           const view = jurorAt(juror, t);
           const variant = modelVariantFor(seatTints, String(juror.index));
-          const isOpen = expanded.has(juror.index);
+          const isOpen = expanded === juror.index;
           const panelId = `juror-trail-${juror.index}`;
           const onToggle = () => {
             if (!isOpen) onRequestProof(runIds);
