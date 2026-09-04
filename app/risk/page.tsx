@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { PageHeader, ExperimentalTag } from "@/components/viz/page-header";
+import { PageHeader } from "@/components/viz/page-header";
 import { Panel } from "@/components/viz/panel";
 import { Warning2, ShieldCross, Cpu, Lock, Link21 } from "@/components/icons";
 
@@ -39,7 +39,6 @@ export default function RiskPage() {
         title="Risk disclosure"
         description="OpenVerdict is an experimental decentralized adversarial AI jury protocol. Understand the technical and economic risks first."
         icon={Warning2}
-        badges={<ExperimentalTag />}
       />
 
       <div className="space-y-4">

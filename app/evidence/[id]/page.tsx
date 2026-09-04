@@ -1,7 +1,7 @@
 "use client";
 
 import { use } from "react";
-import { PageHeader, ExperimentalTag, MetaTag } from "@/components/viz/page-header";
+import { PageHeader, MetaTag } from "@/components/viz/page-header";
 import { Panel, FieldLabel, Well } from "@/components/viz/panel";
 import { HashChip } from "@/components/viz/hash-chip";
 import { suiObjectUrl, walrusBlobUrl } from "@/lib/web/explorer";
@@ -61,7 +61,6 @@ export default function EvidenceDetailPage({ params }: EvidenceDetailPageProps) 
         eyebrow={`Phase ${evidence.phase} · ${evidence.sourceClass.replace(/_/g, " ").toLowerCase()}`}
         title="Evidence artifact"
         icon={DocumentText}
-        badges={<ExperimentalTag />}
         actions={
           <MetaTag tone="sealed">
             <ShieldTick size="11" variant="Bold" />

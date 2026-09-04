@@ -3,7 +3,7 @@
 import { use, useState, useEffect } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { PageHeader, ExperimentalTag, MetaTag } from "@/components/viz/page-header";
+import { PageHeader, MetaTag } from "@/components/viz/page-header";
 import { Panel, FieldLabel } from "@/components/viz/panel";
 import { HashChip } from "@/components/viz/hash-chip";
 import { suiObjectUrl, suiAccountUrl, walrusBlobUrl } from "@/lib/web/explorer";
@@ -175,7 +175,6 @@ export default function AgentDetailPage({ params }: AgentDetailPageProps) {
         eyebrow={family.name}
         title="Agent profile"
         icon={Profile2User}
-        badges={<ExperimentalTag />}
         actions={
           <MetaTag tone={agent.active ? "yes" : "default"}>
             {agent.active ? (

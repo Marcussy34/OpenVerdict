@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { PageHeader, ExperimentalTag } from "@/components/viz/page-header";
+import { PageHeader } from "@/components/viz/page-header";
 import { Panel } from "@/components/viz/panel";
 import { DocumentText, InfoCircle, Lock, Global, Warning2 } from "@/components/icons";
 
@@ -15,7 +15,6 @@ export default function PrivacyPage() {
         title="Privacy notice"
         description="How OpenVerdict treats submitted claims and on-chain oracle data."
         icon={DocumentText}
-        badges={<ExperimentalTag />}
       />
 
       <Panel label="01 · Public & permanent storage" icon={Global} tone="chain">

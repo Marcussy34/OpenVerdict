@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { PageHeader, ExperimentalTag } from "@/components/viz/page-header";
+import { PageHeader } from "@/components/viz/page-header";
 import { Panel } from "@/components/viz/panel";
 import { DocumentText, Warning2 } from "@/components/icons";
 
@@ -43,7 +43,6 @@ export default function TermsPage() {
         title="Terms of use"
         description="Please review these terms carefully before interacting with OpenVerdict."
         icon={DocumentText}
-        badges={<ExperimentalTag />}
       />
 
       {/* Failure red, not amber: amber belongs to the UNSURE verdict alone. */}

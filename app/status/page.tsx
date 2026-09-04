@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
-import { PageHeader, ExperimentalTag } from "@/components/viz/page-header";
+import { PageHeader } from "@/components/viz/page-header";
 import { Panel, FieldLabel } from "@/components/viz/panel";
 import { HashChip } from "@/components/viz/hash-chip";
 import { StatusPill, type DotTone } from "@/components/viz/live-dot";
@@ -93,7 +93,6 @@ export default function StatusPage() {
         title="System & protocol status"
         description="Health and connectivity for the Sui Move deployment, GonkaRouter inference, Walrus storage and the indexing pipeline."
         icon={Activity}
-        badges={<ExperimentalTag />}
         actions={
           <>
             <StatusPill tone={overallTone} label={overallLabel} pulse={allHealthy} />

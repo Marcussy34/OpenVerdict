@@ -11,7 +11,7 @@ import { VerdictGauge } from "@/components/viz/verdict-gauge";
 import { ClaimTimeline } from "@/components/claim/timeline";
 import { TimeDisplay } from "@/components/time-display";
 import { PositionPanel } from "@/components/pool/position-panel";
-import { PageHeader, ExperimentalTag, MetaTag } from "@/components/viz/page-header";
+import { PageHeader, MetaTag } from "@/components/viz/page-header";
 import { Panel, FieldLabel, Well } from "@/components/viz/panel";
 import { HashChip } from "@/components/viz/hash-chip";
 import { suiObjectUrl, suiTransactionUrl, walrusBlobUrl } from "@/lib/web/explorer";
@@ -356,7 +356,6 @@ export default function ClaimDetailPage({ params }: ClaimDetailPageProps) {
                 stranded={stranded}
                 attemptStatus={claim.attemptChain?.status}
               />
-              <ExperimentalTag />
             </div>
             {stranded && !attemptStopped && (
               <p className="mt-1 text-xs text-muted-foreground">

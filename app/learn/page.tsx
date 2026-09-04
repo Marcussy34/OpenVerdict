@@ -1,8 +1,6 @@
 import * as React from "react";
 import type { Metadata } from "next";
-import { PageHeader } from "@/components/viz/page-header";
 import { Hairline, NumberChip, SplitButton } from "@/components/landing/primitives";
-import { Judge } from "@/components/icons";
 import { DOCS_URL } from "@/lib/web/site-urls";
 
 export const metadata: Metadata = {
@@ -39,13 +37,16 @@ const SCORE: ReadonlyArray<readonly [string, string]> = [
 
 export default function LearnPage() {
   return (
-    <div className="mx-auto max-w-4xl px-5 py-10 md:px-7 lg:py-12">
-      <PageHeader
-        eyebrow="Start here"
-        title="How OpenVerdict works"
-        description="Ask whether a statement is true. Five AI jurors check it, and all of their work stays public."
-        icon={Judge}
-      />
+    <div className="mx-auto max-w-4xl px-5 py-16 md:px-7 md:py-24">
+      {/* Hero: the console's centred title block, matching Verify, Claims and
+          Agents. No eyebrow and no icon tile: those pages carry neither. */}
+      <div className="mx-auto max-w-3xl space-y-4 text-center">
+        <h1 className="ov-display text-5xl text-ocean md:text-6xl">How OpenVerdict works</h1>
+        <p className="text-base text-muted-foreground">
+          Ask whether a statement is true. Five AI jurors check it, and all of their
+          work stays public.
+        </p>
+      </div>
 
       <Section n={1} title="What OpenVerdict does">
         <p>You give it one claim, for example:</p>
@@ -134,7 +135,7 @@ function Section({
 }) {
   return (
     <section>
-      {/* The page header closes itself with a rule, so section one skips one. */}
+      {/* The hero is separated by space, so the rules only sit between sections. */}
       {n > 1 && <Hairline />}
       <div className="grid gap-4 py-9 md:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)] md:gap-10 lg:py-11">
         <div className="flex items-start gap-3.5">

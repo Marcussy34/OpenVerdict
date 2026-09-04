@@ -8,7 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { RunProofDetails } from "@/components/claim/run-proof";
 import { AgentHandoff } from "@/components/verify/agent-handoff";
-import { PageHeader, ExperimentalTag, MetaTag } from "@/components/viz/page-header";
+import { MetaTag } from "@/components/viz/page-header";
 import { Panel, FieldLabel, Well } from "@/components/viz/panel";
 import { VerdictGauge } from "@/components/viz/verdict-gauge";
 import { cn } from "@/lib/utils";
@@ -412,18 +412,22 @@ export default function VerifyPage() {
   const selectedSeat = record?.seats.find((seat) => seat.jurySeatId === selectedSeatId) ?? null;
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6 px-5 py-10 md:px-7 lg:py-12">
-      <PageHeader
-        title="Audit a verdict"
-        description="Recompute what Sui holds, in your browser or with your agent."
-        icon={ShieldTick}
-        badges={<ExperimentalTag />}
-      />
+    <div className="mx-auto max-w-5xl space-y-12 px-5 py-16 md:px-7 md:py-24">
+      {/* Hero: the console's centred title block, so Audit reads as a sibling
+          of Verify, Claims and Agents. No icon tile and no eyebrow: those
+          pages carry neither. */}
+      <div className="mx-auto max-w-3xl space-y-4 text-center">
+        <h1 className="ov-display text-5xl text-ocean md:text-6xl">Audit a verdict</h1>
+        <p className="text-base text-muted-foreground">
+          Recompute what Sui holds, in your browser or with your agent.
+        </p>
+      </div>
 
       {/* ---------------------------------------------- The one input ---- */}
       <div className="space-y-3">
-        {/* Two paths, one switch: the claim page's segmented control. */}
-        <div className="flex w-fit items-center gap-1 border border-border bg-card p-1 text-foreground">
+        {/* Two paths, one switch: the claim page's segmented control, centred
+            on the page at every width (owner). */}
+        <div className="mx-auto flex w-fit items-center gap-1 border border-border bg-card p-1 text-foreground">
           <ToggleGroup
             type="single"
             value={path}
