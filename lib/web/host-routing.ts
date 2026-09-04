@@ -20,6 +20,14 @@ export const CONSOLE_PATHS: readonly string[] = [
   "/learn",
 ];
 
+/**
+ * Documentation slugs that also name a console route. On the docs host these
+ * stay local, because docs.openverdict.info/agents is the "Agents" page of the
+ * documentation, not the console directory. `host-routing.test.ts` reads
+ * docs/site and fails when a new page adds a collision this list misses.
+ */
+export const DOCS_PAGE_CONSOLE_PATHS: readonly string[] = ["/agents"];
+
 /** Returns the path to rewrite to, or null when the request passes through. */
 export function rewritePathForHost(
   host: string | null | undefined,
@@ -94,7 +102,18 @@ export function redirectForHost(
   if (hostname === wwwHost) {
     return `https://${apex}${pathname}${search}`;
   }
-  if (hostname === apex && isConsolePath(pathname)) {
+  // The apex and the docs host both hand console paths to the app host: the
+  // footer's links are relative, so "Claims" clicked on docs.openverdict.info
+  // would otherwise be rewritten to /docs/claims and 404 (owner report). The
+  // header builds absolute links there instead, so it needs no hop.
+  const onDocsHost = hostname === `${DOCS_HOST_PREFIX}${apex}`;
+  // One exception: a path that names a documentation page stays where it is.
+  const isDocsPage = onDocsHost && DOCS_PAGE_CONSOLE_PATHS.includes(pathname);
+  if (
+    (hostname === apex || onDocsHost) &&
+    isConsolePath(pathname) &&
+    !isDocsPage
+  ) {
     return `${appOrigin}${pathname === "/app" ? "/" : pathname}${search}`;
   }
   return null;

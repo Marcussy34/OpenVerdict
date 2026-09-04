@@ -3,6 +3,7 @@
 import dynamic from "next/dynamic";
 import { useEffect, useRef, useState } from "react";
 import {
+  useCurrentClient,
   useDAppKit,
   useWalletConnection,
 } from "@mysten/dapp-kit-react";
@@ -28,6 +29,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { formatSui } from "@/lib/web/format-sui";
 
 // The v2 modal registers a browser custom element, so it must never be prerendered.
 const ConnectModal = dynamic(
@@ -45,6 +47,8 @@ function truncateAddress(address: string) {
 export function WalletConnectButton() {
   const dAppKit = useDAppKit();
   const connection = useWalletConnection();
+  const client = useCurrentClient();
+  const connectedAddress = connection.account?.address ?? null;
   const [connectRequest, setConnectRequest] = useState(0);
   const [signInOpen, setSignInOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -54,6 +58,39 @@ export function WalletConnectButton() {
   const [disconnecting, setDisconnecting] = useState(false);
   const [disconnectError, setDisconnectError] = useState(false);
   const copyResetTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // The SUI balance shown in the dropdown (owner request). The read is carried
+  // with the address it was made for, so a reconnection never shows the last
+  // wallet's number, and it runs only while the menu is open: that is both the
+  // one place the number appears and the moment it should be fresh.
+  const [balanceRead, setBalanceRead] = useState<{
+    address: string;
+    value: string;
+  } | null>(null);
+
+  useEffect(() => {
+    if (!menuOpen || connectedAddress === null) return;
+    let cancelled = false;
+    client.core
+      .getBalance({ owner: connectedAddress, coinType: "0x2::sui::SUI" })
+      .then((result) => {
+        // Resolving later, so nothing here is set during the render pass.
+        const value = formatSui(result.balance.balance);
+        if (!cancelled && value !== null) {
+          setBalanceRead({ address: connectedAddress, value });
+        }
+      })
+      .catch(() => {
+        // A failed read shows nothing rather than a wrong number.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [client, connectedAddress, menuOpen]);
+
+  // Derived, never stored: a read for another address simply does not apply.
+  const balance =
+    balanceRead?.address === connectedAddress ? balanceRead.value : null;
 
   useEffect(() => {
     return () => {
@@ -192,6 +229,11 @@ export function WalletConnectButton() {
           <p className="mt-1 break-all font-mono text-xs text-muted-foreground">
             {address}
           </p>
+          {balance !== null && (
+            <p className="mt-1.5 font-mono text-xs text-foreground">
+              {balance} SUI
+            </p>
+          )}
         </div>
 
         <button

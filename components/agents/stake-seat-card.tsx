@@ -244,15 +244,14 @@ function StakeSeatForm({
         <h2 className="text-base font-semibold text-ocean">
           Stake {MIN_STAKE_LABEL} on a juror seat
         </h2>
+        {/* The heading and the panel tag already carry the amount, and the
+            block below already says how to connect, so this paragraph says
+            only what nothing else on the card does. Gas is sponsored when the
+            gas station answers and paid by the wallet when it does not, so the
+            promise here is hedged the way submitStake actually behaves. */}
         <p className="text-xs leading-relaxed text-muted-foreground">
-          Connect any Sui wallet, or continue with Google (zkLogin), and post{" "}
-          {MIN_STAKE_LABEL} as the seat&apos;s bond in one transaction. The stake
-          is real money: you receive that seat&apos;s jury rewards, and the bond
-          stays locked until you unstake (it returns 24 hours later). Seats are
-          standardized, so the protocol
-          pins every juror&apos;s model, prompts and tools, and it assigns the
-          seat&apos;s debate role to keep the pool balanced. OpenVerdict pays the
-          gas where sponsorship is on.
+          You earn this seat&apos;s jury rewards. Unstake any time; the stake
+          returns 24 hours later. OpenVerdict pays the gas when it can.
         </p>
       </div>
       <div>
@@ -366,9 +365,11 @@ function StakeSeatForm({
                       />
                     ))}
                   </div>
+                  {/* The model is the only choice the staker makes, so this is
+                      where the role question gets answered. */}
                   <p className="text-xs text-muted-foreground">
-                    The seat runs this model on every jury it is drawn to. A
-                    committee takes at most two seats per model family.
+                    The seat runs this model on every jury, and the protocol
+                    assigns its debate role.
                   </p>
                 </fieldset>
               ) : (
@@ -430,9 +431,7 @@ function StakeSeatForm({
 
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <p className="max-w-2xl text-xs leading-relaxed text-muted-foreground">
-                Your wallet shows the whole transaction before you sign it. The
-                bond stays locked in the registry until you unstake, and it
-                returns 24 hours after you ask.
+                Your wallet shows the whole transaction before you sign.
               </p>
               <Button
                 type="submit"

@@ -1,7 +1,10 @@
+import { readdir } from "node:fs/promises";
+
 import { describe, expect, it } from "vitest";
 
 import {
   CONSOLE_PATHS,
+  DOCS_PAGE_CONSOLE_PATHS,
   isConsolePath,
   isDocsHost,
   redirectForHost,
@@ -57,11 +60,60 @@ describe("the documentation host", () => {
     expect(rewritePathForHost("localhost:3000", "/docs")).toBeNull();
   });
 
-  it("never redirects the docs host away", () => {
+  it("keeps documentation paths on the docs host", () => {
     const appUrl = "https://app.openverdict.info";
-    for (const path of ["/", "/docs", "/trust-model", "/claims"]) {
+    for (const path of ["/", "/docs", "/trust-model", "/docs/api"]) {
       expect(redirectForHost("docs.openverdict.info", path, "", appUrl)).toBeNull();
     }
+  });
+
+  it("hands console paths on the docs host to the app host", () => {
+    const appUrl = "https://app.openverdict.info";
+    expect(redirectForHost("docs.openverdict.info", "/claims", "", appUrl)).toBe(
+      "https://app.openverdict.info/claims",
+    );
+    expect(redirectForHost("docs.openverdict.info", "/app", "", appUrl)).toBe(
+      "https://app.openverdict.info/",
+    );
+    // A nested path keeps every segment and its query string.
+    expect(
+      redirectForHost(
+        "docs.openverdict.info",
+        "/claims/0xabc/evidence",
+        "?tab=votes",
+        appUrl,
+      ),
+    ).toBe("https://app.openverdict.info/claims/0xabc/evidence?tab=votes");
+  });
+
+  it("keeps a documentation page whose slug is also a console route", () => {
+    const appUrl = "https://app.openverdict.info";
+    // docs.openverdict.info/agents is the "Agents" documentation page, so it
+    // must not be handed to the console directory of the same name. The header
+    // links across hosts itself, so no reader needs the redirect for it.
+    expect(
+      redirectForHost("docs.openverdict.info", "/agents", "", appUrl),
+    ).toBeNull();
+    // Nothing nested under it is a documentation page, and the apex has no
+    // such page at all, so both still cross to the app host.
+    expect(
+      redirectForHost("docs.openverdict.info", "/agents/0xabc", "?x=1", appUrl),
+    ).toBe("https://app.openverdict.info/agents/0xabc?x=1");
+    expect(redirectForHost("openverdict.info", "/agents", "", appUrl)).toBe(
+      "https://app.openverdict.info/agents",
+    );
+  });
+
+  it("lists every documentation slug that collides with a console route", async () => {
+    // The drift guard: adding docs/site/claims.md would break that console
+    // link on the docs host until the new page is listed as an exception.
+    const names = await readdir(new URL("../../docs/site/", import.meta.url));
+    const collisions = names
+      .filter((name) => name.endsWith(".md") && name !== "index.md")
+      .map((name) => `/${name.replace(/\.md$/, "")}`)
+      .filter((path) => isConsolePath(path))
+      .sort();
+    expect(collisions).toEqual([...DOCS_PAGE_CONSOLE_PATHS].sort());
   });
 
   it("leaves apex and app /docs paths in place", () => {

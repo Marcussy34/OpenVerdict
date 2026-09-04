@@ -109,7 +109,9 @@ export default function AgentsPage() {
   const activeCount = activeAgents.length;
 
   return (
-    <div className="mx-auto max-w-5xl space-y-10 px-5 py-16 md:px-7 md:py-24">
+    // Wider than the other console pages: three juror cards to a row need the
+    // room, and every card line reads in full rather than being truncated.
+    <div className="mx-auto max-w-6xl space-y-10 px-5 py-16 md:px-7 md:py-24">
       {/* Hero: one word plus one line of truth. */}
       <div className="space-y-3 text-center">
         <h1 className="ov-display text-4xl text-ocean md:text-5xl">Agents</h1>
@@ -143,7 +145,7 @@ export default function AgentsPage() {
       )}
 
       {/* One row per juror; the full dossier lives behind the click. */}
-      <section className="mx-auto w-full max-w-5xl">
+      <section className="mx-auto w-full">
         {loading ? (
           <div className="space-y-2">
             {[0, 1, 2].map((index) => (
@@ -189,11 +191,11 @@ export default function AgentsPage() {
                         <span aria-hidden className={cn("size-1.5 shrink-0 rounded-full", fam.dot)} />
                         <span className="truncate">{fam.name}</span>
                       </p>
-                      <p className="mt-0.5 truncate font-mono text-[11px] text-muted-foreground">
+                      <p className="mt-0.5 font-mono text-[11px] leading-snug break-all text-muted-foreground">
                         {shortId(agent.agentProfileId)}
                       </p>
                       {agent.trackRecord && (
-                        <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
+                        <p className="mt-0.5 text-[11px] leading-snug text-muted-foreground">
                           {agent.trackRecord.seatsServed} seats ·{" "}
                           {agent.trackRecord.revealed} revealed ·{" "}
                           {agent.trackRecord.agreedWithCertificate} agreed
@@ -202,7 +204,7 @@ export default function AgentsPage() {
                       )}
                       {/* Real stake, so who posted it and how much is the headline. */}
                       {staked && (
-                        <p className="mt-0.5 truncate font-mono text-[11px] text-muted-foreground">
+                        <p className="mt-0.5 font-mono text-[11px] leading-snug break-all text-muted-foreground">
                           {staked}
                         </p>
                       )}

@@ -19,28 +19,36 @@ some bytes. Publishing a hash first pins content that is published later,
 because changed content produces a different hash. OpenVerdict chains those
 pins so a single number on chain commits to a whole juror run.
 
+| What is hashed | How | The hash |
+| --- | --- | --- |
+| The prompt spec (the exact system prompt) | blake2b-256 of the canonical JSON | `prompt_hash` |
+| The tool policy (search and open budgets) | blake2b-256 of the canonical JSON | `tool_policy_hash`, carried inside the transcript's `policyHash` |
+| The juror input (claim, criteria, manifest) | blake2b-256 of the canonical JSON | `input_hash` |
+| The validated output (the vote and its citations) | blake2b-256 of the canonical JSON | `output_hash` |
+| The research transcript (every search, open and quote) | blake2b-256 of the canonical JSON | `tool_transcript_hash` |
+| The evidence manifest items | a Merkle tree over blake2b-256 leaves | `evidence_root` |
+
 ```mermaid
 flowchart TB
-    PS["prompt spec<br/>(the exact system prompt)"] -->|"blake2b256(canonicalJson)"| PH["prompt_hash"]
-    TP["tool policy<br/>(search and open budgets)"] -->|"blake2b256(canonicalJson)"| TPH["tool_policy_hash"]
-    IN["juror input<br/>(claim, criteria, manifest)"] -->|"blake2b256(canonicalJson)"| IH["input_hash"]
-    OUT["validated output<br/>(the vote and its citations)"] -->|"blake2b256(canonicalJson)"| OH["output_hash"]
-    TR["research transcript<br/>(every search, open and quote)"] -->|"blake2b256(canonicalJson)"| TH["tool_transcript_hash"]
-    EV["evidence manifest items"] -->|"Merkle over blake2b256"| ER["evidence_root"]
-
-    PH --> RR["RunRecordV1, BCS"]
-    IH --> RR
+    PH["prompt_hash"] --> RR["RunRecordV1, BCS"]
+    IH["input_hash"] --> RR
+    TH["tool_transcript_hash"] --> RR
+    %% The five inputs sit on two rows so the whole chain fits the reading
+    %% column without sideways scrolling. The ~~~ links are invisible and mean
+    %% nothing on their own: they put output_hash and evidence_root on the
+    %% second row, which are exactly the two that feed the vote preimage as
+    %% well as the run record.
+    PH ~~~ OH["output_hash"]
+    IH ~~~ OH
+    TH ~~~ ER["evidence_root"]
     OH --> RR
-    TH --> RR
     ER --> RR
     RR -->|"blake2b256"| RH["run_hash"]
-    TPH -.->|"inside the transcript's policyHash"| TH
-
-    RH --> AP["approve_run on Sui<br/>pins the run hash BEFORE the vote"]
+    RH --> AP["approve_run on Sui<br/>pins the run hash<br/>BEFORE the vote"]
     RH --> VP["VotePreimageV1, BCS"]
     ER --> VP
     OH --> VP
-    OUTCOME["outcome, confidence, salt"] --> VP
+    OUTCOME["outcome<br/>confidence<br/>salt"] --> VP
     VP -->|"blake2b256"| CM["commitment"]
     CM --> CV["commit_vote on Sui<br/>BEFORE any reveal"]
     CV --> RV["reveal_vote re-derives it<br/>or the transaction aborts"]

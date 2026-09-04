@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { WalletConnectButton } from "@/components/wallet/connect-button";
 import { Arrow } from "@/components/landing/primitives";
+import { APP_URL } from "@/lib/web/site-urls";
 import { cn } from "@/lib/utils";
 
 const NAV_ITEMS = [
@@ -58,7 +59,54 @@ export function BrandMark({ size = 30 }: { size?: number }) {
  */
 const APP_HOME = process.env.NEXT_PUBLIC_APP_URL || "/app";
 
-/** The one control that crosses to the console, wherever the console lives. */
+/**
+ * The console's own origin, or null when one host serves everything (locally,
+ * and wherever NEXT_PUBLIC_APP_URL is unset). On the documentation host every
+ * path is a documentation path, so a relative "/claims" is rewritten to
+ * "/docs/claims"; the nav links there have to name the console outright.
+ */
+const CONSOLE_ORIGIN = process.env.NEXT_PUBLIC_APP_URL ? APP_URL : null;
+
+/**
+ * One chip in the nav rail. It is a plain anchor when the destination is on
+ * another origin, and an in-app Link everywhere else.
+ */
+function NavChip({
+  href,
+  crossHost,
+  active,
+  current = false,
+  className,
+  children,
+}: {
+  href: string;
+  crossHost: boolean;
+  active: boolean;
+  current?: boolean;
+  className: string;
+  children: React.ReactNode;
+}) {
+  const shared = {
+    "data-active": active ? "true" : undefined,
+    "aria-current": current && active ? ("page" as const) : undefined,
+    className,
+  };
+  return crossHost ? (
+    <a href={`${CONSOLE_ORIGIN}${href}`} {...shared}>
+      {children}
+    </a>
+  ) : (
+    <Link href={href} {...shared}>
+      {children}
+    </Link>
+  );
+}
+
+/**
+ * The one control that crosses to the console, wherever the console lives.
+ * The header renders it on the landing page only: it exists to hand a visitor
+ * across, so once they are inside it has nothing left to offer (owner).
+ */
 export function AppLink({
   children,
   className,
@@ -105,11 +153,21 @@ const THEME_VARS: Record<HeaderTheme, React.CSSProperties> = {
  * `consoleHost` is decided by the root layout from the request host: on
  * app.openverdict.info the root path is the console (proxy.ts rewrites it to
  * /app while the browser still shows "/"), so it must not get the landing's
- * transparent, dark-hero treatment.
+ * transparent, dark-hero treatment. `docsHost` comes from the same place and
+ * decides whether the nav links have to cross to the console's origin.
  */
-export function SiteHeader({ consoleHost = false }: { consoleHost?: boolean }) {
+export function SiteHeader({
+  consoleHost = false,
+  docsHost = false,
+}: {
+  consoleHost?: boolean;
+  docsHost?: boolean;
+}) {
   const pathname = usePathname();
   const isLanding = pathname === "/" && !consoleHost;
+  // On the docs host the console is a different origin, so its links are
+  // absolute and cost no redirect hop.
+  const crossHost = docsHost && CONSOLE_ORIGIN !== null;
 
   // The landing opens on the dark hero and flips with its sections; every
   // product page is simply light. Both sides render the same first pass, so
@@ -147,8 +205,11 @@ export function SiteHeader({ consoleHost = false }: { consoleHost?: boolean }) {
     return () => observer.disconnect();
   }, [isLanding, pathname]);
 
+  // On the docs host every path is a documentation page, so no console route
+  // is ever the page being read: docs.openverdict.info/agents is the "Agents"
+  // doc, not the console directory that shares its name.
   const isActive = (href: string) =>
-    pathname === href || pathname.startsWith(`${href}/`);
+    !docsHost && (pathname === href || pathname.startsWith(`${href}/`));
   const dark = theme === "dark";
 
   return (
@@ -192,20 +253,23 @@ export function SiteHeader({ consoleHost = false }: { consoleHost?: boolean }) {
           {/* Chip rail */}
           <div className="hidden items-center gap-[2px] lg:flex">
             {NAV_ITEMS.map((item) => (
-              <Link
+              <NavChip
                 key={item.href}
                 href={item.href}
-                data-active={isActive(item.href) ? "true" : undefined}
-                aria-current={isActive(item.href) ? "page" : undefined}
+                crossHost={crossHost}
+                active={isActive(item.href)}
+                current
                 className="ov-nav-chip"
               >
                 {item.label}
-              </Link>
+              </NavChip>
             ))}
             <WalletConnectButton />
-            <AppLink className="ov-nav-chip ov-nav-chip--accent w-[34px] px-0">
-              <Arrow size={16} />
-            </AppLink>
+            {isLanding && (
+              <AppLink className="ov-nav-chip ov-nav-chip--accent w-[34px] px-0">
+                <Arrow size={16} />
+              </AppLink>
+            )}
           </div>
 
           {/* Compact rail */}
@@ -250,21 +314,24 @@ export function SiteHeader({ consoleHost = false }: { consoleHost?: boolean }) {
             )}
           >
             {NAV_ITEMS.map((item) => (
-              <Link
+              <NavChip
                 key={item.href}
                 href={item.href}
-                data-active={isActive(item.href) ? "true" : undefined}
+                crossHost={crossHost}
+                active={isActive(item.href)}
                 className="ov-nav-chip !h-11 !justify-start"
               >
                 {item.label}
-              </Link>
+              </NavChip>
             ))}
-            <AppLink
-              className="ov-nav-chip ov-nav-chip--accent !h-11 !justify-start"
-              onClick={toggleMenu}
-            >
-              Open the app
-            </AppLink>
+            {isLanding && (
+              <AppLink
+                className="ov-nav-chip ov-nav-chip--accent !h-11 !justify-start"
+                onClick={toggleMenu}
+              >
+                Open the app
+              </AppLink>
+            )}
           </nav>
         )}
       </header>

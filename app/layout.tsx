@@ -9,7 +9,7 @@ import { ChromeVisibility } from "@/components/chrome-visibility";
 import { WalletProviders } from "@/components/wallet/providers";
 
 import { SITE_URL, SITE_NAME, SITE_DESCRIPTION } from "@/lib/web/site-urls";
-import { rewritePathForHost } from "@/lib/web/host-routing";
+import { isDocsHost, rewritePathForHost } from "@/lib/web/host-routing";
 
 // Archivo carries every heading and paragraph; the big display sizes run at 400.
 const archivo = Archivo({ subsets: ["latin"], variable: "--font-sans" });
@@ -53,6 +53,9 @@ export default async function RootLayout({
   const requestHeaders = await headers();
   const host = requestHeaders.get("x-forwarded-host") ?? requestHeaders.get("host");
   const consoleHost = rewritePathForHost(host, "/") !== null;
+  // On the docs host every path is a documentation path, so the header's
+  // console links have to name the app origin outright.
+  const docsHost = isDocsHost(host);
   return (
     // Light is the demo theme; every token lives in globals.css :root.
     <html
@@ -82,7 +85,7 @@ export default async function RootLayout({
         <WalletProviders>
           <div className="relative z-10 flex min-h-screen flex-col">
             <ChromeVisibility>
-              <SiteHeader consoleHost={consoleHost} />
+              <SiteHeader consoleHost={consoleHost} docsHost={docsHost} />
             </ChromeVisibility>
             <main id="main" className="flex-1 min-h-[72vh] pb-20">
               {children}
