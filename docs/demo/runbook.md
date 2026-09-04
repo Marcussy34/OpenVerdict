@@ -11,7 +11,7 @@ Node ≥22, pnpm, Sui CLI ≥1.52. `pnpm install` at the repo root.
 ## 1. Offline proof (no network, no keys)
 
 ```bash
-pnpm test && pnpm test:move   # 485 TS + 70 Move (66 protocol, 4 Seal policy)
+pnpm test && pnpm test:move   # 996 TS + 89 Move (plus 4 in move/openverdict_seal)
 pnpm e2e:localnet             # spawns a local Sui network, deploys, runs 3 full
                               # lifecycles + sponsored deposit, exits 0 on success
 ```
@@ -305,12 +305,16 @@ against the recorded model, or opened through Seal after the deadline.
 ## 5. Human end-to-end walkthrough (the user's test)
 
 1. Open the live URL → submit a claim (no wallet needed).
-2. Watch the deliberation canvas: jurors sprout locked pulses while they
-   research (content-free ticks), the graph blooms into real searches, pages
-   and citations at reveal, the certificate lands at settlement. Click any
-   node for the inspector (an overlay: opening it never shifts the graph;
-   drag its left edge to resize it). The stage pill at the top centre
-   tracks the protocol round, live and during replay. After settlement
+2. The claim page opens in Chat: one card per juror, the events in the same
+   words, one juror trail open at a time, and every debate turn in full.
+   Switch to Graph for the courtroom ring: jurors seated clockwise from
+   juror 1 at the top, an empty middle, each juror's research on its own
+   outer arc, and the certificate closing the ring at the bottom. Seats keep
+   their places, so a juror is where you left it. Jurors sprout locked
+   pulses while they research (content-free ticks), and the wedges fill with
+   real searches, pages and citations at reveal. Click any node for the
+   inspector (an overlay: opening it never shifts the ring; drag its left
+   edge to resize it). After settlement
    press Play for the replay (10x default, 1x/30x presets). In a juror's
    proof, "Check with GonkaRouter" fetches the
    gateway's own public receipt for the recorded request id and compares

@@ -36,7 +36,9 @@ pnpm e2e:localnet  # full localnet lifecycle (spawns `sui start`)
   public POSTs; keep it that way.
 - Product copy says stake / staker / staked seat, never backing or human-backed:
   any account may stake on any number of seats, it is staking economics. The
-  committee draw (one seat per owner and per staker hash) is a diversity rule.
+  committee draw (at most two seats per model, three families, one seat per
+  operational key, a Skeptic and a Source-authenticity seat on every
+  committee, no cap per staker) is a diversity rule.
   zkLogin is authentication, never proof of personhood (PRD §14.4).
 - Move: functions taking `&Random` must be private `entry fun`; draw-and-
   resolve in one call.
@@ -61,7 +63,8 @@ pnpm e2e:localnet  # full localnet lifecycle (spawns `sui start`)
 
 ## Layout
 
-See the Repository layout section in `README.md`. Ownership seams the build
+See `AGENTS.md` and the documentation overview in `docs/site/index.md`
+(served at docs.openverdict.info). Ownership seams the build
 used (protocol/gonka/research/evidence/walrus/seal/sui/storage/events/engine/
 verify/cli/workers/app) still make good boundaries for parallel work.
 

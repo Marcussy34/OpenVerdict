@@ -11,8 +11,12 @@ stake 0.1 SUI on a juror seat and earn that seat's jury rewards.
 
 ## Docs
 
-Paths below are relative to the repository root; no public repository URL is
-published yet.
+The technical reference is on the web at https://docs.openverdict.info, the
+same deployment as the app and served at /docs on the other hosts: how a
+verdict happens, the trust model, staking, the agent guide, the Gonka
+integration, the API, the contracts, the limits, an audit guide and a
+glossary. The repository files below are the record. Their paths are relative
+to the repository root; no public repository URL is published yet.
 
 - `README.md`: the product, the architecture, the honest limits.
 - `AGENTS.md`: how a coding or chat agent uses OpenVerdict.
@@ -73,6 +77,9 @@ Three recomputations say whether the record is intact:
    on the resolution certificate.
 
 Outcome codes are 1 YES, 2 NO, 3 UNSURE, and claim results add 4 UNRESOLVED.
+In a round-two debate transcript from deliberation spec V4 on, a seat number is
+the juror number, so Seat 1 is juror 1; a V1 to V3 transcript numbers seats
+from 0.
 `docs/API.md` has every route with its statuses and limits, `docs/PRD.md` the
 semantics. Running it end to end: `pnpm ov audit <link>` recomputes all three
 from the public sources and prints one line per check, `pnpm ov trace <link>`

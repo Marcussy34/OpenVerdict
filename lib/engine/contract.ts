@@ -409,7 +409,8 @@ export type AgentDirectoryEntry = {
  * Wallet-signed stake on a juror seat: the staking account signs the canonical
  * stake message, and the engine records blake2b-256 of its address as the
  * staker hash. Any account may stake on as many seats as it likes; the Move
- * draw rule "at most one committee seat per staker hash" is a committee
+ * draw caps seats per model, family and operational key and needs a Skeptic
+ * and a Source-authenticity seat, with no cap per staker.
  * diversity rule, never an identity claim. Staking economics only.
  */
 export type ZkBackedRegistrationRequest = {

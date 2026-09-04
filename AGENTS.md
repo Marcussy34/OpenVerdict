@@ -121,6 +121,15 @@ public source was unavailable, 1 means at least one check failed, 2 means the
 input or a fetch failed. A source outage marks a check UNAVAILABLE with a
 manual URL, never FAIL. `pnpm audit:claim` is the same auditor.
 
+To audit without this repository, read
+[`public/llms.txt`](./public/llms.txt) (served at
+`https://app.openverdict.info/llms.txt`). Its "How to audit a claim" section
+lists the read routes, the public sources that are not ours (Sui JSON-RPC, the
+Walrus aggregator, GonkaRouter's receipts) and the three recomputations that
+decide whether the record is intact: the vote commitment, the run hash and the
+truth score. That is the same work `ov audit` does, spelled out for an agent
+with nothing but HTTP.
+
 ### 7. Trace: what each juror actually did
 
 ```bash
@@ -135,7 +144,9 @@ also carries the debate turns and the table votes. A debate turn is a
 conversation move: it answers a named seat's specific point, may put one
 question to a named seat, and states its position last, and a dissenting seat
 opens each exchange. Describe it that way, never as jurors taking turns in
-seat order.
+seat order. From deliberation spec V4 on, a seat number is the juror number, so
+Seat 1 is juror 1; a V1 to V3 transcript numbers seats from 0, and juror n
+holds seat n minus one.
 
 ## Rules an agent must respect
 
@@ -187,12 +198,19 @@ terminal. A staker picks the model and nothing else: research is identical for
 every seat, so the engine assigns the seat's debate role, taking the least
 represented role among the active seats on that model. Any account may stake
 on as many seats as it likes: this is staking economics. The committee draw stays diverse on its own terms, at most two
-seats per model family, three families per jury, and at most one seat per
+seats per model family, three families per jury, a skeptic seat and a
+source-authenticity seat on every committee, and at most one seat per
 operational signing key, with no cap per staker. Those caps are a diversity
 rule, never an identity claim.
 
 ## Pointers
 
+- [docs.openverdict.info](https://docs.openverdict.info): the docs site, the
+  same deployment as the app (`/docs` on the other hosts). How a verdict
+  happens, the trust model, staking, the API, the contracts, the limits, an
+  audit guide and a glossary.
+- [public/llms.txt](./public/llms.txt): the shortest complete audit route, for
+  an agent with only HTTP.
 - [docs/API.md](./docs/API.md): the full public API reference.
 - [README.md](./README.md): the product, the architecture and the honest limits.
 - [docs/PRD.md](./docs/PRD.md): complete protocol semantics.

@@ -47,6 +47,7 @@ SUI is the working currency. (Full write-up: [appendix](#appendix-the-idea-in-fu
 
 - **Sui's built-in randomness draws the 5 seats**
 - **Max 2 seats per AI family**: DeepSeek, Kimi and MiniMax, all served through GonkaRouter
+- Every committee also seats **a skeptic and a source-authenticity juror**; the **engine assigns** a seat's debate role, nobody picks it
 - **Equal weights** in v1 (in future: weighted by on-chain track record)
 - Anyone can **stake on a seat**: **0.1 SUI** minimum, with a wallet or a Google sign-in through Sui zkLogin, and the staker earns that seat's jury rewards
 
@@ -109,7 +110,7 @@ process); the five seats form the **committee**, and **4 of 5** is the
 - Revealed jurors bring their round-one evidence and vote **to the table** and **argue it out**, streamed **live**; every turn is its own GonkaRouter run
 - It is a **conversation, not a row of briefs**: each turn **answers a named seat's specific point**, weighs it against the record, may **put one question to a named seat**, and states its **position last**. A **dissenting seat opens** each exchange and the sides **speak alternately**; a seat that is asked a question **speaks next and answers it first**
 - Each turn states a **current stance and confidence**; up to **three exchanges**, and the debate **stops early when nobody moves**
-- They cross-examine each other's **interpretations of the frozen evidence root**; a juror may cite **only evidence ids from the frozen record**, and a turn that cites anything else is rejected, so no new or invented facts enter the debate
+- They cross-examine each other's **interpretations of the frozen evidence root**; a juror may cite **only the frozen round-one record** (its evidence ids and the pages the jury itself opened and revealed), and a turn that cites anything else is rejected, so no new or invented facts enter the debate
 - The transcript is **frozen into the evidence on Walrus**
 
 **Adversarial cross-examination in the open, not an ungrounded chat between bots.**
@@ -131,7 +132,7 @@ process); the five seats form the **committee**, and **4 of 5** is the
 
 <img src="docs/assets/hairline.svg" width="100%" height="1" alt="" />
 
-**All or nothing:** a verification is one attempt. Any juror error at a binding step (a failed run, a missing commit, a missing reveal) **voids the whole attempt**; nothing partial is ever finalized. The engine **relaunches automatically** once all three model families answer a health probe, up to **three attempts**, and gives up after six hours. Every attempt, voided or not, stays public on the claim page.
+**All or nothing:** a verification is one attempt. Any error at a binding step (a failed run, a committee that never drew, a missing commit, a missing reveal) **voids the whole attempt**; nothing partial is ever finalized. The engine **relaunches automatically** once all three model families answer a health probe, up to **three attempts**, and gives up after six hours. Every attempt, voided or not, stays public on the claim page.
 
 ---
 
@@ -200,12 +201,12 @@ dark mode).
 | Storage of record | Walrus (`@mysten/walrus` 1.2) | Evidence, opened pages, manifests, sealed and revealed run bundles, failure records |
 | App/db | drizzle-orm + pglite (dev/tests) / Railway Postgres (prod) | Rebuildable indexes and the resolution event log |
 | Frontend | Next.js 16, React 19, Tailwind 4, shadcn/ui, iconsax | Read-only observer + verification UI |
-| CLI | TypeScript: `pnpm cli` (operator console, commander 15) and `pnpm ov` (public: weather, board, extract, submit, watch, audit) | Complete control, inspection, automation; the public journey with no key |
+| CLI | TypeScript: `pnpm cli` (operator console, commander 15) and `pnpm ov` (public: weather, board, extract, submit, queue, status, watch, audit, trace) | Complete control, inspection, automation; the public journey with no key |
 | Validation | zod 4 (strict schemas) | Oracle I/O contracts, manifests, config |
 | Hashing | `@noble/hashes` blake2b-256 == `sui::hash::blake2b256` | One commitment format across TS and Move |
 | Onboarding | `@mysten/enoki` (zkLogin) + dapp-kit v2 | Social-login self-custodial addresses; env-gated, wallet-standard |
 | Object metadata | Sui Object Display (`display_meta` module) | Certificates/profiles/positions render in wallets + explorers |
-| Tests | vitest 4 + `sui move test` + the localnet E2E | 820 TS + 93 Move (89 protocol, 4 Seal policy), incl. the cross-language parity gate; `pnpm e2e:localnet` runs every lifecycle on a fresh localnet |
+| Tests | vitest 4 + `sui move test` + the localnet E2E | 996 TS + 93 Move (89 protocol, 4 Seal policy), incl. the cross-language parity gate; `pnpm e2e:localnet` runs every lifecycle on a fresh localnet |
 
 ---
 
@@ -241,14 +242,16 @@ truth: manipulation cannot hide.
 | Payouts and refunds | Payout-ticket objects and Sui coin movement |
 | Observer dashboard | Rebuildable read-only projection, never authoritative |
 
-Verify it yourself: `/verify` in the app recomputes commitments and Truth
+Verify it yourself: `/verify` in the app takes a claim link and offers two
+ways to audit it, "With an agent" (the command to hand any agent, Claude Code
+or the terminal) and "By hand". By hand it recomputes commitments and Truth
 Scores client-side from revealed fields, runs 15 checks on any revealed run
 (prompt, policy, system prompt, input, output and transcript hashes,
-citations, both sides opened, citation sites, counter-evidence summary, opens
-per turn, Seal escrow binding, run hash, sealed core), opens a sealed bundle
-through Seal after its deadline, and re-runs a juror against the recorded
-model; `scripts/gen-parity-vectors.ts` regenerates the cross-language vectors
-pinned in both test suites.
+citations, challenge search, both sides opened, citation sites,
+counter-evidence summary, opens per turn, run hash, Seal escrow binding,
+sealed core), opens a sealed bundle through Seal after its deadline, and
+re-runs a juror against the recorded model; `scripts/gen-parity-vectors.ts`
+regenerates the cross-language vectors pinned in both test suites.
 
 ### Use OpenVerdict from the terminal and from Claude
 
@@ -274,10 +277,11 @@ never FAIL. Run links, report links, queue links and bare ids are accepted;
 The whole journey runs from the same terminal through the public CLI `ov`
 (`pnpm ov`, also no key, no database, no wallet): check the jury's weather,
 extract a checkable claim from a page, submit it, watch the jury live, audit
-the verdict. The web console stays the visual monitor: a claim page opens as a
-live transcript, the same events in the same words with one card per juror, and
-switches to the deliberation graph in a click. The CLI reads and writes only the
-public API.
+the verdict. The web console stays the visual monitor: a claim page opens in
+its Chat view, the same events in the same words with one card per juror and
+every debate turn in full, and a Chat | Graph toggle switches to the courtroom
+ring, a fixed seating chart where each juror keeps its place. The CLI reads and
+writes only the public API.
 
 ```bash
 pnpm ov weather                                                    # DeepSeek, MiniMax, Kimi, Web search: ok or down, clear or not
@@ -402,8 +406,12 @@ transaction (gas sponsored through Shinami, so a Google sign-in can stake
 with 0.1 SUI and nothing else). The staker receives that seat's jury
 rewards, keeps the bond locked while the seat is active, and gets it back
 24 hours after unstaking (slashing the bond for proven protocol violations
-is specified in the PRD and not yet enforced on chain). The draw stays diverse on its own terms: at most two seats
-per model family, three families per jury, and at most one seat per
+is specified in the PRD and not yet enforced on chain). A staker picks the
+model and nothing else: research is identical for every seat, so the engine
+assigns the seat's debate role, taking the least represented role among the
+active seats on that model. The draw stays diverse on its own terms: at most
+two seats per model family, three families per jury, a skeptic seat and a
+source-authenticity seat on every committee, and at most one seat per
 operational signing key, with no cap per staker. Two guards keep that
 draw honest in practice: the on-chain sample restarts when a partial
 pick can no longer be completed (so a valid roster is always drawn), and
@@ -492,7 +500,7 @@ and the chain does not get shorter; it breaks.
 | Requirement | OpenVerdict |
 | --- | --- |
 | All AI reasoning/verification through GonkaRouter | Single adapter, host-pinned to gonkarouter.io in code; no other provider; fail-closed on outage |
-| URL or text input | `/fact-check` and CLI accept claim, URLs, or both |
+| URL or text input | `/fact-check` takes one bar: paste a URL or a paragraph and a Gonka model extracts the checkable claim into it; the API and CLI also accept optional source URLs and evidence text |
 | Multi-model cross-verification | 5 juror seats spanning all three GonkaRouter model families, no family majority, each juror researching both sides of the claim |
 | Truth Score 0–100 + reasoning trace | Deterministic, recomputable; evidence-linked public traces with the full research trail, never chain-of-thought |
 | Gonka Request IDs | Response `id`, `x-request-id`, devshard id and fingerprint preserved verbatim for every attempt, shown after reveal |
@@ -615,8 +623,8 @@ so the operator key stops being a gas wallet.
 - **“Why doesn't the round-two debate amplify hallucinations like agent
   swarms do?”** Most swarms hallucinate in loops because context accumulates
   unchecked. Deliberation here is strictly bounded: (1) the evidence is
-  frozen on Walrus before the debate starts and a juror may cite only ids
-  from that record, never an outside URL or a new claim; (2) turns are capped
+  frozen on Walrus before the debate starts and a juror may cite only the
+  frozen round-one record, never a fresh URL or a new claim; (2) turns are capped
   at three exchanges and stop early when nobody moves; (3) the second vote
   is a sealed ballot over the frozen record, not a negotiated consensus; (4)
   when the quorum is still missing the claim exits cleanly to `UNRESOLVED`
@@ -647,6 +655,15 @@ The long-form defence and full protocol semantics live in [PRD.md](./docs/PRD.md
 
 ## 📚 Documentation
 
+The technical reference is the docs site,
+[docs.openverdict.info](https://docs.openverdict.info): how a verdict happens,
+the trust model, staking, the agent guide, the Gonka integration, the API, the
+contracts, the limits, an audit guide and a glossary. It is the same deployment
+as the app, served at `/docs` on the other hosts, and its pages are the
+Markdown files in [`docs/site/`](./docs/site). The repository documents below
+stay the record.
+
+- [The public API reference](./docs/API.md) (every route, with its limits and status codes)
 - [Complete product requirements and implementation specification](./docs/PRD.md) (§1.1 records every place the code corrected the spec)
 - [Current product state](./docs/STATUS.md) and the [resume map for agents](./docs/CHECKPOINT-2026-08-30.md)
 - [Demo runbook + preserved live testnet claim ids](./docs/demo/runbook.md)

@@ -202,7 +202,8 @@ The deliberation prompt hash is not pinned in the agent manifest (that
 document pins the research prompt and the table-vote prompt) and never was, so
 there is no manifest version to add. Today the hash is recorded on the stored
 turn record. V4 keeps that, computed from the spec that actually ran, and adds
-the public marker `specVersion: "4"` on every V4 turn, so the choice reaches:
+the public marker `specVersion: "4"` on every spoken V4 turn (a turn that
+failed closed carries none), so the choice reaches:
 
 - the deliberation transcript artifact, hashed into the phase-two evidence
   root on Walrus,

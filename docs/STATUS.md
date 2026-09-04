@@ -1,64 +1,143 @@
 # OpenVerdict — Product Status Snapshot
 
-> Last updated: 2026-09-01 20:00. Source of truth for claims below: the code
+> Last updated: 2026-09-04 20:00. Source of truth for claims below: the code
 > and its test suites (`pnpm test`, `pnpm test:move`), not this file. The
 > dated bullets under "What is NOT true yet" are the change log, newest first.
 
 ## What the product is right now
 
 A live, demo-able verification protocol on Sui testnet: https://openverdict.info
-(landing) and https://app.openverdict.info (dashboard). A submitted claim gets
-a five-seat jury drawn on chain with native randomness from seven registered
-jurors spanning GonkaRouter's three model families; every juror searches the
+(landing), https://app.openverdict.info (console) and
+https://docs.openverdict.info (documentation), all one deployment. A submitted
+claim gets a five-seat jury drawn on chain with native randomness from the
+registered jurors (the team's seven demo seats plus the seats stakers have
+opened) spanning GonkaRouter's three model families; every juror searches the
 web through the engine, reads pages on both sides (up to three per turn),
-cites them, commits a sealed verdict and reveals it; the chain settles a
-resolution certificate with a truth score about 10 minutes after submission
-(about 21 minutes when a second round is needed). Every prompt, model reply,
-request id, node id, page, hash, Sui object and Walrus blob is public after
-the reveal; reveal keys are also escrowed under a Mysten Seal time-lock policy
-so a sealed bundle opens after its deadline without the operator; a browser
-verifier recomputes 15 checks per run, re-runs a juror against the recorded
-model, and opens bundles through Seal; failed seats keep their research trail.
-Hosted on one Railway container (web, API, three workers) with Railway
-Postgres. Tests: 512 vitest, 70 Move.
+cites them, commits a sealed verdict and reveals it; a deadlock goes to a
+public debate that is a conversation, then to a sealed table vote; the chain
+settles a resolution certificate with a truth score about 12 minutes after
+submission (about 32 minutes when a second round is needed). Every prompt,
+model reply, request id, node id, page, hash, Sui object and Walrus blob is
+public after the reveal; reveal keys are also escrowed under a Mysten Seal
+time-lock policy so a sealed bundle opens after its deadline without the
+operator; a browser verifier recomputes 15 checks per run, re-runs a juror
+against the recorded model, and opens bundles through Seal; failed seats keep
+their research trail. Anyone can open a juror seat by staking 0.1 SUI on it and
+receives that seat's jury rewards. Hosted on one Railway container (web, API,
+three workers) with Railway Postgres. Tests: 996 vitest, 93 Move (89 protocol,
+4 Seal policy).
 
 ## Layer inventory
 
 | Layer | Where | State | Evidence |
 | --- | --- | --- | --- |
-| Protocol (Move) | `move/openverdict` — 8 modules: agent_registry, claim, evidence, jury, settlement, demo_fact_checker, demo_binary_pool, display_meta | ✅ | 66/66 `sui move test`; commit–reveal enforced on-chain; immutable certificates; one-time payout tickets; Object Display metadata |
+| Protocol (Move) | `move/openverdict`, 8 modules: agent_registry, claim, evidence, jury, settlement, demo_fact_checker, demo_binary_pool, display_meta | ✅ | 89/89 `sui move test` (plus 4/4 in `move/openverdict_seal`); commit-reveal enforced on-chain; immutable certificates; one-time payout tickets; Object Display metadata; real stake on a seat (0.1 SUI minimum, jury rewards routed to the staker, 24 h unstake delay); the draw caps models and operational keys and requires a skeptic and a source-authenticity seat, with no cap per staker |
 | Cross-language contract | `lib/protocol` (incl. `parity.test.ts`) + `tests/parity_tests.move` | ✅ | 6 blake2b256/BCS vectors asserted byte-identical in BOTH suites |
-| Inference adapter | `lib/gonka`, `lib/research` | ✅ | Live-verified GonkaRouter API (4096-token cap, `devshard-…` ids, visible retries, hedged same-model calls after 25 s, redacting attempt log; X-Gonka-No-Fallback pinned on every call since 2026-08-31 so the gateway returns a real 429 instead of substituting a model, and any X-Gonka-Fallback notice is audited; the gateway's public receipts lookup (GET api.gonkarouter.io/v1/receipts/<x-request-id>, live 2026-08-31) is cross-checked from the run view: model, devshard, timing and outcome compared against the sealed record, relayed server-side until the gateway sends CORS); POST /api/extract-claim (public, rate-limited) turns a pasted URL into one checkable claim: SSRF-guarded engine fetch, first configured Gonka model at temperature 0 with a 1500-token cap, strict-JSON fail-closed validation, Gonka + gateway request ids returned for transparency; prompt specs v1 to v4 and tool policies v2 to v4 (`promptSpec.ts`) hashed over canonical JSON and bound into every juror manifest (v5 documents live); juror research loop (search with intent, batched page opens, citations, two-sided checks) through Firecrawl; gateway ids (`x-request-id`, `x-devshard-id`, `system_fingerprint`) kept as audit pointers; deterministic fake for offline juries |
+| Inference adapter | `lib/gonka`, `lib/research` | ✅ | Live-verified GonkaRouter API (4096-token cap, `devshard-…` ids, visible retries, hedged same-model calls after 25 s, redacting attempt log; X-Gonka-No-Fallback pinned on every call since 2026-08-31 so the gateway returns a real 429 instead of substituting a model, and any X-Gonka-Fallback notice is audited; the gateway's public receipts lookup (GET api.gonkarouter.io/v1/receipts/<x-request-id>, live 2026-08-31) is cross-checked from the run view: model, devshard, timing and outcome compared against the sealed record, relayed server-side until the gateway sends CORS); POST /api/extract-claim (public, rate-limited) turns a pasted URL into one checkable claim: SSRF-guarded engine fetch, first configured Gonka model at temperature 0 with a 1500-token cap, strict-JSON fail-closed validation, Gonka + gateway request ids returned for transparency; prompt specs v1 to v4 and tool policies v2 to v4 (`promptSpec.ts`) hashed over canonical JSON and bound into every juror manifest (v5 documents live); the deliberation prompt specs V1 to V4 live in the same file but stay engine-only (they are not part of a juror manifest), each with a pinned hash so an old transcript keeps verifying; juror research loop (search with intent, batched page opens, citations, two-sided checks) through Firecrawl; gateway ids (`x-request-id`, `x-devshard-id`, `system_fingerprint`) kept as audit pointers; deterministic fake for offline juries |
 | Evidence pipeline | `lib/evidence`, `lib/walrus` | ✅ | SSRF suite (DNS-first, per-hop revalidation, streaming caps); Merkle manifests; local + SDK Walrus stores + retention; SDK store writes raw blobs (`writeBlob`/`readBlob`, no quilts) so every blob id on chain is a content address a verifier can fetch |
-| Engine | `lib/engine` (contract.ts seam), `lib/sui` (builders per entry point, SuiGateway + fake), `lib/seal` (reveal-key escrow), `lib/storage` (drizzle/pglite/pg), `lib/events` (phase-gated serializer) | ✅ | Full lifecycle: direct review + optimistic; `juryRun` fails closed unless every seat's manifest hashes equal its published document; each run's bundle (exact conversation, input, every attempt, validated output, transcript, audit) is sealed with AES-256-GCM before `approve_run` and the commit, the key is escrowed under the Seal time-lock policy, and the plaintext bundle plus key is published as the reveal argument blob; failed seats keep a failure record; `runProof` / `agentManifestDocument` seams; each commitment now carries the seat's manifest `modelId` so juror identity resolves even for seats that failed before inference; a split first round now injects the revealed round-1 public record (per seat: model, outcome, confidence, public reasoning trace) into every round-2 juror input AND freezes it canonically into the phase-2 evidence manifest (round-1-public-record:<claimId>), fail-closed when a reveal is missing, phase-1 inputs byte-identical; 512/512 vitest incl. lifecycle, seal-then-reveal, escrow, hedge, no-fallback and zkLogin registration tests over FakeSuiGateway |
+| Engine | `lib/engine` (contract.ts seam), `lib/sui` (builders per entry point, SuiGateway + fake), `lib/seal` (reveal-key escrow), `lib/storage` (drizzle/pglite/pg), `lib/events` (phase-gated serializer) | ✅ | Full lifecycle: direct review + optimistic; `juryRun` fails closed unless every seat's manifest hashes equal its published document; each run's bundle (exact conversation, input, every attempt, validated output, transcript, audit) is sealed with AES-256-GCM before `approve_run` and the commit, the key is escrowed under the Seal time-lock policy, and the plaintext bundle plus key is published as the reveal argument blob; failed seats keep a failure record; `runProof` / `agentManifestDocument` seams; each commitment now carries the seat's manifest `modelId` so juror identity resolves even for seats that failed before inference; a split first round now injects the revealed round-1 public record (per seat: model, outcome, confidence, public reasoning trace) into every round-2 juror input AND freezes it canonically into the phase-2 evidence manifest (round-1-public-record:<claimId>), fail-closed when a reveal is missing, phase-1 inputs byte-identical; the engine assigns each seat's debate role (least represented role among the active seats on that model, then drawability) and the debate's speaking order is a pure function of the persisted turns (`debateOrder.ts`); 996/996 vitest incl. lifecycle, seal-then-reveal, escrow, hedge, no-fallback, staked registration and debate-order tests over FakeSuiGateway |
 | CLI | `cli/` (`openverdict`, PRD §27.3 surface) | ✅ | `--json` NDJSON, preflight prints, stable exit codes |
 | Workers | `workers/` | ✅ | evidence / inference / resolution loops, graceful shutdown; live-claim triage (2 s poll while a claim is in flight, 15 s idle, wake file on submission), stranded and dead claims skipped, exponential backoff per failing claim |
-| Observer + verification UI | `app/`, `components/` | ✅ | Builds/typechecks/lints; SSE with resume; strict pre-reveal redaction; run view with provenance strip, research trail (batched opens, both sides, refusals), per-turn conversation with the answering node, "Re-run this juror", "Open through Seal", "Seat failed before commit"; client-side `/verify` recomputes 15 checks per run and decrypts the sealed blob with WebCrypto; `GET /api/claims/[id]/runs/[runId]/proof`, `POST …/reexecute`, `GET /api/agents/[id]/manifest`; manifest panel on `/agents/[id]`; since 2026-08-31 the claim page is the deliberation canvas (live force graph: jurors with family avatars, sealed-phase pulses from content-free `RESEARCH_TICK` events, node inspector reusing the run-proof components, replay at 1x/10x/30x on terminal claims; full-viewport stage without the global chrome, quick-nav pill, auto-fit view; always-visible stage pill top-centre showing the live on-chain round (or the stage at the scrubbed replay moment); the node inspector overlays the stage so opening it never shifts node positions, resizes by dragging its left edge, and renders the shared proof components under a scoped dark token remap (`.ov-inspector-dark`) with container-query grids that fit any panel width; every juror node shows its short seat id, families come from the commitment's manifest `modelId` (failed seats keep their mascot), and new nodes grow out of the node they attach to; revealed run proofs served from an immutable in-memory cache with browser caching, first build per claim still pays two Walrus reads), the audit view moved to `/claims/[id]/report`, `/observe` redirects |
+| Observer + verification UI | `app/`, `components/` | ✅ | Builds/typechecks/lints; SSE with resume; strict pre-reveal redaction; run view with provenance strip, research trail (batched opens, both sides, refusals), per-turn conversation with the answering node, "Re-run this juror", "Open through Seal", "Seat failed before commit"; client-side `/verify` recomputes 15 checks per run and decrypts the sealed blob with WebCrypto; `GET /api/claims/[id]/runs/[runId]/proof`, `POST …/reexecute`, `GET /api/agents/[id]/manifest`; manifest panel on `/agents/[id]`; since 2026-09-04 the claim page carries two views behind one Chat | Graph toggle. Chat is the default: a live transcript in the same words as the events, one card per juror, one juror trail open at a time, and every debate turn in full rather than a summary. Graph is the courtroom ring (`lib/viz/courtroom-layout.ts`): a deterministic seating chart, juror 1 at 12 o'clock and the rest clockwise, each juror's research on an outer arc inside its own wedge, the certificate closing the ring at the bottom, and an empty middle with no claim node, so the same committee always lands in the same seats. Nothing simulates or settles; the earlier force layout is no longer used by the console. Kept from that canvas: sealed-phase pulses from content-free `RESEARCH_TICK` events, the node inspector reusing the run-proof components under a scoped dark token remap (`.ov-inspector-dark`), and replay at 1x/10x/30x on terminal claims. Both views show a "Where the table stands" card that counts the stances, names who moved, and says out loud that the sealed table vote is what decides. Revealed run proofs come from an immutable in-memory cache with browser caching, first build per claim still pays two Walrus reads; the audit view is at `/claims/[id]/report`, `/observe` redirects |
 | API guards | `app/api/_lib/guard.ts` | ✅ | Operator bearer token, public-write flag, trusted-proxy-gated rate limits |
-| Wallet + zkLogin onboarding | `components/wallet`, `components/agents` | ✅ | dapp-kit v2 + Enoki (env-gated); zkLogin-backed agent registration (T7b): SDK signature verification, blake2b backing hash, one-social-account-one-seat, guarded POST /api/agents/register |
+| Wallet + zkLogin staking | `components/wallet`, `components/agents` | ✅ | dapp-kit v2 + Enoki (env-gated); a seat is opened by staking 0.1 SUI from a browser wallet or from a Google sign-in through zkLogin (authentication only, never proof of personhood), gas sponsored through Shinami; SDK signature verification and a blake2b staker hash; guarded `POST /api/agents/register` and `POST /api/agents/stake/prepare`; any account may stake on as many seats as it likes, and the stake card offers the model and nothing else because the engine assigns the seat's debate role |
+| Docs site | `app/docs/[[...slug]]`, `lib/docs`, `components/docs`, pages in `docs/site/` | ✅ | https://docs.openverdict.info off the same deployment (`lib/web/host-routing.ts` maps every path on a `docs.` host under `/docs`, so `/docs` also serves on the apex and app hosts); `NEXT_PUBLIC_DOCS_URL` (a Dockerfile build ARG) names the host and falls back to the in-app `/docs`; pages generated from the Markdown in `docs/site/` |
 | Localnet E2E + sponsorship | `scripts/localnet-e2e.ts`, `scripts/cockpit-demo.ts` | ✅ | `pnpm e2e:localnet` exits 0 (3 lifecycle paths, sponsored deposit, CLI parity, recomputed Truth Score); cockpit harness leaves a finalized + a sealed claim live for the observer |
 
 ## What is NOT true yet
 
+- REAL STAKE ON A SEAT SHIPPED 2026-09-04: a seat is opened by its staker
+  posting at least 0.1 SUI (`MIN_STAKE_MIST = 100_000_000` in
+  `agent_registry.move`) in one wallet transaction, gas sponsored through
+  Shinami, so a Google sign-in can stake with 0.1 SUI and nothing else. The
+  seat's jury reward tickets are minted to the staker rather than to the
+  operational key that runs it (`register_staked_agent` records the recipient,
+  `jury::payout_recipient_for_expected_index` resolves it at the draw and
+  `settlement.move` pays it; committees drawn before staking fall back to the
+  seat owner). The bond stays locked while the seat is active and is returned
+  24 h after unstaking (`WITHDRAWAL_DELAY_MS = 86_400_000`), which deactivates
+  the seat at once. Slashing is specified in the PRD and NOT enforced on
+  chain. The draw lost its per-staker cap the same day: it caps models (at
+  most two seats per model) and operational keys (one seat each), requires at
+  least three distinct models and both a SKEPTIC and a SOURCE_AUTHENTICITY
+  seat (`selected_diversity_valid`), and no longer looks at staker hashes at
+  all, which are still recorded but read by nothing. Any account may stake on
+  as many seats as it likes; the caps are a diversity rule, never an identity
+  claim, and zkLogin remains authentication only.
+- DEBATE ROLES ARE ASSIGNED, NOT CHOSEN 2026-09-04: research is identical for
+  every seat, so nobody picks a role in the product. The stake card offers the
+  model and nothing else, and the engine picks the role (`debate-role.ts`):
+  the least represented role among the active seats on that model, tie-broken
+  INVESTIGATOR, SKEPTIC, SOURCE_AUTHENTICITY, then filtered to a role the
+  roster can still seat; the choice is refused outright if the seat could
+  never be drawn. The three roles are SKEPTIC, SOURCE_AUTHENTICITY and
+  INVESTIGATOR. The stake and register routes still accept an optional role
+  and return the one recorded, so an operator can name one.
+- CONSOLE REWORK SHIPPED 2026-09-04: the claim page is Chat by default with a
+  Chat | Graph toggle to the courtroom ring (see the observer row above); the
+  `/agents` grid puts three seats per row at large widths and drops the stake
+  kind chip from the list (the detail page still shows it); Status left the
+  top nav and lives under the console home and in the footer; `/learn` is
+  plain words with the technical detail on the docs site; the audit page at
+  `/verify` is one claim link plus two paths, "With an agent" (a command to
+  paste into any agent, Claude Code, or the terminal) and "By hand" (the
+  client-side recompute of the commitment, the truth score and the run
+  proof); `/fact-check` is one input with no weather strip (the strip still
+  shows on a queued submission and on a voided claim, where a relaunch still
+  depends on the weather).
+- ONE PALETTE 2026-09-04 (owner): the app uses the paper ground and white
+  surfaces with hairline borders, ink for text with muted and faint ink for
+  secondary and tertiary, the blue accent `#0E76FF` (filled controls on
+  `#0B60D8`) for everything interactive or active, and the semantic colours
+  only for protocol outcomes and failures (YES green, NO red, UNSURE amber,
+  failure red). Nothing else gets a hue: sealed is ink with a lock, graph
+  edges differ by weight and dash rather than colour, chips are hairline and
+  ink. The three provider tints survive as the logo tiles' own colours.
+- DOCS SITE SHIPPED 2026-09-04: https://docs.openverdict.info off the same
+  deployment, `/docs` on the other hosts, its pages generated from the
+  Markdown in `docs/site/`. `lib/web/host-routing.ts` maps every path on a
+  `docs.` host under `/docs` (the host root is the index) and lets a path that
+  already names `/docs` pass through, so a link copied from another host never
+  doubles the prefix. `NEXT_PUBLIC_DOCS_URL` (a Dockerfile build ARG) names
+  the host; unset, every "Read the docs" link falls back to the in-app
+  `/docs`.
+- FAST PATH, AS IT STANDS 2026-09-04: the ladder from `create_claim` is
+  evidence cutoff +60 s, first commit +600 s, first reveal +720 s, discussion
+  +1560 s, second commit +1800 s, second reveal +1920 s, so a one-round
+  verdict lands about 12 min after the POST and a two-round claim about
+  32 min. A committee may be locked twenty seconds after selection and never
+  later than the commit deadline (`ACCEPTANCE_WINDOW_MS = 20_000` in
+  `jury.move`, mirrored as `COMMITTEE_ACCEPTANCE_WINDOW_MS`), which is the
+  floor the per-claim commit pump waits for; round two has no floor at all, so
+  table votes commit the moment they are ready. Walrus writes ride four
+  writer lanes derived from the operator seed (`DEFAULT_WALRUS_WRITERS = 4`,
+  `OPENVERDICT_WALRUS_WRITERS` overrides, 0 keeps every write on the
+  operator), funded by `pnpm walrus:writers`. A claim whose draw kept failing
+  until the first commit deadline is voided `MISSING_COMMITTEE` by the
+  resolution worker rather than sitting in REVIEW_REQUESTED forever, so the
+  attempt relaunches under the all-or-nothing rule.
 - Positioning UPDATED 2026-09-01: the Sui x Gonka model is now the stated
   product story (README one-liner + idea + track fit, landing FAQ "Who pays,
   and who earns?", /learn Currency row): Gonka the only mind, Sui the judge
-  and the currency, delegated seat backing the recorded next rung. On-chain
+  and the currency, pooled stake behind a seat the recorded next rung. On-chain
   surface unchanged.
-- Economic direction RECORDED 2026-09-01 (roadmap, NOT implemented):
-  requester-paid SUI per verification funds the round's jury pool; backers
-  delegate SUI stake behind seats and share those seats' jury rewards pro
-  rata after fees. Reward split stays participation-based with at most an
+- Economic direction RECORDED 2026-09-01, PART SHIPPED 2026-09-04: one staker
+  per seat is now live on chain (see the real-stake bullet above). Still
+  roadmap and NOT implemented: requester-paid SUI per verification funding the
+  round's jury pool, and several stakers pooling behind one seat to share its
+  jury rewards pro rata after fees, with stake-weighted draws under a cap.
+  Reward split stays participation-based with at most an
   accuracy bonus; majority-only pay is rejected (herding, anti-UNSURE).
-  PRD §1.1 item 20 is the answer of record for judges; nothing on-chain
-  changed for this.
+  PRD §1.1 item 20 is the answer of record for judges.
 - Truth reframe SHIPPED 2026-09-01: the Gonka track mandate is a code-enforced
   invariant (the adapter refuses any inference host outside gonkarouter.io;
   every AI path already routes through the one adapter), README/PRD/app copy
   now state that selection weight is equal in v1 (on-chain reputation counters
-  register at baseline and are never updated yet), agent roles are recorded
-  labels with no behavioral effect (the registration card no longer offers a
-  role picker and reads "Back a jury seat"), and reputation panels are
+  register at baseline and are never updated yet), the card that opens a seat
+  offers no role picker (superseded 2026-09-04: it is the stake card, and the
+  engine assigns the role, which now does have an effect because the draw
+  requires a SKEPTIC and a SOURCE_AUTHENTICITY seat and the debate opener and
+  turn instructions read it), and reputation panels are
   labelled static-in-v1. PRD §1.1 item 19 records the amendment.
 - Public deliberation SHIPPED 2026-09-01: a split first round now runs a
   public structured debate before round two (revealed jurors argue in seat
@@ -99,11 +178,14 @@ Postgres. Tests: 512 vitest, 70 Move.
   conversation. Validation stays fail closed with a label per broken part
   (INVALID_ANSWERING, INVALID_QUESTION, INVALID_LENGTH beside the old
   INVALID_OUTPUT and INVALID_CITATIONS). The stored turn and
-  DeliberationTurnPublic gain those fields plus specVersion, all optional and
-  absent on V1 to V3 turns, and argument stays required as analysis plus
+  DeliberationTurnPublic gain those fields plus specVersion, all optional,
+  absent on V1 to V3 turns and absent on a V4 turn that failed closed, and
+  argument stays required as analysis plus
   position, so every existing reader and every old transcript's bytes, root
   and audit result are unchanged. OPENVERDICT_DELIBERATION_SPEC picks the
-  contract ("4" default, "3" allowed) and the choice is recorded per turn,
+  contract: the exact string "3" runs V3 and anything else, unset included,
+  runs V4. It is read once when the debate starts, so an exchange can never
+  split across two contracts, and the choice is recorded per turn,
   in the frozen transcript and in the sealed table-vote input
   (deliberationSpecVersion). V4 also numbers seats from 1, so a seat number
   is the juror number the console and ov trace print (Seat 1 is juror 1); the
