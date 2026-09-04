@@ -2738,3 +2738,34 @@ chip last; Live view shows full turns instead of the 180-char preview;
 one canary debate before the demo. Weather still closed at 17:40
 (DeepSeek TIMEOUT / MiniMax 429 in turns); attempt 2 of the minimum-wage
 claim fires on the first clear probe.
+
+### 3ar progress, 18:25: owner directives applied live (all deployed)
+
+- e13fd97 design pass (deploy 07d28ce6), 89611ca Kimi mark = Moonshot's
+  current K with its blue dot (deploy 4c3e074b), 3ffafcd stage control is
+  a plain Chat and Graph toggle, Replay segment and "Back to live" gone
+  (deploy 062ea97f), 6ffd1da one trail open at a time + sealed token is
+  muted ink + no weather block on /fact-check (deploy a347e6a9).
+- OWNER RULES ADDED (binding, in common-rules.md): ONE PALETTE (paper,
+  white hairline surfaces, ink and muted ink, blue accent for anything
+  interactive, semantic colour only for YES/NO/UNSURE and failures,
+  provider tints only inside logo tiles, no other hue anywhere); graph has
+  NO claim node in the middle (five seats on the ring, nothing at the
+  centre, claim text lives in the left panel only); trails open one at a
+  time; the top control is Chat | Graph only.
+- Kimi logo terms (kimi.ai/policies/logo-usage-terms) forbid recolouring;
+  the owner was told; marks keep the seat tints as requested; a one-line
+  switch to official colours exists if wanted.
+- WORKERS RUNNING: courtroom-graph (radial layout, no centre node, palette
+  rule sent), debate-v4 (engine spec V4, design doc already on disk at
+  docs/superpowers/specs/2026-09-04-deliberation-conversation-design.md,
+  lib/engine/debateOrder.ts + test in progress), verify-ux (brief
+  scratchpad/opus-verify-ux.md: /verify becomes link field + "With an
+  agent" (three one-line cards with copy buttons, llms.txt must let any
+  agent audit) | "By hand" (existing tabs pre-filled from the public
+  report for a chosen seat)). debate-ui brief ready at
+  scratchpad/opus-debate-ui.md (dispatch after courtroom-graph and
+  debate-v4 land). Then a palette sweep worker over the whole app.
+- Committing while workers edit: stage HEAD + own hunks via
+  `git hash-object -w` + `git update-index --cacheinfo` when a shared file
+  also holds a worker's unfinished hunks (done for page.tsx at 3ffafcd).
