@@ -2609,3 +2609,88 @@ visuals on production or use a local claim id. A stray
 workspace root when a shell drifts there (owner to delete). Owner-owned
 untracked folders now: docs/demo/deck/, docs/demo/devfolio/,
 public/brand/, scripts/generate-brand-assets.py.
+
+## 3aq. RESUME MAP 2026-09-04 17:25 (pre-compaction: read 3ao and 3ap, then THIS, and continue as if nothing happened)
+
+OWNER STATE: present, reviewing the claim page design live, full delegation
+otherwise. Wants: Opus workers at max effort (not Fable, not Codex); fresh
+workers when one has been through many rounds; "clean and minimalistic UI,
+nothing fancy or cluttering", aligned with the landing pages.
+
+DESIGN DECISIONS (owner's, in order, all binding):
+1. Claim page and Live view on the landing's paper ground (#f7f7f5), white
+   hairline cards, landing furniture (CornerPin, Hairline, SplitButton,
+   dashed guide rail, 6px semantic squares), type scale 19/15/13/11,
+   semantic colour only for YES/NO/UNSURE, sealed, failed.
+2. Live transcript view (chat-like) is the default; Graph view one toggle
+   away; nothing removed from the page; five compact juror tiles in one
+   row, expanded juror = full-width panel below the row, several at once;
+   Replay at 1x/10x/30x with Skip to end; mini graph preview in Live.
+3. Graph on a LIGHT background (not the dark navy canvas), dock and
+   inspector light too.
+4. Blue #0E76FF only as ACCENT (active segment, primary buttons Play and
+   Full report, corner pin, links, live dot, selected tile hairline), NOT
+   as a solid ground for the sidebar or the top bar (the solid version was
+   built, seen at 17:18, and rejected as too vibrant: "reverse it").
+5. Provider LOGOS instead of the mascots: DeepSeek whale, MiniMax mark,
+   Kimi (Moonshot) mark, inline SVG from lobe-icons (MIT, attribution
+   comment), three tints per provider, the tint chosen by the seat's index
+   among same-model seats; used in Live tiles and panels, graph nodes,
+   dock, report seat cards, agents pages, jury marquee, model-badge.
+6. Courtroom graph (approved 17:12): fixed radial layout replacing the
+   force cloud. Brief ready at scratchpad/opus-courtroom-graph.md; NOT yet
+   dispatched. Dispatch a FRESH Opus worker (name it courtroom-graph) the
+   moment the live-design worker's final report lands, so the two never
+   edit components/viz/deliberation-canvas.tsx at the same time.
+
+IN FLIGHT: worker live-design (Opus, many rounds already) finishing one
+pass: light graph + light dock/inspector (done per its earlier note),
+provider logos with tints, and the blue reversal (paper rail and bar,
+blue accents only). It was told to send ONE final report and stop.
+After it lands: review, `pnpm typecheck && pnpm lint && pnpm exec vitest
+run lib/viz && pnpm build`, commit (Claude-Session trailer, never
+Co-Authored-By), deploy in a free window (seeder.pause, railway-tree at
+origin/main, `railway up -s app -d`, monitor, verify in the browser with
+the Chrome tools on https://app.openverdict.info/claims/0x273220b5...
+?view=live and ?view=graph, unpause), then dispatch courtroom-graph.
+
+COMMITTED AND DEPLOYED SO FAR TODAY: see 3an (trace, agent docs, diagrams,
+incident), 3ao (fast path, live transcript, funding, upgrade to
+0x38ecc9fa..., deploy), 3ap (light redesign 9253d56, tiles + panels + chrome
+bar 0538b52). Latest code commit on main: 0538b52; docs after it.
+Production package 0x38ecc9fa1deca5413376ca2cc82f099f468c6aa5f8311e6167e5268d582e04c8.
+
+BOARD: minimum-wage claim 0xadee0c44... attempt 1 VOIDED (MISSING_COMMITTEE),
+attempt 2 relaunches by itself on the first clear probe (weather closed
+all day: DeepSeek/MiniMax/Kimi 429 or TIMEOUT in turns). Seeder armed
+(scratchpad/seeder.sh, pause file scratchpad/seeder.pause), board watcher
+streaming (scratchpad/board-watch.log; the Monitor in the lead session
+prints "live:" and "CLEAR" lines). The first live claim on the new
+plumbing is the measurement: `ov watch <id> --verbose` shows timing_ms.
+
+LOCAL CHECKS: a `pnpm dev` server on :3000 (started by a worker) serves a
+LOCALNET dataset, so production ids 404 there; check visuals on
+production or with a local claim id. Chrome tools work
+(mcp__claude-in-chrome__*: navigate, computer screenshot with
+save_to_disk, find, tabs_close). Screenshots for the owner: give the
+saved path.
+
+OWNER-OWNED UNTRACKED (never add, never delete): docs/demo/deck/ (its
+exports/slide-05.svg trips GitHub push protection: Dropbox token
+pattern; owner to check), docs/demo/devfolio/, public/brand/,
+scripts/generate-brand-assets.py. Never `git add docs` or `git add .`
+wholesale; add explicit paths. A stray /Users/marcus/pnpm-workspace.yaml
+exists (owner to delete).
+
+STANDING RULES: reply starts "Mr. Marcus,"; no em dashes anywhere; never
+print keys; commit trailer "Claude-Session:
+https://claude.ai/code/session_012xRV9z14guVqZhYXV6UEAP"; never deploy
+while an attempt is active or a relaunch could fire (deploy only while the
+weather is not clear or right after a settlement); pause the seeder around
+deploys; cwd resets between Bash calls; foreground sleep is limited; the
+upgrade script output must never be piped through grep (an upgrade once
+ran silently); zkLogin is authentication only; product vocabulary is
+stake/staker (see 3ak). Leftovers: on-chain Display string; rotate the
+Shinami key after the demo; double-debate cost fix; the app DB lists the
+deprecated DeepSeek skeptic seat 0x81a737... as active (display only);
+stdio MCP wrapper is optional later.
