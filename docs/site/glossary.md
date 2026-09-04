@@ -118,7 +118,6 @@ page that carries it is linked.
 
 | Term | Definition |
 | --- | --- |
-| **Queue** | Where a submission waits when the weather is not clear. Items expire after six hours and launch at most one every ten minutes. |
 | **Quorum** | Four matching reveals out of five. Anything less sends a first round to the debate and a second round to UNRESOLVED. |
 
 ## R
@@ -179,7 +178,7 @@ page that carries it is linked.
 | Term | Definition |
 | --- | --- |
 | **Walrus** | The decentralized blob store holding evidence, run bundles and manifests. Sui stores the hashes; Walrus stores the bytes. |
-| **Weather** | The engine's health report for the three model families and web search. Submissions queue until it is clear. |
+| **Weather** | The engine's health report for the three model families and web search. A submission is refused while it is not clear. |
 | **Worker** | One of the three engine background processes that drive claims through their phases. |
 
 ## Z

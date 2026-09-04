@@ -133,7 +133,7 @@ async function main(): Promise<void> {
   console.log(`digest:    ${result.digest}`);
   console.log(`sender:    ${address}`);
   console.log(`gas owner: ${payer} ${payer === address ? "(OPERATOR PAID, not sponsored)" : "(sponsored)"}`);
-  console.log(`explorer:  https://testnet.suivision.xyz/txblock/${result.digest}`);
+  console.log(`explorer:  https://suiscan.xyz/testnet/tx/${result.digest}`);
   if (payer === address) process.exitCode = 1;
 }
 

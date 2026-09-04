@@ -4,7 +4,7 @@ Answers are drawn from the repository as of 2026-09-03 (README, PRD, runbook, ch
 
 ## 1. How do you know the vote was not changed?
 
-Each juror committed a blake2b-256 hash of its vote on Sui before any vote was revealed. The hash covers the outcome, the confidence, the run hash, the frozen evidence root, the claim id, the seat id, the juror's profile id, the phase and a secret salt. At reveal the Move contract rebuilt that hash from the revealed values and refused anything that did not match. The auditor recomputes the same hash from the reveal transaction's inputs, independently of the app server, and compares it to the `VoteCommitted` event in the commit transaction. Both transaction digests are in the dossier and open on SuiVision.
+Each juror committed a blake2b-256 hash of its vote on Sui before any vote was revealed. The hash covers the outcome, the confidence, the run hash, the frozen evidence root, the claim id, the seat id, the juror's profile id, the phase and a secret salt. At reveal the Move contract rebuilt that hash from the revealed values and refused anything that did not match. The auditor recomputes the same hash from the reveal transaction's inputs, independently of the app server, and compares it to the `VoteCommitted` event in the commit transaction. Both transaction digests are in the dossier and open on Suiscan.
 
 ## 2. Could the operator fake a verdict?
 
@@ -32,7 +32,7 @@ A claim result, never a juror's vote. It happens when four or more jurors reveal
 
 ## 8. What happens when a provider is down?
 
-Inside an attempt: a call that has not answered after 25 s is hedged to the same model, shed or timed-out calls are retried inside the seat window, and every attempt lands in the audit trail. If a seat still fails at a binding step, the whole attempt is voided in public and nothing partial is finalized. The engine relaunches once all three families and web search answer a health probe, at most three attempts, and gives up after six hours of bad weather after a void (`WEATHER_TIMEOUT`) or after three voids (`ATTEMPTS_EXHAUSTED`). New submissions during bad weather are queued and launched one per ten minutes when the weather clears; a queued submission expires after six hours.
+Inside an attempt: a call that has not answered after 25 s is hedged to the same model, shed or timed-out calls are retried inside the seat window, and every attempt lands in the audit trail. If a seat still fails at a binding step, the whole attempt is voided in public and nothing partial is finalized. The engine relaunches once all three families and web search answer a health probe, at most three attempts, and gives up after six hours of bad weather after a void (`WEATHER_TIMEOUT`) or after three voids (`ATTEMPTS_EXHAUSTED`). New submissions during bad weather are refused with 503 `WEATHER_NOT_CLEAR` and nothing is stored.
 
 ## 9. What does staking on a seat do?
 
@@ -108,11 +108,11 @@ Because paying for agreement manufactures herding, punishes honest UNSURE votes 
 
 ## 27. What if Gonka is down right now?
 
-Then the claim does not launch. The engine probes DeepSeek, MiniMax, Kimi and the web search provider every two minutes with research-shaped requests (three parallel 400-token calls per family; the search row is a credit check). When any row fails, a new submission is queued instead of started (the API answers 202 with a queue id), and it launches by itself on the first clear probe, one engine launch every ten minutes, or expires after six hours. Nothing is held on unknown weather (no probe in the last five minutes): such a submission launches at once. If a family fails after the launch, the seat fails closed, the attempt is voided in public and relaunched on the next clear probe, up to three attempts. `ov weather` and `GET /api/weather` show the four rows; the console shows them as chips.
+Then the claim does not launch. The engine probes DeepSeek, MiniMax, Kimi and the web search provider every two minutes with research-shaped requests (three parallel 400-token calls per family; the search row is a credit check). When any row fails, a new submission is refused outright: the API answers 503 `WEATHER_NOT_CLEAR` with the family health and a `Retry-After` of two minutes, and nothing is stored. Nothing is held on unknown weather (no probe in the last five minutes): such a submission launches at once. If a family fails after the launch, the seat fails closed, the attempt is voided in public and relaunched on the next clear probe, up to three attempts. `ov weather` and `GET /api/weather` show the four rows; the console shows them as chips.
 
-## 28. Why did my submission queue, and how long will it wait?
+## 28. Why was my submission refused?
 
-Because the last probe, less than five minutes old, showed at least one of the four rows not ok; the CLI printed which one and its status (429 shedding, TIMEOUT, 402 no search credits). The Move rules require three model families in every committee, and a jury without web search answers UNSURE on everything, so launching into a known-bad window would burn one of the three attempts for nothing. The queue holds the request exactly as submitted and starts it when all four rows answer, oldest first, one launch per ten minutes; it expires after six hours ("The families did not all answer within six hours. Submit again."). Nobody can say how long the weather takes to clear; `ov watch <queueId>` polls every 30 s and follows the claim the moment it launches.
+Because the last probe, less than five minutes old, showed at least one of the four rows not ok; the CLI printed which one and its status (429 shedding, TIMEOUT, 402 no search credits). The Move rules require three model families in every committee, and a jury without web search answers UNSURE on everything, so launching into a known-bad window would burn one of the three attempts for nothing. So the API refuses the submission instead of parking it: 503 `WEATHER_NOT_CLEAR` with the live family health, nothing stored, nothing waiting in the background. Nobody can say how long the weather takes to clear, so run `ov weather` and submit again when all four rows answer.
 
 ## 29. Why can one seat void the whole attempt?
 
@@ -120,7 +120,7 @@ Because a verification is all or nothing: every step is five for five or void, a
 
 ## 30. How long does a verification take?
 
-Counted from the claim's creation on Sui (testnet ladder, 2026-09-03): the committee is drawn about a minute in and the evidence is frozen right after; seats accept within a minute; the first commit deadline is at +10 minutes and the reveal window closes at +12 minutes, so a one-round verdict lands about 11 to 12 minutes after launch (measured 10.6 minutes on "Humans use only ten percent of their brains."). A split opens a debate of up to 14 minutes that stops early when nobody moves, then a 4-minute table-vote commit window and a 2-minute reveal, so a two-round verdict lands about 32 minutes after launch. The POST itself takes under a minute before the claim id exists. A queued submission adds the wait for clear weather plus the ten-minute launch spacing.
+Counted from the claim's creation on Sui (testnet ladder, 2026-09-03): the committee is drawn about a minute in and the evidence is frozen right after; seats accept within a minute; the first commit deadline is at +10 minutes and the reveal window closes at +12 minutes, so a one-round verdict lands about 11 to 12 minutes after launch (measured 10.6 minutes on "Humans use only ten percent of their brains."). A split opens a debate of up to 14 minutes that stops early when nobody moves, then a 4-minute table-vote commit window and a 2-minute reveal, so a two-round verdict lands about 32 minutes after launch. The POST itself takes under a minute before the claim id exists.
 
 ## 31. What are the limits on a public submission?
 

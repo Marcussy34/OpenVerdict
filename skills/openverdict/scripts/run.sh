@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Run the public OpenVerdict auditor from anywhere, including through the
-# global symlink at ~/.claude/skills/openverdict-audit.
+# Run the public OpenVerdict auditor from anywhere, including through a
+# symlink to this skill folder from any agent's skills directory.
 #
 # Usage: run.sh <claim link | claim id> [--base <url>] [--json <file>] [--out <file>] [--run <runId>] [--quiet]
 #        run.sh --list [--base <url>] [--limit <n>] [--json <file>]   (the board: every claim, newest first)
@@ -10,13 +10,22 @@
 set -euo pipefail
 
 # Physical directory of this script: `pwd -P` follows the symlink, so the
-# repo root is found even when the skill folder is linked from ~/.claude.
+# real skill folder is found even when it is linked from .claude/skills,
+# .agents/skills or another agent's skills directory.
 SKILL_DIR="$(cd "$(dirname "$0")" && pwd -P)"
-# The skill lives at <repo>/.claude/skills/openverdict-audit: three levels up.
-REPO="$(cd "$SKILL_DIR/../../.." && pwd -P)"
+# Walk up to the repository root instead of counting levels, so the skill
+# folder can move without breaking the launcher.
+REPO="$SKILL_DIR"
+while [ ! -f "$REPO/scripts/audit-claim.ts" ] && [ "$REPO" != "/" ]; do
+  REPO="$(dirname "$REPO")"
+done
 
 if [ ! -f "$REPO/scripts/audit-claim.ts" ]; then
-  echo "audit-claim.ts not found under $REPO/scripts; is the skill inside the OpenVerdict repo?" >&2
+  # `npx skills add` copies the skill outside the repository, so say what to do.
+  echo "audit-claim.ts not found above $SKILL_DIR: this skill is installed outside the OpenVerdict repository." >&2
+  echo "Clone it, then run this launcher from skills/openverdict/scripts inside the clone:" >&2
+  echo "  git clone https://github.com/Marcussy34/OpenVerdict.git && cd OpenVerdict && pnpm install" >&2
+  echo "Without the repository, every read in SKILL.md is still a plain HTTPS GET against https://app.openverdict.info/api." >&2
   exit 2
 fi
 
@@ -36,7 +45,7 @@ if [ ! -f "$TSX" ]; then
 fi
 
 # One line of context for the caller; the dossier itself goes to stdout.
-echo "openverdict-audit: repo $REPO" >&2
+echo "openverdict: repo $REPO" >&2
 
 # Run from the repo root so relative --json and --out paths resolve there;
 # the skill always passes absolute paths.

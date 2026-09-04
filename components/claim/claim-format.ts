@@ -16,13 +16,6 @@ export const OUTCOME_CHIP: Record<string, string> = {
   UNRESOLVED: "bg-muted text-muted-foreground",
 };
 
-/** Object ids are too long to show whole; keep the ends, elide the middle. */
-export function shortClaimId(claimId: string): string {
-  return claimId.length <= 14
-    ? claimId
-    : `${claimId.slice(0, 8)}…${claimId.slice(-4)}`;
-}
-
 /** Truth score as a percentage string, or null while the claim is unsettled. */
 export function truthScoreOf(claim: ClaimInspection): string | null {
   const bps = claim.result?.truthScoreBps;

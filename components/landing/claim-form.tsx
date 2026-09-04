@@ -12,9 +12,11 @@ import { useClaimSubmission, MAX_CLAIM } from "@/components/claim/use-claim-subm
  */
 export function ClaimForm() {
   const [claim, setClaim] = React.useState("");
-  const { submit, submitting, errorMessage, isEngineOffline } = useClaimSubmission();
+  const { submit, submitting, errorMessage, isEngineOffline, refusal } =
+    useClaimSubmission();
   const tooLong = claim.length > MAX_CLAIM * 0.9;
-  const errorId = errorMessage || isEngineOffline ? "landing-claim-error" : undefined;
+  const errorId =
+    errorMessage || isEngineOffline || refusal ? "landing-claim-error" : undefined;
 
   return (
     <form
@@ -61,15 +63,18 @@ export function ClaimForm() {
         </span>
       </div>
 
-      {(errorMessage || isEngineOffline) && (
+      {(errorMessage || isEngineOffline || refusal) && (
         <p
           id="landing-claim-error"
           role="alert"
           className="mt-3 border-l-2 border-no-dark bg-black/20 py-2 pl-3 text-[13px] leading-snug text-no-dark"
         >
-          {isEngineOffline
-            ? "The verification engine is not reachable right now. Client-side proof tools stay available on the verifier."
-            : errorMessage}
+          {/* Bad weather refuses the submission outright; nothing was stored. */}
+          {refusal
+            ? `${refusal.message} Try again in a few minutes.`
+            : isEngineOffline
+              ? "The verification engine is not reachable right now. Client-side proof tools stay available on the verifier."
+              : errorMessage}
         </p>
       )}
     </form>

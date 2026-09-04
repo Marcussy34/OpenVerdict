@@ -502,7 +502,7 @@ export function StakeResult({
         </ResultRow>
         <ResultRow label="Transaction">
           {/* `tx` resolves to suiTransactionUrl through the shared chip
-              mapping, so this digest lands on SuiVision like every other. */}
+              mapping, so this digest lands on Suiscan like every other. */}
           <HashChip value={confirmation.digest} tone="chain" kind="tx" />
         </ResultRow>
         <ResultRow label="Stake">

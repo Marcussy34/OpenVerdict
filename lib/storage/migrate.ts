@@ -105,13 +105,6 @@ CREATE TABLE IF NOT EXISTS gonka_weather (
   status TEXT NOT NULL, probed_at TIMESTAMPTZ NOT NULL
 );
 
-CREATE TABLE IF NOT EXISTS fact_check_queue (
-  queue_id TEXT PRIMARY KEY, status TEXT NOT NULL, request JSONB NOT NULL,
-  hold_reason TEXT NOT NULL, launch_error TEXT, launched_claim_id TEXT,
-  created_at TIMESTAMPTZ NOT NULL, updated_at TIMESTAMPTZ NOT NULL,
-  expires_at TIMESTAMPTZ NOT NULL
-);
-
 CREATE TABLE IF NOT EXISTS tool_calls (
   tool_call_id TEXT PRIMARY KEY, run_id TEXT NOT NULL, call_index INTEGER NOT NULL,
   tool_name TEXT NOT NULL, argument_hash TEXT NOT NULL, result_hash TEXT,
@@ -200,6 +193,8 @@ ALTER TABLE inference_runs ADD COLUMN IF NOT EXISTS revealed_blob_id TEXT;
 ALTER TABLE inference_runs ADD COLUMN IF NOT EXISTS revealed_object_id TEXT;
 ALTER TABLE inference_runs ADD COLUMN IF NOT EXISTS failure JSONB;
 ALTER TABLE evidence_artifacts ADD COLUMN IF NOT EXISTS source_class TEXT;
+/* Submissions in bad weather are refused outright, never held: there is no queue. */
+DROP TABLE IF EXISTS fact_check_queue;
 
 CREATE INDEX IF NOT EXISTS claims_state_idx ON claims (state);
 CREATE INDEX IF NOT EXISTS jury_seats_claim_phase_idx ON jury_seats (claim_id, phase);
@@ -210,8 +205,6 @@ CREATE INDEX IF NOT EXISTS deliberation_turns_claim_ordinal_idx
   ON deliberation_turns (claim_id, ordinal);
 CREATE INDEX IF NOT EXISTS verification_attempts_verification_idx ON verification_attempts (verification_id, attempt);
 CREATE INDEX IF NOT EXISTS verification_attempts_status_idx ON verification_attempts (status);
-CREATE INDEX IF NOT EXISTS fact_check_queue_status_created_idx
-  ON fact_check_queue (status, created_at);
 CREATE INDEX IF NOT EXISTS resolution_events_claim_sequence_idx ON resolution_events (claim_id, sequence);
 CREATE INDEX IF NOT EXISTS stake_reservations_status_expires_idx
   ON stake_reservations (status, expires_at);

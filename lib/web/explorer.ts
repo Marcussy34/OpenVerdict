@@ -1,14 +1,20 @@
 /**
  * Public explorer URLs for on-chain and storage artifacts. One home for
- * these so every hash chip in the app links to the same destinations.
+ * these so every hash chip in the app links to the same destinations:
+ * transactions on Suiscan, objects and accounts on SuiVision.
  */
 
-// SuiVision puts the network in the host rather than the path, and its
-// transaction page is /txblock, not /tx.
+// SuiVision puts the network in the host rather than the path.
 const SUIVISION =
   process.env.NEXT_PUBLIC_SUI_NETWORK === "mainnet"
     ? "https://suivision.xyz"
     : "https://testnet.suivision.xyz";
+
+// Suiscan keeps the network in the path, and its transaction page is /tx.
+const SUISCAN =
+  process.env.NEXT_PUBLIC_SUI_NETWORK === "mainnet"
+    ? "https://suiscan.xyz/mainnet"
+    : "https://suiscan.xyz/testnet";
 
 export function suiObjectUrl(id: string): string {
   return `${SUIVISION}/object/${encodeURIComponent(id)}`;
@@ -19,7 +25,7 @@ export function suiAccountUrl(address: string): string {
 }
 
 export function suiTransactionUrl(digest: string): string {
-  return `${SUIVISION}/txblock/${encodeURIComponent(digest)}`;
+  return `${SUISCAN}/tx/${encodeURIComponent(digest)}`;
 }
 
 /** Walrus aggregator URL for a blob id; null when no public network is set. */

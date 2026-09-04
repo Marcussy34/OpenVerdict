@@ -1,8 +1,8 @@
 /**
  * What a chip's value actually is, and where a click on it should go.
- * One place for the mapping so every chip in the app agrees: a Sui object,
- * account or transaction opens on SuiVision, a Walrus blob opens on the
- * aggregator, and a hash or a bare id never pretends to be a link.
+ * One place for the mapping so every chip in the app agrees: a Sui object or
+ * account opens on SuiVision, a transaction opens on Suiscan, a Walrus blob
+ * opens on the aggregator, and a hash or a bare id never pretends to be a link.
  */
 
 import { suiAccountUrl, suiObjectUrl, suiTransactionUrl, walrusBlobUrl } from "./explorer";
@@ -44,7 +44,9 @@ export function chipHref(kind: ChipKind | undefined, value: string): string | nu
 
 /** Where a linked chip goes, named for the title attribute. */
 export function chipExplorer(kind: ChipKind | undefined): string | null {
-  if (kind === "object" || kind === "account" || kind === "tx") return "SuiVision";
+  // Transactions read better on Suiscan; objects and accounts stay on SuiVision.
+  if (kind === "tx") return "Suiscan";
+  if (kind === "object" || kind === "account") return "SuiVision";
   if (kind === "blob") return "Walrus";
   return null;
 }

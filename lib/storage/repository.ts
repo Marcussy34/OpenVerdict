@@ -11,7 +11,6 @@ import type {
   EvidenceArtifactRecord,
   EvidenceManifestRecord,
   EvidenceSubmissionRecord,
-  FactCheckQueueRecord,
   GonkaWeatherRecord,
   InferenceRunRecord,
   JurySeatRecord,
@@ -52,18 +51,6 @@ interface GonkaWeatherRow {
   latency_ms: number;
   status: string;
   probed_at: string | Date;
-}
-
-interface FactCheckQueueRow {
-  queue_id: string;
-  status: FactCheckQueueRecord["status"];
-  request: unknown;
-  hold_reason: FactCheckQueueRecord["holdReason"];
-  launch_error: string | null;
-  launched_claim_id: string | null;
-  created_at: string | Date;
-  updated_at: string | Date;
-  expires_at: string | Date;
 }
 
 type SqlValue = string | number | boolean | null | undefined;
@@ -574,62 +561,6 @@ export class Repository {
     }));
   }
 
-  async saveFactCheckQueueItem(item: FactCheckQueueRecord): Promise<void> {
-    await execute(
-      this.db,
-      `INSERT INTO fact_check_queue (
-        queue_id, status, request, hold_reason, launch_error, launched_claim_id,
-        created_at, updated_at, expires_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-      ON CONFLICT (queue_id) DO UPDATE SET
-        status = EXCLUDED.status,
-        request = EXCLUDED.request,
-        hold_reason = EXCLUDED.hold_reason,
-        launch_error = EXCLUDED.launch_error,
-        launched_claim_id = EXCLUDED.launched_claim_id,
-        created_at = EXCLUDED.created_at,
-        updated_at = EXCLUDED.updated_at,
-        expires_at = EXCLUDED.expires_at`,
-      [
-        item.queueId,
-        item.status,
-        json(item.request),
-        item.holdReason,
-        item.launchError ?? null,
-        item.launchedClaimId ?? null,
-        item.createdAt,
-        item.updatedAt,
-        item.expiresAt,
-      ],
-    );
-  }
-
-  async getFactCheckQueueItem(
-    queueId: string,
-  ): Promise<FactCheckQueueRecord | undefined> {
-    const rows = await listRows<FactCheckQueueRow>(
-      this.db,
-      `SELECT queue_id, status, request, hold_reason, launch_error,
-        launched_claim_id, created_at, updated_at, expires_at
-       FROM fact_check_queue WHERE queue_id = $1 LIMIT 1`,
-      [queueId],
-    );
-    return rows[0] === undefined ? undefined : decodeFactCheckQueueRow(rows[0]);
-  }
-
-  async listFactCheckQueueItems(
-    status: FactCheckQueueRecord["status"],
-  ): Promise<FactCheckQueueRecord[]> {
-    const rows = await listRows<FactCheckQueueRow>(
-      this.db,
-      `SELECT queue_id, status, request, hold_reason, launch_error,
-        launched_claim_id, created_at, updated_at, expires_at
-       FROM fact_check_queue WHERE status = $1 ORDER BY created_at, queue_id`,
-      [status],
-    );
-    return rows.map(decodeFactCheckQueueRow);
-  }
-
   async saveRunApproval(record: RunApprovalRecord): Promise<void> {
     await saveRecord(this.db, "run_approvals", ["run_id"], {
       run_approval_id: record.runApprovalId,
@@ -1102,22 +1033,6 @@ function decodeJson<T>(value: unknown): T {
 
 function timestampString(value: string | Date): string {
   return (value instanceof Date ? value : new Date(value)).toISOString();
-}
-
-function decodeFactCheckQueueRow(row: FactCheckQueueRow): FactCheckQueueRecord {
-  return {
-    queueId: row.queue_id,
-    status: row.status,
-    request: decodeJson(row.request),
-    holdReason: row.hold_reason,
-    ...(row.launch_error === null ? {} : { launchError: row.launch_error }),
-    ...(row.launched_claim_id === null
-      ? {}
-      : { launchedClaimId: row.launched_claim_id }),
-    createdAt: timestampString(row.created_at),
-    updatedAt: timestampString(row.updated_at),
-    expiresAt: timestampString(row.expires_at),
-  };
 }
 
 function isUniqueViolation(error: unknown): boolean {

@@ -68,7 +68,7 @@ async function main(): Promise<void> {
   console.log(`operator ${address}`);
   console.log(`swapped  ${amount} SUI for WAL`);
   console.log(`digest   ${digest}`);
-  console.log(`explorer https://testnet.suivision.xyz/txblock/${digest}`);
+  console.log(`explorer https://suiscan.xyz/testnet/tx/${digest}`);
 }
 
 main().catch((error) => {

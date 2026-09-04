@@ -177,7 +177,7 @@ async function main(): Promise<void> {
   await rename(tmp, testnetConfigPath);
   console.log(`upgraded to  ${newPackageId}`);
   console.log(`digest       ${txDigest}`);
-  console.log(`explorer     https://testnet.suivision.xyz/txblock/${txDigest}`);
+  console.log(`explorer     https://suiscan.xyz/testnet/tx/${txDigest}`);
 }
 
 main().catch((error) => {

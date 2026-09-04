@@ -22,7 +22,7 @@ afterEach(() => {
 });
 
 describe("chipHref", () => {
-  it("sends objects, accounts and transactions to SuiVision", async () => {
+  it("sends objects and accounts to SuiVision and transactions to Suiscan", async () => {
     const { chipHref } = await loadChipLink("testnet");
 
     expect(chipHref("object", OBJECT_ID)).toBe(
@@ -31,7 +31,7 @@ describe("chipHref", () => {
     expect(chipHref("account", ADDRESS)).toBe(
       `https://testnet.suivision.xyz/account/${ADDRESS}`,
     );
-    expect(chipHref("tx", DIGEST)).toBe(`https://testnet.suivision.xyz/txblock/${DIGEST}`);
+    expect(chipHref("tx", DIGEST)).toBe(`https://suiscan.xyz/testnet/tx/${DIGEST}`);
   });
 
   it("sends a blob to the Walrus aggregator for the configured network", async () => {
@@ -67,7 +67,7 @@ describe("chipExplorer", () => {
 
     expect(chipExplorer("object")).toBe("SuiVision");
     expect(chipExplorer("account")).toBe("SuiVision");
-    expect(chipExplorer("tx")).toBe("SuiVision");
+    expect(chipExplorer("tx")).toBe("Suiscan");
     expect(chipExplorer("blob")).toBe("Walrus");
     expect(chipExplorer("hash")).toBeNull();
     expect(chipExplorer("id")).toBeNull();
@@ -80,6 +80,9 @@ describe("chipTitle", () => {
 
     expect(chipTitle({ value: OBJECT_ID, kind: "object", linked: true })).toBe(
       `${OBJECT_ID} (Open on SuiVision; copy icon copies)`,
+    );
+    expect(chipTitle({ value: DIGEST, label: "finalize", kind: "tx", linked: true })).toBe(
+      `finalize: ${DIGEST} (Open on Suiscan; copy icon copies)`,
     );
     expect(chipTitle({ value: BLOB_ID, label: "manifest", kind: "blob", linked: true })).toBe(
       `manifest: ${BLOB_ID} (Open on Walrus; copy icon copies)`,

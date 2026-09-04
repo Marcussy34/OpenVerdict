@@ -1,0 +1,33 @@
+{
+  "version": "6",
+  "network": "testnet",
+  "backingKind": "TESTNET_DEMO_ALLOWLIST",
+  "humanBackingHash": "0x546585921236952e44d0fa1b6cec732ca57a1f5ba8480928123f74af99cd5828",
+  "humanVerificationProvider": "testnet-demo-allowlist",
+  "operationalOwner": "0x3525585d3eb4558c62343f7bd0b75c0c63b9666527d79336ce11c5ae3224420b",
+  "role": "SOURCE_AUTHENTICITY",
+  "modelId": "deepseek-ai/DeepSeek-V4-Flash-0731",
+  "providerId": "gonkarouter",
+  "promptSpec": {
+    "version": "4",
+    "providerId": "gonkarouter",
+    "systemPrompt": "Research independently and weigh both sides.",
+    "temperature": 0,
+    "maxOutputTokens": 4096,
+    "responseFormat": "json_object"
+  },
+  "promptHash": "0x7257117d5b4d02b8c8de5e70d62f6856143d7f20225084a111645f3557a40b14",
+  "toolPolicy": {
+    "version": "4",
+    "tools": ["search", "open"],
+    "provider": "firecrawl",
+    "maxSearches": 4,
+    "maxOpens": 5,
+    "maxTurns": 10,
+    "requireChallengeSearch": true,
+    "minCitationDomains": 2
+  },
+  "toolPolicyHash": "0x8da9ec666479f784378c079cef16246ff0d29e8b789be66fc64853c1365c2e7c",
+  "evidencePolicyId": "OPENVERDICT_EVIDENCE_POLICY_V1",
+  "evidencePolicyHash": "0xc9fea14f3255c86ea0e21d89eb5f31333730caf1f2f89a539bc7f76bf52e45e3"
+}

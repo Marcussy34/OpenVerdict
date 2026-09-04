@@ -6,7 +6,6 @@ import {
   migrate,
   type ClaimRecord,
   type DeliberationTurnRecord,
-  type FactCheckQueueRecord,
   type GonkaWeatherRecord,
   type InferenceRunRecord,
   type RunProofRecord,
@@ -384,7 +383,7 @@ describe("verification attempts", () => {
   });
 });
 
-describe("weather and submission queue", () => {
+describe("weather probes", () => {
   it("round trips and updates the latest weather for each model", async () => {
     const repository = await testRepository();
     const rows: GonkaWeatherRecord[] = [
@@ -419,48 +418,6 @@ describe("weather and submission queue", () => {
       updated,
       rows[1],
     ]);
-  });
-
-  it("round trips queue items, upserts state, and lists oldest first", async () => {
-    const repository = await testRepository();
-    const first: FactCheckQueueRecord = {
-      queueId: `0x${"11".repeat(32)}`,
-      status: "QUEUED",
-      request: { claim: "The first queued claim.", urls: [] },
-      holdReason: "WEATHER",
-      createdAt: "2026-09-03T00:00:00.000Z",
-      updatedAt: "2026-09-03T00:00:00.000Z",
-      expiresAt: "2026-09-03T06:00:00.000Z",
-    };
-    const second: FactCheckQueueRecord = {
-      ...first,
-      queueId: `0x${"22".repeat(32)}`,
-      request: { claim: "The second queued claim.", urls: [] },
-      createdAt: "2026-09-03T00:01:00.000Z",
-      updatedAt: "2026-09-03T00:01:00.000Z",
-      expiresAt: "2026-09-03T06:01:00.000Z",
-    };
-
-    await repository.saveFactCheckQueueItem(second);
-    await repository.saveFactCheckQueueItem(first);
-    await expect(repository.listFactCheckQueueItems("QUEUED")).resolves.toEqual([
-      first,
-      second,
-    ]);
-
-    const launched: FactCheckQueueRecord = {
-      ...first,
-      status: "LAUNCHED",
-      launchedClaimId: "0xclaim",
-      updatedAt: "2026-09-03T00:02:00.000Z",
-    };
-    await repository.saveFactCheckQueueItem(launched);
-    await expect(repository.getFactCheckQueueItem(first.queueId)).resolves.toEqual(
-      launched,
-    );
-    await expect(
-      repository.listFactCheckQueueItems("QUEUED"),
-    ).resolves.toEqual([second]);
   });
 
   it("round trips stake reservations and upserts them by reservation id", async () => {

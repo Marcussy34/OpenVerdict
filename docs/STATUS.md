@@ -46,6 +46,18 @@ three workers) with Railway Postgres. Tests: 996 vitest, 93 Move (89 protocol,
 
 ## What is NOT true yet
 
+- NO SUBMISSION QUEUE 2026-09-05 (owner: "if the weather is bad then just stop
+  it completely"): a public submission arriving under fresh bad weather is
+  refused outright instead of being held. `POST /api/fact-checks` answers 503
+  with `{ error: "WEATHER_NOT_CLEAR", message, weather }` and a
+  `Retry-After: 120` header, nothing is stored, and `/fact-check` keeps the
+  form with a refusal block naming the families that are down plus a "Check
+  again" button that re-reads the weather and submits when it clears. The
+  queue types, engine methods, launcher tick, `fact_check_queue` table,
+  `/api/fact-checks/queue/[id]` and `/fact-check/queue/[id]` are gone
+  (the table is dropped in `lib/storage/migrate.ts`). Unknown or stale weather
+  still launches at once, and the relaunch of a voided attempt on the next
+  clear probe is untouched.
 - REAL STAKE ON A SEAT SHIPPED 2026-09-04: a seat is opened by its staker
   posting at least 0.1 SUI (`MIN_STAKE_MIST = 100_000_000` in
   `agent_registry.move`) in one wallet transaction, gas sponsored through
@@ -79,11 +91,11 @@ three workers) with Railway Postgres. Tests: 996 vitest, 93 Move (89 protocol,
   kind chip from the list (the detail page still shows it); Status left the
   top nav and lives under the console home and in the footer; `/learn` is
   plain words with the technical detail on the docs site; the audit page at
-  `/verify` is one claim link plus two paths, "With an agent" (a command to
-  paste into any agent, Claude Code, or the terminal) and "By hand" (the
+  `/verify` is one claim link plus two paths, "With an agent" (one line to
+  hand any agent that can read a link) and "By hand" (the
   client-side recompute of the commitment, the truth score and the run
   proof); `/fact-check` is one input with no weather strip (the strip still
-  shows on a queued submission and on a voided claim, where a relaunch still
+  shows on a refused submission and on a voided claim, where a relaunch still
   depends on the weather).
 - ONE PALETTE 2026-09-04 (owner): the app uses the paper ground and white
   surfaces with hairline borders, ink for text with muted and faint ink for

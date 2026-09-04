@@ -93,7 +93,6 @@ import {
   type EvidenceArtifactRecord,
   type EvidenceManifestRecord,
   type EvidenceSubmissionRecord,
-  type FactCheckQueueRecord,
   type GonkaWeatherRecord,
   type InferenceRunRecord,
   type JurySeatRecord,
@@ -139,7 +138,6 @@ import type {
   FactCheckSubmission,
   FinalizeReport,
   JuryRunReport,
-  QueuedFactCheck,
   ResolutionEvent,
   ResolutionEventSource,
   ResolutionEventVisibility,
@@ -239,22 +237,20 @@ export const RELAUNCH_GIVE_UP_MS = 6 * 60 * 60 * 1000;
 export const RELAUNCH_PROBE_TIMEOUT_MS = 60_000;
 /** Stored probes are refreshed at most once every two minutes. */
 export const WEATHER_PROBE_INTERVAL_MS = 120_000;
-/** Unknown weather must not hold a public submission. */
+/** Unknown weather must not refuse a public submission. */
 export const WEATHER_STALE_MS = 300_000;
-/** A queued submission waits no longer than the relaunch policy. */
-export const QUEUE_TTL_MS = 6 * 60 * 60 * 1000;
 /** The research provider's row in the weather table (not a Gonka model). */
 export const RESEARCH_WEATHER_ID = "research:firecrawl";
 /** The credit check is a single small GET; it never waits on a model. */
 export const RESEARCH_PROBE_TIMEOUT_MS = 15_000;
 /**
- * Cleared weather launches at most one queued or relaunched claim per window.
+ * Cleared weather relaunches at most one voided attempt per window.
  * Round-one research runs from +70 s to +600 s, so ten minutes keeps two
  * engine-launched juries from researching at the same time: three juries
  * side by side drew a 429 storm from the shared gateway (2026-09-03 01:48).
  * A direct submission on clear weather still launches at once.
  */
-export const QUEUE_LAUNCH_SPACING_MS = 10 * 60_000;
+export const RELAUNCH_SPACING_MS = 10 * 60_000;
 /** The two live deliberation contracts; V1 and V2 stay published history. */
 const DELIBERATION_SPEC_V3 = {
   version: "3",
@@ -599,7 +595,7 @@ class OpenVerdictEngine implements Engine {
   readonly #operationalAgentSlots: readonly { address: string; index: number }[];
   readonly #sealEscrow: SealEscrowService | undefined;
   #registrationTail: Promise<void> = Promise.resolve();
-  #lastQueueLaunchAtMs: number | null = null;
+  #lastRelaunchAtMs: number | null = null;
 
   constructor(dependencies: EngineDependencies) {
     this.#repository = dependencies.repository;
@@ -708,103 +704,14 @@ class OpenVerdictEngine implements Engine {
   async factCheckSubmit(req: FactCheckRequest): Promise<FactCheckSubmission> {
     validateFactCheckRequest(req);
     const weather = await this.weather();
-    // Unknown weather preserves immediate launch behavior instead of holding work.
-    if (weather.clear || weather.stale) {
-      const result = await this.factCheckStart(req);
-      return { kind: "claim", claimId: result.claimId };
+    // Bad weather stops a submission outright: nothing is stored and the
+    // visitor submits again themselves. Unknown weather is not bad weather,
+    // so a deployment with no probe yet still launches immediately.
+    if (!weather.clear && !weather.stale) {
+      return { kind: "refused", reason: "WEATHER_NOT_CLEAR", weather };
     }
-
-    const nowMs = this.#now();
-    const createdAt = new Date(nowMs).toISOString();
-    const queueId = `0x${randomBytes(32).toString("hex")}`;
-    await this.#repository.saveFactCheckQueueItem({
-      queueId,
-      status: "QUEUED",
-      request: req,
-      holdReason: "WEATHER",
-      createdAt,
-      updatedAt: createdAt,
-      expiresAt: new Date(nowMs + QUEUE_TTL_MS).toISOString(),
-    });
-    return { kind: "queued", queueId, weather };
-  }
-
-  async getQueuedFactCheck(
-    queueId: string,
-  ): Promise<QueuedFactCheck | undefined> {
-    const item = await this.#repository.getFactCheckQueueItem(queueId);
-    if (item === undefined) return undefined;
-    return queuedFactCheck(item, await this.weather());
-  }
-
-  async listQueuedFactChecks(): Promise<QueuedFactCheck[]> {
-    const items = await this.#repository.listFactCheckQueueItems("QUEUED");
-    if (items.length === 0) return [];
-    const weather = await this.weather();
-    return items.map((item) => queuedFactCheck(item, weather));
-  }
-
-  async queueTick(): Promise<void> {
-    const nowMs = this.#now();
-    const updatedAt = new Date(nowMs).toISOString();
-    const queued = await this.#repository.listFactCheckQueueItems("QUEUED");
-    const launchable: FactCheckQueueRecord[] = [];
-    for (const item of queued) {
-      if (Date.parse(item.expiresAt) <= nowMs) {
-        await this.#repository.saveFactCheckQueueItem({
-          ...item,
-          status: "EXPIRED",
-          updatedAt,
-        });
-      } else {
-        launchable.push(item);
-      }
-    }
-    if (launchable.length === 0) return;
-
-    const weather = await this.weather();
-    if (!weather.clear) return;
-    if (
-      this.#lastQueueLaunchAtMs !== null &&
-      nowMs - this.#lastQueueLaunchAtMs < QUEUE_LAUNCH_SPACING_MS
-    ) {
-      return;
-    }
-
-    const item = launchable[0]!;
-    let launched: { claimId: string };
-    try {
-      launched = await this.factCheckStart(item.request);
-    } catch (error) {
-      const launchError = errorMessage(error);
-      if (error instanceof EngineValidationError) {
-        await this.#repository.saveFactCheckQueueItem({
-          ...item,
-          status: "CANCELLED",
-          launchError,
-          updatedAt,
-        });
-        return;
-      }
-      process.stderr.write(
-        `queue: ${item.queueId.slice(0, 10)}: ${launchError}\n`,
-      );
-      await this.#repository.saveFactCheckQueueItem({
-        ...item,
-        launchError,
-        updatedAt,
-      });
-      return;
-    }
-
-    this.#lastQueueLaunchAtMs = nowMs;
-    await this.#repository.saveFactCheckQueueItem({
-      ...item,
-      status: "LAUNCHED",
-      launchedClaimId: launched.claimId,
-      launchError: undefined,
-      updatedAt,
-    });
+    const result = await this.factCheckStart(req);
+    return { kind: "claim", claimId: result.claimId };
   }
 
   async factCheckStart(
@@ -971,15 +878,15 @@ class OpenVerdictEngine implements Engine {
         if (!this.#weatherProbeCache.results.every((result) => result.ok)) {
           continue;
         }
-        // Relaunches share the queue's spacing; the rest wait for a later tick.
+        // One relaunch per window; the rest wait for a later tick.
         if (
-          this.#lastQueueLaunchAtMs !== null &&
-          nowMs - this.#lastQueueLaunchAtMs < QUEUE_LAUNCH_SPACING_MS
+          this.#lastRelaunchAtMs !== null &&
+          nowMs - this.#lastRelaunchAtMs < RELAUNCH_SPACING_MS
         ) {
           continue;
         }
         const nextAttempt: 2 | 3 = attempt.attempt === 1 ? 2 : 3;
-        this.#lastQueueLaunchAtMs = nowMs;
+        this.#lastRelaunchAtMs = nowMs;
         const relaunched = await this.factCheckStart(
           {
             claim: claim.statement,
@@ -6260,28 +6167,6 @@ function weatherFamily(modelId: string): WeatherFamily["family"] {
   if (normalized.includes("minimax")) return "minimax";
   if (normalized.includes("kimi")) return "kimi";
   return modelId;
-}
-
-function queuedFactCheck(
-  item: FactCheckQueueRecord,
-  weather: WeatherReport,
-): QueuedFactCheck {
-  return {
-    queueId: item.queueId,
-    status: item.status,
-    statement: item.request.claim,
-    createdAt: item.createdAt,
-    expiresAt: item.expiresAt,
-    ...(item.launchedClaimId === undefined
-      ? {}
-      : { claimId: item.launchedClaimId }),
-    ...(item.launchError === undefined ? {} : { launchError: item.launchError }),
-    weather,
-  };
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }
 
 function validateFactCheckRequest(request: FactCheckRequest): void {

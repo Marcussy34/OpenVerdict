@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import type { WeatherFamily, WeatherReport } from "@/lib/engine/contract";
+import { weatherFamilyLabel } from "@/lib/web/weather-copy";
 import { cn } from "@/lib/utils";
 
 export interface WeatherStripProps {
@@ -22,16 +23,6 @@ interface FamilyChipData {
 
 // The fourth chip is the web search provider: a jury needs it as much as the models.
 const ORDERED_FAMILIES = ["deepseek", "minimax", "kimi", "research"] as const;
-
-/** Map raw family identifier to canonical display name. */
-function familyDisplayName(family: string, modelId: string): string {
-  const norm = family.toLowerCase();
-  if (norm === "deepseek") return "DeepSeek";
-  if (norm === "minimax") return "MiniMax";
-  if (norm === "kimi") return "Kimi";
-  if (norm === "research") return "Web search";
-  return modelId || family;
-}
 
 /** Compute human-readable probe age relative to client time. */
 function formatProbedAgo(probedAtMs: number | null | undefined, nowMs: number): string {
@@ -57,7 +48,7 @@ function deriveFamilyChip(
   familyProbe: WeatherFamily | undefined,
   isStale: boolean,
 ): FamilyChipData {
-  const name = familyDisplayName(targetKey, familyProbe?.modelId ?? targetKey);
+  const name = weatherFamilyLabel(targetKey, familyProbe?.modelId ?? targetKey);
 
   if (isStale || !familyProbe) {
     return {

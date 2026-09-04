@@ -742,7 +742,6 @@ type FetchPlan = {
   claimStatus?: number;
   eventsStatus?: number;
   eventsNeverEnd?: boolean;
-  queue?: Json;
   calls?: string[];
 };
 
@@ -775,9 +774,6 @@ export function createFakeFetch(world: FakeWorld, plan: FetchPlan = {}): typeof 
     const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
     plan.calls?.push(`${init?.method ?? "GET"} ${url}`);
     const api = `${BASE}/api/claims/${world.claimId}`;
-    if (url.startsWith(`${BASE}/api/fact-checks/queue/`)) {
-      return plan.queue ? json(plan.queue) : json({ error: "not_found" }, 404);
-    }
     if (url === `${BASE}/api/agents`) return json({ agents: [] });
     if (url === api) {
       if (plan.claimStatus === 404) return json({ error: "internal_error", message: `claim was not found: ${world.claimId}` }, 500);
@@ -903,13 +899,12 @@ describe("parseAuditTarget", () => {
     expect(parseAuditTarget(id.toUpperCase().replace("0X", "0x"))).toEqual({ base: "https://app.openverdict.info", claimId: id, kind: "claim" });
   });
 
-  it("accepts claim, report, observe, run, api and queue links", () => {
+  it("accepts claim, report, observe, run and api links", () => {
     expect(parseAuditTarget(`https://app.openverdict.info/claims/${id}`)).toEqual({ base: "https://app.openverdict.info", claimId: id, kind: "claim" });
     expect(parseAuditTarget(`https://app.openverdict.info/claims/${id}/report?tab=jury#votes`).claimId).toBe(id);
     expect(parseAuditTarget(`https://app.openverdict.info/claims/${id}/observe`).kind).toBe("claim");
     expect(parseAuditTarget(`https://app.openverdict.info/claims/${id}/runs/${run}`)).toEqual({ base: "https://app.openverdict.info", claimId: id, runId: run, kind: "claim" });
     expect(parseAuditTarget(`https://app.openverdict.info/api/claims/${id}/report`).claimId).toBe(id);
-    expect(parseAuditTarget("https://app.openverdict.info/fact-check/queue/queue-42")).toEqual({ base: "https://app.openverdict.info", claimId: "queue-42", kind: "queue" });
     expect(parseAuditTarget(`http://localhost:3000/claims/${id}`).base).toBe("http://localhost:3000");
   });
 
@@ -918,11 +913,20 @@ describe("parseAuditTarget", () => {
     expect(parseAuditTarget(id, { base: "http://127.0.0.1:3000/" }).base).toBe("http://127.0.0.1:3000");
   });
 
-  it("rejects anything that is not a claim or queue reference", () => {
+  it("rejects anything that is not a claim reference", () => {
     expect(() => parseAuditTarget("")).toThrow(AuditInputError);
     expect(() => parseAuditTarget("not a claim")).toThrow(AuditInputError);
     expect(() => parseAuditTarget("https://app.openverdict.info/agents/0x1")).toThrow(AuditInputError);
     expect(() => parseAuditTarget("https://app.openverdict.info/claims/zzz")).toThrow(AuditInputError);
+  });
+
+  it("says plainly that a queue link is gone", () => {
+    expect(() => parseAuditTarget("https://app.openverdict.info/fact-check/queue/queue-42")).toThrow(
+      AuditInputError,
+    );
+    expect(() => parseAuditTarget("https://app.openverdict.info/fact-check/queue/queue-42")).toThrow(
+      "queue links no longer exist",
+    );
   });
 });
 
@@ -1247,24 +1251,6 @@ describe("auditClaim on claims that are not settled", () => {
     expect(renderVerdictCard(result)).toContain("Result: PENDING (no certificate yet)");
   });
 
-  it("explains a queued submission and follows a launched one", async () => {
-    const world = buildWorld(RESEARCH_CLAIM);
-    const queued = await auditClaim({ base: BASE, claimId: "q-1", kind: "queue" }, {
-      fetch: createFakeFetch(world, { queue: { queueId: "q-1", status: "QUEUED", statement: "Queued statement", createdAt: "2026-09-03T00:00:00Z", expiresAt: "2026-09-04T00:00:00Z", weather: { clear: false, stale: false, families: [{ modelId: "moonshotai/Kimi-K2.6", ok: false, status: "TIMEOUT" }] } } }),
-      eventsIdleMs: 40,
-    });
-    expect(queued.status).toBe("QUEUED");
-    expect(queued.claim.pending[1]).toMatch(/weather gate .* moonshotai\/Kimi-K2.6 TIMEOUT/);
-    expect(renderMarkdown(queued)).toContain("## Verdict card");
-    const launched = await auditClaim({ base: BASE, claimId: "q-2", kind: "queue" }, {
-      fetch: createFakeFetch(world, { queue: { queueId: "q-2", status: "LAUNCHED", claimId: world.claimId } }),
-      eventsIdleMs: 40,
-    });
-    expect(launched.status).toBe("FINALIZED");
-    expect(launched.queue?.status).toBe("LAUNCHED");
-    await expect(auditClaim({ base: BASE, claimId: "missing", kind: "queue" }, { fetch: createFakeFetch(world) })).rejects.toThrow(AuditInputError);
-  });
-
   it("refuses an unknown claim id with a one-line reason", async () => {
     const world = buildWorld(RESEARCH_CLAIM);
     await expect(runAudit(world, { claimStatus: 404 })).rejects.toThrow(/claim not found/);
@@ -1306,10 +1292,10 @@ describe("auditClaim when a source is down", () => {
     expect(result.exitCode).toBe(0);
     const c1 = find(result, "C1", "UNAVAILABLE");
     expect(c1).toHaveLength(5);
-    expect(c1[0]?.url).toMatch(/^https:\/\/testnet\.suivision\.xyz\/txblock\//);
+    expect(c1[0]?.url).toMatch(/^https:\/\/suiscan\.xyz\/testnet\/tx\//);
     expect(find(result, "S2", "UNAVAILABLE")[0]?.url).toMatch(/^https:\/\/testnet\.suivision\.xyz\/object\//);
     expect(find(result, "R16", "UNAVAILABLE")).toHaveLength(5);
-    expect(renderMarkdown(result)).toContain("check by hand: https://testnet.suivision.xyz/txblock/");
+    expect(renderMarkdown(result)).toContain("check by hand: https://suiscan.xyz/testnet/tx/");
   });
 
   it("fails a commit transaction that no endpoint knows", async () => {

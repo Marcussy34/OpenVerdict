@@ -243,8 +243,8 @@ against the recorded model, or opened through Seal after the deadline.
 6. What to show on a run page (juror research v2, 2026-08-30 afternoon):
    the provenance strip (requested versus served model, devshard, vLLM
    fingerprint, gateway and Gonka request ids, tokens, latency, links to
-   the run approval, commitment and reveal objects and transactions on
-   SuiVision, the sealed and revealed blobs on Walrus); the research trail
+   the run approval, commitment and reveal objects on SuiVision and their
+   transactions on Suiscan, the sealed and revealed blobs on Walrus); the research trail
    with a support search and a challenge search, the pages opened on each
    side, and any engine refusal (`CHALLENGE_REQUIRED`,
    `CORROBORATION_REQUIRED`) shown as an event; per turn, "what the model

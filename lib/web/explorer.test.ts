@@ -20,28 +20,28 @@ afterEach(() => {
 });
 
 describe("sui explorer urls", () => {
-  it("points testnet ids at the testnet SuiVision host", async () => {
+  it("points testnet objects at SuiVision and testnet transactions at Suiscan", async () => {
     const { suiObjectUrl, suiAccountUrl, suiTransactionUrl } = await loadExplorer("testnet");
 
     expect(suiObjectUrl(OBJECT_ID)).toBe(`https://testnet.suivision.xyz/object/${OBJECT_ID}`);
     expect(suiAccountUrl(ADDRESS)).toBe(`https://testnet.suivision.xyz/account/${ADDRESS}`);
-    // SuiVision calls a transaction page a "txblock".
-    expect(suiTransactionUrl(DIGEST)).toBe(`https://testnet.suivision.xyz/txblock/${DIGEST}`);
+    // Suiscan keeps the network in the path and calls the page /tx.
+    expect(suiTransactionUrl(DIGEST)).toBe(`https://suiscan.xyz/testnet/tx/${DIGEST}`);
   });
 
-  it("points mainnet ids at the apex SuiVision host", async () => {
+  it("points mainnet objects at the apex SuiVision host and transactions at Suiscan mainnet", async () => {
     const { suiObjectUrl, suiAccountUrl, suiTransactionUrl } = await loadExplorer("mainnet");
 
     expect(suiObjectUrl(OBJECT_ID)).toBe(`https://suivision.xyz/object/${OBJECT_ID}`);
     expect(suiAccountUrl(ADDRESS)).toBe(`https://suivision.xyz/account/${ADDRESS}`);
-    expect(suiTransactionUrl(DIGEST)).toBe(`https://suivision.xyz/txblock/${DIGEST}`);
+    expect(suiTransactionUrl(DIGEST)).toBe(`https://suiscan.xyz/mainnet/tx/${DIGEST}`);
   });
 
   it("falls back to testnet for any other network", async () => {
     const { suiObjectUrl, suiTransactionUrl } = await loadExplorer("localnet");
 
     expect(suiObjectUrl(OBJECT_ID)).toBe(`https://testnet.suivision.xyz/object/${OBJECT_ID}`);
-    expect(suiTransactionUrl(DIGEST)).toBe(`https://testnet.suivision.xyz/txblock/${DIGEST}`);
+    expect(suiTransactionUrl(DIGEST)).toBe(`https://suiscan.xyz/testnet/tx/${DIGEST}`);
   });
 
   it("escapes anything that is not a plain id", async () => {

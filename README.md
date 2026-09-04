@@ -201,7 +201,7 @@ dark mode).
 | Storage of record | Walrus (`@mysten/walrus` 1.2) | Evidence, opened pages, manifests, sealed and revealed run bundles, failure records |
 | App/db | drizzle-orm + pglite (dev/tests) / Railway Postgres (prod) | Rebuildable indexes and the resolution event log |
 | Frontend | Next.js 16, React 19, Tailwind 4, shadcn/ui, iconsax | Read-only observer + verification UI |
-| CLI | TypeScript: `pnpm cli` (operator console, commander 15) and `pnpm ov` (public: weather, board, extract, submit, queue, status, watch, audit, trace) | Complete control, inspection, automation; the public journey with no key |
+| CLI | TypeScript: `pnpm cli` (operator console, commander 15) and `pnpm ov` (public: weather, board, agents, agent, extract, submit, status, watch, audit, trace) | Complete control, inspection, automation; the public journey with no key |
 | Validation | zod 4 (strict schemas) | Oracle I/O contracts, manifests, config |
 | Hashing | `@noble/hashes` blake2b-256 == `sui::hash::blake2b256` | One commitment format across TS and Move |
 | Onboarding | `@mysten/enoki` (zkLogin) + dapp-kit v2 | Social-login self-custodial addresses; env-gated, wallet-standard |
@@ -243,8 +243,7 @@ truth: manipulation cannot hide.
 | Observer dashboard | Rebuildable read-only projection, never authoritative |
 
 Verify it yourself: `/verify` in the app takes a claim link and offers two
-ways to audit it, "With an agent" (the command to hand any agent, Claude Code
-or the terminal) and "By hand". By hand it recomputes commitments and Truth
+ways to audit it, "With an agent" (one line to hand any agent) and "By hand". By hand it recomputes commitments and Truth
 Scores client-side from revealed fields, runs 15 checks on any revealed run
 (prompt, policy, system prompt, input, output and transcript hashes,
 citations, challenge search, both sides opened, citation sites,
@@ -253,7 +252,7 @@ sealed core), opens a sealed bundle through Seal after its deadline, and
 re-runs a juror against the recorded model; `scripts/gen-parity-vectors.ts`
 regenerates the cross-language vectors pinned in both test suites.
 
-### Use OpenVerdict from the terminal and from Claude
+### Use OpenVerdict from the terminal and from any agent
 
 Any claim can be audited from a terminal with no key, no database and no
 wallet. The auditor refetches the public record (the app's API, Sui JSON-RPC,
@@ -271,7 +270,7 @@ pnpm audit:claim --list                                          # the board: ev
 Exit 0 means every check passed (or a public source was unavailable), 1 means
 at least one check failed, 2 means the input or a fetch failed. A Sui RPC,
 Walrus or receipt outage marks the check UNAVAILABLE with the manual URL,
-never FAIL. Run links, report links, queue links and bare ids are accepted;
+never FAIL. Run links, report links and bare ids are accepted;
 `--base <url>` points at another deployment.
 
 The whole journey runs from the same terminal through the public CLI `ov`
@@ -287,8 +286,9 @@ writes only the public API.
 pnpm ov weather                                                    # DeepSeek, MiniMax, Kimi, Web search: ok or down, clear or not
 pnpm ov board --limit 20                                           # the live board, newest first
 pnpm ov extract --url https://example.org/article                  # up to three checkable claims with reasons and quotes (or --text, --file)
-pnpm ov submit "The first Bitcoin halving happened in November 2012."   # 200: claim id and link; 202: queued until the weather clears
-pnpm ov queue <queueId>                                            # QUEUED, LAUNCHED (with the claim), EXPIRED or CANCELLED, plus the weather
+pnpm ov submit "The first Bitcoin halving happened in November 2012."   # 200: claim id and link; 503: the jury cannot sit, nothing stored
+pnpm ov agents                                                     # the jury roster: model, role, stake, lifetime rewards, track record
+pnpm ov agent <seatId>                                             # one seat and its published manifest (prompt spec, tool policy, evidence policy)
 pnpm ov status <claimId>                                           # one block: state in plain words, seats committed and revealed, next deadline
 pnpm ov watch <claimId> --for 9m                                   # one dated line per event until the final line (rerun with --since N)
 pnpm ov audit <claimId>                                            # the same dossier as pnpm audit:claim
@@ -307,28 +307,55 @@ document on stdout (`watch`: one line per event), the banner goes to
 stderr, and `--base <url>` points at another deployment. Limits on a public
 submission: a claim of 5 to 1000 characters, evidence text up to 20000
 characters, up to five https URLs, five submissions per minute per client;
-a submission made while a model family or web search is down queues, starts
-by itself on the first clear probe (one launch per ten minutes) and expires
-after six hours. A one-round verdict lands about 11 to 12 minutes after
+a submission made while a model family or web search is down is refused with
+503 `WEATHER_NOT_CLEAR` and nothing is stored, so you try again when the
+weather clears. A one-round verdict lands about 11 to 12 minutes after
 launch, a two-round verdict about 32 minutes.
 
-The auditor and the CLI are packaged together as a Claude Code skill in
-`.claude/skills/openverdict-audit/`: Claude runs the auditor, presents the
-verdict card and a plain-English timeline, and answers questions from the
-dossier and a bundled protocol reference (`reference.md`, `faq.md`); it also
-drives the journey above through chat (confirm the claim text, check the
-weather, submit on an explicit go, narrate the events as they land, then
-audit). Inside the repo the skill loads on its own; to use it from any
-folder, link it once:
+### Give this to your agent
 
-```bash
-ln -s "$(pwd)/.claude/skills/openverdict-audit" ~/.claude/skills/openverdict-audit
+```
+Set up https://app.openverdict.info/SKILL.md and take it from there.
 ```
 
-Then, in any Claude Code session:
-`/openverdict-audit https://app.openverdict.info/claims/<claimId>` to audit,
-or `/openverdict-audit verify this claim: <statement>` to run a new
-verification end to end.
+Works with any agent that can read a link: Claude, ChatGPT, Codex, Cursor,
+Gemini. That URL serves `skills/openverdict/SKILL.md` from disk, so the link and
+the folder are the same file, and it tells the agent how to set itself up at
+whichever rung it can reach.
+
+The auditor, the CLI and a map of the whole app are packaged together as one
+agent skill at `skills/openverdict/`, written in the open
+[Agent Skills format](https://agentskills.io). It is not tied to one product:
+install it with the [`skills`](https://skills.sh) CLI and any agent that reads
+the format loads it.
+
+```bash
+npx skills add Marcussy34/OpenVerdict
+```
+
+That covers Claude Code, Codex, Cursor, Gemini CLI, GitHub Copilot, VS Code,
+OpenCode, Amp and the rest. The skill's two launchers run this repository's own
+code, so clone it for the `ov` CLI itself:
+
+```bash
+git clone https://github.com/Marcussy34/OpenVerdict.git
+cd OpenVerdict && pnpm install
+pnpm ov help
+```
+
+The folder holds `SKILL.md`, `references/reference.md`, `references/faq.md` and
+the launchers `scripts/ov.sh` and `scripts/run.sh`;
+`.claude/skills/openverdict-audit` and `.agents/skills/openverdict` are two of
+the discovery paths agents scan, both symlinked to that one folder, so the skill
+loads on its own inside the repo.
+
+With the skill loaded, paste a claim, report, run or agent link, or ask
+in plain words: "audit this", "verify this claim", "who is on the jury", "is the
+jury healthy", "watch this claim". The agent runs the auditor, presents the
+verdict card and a plain-English timeline, and answers questions from the
+dossier and the bundled protocol reference. It also drives the journey above end
+to end: confirm the claim text, check the weather, submit on an explicit go,
+narrate the events as they land, then audit.
 
 ---
 
@@ -558,7 +585,7 @@ to on-chain before anyone reveals.
 
 | Used for | How | Check it |
 | --- | --- | --- |
-| Protocol of record | Claims, committees, jury seats, revealed votes, certificates and payout tickets are Sui objects; deadlines, thresholds, payouts and seat stakes enforced in Move (89 tests) | Every object and tx in the UI opens on SuiVision |
+| Protocol of record | Claims, committees, jury seats, revealed votes, certificates and payout tickets are Sui objects; deadlines, thresholds, payouts and seat stakes enforced in Move (89 tests) | Every object in the UI opens on SuiVision and every transaction on Suiscan |
 | Jury selection | Native `Random` draw under the model-family constraints | `move/openverdict/sources/jury.move` |
 | Commit-reveal voting | Commitments bind the approved run hash on-chain before any reveal; `blake2b256(BCS(preimage))` is recomputable by anyone | `/verify` recomputes it in the browser |
 | Evidence freezing | The manifest merkle root is frozen into an `EvidenceBundle` object before any vote reveals | Report page, evidence bundle chip |
@@ -588,7 +615,7 @@ to on-chain before anyone reveals.
 | --- | --- | --- |
 | Gas for wallet-signed pool entries and seat stakes | The browser builds the transaction kind, the server allowlists it and Shinami attaches gas and signs; the user's wallet signs the bytes Shinami returned, so the user still approves the full transaction | `app/api/sponsor/route.ts`; a sponsored deposit or stake shows "Gas paid by OpenVerdict (Shinami Gas Station)" with its digest |
 | Google sign-in without SUI | A zkLogin address created by a Google login holds no SUI, so without sponsorship it cannot act at all; with it, the first on-chain action costs the user nothing, and a seat stake costs exactly the 0.1 SUI bond | `/claims/<id>` market panel after continuing with Google; `/agents` stake card |
-| Fund health | `gas_getFund` reports fund name, network, balance and in-flight reservations, with no key in the output | `pnpm sponsor:check`; a live sponsored testnet transaction: [9ToB29r3…](https://testnet.suivision.xyz/txblock/9ToB29r3WWJv7odpai4HkTMjjccmu3aCndrxEAoViGjw) (sender the operator, gas owner Shinami's fund) |
+| Fund health | `gas_getFund` reports fund name, network, balance and in-flight reservations, with no key in the output | `pnpm sponsor:check`; a live sponsored testnet transaction: [9ToB29r3…](https://suiscan.xyz/testnet/tx/9ToB29r3WWJv7odpai4HkTMjjccmu3aCndrxEAoViGjw) (sender the operator, gas owner Shinami's fund) |
 
 The access key never reaches the browser: Shinami's Gas Station refuses CORS
 requests by design, and a leaked key drains the fund. It stays in
@@ -606,7 +633,7 @@ A rejected kind never reaches Shinami, so a rejection costs the fund nothing.
 Configure it with `SHINAMI_GAS_ACCESS_KEY` (and optionally `SHINAMI_GAS_ENDPOINT`
 for a non-US region), then run `pnpm sponsor:check` to print the fund line, or
 `pnpm sponsor:check --send` to sponsor one real operator transaction and see the
-gas owner on SuiVision. With the key unset the app degrades quietly: the route
+gas owner on Suiscan. With the key unset the app degrades quietly: the route
 answers 503 and the deposit falls back to wallet-paid gas, labelled as such.
 
 Next rungs of the same ladder: sponsored juror commit and reveal, so a seat never

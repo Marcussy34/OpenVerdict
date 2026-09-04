@@ -7,10 +7,11 @@
  * should end with (2 request error, 5 rate limited or writes disabled).
  */
 import type {
+  AgentDirectoryEntry,
   ClaimInspection,
-  QueuedFactCheck,
   WeatherReport,
 } from "../engine/contract";
+import type { AgentManifestDocument } from "../protocol/types";
 
 export const DEFAULT_BASE = "https://app.openverdict.info";
 /** Per request, unless a command passes its own. */
@@ -201,16 +202,6 @@ export class Api {
     throw new OvError(`claim request failed: ${replyMessage(reply)}`);
   }
 
-  /** The queue item, or undefined when the id is unknown. */
-  async queue(queueId: string): Promise<QueuedFactCheck | undefined> {
-    const reply = await this.request(`/api/fact-checks/queue/${encodeURIComponent(queueId)}`);
-    if (reply.status >= 200 && reply.status < 300 && isRecord(reply.body)) {
-      return reply.body as unknown as QueuedFactCheck;
-    }
-    if (isNotFound(reply)) return undefined;
-    throw new OvError(`queue request failed: ${replyMessage(reply)}`);
-  }
-
   /** Model id by agent profile id (lower case). Best effort: empty when the directory is down. */
   async agents(): Promise<Map<string, string>> {
     const models = new Map<string, string>();
@@ -227,6 +218,23 @@ export class Api {
       // The directory only decorates lines; the watch goes on without it.
     }
     return models;
+  }
+
+  /** The whole jury roster, as GET /api/agents returns it. Fails loudly: `ov agents` has nothing else to print. */
+  async agentDirectory(): Promise<AgentDirectoryEntry[]> {
+    const body = await this.#expectOk("/api/agents", "agents request failed");
+    const agents = isRecord(body) ? asArray(body.agents) : [];
+    return agents.filter(isRecord) as unknown as AgentDirectoryEntry[];
+  }
+
+  /** One seat's published manifest, or undefined when the seat has none. */
+  async agentManifest(agentProfileId: string): Promise<AgentManifestDocument | undefined> {
+    const reply = await this.request(`/api/agents/${encodeURIComponent(agentProfileId)}/manifest`);
+    if (reply.status >= 200 && reply.status < 300 && isRecord(reply.body)) {
+      return reply.body as unknown as AgentManifestDocument;
+    }
+    if (isNotFound(reply)) return undefined;
+    throw new OvError(`manifest request failed: ${replyMessage(reply)}`);
   }
 
   /**

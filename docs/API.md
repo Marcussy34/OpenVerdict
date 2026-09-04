@@ -12,8 +12,8 @@ the status codes below come from the route handlers themselves.
 
 **Ids.** Claim ids, run ids, seat ids, agent profile ids, certificate ids and
 object ids are 66-character lowercase hex strings (`0x` plus 64 hex digits).
-Transaction digests are base58. Walrus blob ids are base64url. Queue ids and
-stake reservation ids are UUIDs. GonkaRouter request ids look like
+Transaction digests are base58. Walrus blob ids are base64url. Stake
+reservation ids are UUIDs. GonkaRouter request ids look like
 `req-<digits>-<digits>`.
 
 **Errors.** Every error body carries an `error` code and usually a `message`:
@@ -422,35 +422,6 @@ The bundle sections, in the order a verifier walks them:
 | 503 | `engine_not_wired` | |
 | 500 | `internal_error` | |
 
-### GET /api/fact-checks/queue/{id}
-
-One queued submission. Sent with `Cache-Control: no-store`.
-
-```bash
-curl -s https://app.openverdict.info/api/fact-checks/queue/<queueId>
-```
-
-```json
-{
-  "queueId": "…",
-  "status": "QUEUED",
-  "statement": "…",
-  "createdAt": "2026-09-04T04:00:00.000Z",
-  "expiresAt": "2026-09-04T10:00:00.000Z",
-  "weather": { "clear": false, "stale": false, "families": [] }
-}
-```
-
-`status` is `QUEUED`, `LAUNCHED`, `EXPIRED` or `CANCELLED`. A launched item
-carries `claimId`; a failed launch carries `launchError`.
-
-| Status | Body |
-| --- | --- |
-| 200 | `QueuedFactCheck` |
-| 404 | `not_found` |
-| 503 | `engine_not_wired` |
-| 500 | `internal_error` |
-
 ### GET /api/agents
 
 The juror seat directory.
@@ -649,22 +620,29 @@ Clear weather returns 200 and the claim is live on Sui:
 { "claimId": "0x2732…" }
 ```
 
-Weather that is not clear returns 202 and the submission is queued:
+Weather that is not clear refuses the submission with 503 and a
+`Retry-After: 120` header. Nothing is stored: there is no queue, and the
+submission has to be sent again.
 
 ```json
-{ "queued": true, "queueId": "…", "weather": { "clear": false, "stale": false, "families": [] } }
+{
+  "error": "WEATHER_NOT_CLEAR",
+  "message": "The jury cannot sit right now: DeepSeek and Kimi are down.",
+  "weather": { "clear": false, "stale": false, "families": [] }
+}
 ```
 
-A queued submission launches on the first clear probe, one launch every ten
-minutes, and expires after six hours. Unknown weather never queues.
+`message` is one sentence naming the families that are down, and `weather` is
+the same report `GET /api/weather` serves. Unknown weather (no probe yet, or a
+probe older than five minutes) is not bad weather and still launches at once.
 
 | Status | Code | Meaning |
 | --- | --- | --- |
 | 200 | | launched, `claimId` returned |
-| 202 | | queued, `queueId` and the current weather returned |
 | 400 | `validation_error` | the message names the field and its bound |
 | 403 | `writes_disabled` | |
 | 429 | `rate_limited` | |
+| 503 | `WEATHER_NOT_CLEAR` | a model family or web search is down, with `Retry-After: 120` |
 | 503 | `engine_not_wired` | |
 | 500 | `internal_error` | |
 
@@ -945,12 +923,11 @@ lowercase hex. Transaction digests are base58; Walrus blob ids are base64url.
 | --- | --- |
 | Claim page | `https://app.openverdict.info/claims/<claimId>` |
 | Report page | `https://app.openverdict.info/claims/<claimId>/report` |
-| Queue page | `https://app.openverdict.info/fact-check/queue/<queueId>` |
 | Evidence page | `https://app.openverdict.info/evidence/<evidenceId>` |
 | Agent page | `https://app.openverdict.info/agents/<agentProfileId>` |
 | Board, submit, verify, agents, risk | `/claims`, `/fact-check`, `/verify`, `/agents`, `/risk` |
 | Sui object | `https://testnet.suivision.xyz/object/<objectId>` |
-| Sui transaction | `https://testnet.suivision.xyz/txblock/<digest>` |
+| Sui transaction | `https://suiscan.xyz/testnet/tx/<digest>` |
 | Walrus blob | `https://aggregator.walrus-testnet.walrus.space/v1/blobs/<blobId>` |
 | GonkaRouter receipt | `https://api.gonkarouter.io/v1/receipts/<gatewayRequestId>` |
 

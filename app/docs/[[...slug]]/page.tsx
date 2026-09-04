@@ -51,8 +51,14 @@ export default async function DocsPage({ params }: PageProps) {
   return (
     // Prose and rail travel together and centre in what the sidebar leaves,
     // so the reading column never drifts to one edge of a wide window.
-    <div className="mx-auto flex w-full max-w-[1240px] items-start gap-12 py-10 lg:px-9 lg:py-12">
-      <article className="min-w-0 w-full max-w-[84ch] flex-1">
+    // The two data attributes are the only hook a figure needs to break out of
+    // the reading column: they name the column it starts at and the frame its
+    // right edge may reach (see components/docs/mermaid.tsx).
+    <div
+      data-docs-frame
+      className="mx-auto flex w-full max-w-[1240px] items-start gap-12 py-10 lg:px-9 lg:py-12"
+    >
+      <article data-docs-column className="min-w-0 w-full max-w-[84ch] flex-1">
         <header className="border-b border-[var(--ov-line)] pb-7">
           <h1 className="ov-display text-[clamp(1.9rem,4vw,2.5rem)] text-ocean">
             {page.title}

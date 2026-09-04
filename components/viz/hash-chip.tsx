@@ -18,10 +18,10 @@ const TONE = {
  * Every hash, object id, blob id and tx digest in the app renders through this
  * chip: truncated mono head/tail, full value on hover (title) and click-to-copy.
  * `kind` says what the value is, and the chip derives its own explorer link
- * from it: a Sui object, account or transaction opens on SuiVision, a Walrus
- * blob on the aggregator, and a hash says it is a hash instead of pretending
- * to be a link. An explicit `href` still wins, for internal pages. Nothing is
- * dropped: long values are rehoused, not removed.
+ * from it: a Sui object or account opens on SuiVision, a transaction on
+ * Suiscan, a Walrus blob on the aggregator, and a hash says it is a hash
+ * instead of pretending to be a link. An explicit `href` still wins, for
+ * internal pages. Nothing is dropped: long values are rehoused, not removed.
  */
 export function HashChip({
   value,

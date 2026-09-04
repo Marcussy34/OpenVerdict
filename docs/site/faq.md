@@ -153,18 +153,19 @@ should pull toward neither end.
 ### What happens when a model provider is down?
 
 Nothing launches. The engine probes the three model families and web search
-together, and a submission arriving under bad weather is queued rather than
-started, with a six-hour lifetime. A verification already in flight that loses
-a seat fails closed, voids, and relaunches only once every family answers a
-probe again.
+together, and a submission arriving under bad weather is refused outright:
+the API answers 503 with the weather report, nothing is stored, and the page
+says which families are down so you can send it again yourself. There is no
+queue. A verification already in flight that loses a seat fails closed, voids,
+and relaunches only once every family answers a probe again.
 
 Web search counts as a family for this purpose because a jury with no web
 search answers UNSURE on everything, which is a useless verdict rather than a
 failure.
 
-The queue also spaces launches: at most one engine-launched jury every ten
-minutes. That limit exists because three concurrent juries drew a rate-limit
-storm from the shared gateway on 2026-09-03.
+Relaunches are spaced: at most one engine-relaunched jury every ten minutes.
+That limit exists because three concurrent juries drew a rate-limit storm from
+the shared gateway on 2026-09-03.
 
 ### What does UNRESOLVED mean?
 

@@ -551,7 +551,7 @@ export function PositionPanel() {
                     : "Gas paid by your wallet"}
                 </p>
                 {/* The deployment's own explorer template wins; without one the
-                    tx kind falls back to SuiVision. */}
+                    tx kind falls back to Suiscan. */}
                 <HashChip
                   value={digest}
                   label="digest"

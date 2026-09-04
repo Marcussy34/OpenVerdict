@@ -2,7 +2,11 @@ import { NextResponse } from "next/server";
 import { getServerEngine, EngineNotWiredError } from "@/lib/engine/server";
 import { touchWake } from "@/lib/engine/wake";
 import type { FactCheckRequest } from "@/lib/engine/contract";
+import { weatherRefusalMessage } from "@/lib/web/weather-copy";
 import { rateLimitPublic, requirePublicWritesEnabled } from "../_lib/guard";
+
+/** Seconds a refused visitor is asked to wait; one weather probe interval. */
+const WEATHER_RETRY_AFTER_SECONDS = 120;
 
 /** Max byte caps and validation limits for public fact-check submission. */
 const MAX_CLAIM_LENGTH = 1000;
@@ -156,15 +160,25 @@ export async function POST(req: Request) {
 
     const engine = await getServerEngine();
     const result = await engine.factCheckSubmit(requestData);
-    // Idle workers poll slowly; the wake file ends their wait at once.
-    touchWake();
 
     if (result.kind === "claim") {
+      // Idle workers poll slowly; the wake file ends their wait at once.
+      // A refusal creates no claim, so there is nothing to wake for.
+      touchWake();
       return NextResponse.json({ claimId: result.claimId }, { status: 200 });
     }
+    // Bad weather refuses the submission outright: nothing was stored, and the
+    // visitor is told when it is worth trying again.
     return NextResponse.json(
-      { queued: true, queueId: result.queueId, weather: result.weather },
-      { status: 202 },
+      {
+        error: result.reason,
+        message: weatherRefusalMessage(result.weather),
+        weather: result.weather,
+      },
+      {
+        status: 503,
+        headers: { "Retry-After": String(WEATHER_RETRY_AFTER_SECONDS) },
+      },
     );
   } catch (error) {
     if (error instanceof EngineNotWiredError || (error as Error)?.name === "EngineNotWiredError") {

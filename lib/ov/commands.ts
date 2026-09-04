@@ -1,5 +1,5 @@
 /**
- * The eight `ov` commands (docs/superpowers/specs/2026-09-03-ov-cli-design.md).
+ * The `ov` commands (docs/superpowers/specs/2026-09-03-ov-cli-design.md).
  * Each takes the shared environment (API client, clock, sleep, output sinks)
  * and returns the exit code; input and request problems are thrown as
  * OvError and printed by the entry script as one `error: ...` line.
@@ -18,13 +18,14 @@ import {
   renderVerdictCard,
 } from "../audit/audit-claim";
 import type { WeatherReport } from "../engine/contract";
+import { weatherRefusalMessage } from "../web/weather-copy";
 import { Api, OvError, asString, isRecord, replyMessage, type ApiReply, type Sleep } from "./api";
 import {
   NOT_CLEAR_NOTE,
   claimLink,
-  queueLink,
+  renderAgent,
+  renderAgents,
   renderExtract,
-  renderQueue,
   renderStatus,
   weatherLines,
   weatherSummary,
@@ -101,6 +102,53 @@ export async function boardCommand(env: CommandEnv, options: { limit?: number })
   if (env.json) printJson(env, { claims: rows });
   else env.io.out(renderBoard(rows).trimEnd());
   return 0;
+}
+
+// ---------------------------------------------------------------------------
+// agents and agent: the jury roster and one seat
+// ---------------------------------------------------------------------------
+
+export async function agentsCommand(env: CommandEnv): Promise<number> {
+  const agents = await env.api.agentDirectory();
+  if (env.json) {
+    printJson(env, { agents });
+    return 0;
+  }
+  if (agents.length === 0) {
+    env.io.out("no seats in the registry on this deployment");
+    return 0;
+  }
+  for (const line of renderAgents(agents, env.api.base)) env.io.out(line);
+  return 0;
+}
+
+export async function agentCommand(env: CommandEnv, input: string): Promise<number> {
+  const agentId = agentIdOf(input);
+  const agents = await env.api.agentDirectory();
+  // Seat ids are shortened in the roster table, so a prefix resolves like a claim id.
+  const matches = agents.filter((agent) => agent.agentProfileId.toLowerCase().startsWith(agentId));
+  if (matches.length === 0) throw new OvError(`seat not found: ${input} (ov agents lists every seat with its full id)`);
+  if (matches.length > 1) {
+    const listed = matches.map((agent) => `  ${agent.agentProfileId}`).join("\n");
+    throw new OvError(`${input} matches ${matches.length} seats, give more of the id:\n${listed}`);
+  }
+  const agent = matches[0]!;
+  const manifest = await env.api.agentManifest(agent.agentProfileId);
+  if (env.json) {
+    printJson(env, { agent, manifest: manifest ?? null });
+    return 0;
+  }
+  for (const line of renderAgent(agent, manifest, env.api.base)) env.io.out(line);
+  return 0;
+}
+
+/** A seat id, an id prefix from the roster table, or an agent page link. */
+function agentIdOf(input: string): string {
+  const trimmed = input.trim();
+  if (HEX_ID.test(trimmed)) return trimmed.toLowerCase();
+  const match = trimmed.match(/\/agents\/(0x[0-9a-fA-F]+)/);
+  if (match?.[1]) return match[1].toLowerCase();
+  throw new OvError(`not a seat id or link: ${input}`);
 }
 
 // ---------------------------------------------------------------------------
@@ -211,7 +259,6 @@ export async function submitCommand(env: CommandEnv, input: SubmitInput): Promis
   });
   const body = isRecord(reply.body) ? reply.body : {};
   const claimId = asString(body.claimId);
-  const queueId = asString(body.queueId);
   if (reply.status === 200 && claimId) {
     const link = claimLink(env.api.base, claimId);
     if (env.json) {
@@ -224,47 +271,27 @@ export async function submitCommand(env: CommandEnv, input: SubmitInput): Promis
     env.io.out(`watch it: ov watch ${claimId}`);
     return 0;
   }
-  if (reply.status === 202 && queueId) {
-    const link = queueLink(env.api.base, queueId);
-    if (env.json) {
-      printJson(env, { ...body, link, kind: "queued" });
-      return 0;
-    }
-    env.io.out(`queued: ${queueId}`);
-    env.io.out(`link: ${link}`);
+  // There is no queue: the jury either sits now or the submission is refused
+  // and nothing is stored. The route sends one sentence naming the families
+  // that are down, so relay it verbatim rather than wrapping it in another.
+  // The other 503 on this route is engine_not_wired, hence the error field.
+  if (reply.status === 503 && asString(body.error) === "WEATHER_NOT_CLEAR") {
     const weather = isRecord(body.weather) ? (body.weather as unknown as WeatherReport) : undefined;
-    if (weather) {
-      env.io.out("weather:");
-      for (const line of weatherLines(weather)) env.io.out(`  ${line}`);
-      env.io.out(`  ${weatherSummary(weather, env.now())}`);
+    if (env.json) printJson(env, body);
+    else if (weather) {
+      for (const line of weatherLines(weather)) env.io.out(line);
+      env.io.out(weatherSummary(weather, env.now()));
     }
-    env.io.out("the engine launches it when all four answer; queued items expire after six hours");
-    env.io.out(`watch it: ov watch ${queueId}`);
-    return 0;
+    // The same sentence the route and the console use, rebuilt only if it is missing.
+    const sentence =
+      asString(body.message) ??
+      (weather ? weatherRefusalMessage(weather) : "The jury cannot sit right now.");
+    throw new OvError(
+      `${sentence} Nothing was stored. Run ov weather and submit again when all four rows answer.`,
+      5,
+    );
   }
   throw writeError(reply, "submission");
-}
-
-// ---------------------------------------------------------------------------
-// queue
-// ---------------------------------------------------------------------------
-
-export async function queueCommand(env: CommandEnv, input: string): Promise<number> {
-  const queueId = queueIdOf(input);
-  const item = await env.api.queue(queueId);
-  if (!item) throw new OvError(`queue item not found: ${queueId}`);
-  if (env.json) printJson(env, item);
-  else for (const line of renderQueue(item, env.api.base, env.now())) env.io.out(line);
-  return 0;
-}
-
-/** A queue id or a queue link. */
-function queueIdOf(input: string): string {
-  const trimmed = input.trim();
-  if (HEX_ID.test(trimmed)) return trimmed.toLowerCase();
-  const match = trimmed.match(/\/fact-check\/queue\/(0x[0-9a-fA-F]+)/);
-  if (match?.[1]) return match[1].toLowerCase();
-  throw new OvError(`not a queue id or link: ${input}`);
 }
 
 // ---------------------------------------------------------------------------
@@ -273,13 +300,8 @@ function queueIdOf(input: string): string {
 
 export async function statusCommand(env: CommandEnv, input: string): Promise<number> {
   const target = await resolveTarget(env, input);
-  if (target.kind === "queue") return queueCommand(env, target.id);
   const inspection = await env.api.claim(target.id);
-  if (!inspection) {
-    // A bare id may be a queue item.
-    if (target.kind === "id" && (await env.api.queue(target.id))) return queueCommand(env, target.id);
-    throw new OvError(`claim not found: ${target.id}`);
-  }
+  if (!inspection) throw new OvError(`claim not found: ${target.id}`);
   if (env.json) printJson(env, inspection);
   else for (const line of renderStatus(inspection, env.api.base, env.now())) env.io.out(line);
   return 0;
@@ -312,7 +334,7 @@ export async function resolveTarget(env: CommandEnv, input: string): Promise<Wat
   return watchTargetOf(trimmed);
 }
 
-/** A claim link, a queue link, or a bare id that may be either. */
+/** A claim link or a bare claim id. */
 export function watchTargetOf(input: string): WatchTarget {
   const trimmed = input.trim();
   if (HEX_ID.test(trimmed)) return { kind: "id", id: trimmed.toLowerCase() };
@@ -409,9 +431,6 @@ export type TraceCommandInput = TraceFlags & { target: string };
 
 export async function traceCommand(env: CommandEnv, input: TraceCommandInput): Promise<number> {
   const target = await resolveTarget(env, input.target);
-  if (target.kind === "queue") {
-    throw new OvError(`${target.id} is a queued submission: there is no jury yet, try ov queue ${target.id}`);
-  }
   return trace({
     base: env.api.base,
     claimId: target.id,
@@ -460,9 +479,19 @@ const COMMAND_HELP: Record<string, { usage: string; about: string; example: stri
     example: "ov weather",
   },
   board: {
-    usage: "ov board [--limit <n>]",
+    usage: "ov board [--limit <n>]   (alias: ov claims)",
     about: "The public board: every claim, newest first, with state, result, score and attempt.",
     example: "ov board --limit 5",
+  },
+  agents: {
+    usage: "ov agents",
+    about: "The jury roster: every seat with its model, role, stake, lifetime rewards and track record.",
+    example: "ov agents",
+  },
+  agent: {
+    usage: "ov agent <seat id, id prefix or link>",
+    about: "One seat: its stake, track record and published manifest (prompt spec, tool policy, evidence policy).",
+    example: "ov agent 0x4ee8af570a",
   },
   extract: {
     usage: "ov extract (--url <url> | --text \"<text>\" | --file <path>)",
@@ -471,13 +500,8 @@ const COMMAND_HELP: Record<string, { usage: string; about: string; example: stri
   },
   submit: {
     usage: "ov submit \"<claim>\" [--text \"<evidence text>\"] [--url <https url>]... [--criteria \"<text>\"]",
-    about: "Submit a claim to the jury (5 to 1000 characters, up to 5 https urls). Queued when the weather is not clear.",
+    about: "Submit a claim to the jury (5 to 1000 characters, up to 5 https urls). Refused when the weather is not clear.",
     example: "ov submit \"The Eiffel Tower was completed in 1889.\"",
-  },
-  queue: {
-    usage: "ov queue <queueId or link>",
-    about: "A queued submission: QUEUED, LAUNCHED (with the claim), EXPIRED or CANCELLED, plus the weather.",
-    example: "ov queue 0x9f3c...",
   },
   status: {
     usage: "ov status <claim id or link>",
@@ -485,7 +509,7 @@ const COMMAND_HELP: Record<string, { usage: string; about: string; example: stri
     example: "ov status 0x273220b56d87edea0a6db35f85c0fc8f36591461ee6be6962e86bb4586ee4ac6",
   },
   watch: {
-    usage: "ov watch <claim id, claim link or queue id> [--for <duration>] [--since <sequence>] [--verbose]",
+    usage: "ov watch <claim id or claim link> [--for <duration>] [--since <sequence>] [--verbose]",
     about: "Follow a verification live, one dated line per step, until it ends or --for (default 9m) runs out.",
     example: "ov watch 0x273220b56d87edea0a6db35f85c0fc8f36591461ee6be6962e86bb4586ee4ac6 --for 9m --since 45",
   },
@@ -501,16 +525,25 @@ const COMMAND_HELP: Record<string, { usage: string; about: string; example: stri
   },
 };
 
+/** Command aliases: the console calls the board "Claims", so `ov claims` runs it too. */
+export const ALIASES: Record<string, string> = { claims: "board" };
+
+/** The command an alias stands for, or the name itself. */
+export function resolveCommand(name: string): string {
+  return ALIASES[name] ?? name;
+}
+
 export const EXIT_CODES = [
   "0  success",
   "2  input or request error (one error: line on stderr)",
   "3  the claim voided or gave up (watch)",
   "4  watch stopped before the end (timeout or budget)",
-  "5  rate limited or writes disabled (submit, extract)",
+  "5  the request was refused and nothing was stored: rate limited, writes disabled, or the jury cannot sit (submit, extract)",
 ];
 
-export function helpText(command?: string): string {
+export function helpText(topic?: string): string {
   const lines: string[] = [];
+  const command = topic === undefined ? undefined : resolveCommand(topic);
   if (command && COMMAND_HELP[command]) {
     const entry = COMMAND_HELP[command];
     lines.push(`usage: ${entry.usage}`, "", entry.about, "", `example: ${entry.example}`);
@@ -546,5 +579,5 @@ export function helpText(command?: string): string {
 }
 
 export function isCommand(name: string): boolean {
-  return name in COMMAND_HELP || name === "help";
+  return resolveCommand(name) in COMMAND_HELP || name === "help";
 }

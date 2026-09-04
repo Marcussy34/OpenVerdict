@@ -122,18 +122,18 @@ describe("OpenVerdict CLI", () => {
     ]);
   });
 
-  it("prints a queue id and one line for each model family", async () => {
+  it("fails with the weather refusal when the jury cannot sit", async () => {
     const directory = await mkdtemp(join(tmpdir(), "openverdict-cli-"));
     temporaryDirectories.push(directory);
     const requestPath = join(directory, "request.json");
     await writeFile(
       requestPath,
-      JSON.stringify({ claim: "Weather can queue this claim.", urls: [] }),
+      JSON.stringify({ claim: "Bad weather refuses this claim.", urls: [] }),
     );
     const engine = fakeEngine();
     vi.spyOn(engine, "factCheckSubmit").mockResolvedValue({
-      kind: "queued",
-      queueId: `0x${"55".repeat(32)}`,
+      kind: "refused",
+      reason: "WEATHER_NOT_CLEAR",
       weather: {
         probedAtMs: 1,
         stale: false,
@@ -163,32 +163,29 @@ describe("OpenVerdict CLI", () => {
         ],
       },
     });
-    const output: string[] = [];
+    const errors: string[] = [];
 
     const code = await runCli(
       ["fact-check", "start", "--file", requestPath],
       {
         engine,
-        stdout: (value) => output.push(value),
-        stderr: () => undefined,
+        stdout: () => undefined,
+        stderr: (value) => errors.push(value),
       },
     );
 
-    expect(code).toBe(0);
-    const rendered = output.join("\n");
-    expect(rendered).toContain(`Queue ID: 0x${"55".repeat(32)}`);
-    expect(rendered).toContain("deepseek: ok (12 ms, status 200)");
-    expect(rendered).toContain("minimax: down (60000 ms, status TIMEOUT)");
-    expect(rendered).toContain("kimi: ok (31 ms, status 200)");
+    expect(code).toBe(1);
+    const rendered = errors.join("\n");
+    expect(rendered).toContain("WEATHER_NOT_CLEAR");
+    expect(rendered).toContain(
+      "The jury cannot sit right now: MiniMax is down.",
+    );
   });
 });
 
 function fakeEngine(): Engine {
   return {
     factCheckSubmit: async () => ({ kind: "claim", claimId: "0xclaim" }),
-    getQueuedFactCheck: async () => undefined,
-    listQueuedFactChecks: async () => [],
-    queueTick: async () => undefined,
     weatherTick: async () => undefined,
     weather: async () => ({
       probedAtMs: null,

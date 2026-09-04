@@ -426,11 +426,11 @@ describe("ov trace inputs", () => {
     expect(s.out[0]).toBe(`claim      ${FINALIZED.claimId}`);
   });
 
-  it("sends a queue link back to ov queue", async () => {
+  it("says plainly that queue links are gone", async () => {
     const s = setup(FINALIZED, {});
     const queueId = `0x${"9f".repeat(32)}`;
     const error = await failure(traceCommand(s.env, { target: `${BASE}/fact-check/queue/${queueId}`, full: false }));
     expect(error.exitCode).toBe(2);
-    expect(error.message).toBe(`${queueId} is a queued submission: there is no jury yet, try ov queue ${queueId}`);
+    expect(error.message).toContain("queue links no longer exist");
   });
 });

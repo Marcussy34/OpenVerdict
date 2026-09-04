@@ -1,0 +1,40 @@
+[
+  {
+    "agentProfileId": "0x4ee8af570a34423592e73d14643c9235b477cb1119e9ec6b8785a7dc8c241d94",
+    "owner": "0x3525585d3eb4558c62343f7bd0b75c0c63b9666527d79336ce11c5ae3224420b",
+    "modelId": "deepseek-ai/DeepSeek-V4-Flash-0731",
+    "role": "SOURCE_AUTHENTICITY",
+    "manifestHash": "0x1f2ad3d0aa8c0e0b6ec8db6e1a48bd7bb2d5a3f8a4b0c1d2e3f405162738495a",
+    "active": true,
+    "reputation": {},
+    "backing": { "kind": "ALLOWLIST", "label": "testnet-demo-allowlist" },
+    "trackRecord": { "seatsServed": 32, "committed": 13, "revealed": 4, "agreedWithCertificate": 1 },
+    "earnedMist": "6650000"
+  },
+  {
+    "agentProfileId": "0x1047c939b3f7c8c0b0a5d1e2f3a4b5c6d7e8f9001122334455667788990aabbc",
+    "owner": "0x67ac8e9012345678901234567890123456789012345678901234567890abcdef",
+    "modelId": "MiniMaxAI/MiniMax-M2.7",
+    "role": "SKEPTIC",
+    "manifestHash": "0x2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f8091a",
+    "active": true,
+    "reputation": {},
+    "backing": { "kind": "WALLET" },
+    "trackRecord": { "seatsServed": 0, "committed": 0, "revealed": 0, "agreedWithCertificate": 0 },
+    "staker": "0x67ac8e9012345678901234567890123456789012345678901234567890abcdef",
+    "stakeMist": "100000000",
+    "earnedMist": "0"
+  },
+  {
+    "agentProfileId": "0x19e6bda3a5cc11223344556677889900aabbccddeeff00112233445566778899",
+    "owner": "0x3525585d3eb4558c62343f7bd0b75c0c63b9666527d79336ce11c5ae3224420b",
+    "modelId": "moonshotai/Kimi-K2.6",
+    "role": "SKEPTIC",
+    "manifestHash": "0x3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f8091a2b",
+    "active": false,
+    "reputation": {},
+    "backing": { "kind": "ALLOWLIST", "label": "testnet-demo-allowlist" },
+    "trackRecord": { "seatsServed": 25, "committed": 8, "revealed": 3, "agreedWithCertificate": 0 },
+    "earnedMist": "4275000"
+  }
+]

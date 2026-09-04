@@ -19,8 +19,10 @@ import {
   type ExtractedClaimCandidate,
 } from "@/components/claim/claim-picker";
 import { useNow } from "@/components/use-now";
+import { WeatherStrip } from "@/components/weather/weather-strip";
 import { cn } from "@/lib/utils";
-import type { ClaimInspection } from "@/lib/engine/contract";
+import { weatherRefusalMessage } from "@/lib/web/weather-copy";
+import type { ClaimInspection, WeatherReport } from "@/lib/engine/contract";
 import {
   ArrowDown2,
   ArrowRight,
@@ -257,7 +259,17 @@ function FactCheckContent() {
 
   // Validation, the POST and the redirect all live in the shared hook, so this
   // page and the landing footer's one-line form behave identically.
-  const { submit, submitting, errorMessage, isEngineOffline } = useClaimSubmission();
+  const {
+    submit,
+    resubmit,
+    submitting,
+    errorMessage,
+    isEngineOffline,
+    refusal,
+    setRefusal,
+  } = useClaimSubmission();
+  // The refusal block's own button re-reads the weather before trying again.
+  const [checkingWeather, setCheckingWeather] = useState(false);
 
   // Extraction state and provenance for URL or long text inputs.
   const [extracting, setExtracting] = useState(false);
@@ -347,6 +359,25 @@ function FactCheckContent() {
     }
     // Clear candidate list so the form reappears for editing, while preserving provenance.
     setCandidates([]);
+  };
+
+  /** Read the weather again: submit the same claim if it cleared, else say what is still down. */
+  const handleCheckAgain = async () => {
+    setCheckingWeather(true);
+    try {
+      const response = await fetch("/api/weather");
+      if (!response.ok) return;
+      const report = (await response.json()) as WeatherReport;
+      if (report.clear) {
+        await resubmit();
+        return;
+      }
+      setRefusal({ message: weatherRefusalMessage(report), weather: report });
+    } catch {
+      // A failed probe leaves the block as it is; the button can be used again.
+    } finally {
+      setCheckingWeather(false);
+    }
   };
 
   const handleStartOver = () => {
@@ -525,6 +556,36 @@ function FactCheckContent() {
               </div>
             )}
           </>
+        )}
+
+        {/* Bad weather refuses the submission outright: nothing was stored, so
+            the form stays put and the visitor decides when to try again. */}
+        {refusal && (
+          <div
+            role="alert"
+            className="space-y-3 rounded-xl border border-destructive/30 bg-destructive/8 px-3.5 py-3"
+          >
+            <p className="text-xs font-medium text-destructive">
+              {refusal.message} Try again in a few minutes.
+            </p>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              {/* The family health the queue page used to show, in one row. */}
+              <WeatherStrip compact initial={refusal.weather} className="min-w-0 flex-1" />
+              <Button
+                type="button"
+                size="sm"
+                disabled={checkingWeather || submitting}
+                aria-busy={checkingWeather || submitting}
+                onClick={() => void handleCheckAgain()}
+                className="min-h-9 shrink-0 font-semibold"
+              >
+                {checkingWeather || submitting ? (
+                  <Refresh size="14" variant="Linear" className="motion-safe:animate-spin" />
+                ) : null}
+                Check again
+              </Button>
+            </div>
+          </div>
         )}
 
         {extractError && (

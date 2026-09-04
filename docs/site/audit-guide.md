@@ -1,6 +1,6 @@
 ---
 title: Audit guide
-description: Three ways to check a verdict yourself: with any agent, with Claude Code, or with the public ov command line.
+description: Three ways to check a verdict yourself, in the browser, with any agent, or with the public ov command line.
 order: 4
 ---
 
@@ -141,26 +141,37 @@ cryptographic argument:
 
 - Sui JSON-RPC at `https://sui-testnet-rpc.publicnode.com` or
   `https://fullnode.testnet.sui.io:443`.
-- The Sui explorer at `https://testnet.suivision.xyz/txblock/<digest>` and
-  `/object/<id>`.
+- The Sui explorers at `https://suiscan.xyz/testnet/tx/<digest>` for a
+  transaction and `https://testnet.suivision.xyz/object/<id>` for an object.
 - Walrus at `https://aggregator.walrus-testnet.walrus.space/v1/blobs/<blobId>`.
 - GonkaRouter at `https://api.gonkarouter.io/v1/receipts/<gatewayRequestId>`.
   A 404 means no record and a 429 means rate limited. Use the `req-...` id, not
   the `devshard-...` one.
 
-## 2. With Claude Code
+## 2. With an agent
 
-The repository ships a skill, `.claude/skills/openverdict-audit/`. Install it
-once with a symlink:
+The repository ships a skill at `skills/openverdict/`, written in the open
+[Agent Skills format](https://agentskills.io), so any agent that reads that
+format can load it. Install it with the [`skills`](https://skills.sh) CLI:
 
 ```bash
-ln -s "$PWD/.claude/skills/openverdict-audit" ~/.claude/skills/openverdict-audit
+npx skills add Marcussy34/OpenVerdict
 ```
 
-Then paste a claim link, a report link, a run link, a queue link or a bare `0x`
-id into the session, or ask in plain words: "audit this", "verify this claim",
-"is the jury healthy", "watch this claim". The skill runs the public auditor,
-reads the Markdown dossier it produces, and answers questions from it.
+That works with Claude Code, Codex, Cursor, Gemini CLI, GitHub Copilot, VS Code,
+OpenCode, Amp and any other agent that reads the format. The skill's launchers
+run this repository's own code, so clone it too for the `ov` CLI:
+
+```bash
+git clone https://github.com/Marcussy34/OpenVerdict.git
+cd OpenVerdict && pnpm install
+```
+
+Then paste a claim link, a report link, a run link, an agent link or a bare
+`0x` id into the session, or ask in plain words: "audit this", "verify
+this claim", "who is on the jury", "is the jury healthy", "watch this claim".
+The skill runs the public auditor, reads the Markdown dossier it produces, and
+answers questions from it.
 
 It presents in three tiers. The verdict card and a short narrative come first.
 Asking about a specific juror moves to the research trail for that seat. Asking
@@ -168,9 +179,9 @@ for everything prints the full trail with the pinned system prompt and every
 message verbatim.
 
 The skill is read-only by construction. It runs nothing but the two launchers
-in its own folder and read-only requests, its only writes are the audit outputs
-in a scratch directory, and it never submits anything without an explicit go
-from you. It needs network access and nothing else: no key, no database, no
+in its own `scripts/` folder and read-only requests, its only writes are the
+audit outputs in a temporary directory, and it never submits anything without an
+explicit go from you. It needs network access and nothing else: no key, no database, no
 wallet.
 
 ## 3. With the ov command line
@@ -216,8 +227,8 @@ The banner is written to stderr, so `--json` on stdout stays parseable.
 #### `ov weather`
 
 Is the jury healthy? One line per model family (DeepSeek, MiniMax, Kimi and web
-search), then clear or not clear. Not clear means new submissions queue until
-all four families answer a probe.
+search), then clear or not clear. Not clear means the API refuses new
+submissions until all four families answer a probe.
 
 JSON shape: `{ probedAtMs, stale, clear, families[] }`, where each family is
 `{ modelId, family, ok, latencyMs, status }`.
@@ -246,21 +257,12 @@ Submit a claim to the jury. The statement is 5 to 1000 characters, the optional
 context text up to 20000, up to five `https:` URLs, and criteria up to 2000
 characters. The public rate limit is five submissions per minute.
 
-A 200 means the jury is forming and prints the claim id and its link. A 202
-means the weather was not clear and the submission is queued; it prints the
-queue id, the weather block, and the note that queued items expire after six
-hours. Both exit 0.
+A 200 means the jury is forming and prints the claim id and its link, and
+exits 0. A submission needs all three model families and web search up at that
+moment; otherwise the API refuses it with a 503 and you try again later, and
+`ov weather` shows the health.
 
-JSON shape: the response body plus `link` and `kind`, where `kind` is `"claim"`
-or `"queued"`.
-
-#### `ov queue <queueId or link>`
-
-A queued submission: QUEUED, LAUNCHED with its claim, EXPIRED or CANCELLED,
-plus the weather.
-
-JSON shape: `{ queueId, status, statement, createdAt, expiresAt, weather }`,
-plus `claimId` when it launched and `launchError` when a launch failed.
+JSON shape: the response body plus `link` and `kind`, where `kind` is `"claim"`.
 
 #### `ov status <claim id or link>`
 
@@ -277,17 +279,16 @@ JSON shape: the full claim inspection, with `claimId`, `mode`, `state`,
 #### `ov watch <id or link> [--for <duration>] [--since <sequence>] [--verbose]`
 
 Follow a verification live, one dated line per step, until it ends or `--for`
-runs out. The default is nine minutes, chosen because a Claude Code tool call
-cannot exceed ten. `--since` resumes from a sequence number and `--verbose`
+runs out. The default is nine minutes, because an agent's tool call
+typically cannot exceed ten. `--since` resumes from a sequence number and `--verbose`
 adds research tick lines.
 
-It polls a queue every thirty seconds until it launches, then follows the
-Server-Sent Events stream, with a sixty-second poll of the claim alongside to
-catch a void or a give-up the stream does not carry. It reconnects up to five
+It follows the Server-Sent Events stream, with a sixty-second poll of the
+claim alongside to catch a void or a give-up the stream does not carry. It reconnects up to five
 times with backoff.
 
 JSON output is NDJSON: one line per event, then a summary object with `kind`
-(always `watch_summary`), `claimId`, `queueId`, `state`, `stateLabel`,
+(always `watch_summary`), `claimId`, `state`, `stateLabel`,
 `lastSequence`, `exitCode`, `result`, `attemptChain` and `reason`.
 
 Exit 0 when the claim finalized, 3 when the attempt voided with no relaunch
@@ -297,7 +298,7 @@ The last line tells you the sequence to resume from.
 #### `ov audit <claim id or link> [--json <file>] [--out <file>] [--run <runId>] [--quiet] [--trace]`
 
 Rebuild and check the whole public record of a verdict. Accepts a claim link, a
-report link, a run link, a queue link, a bare `0x` id or a hex prefix.
+report link, a run link, a bare `0x` id or a hex prefix.
 
 - `--json <file>` writes the JSON dump to that path.
 - `--out <file>` writes the Markdown dossier, defaulting to
@@ -314,10 +315,10 @@ score, certificate on Sui, what this audit proves and what it does not, and
 data.
 
 The JSON document is version 1 with these top-level keys: `version`,
-`generatedAt`, `target`, `status`, `claim`, `verdict`, `queue`, `jury`,
+`generatedAt`, `target`, `status`, `claim`, `verdict`, `jury`,
 `votes`, `runs`, `claimChecks`, `timeline`, `timelineSource`, `debate`,
 `score`, `certificate`, `urls`, `sources`, `summary` and `exitCode`. `status`
-is one of FINALIZED, IN_PROGRESS, VOIDED, GAVE_UP, CANCELLED or QUEUED, and
+is one of FINALIZED, IN_PROGRESS, VOIDED, GAVE_UP or CANCELLED, and
 `summary` counts passed, failed, unavailable and skipped checks by group.
 
 #### `ov trace <claim id or link> [--juror <n>] [--round 1|2] [--full]`
@@ -328,8 +329,6 @@ its hash, the claim JSON the juror received, every message verbatim including
 page texts, and the raw completion.
 
 JSON shape: `{ claimId, statement, jurors: [{ jurorIndex, modelId?, role?, rounds: [{ phase, runId, kind, vote?, missing?, turns[] }] }] }`.
-
-Pointing it at a queued submission is an error: there is no jury yet.
 
 ### The sibling script
 

@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import type { WeatherReport } from "@/lib/engine/contract";
 
 /**
  * The one claim-submission path the UI has: validate, POST /api/fact-checks,
@@ -25,15 +26,26 @@ export type ClaimSubmissionInput = {
   resolutionCriteria?: string;
 };
 
+/** A submission the jury refused: bad weather, nothing stored, submit again. */
+export type ClaimSubmissionRefusal = {
+  message: string;
+  weather: WeatherReport;
+};
+
 export function useClaimSubmission() {
   const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isEngineOffline, setIsEngineOffline] = useState(false);
+  const [refusal, setRefusal] = useState<ClaimSubmissionRefusal | null>(null);
+  // The last input, so a refusal block can send exactly it again.
+  const lastInput = useRef<ClaimSubmissionInput | null>(null);
 
   async function submit(input: ClaimSubmissionInput) {
+    lastInput.current = input;
     setErrorMessage(null);
     setIsEngineOffline(false);
+    setRefusal(null);
 
     const trimmedClaim = input.claim.trim();
     if (trimmedClaim.length < MIN_CLAIM) {
@@ -67,15 +79,17 @@ export function useClaimSubmission() {
       });
 
       if (res.status === 503) {
+        // Two different 503s: the jury refusing bad weather, or no engine.
+        const refused = await res.json().catch(() => null);
+        if (refused?.error === "WEATHER_NOT_CLEAR" && refused.weather) {
+          setRefusal({ message: refused.message, weather: refused.weather });
+          return false;
+        }
         setIsEngineOffline(true);
         return false;
       }
 
       const data = await res.json();
-      if (res.status === 202 && data.queueId) {
-        router.push(`/fact-check/queue/${encodeURIComponent(data.queueId)}`);
-        return true;
-      }
       if (!res.ok) {
         setErrorMessage(data.message || data.error || "Failed to submit the claim");
         return false;
@@ -94,5 +108,20 @@ export function useClaimSubmission() {
     }
   }
 
-  return { submit, submitting, errorMessage, isEngineOffline, setErrorMessage };
+  /** Send the last input again, after the weather cleared. */
+  async function resubmit() {
+    const input = lastInput.current;
+    return input === null ? false : submit(input);
+  }
+
+  return {
+    submit,
+    resubmit,
+    submitting,
+    errorMessage,
+    isEngineOffline,
+    setErrorMessage,
+    refusal,
+    setRefusal,
+  };
 }

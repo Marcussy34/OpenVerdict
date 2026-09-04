@@ -58,7 +58,7 @@ describe("parseClaimLink", () => {
   it("rejects a queue link by name", () => {
     expect(parseClaimLink("https://app.openverdict.info/fact-check/queue/queue-42")).toEqual({
       ok: false,
-      reason: expect.stringContaining("queued submission"),
+      reason: expect.stringContaining("Queue links no longer exist"),
     });
   });
 });

@@ -14,24 +14,50 @@ anyone can recompute from public data, and every page a juror opened, every
 sealed and revealed run bundle and every evidence manifest lives on Walrus.
 Production runs at https://app.openverdict.info on Sui testnet.
 
-## The two ways in
+## Give this to your agent
 
-**The public CLI `ov`** is the recommended path. After `pnpm install` it needs
-no API key, no wallet and no database: it reads and writes only the public API.
+```
+Set up https://app.openverdict.info/SKILL.md and take it from there.
+```
+
+Works with any agent that can read a link: Claude, ChatGPT, Codex, Cursor,
+Gemini. That URL serves this repository's `skills/openverdict/SKILL.md` from
+disk, so it is the same file either way, and it tells the agent how to set
+itself up at whichever rung it can reach.
+
+## The three ways in
+
+**The agent skill** covers the whole app: the claim board, the jury roster and
+one seat's manifest, the weather, claim extraction, submission, the live watch,
+the audit and the research trail. It is written in the open
+[Agent Skills format](https://agentskills.io), so any agent that reads that
+format loads it. Install it with the [`skills`](https://skills.sh) CLI:
 
 ```bash
-pnpm install
+npx skills add Marcussy34/OpenVerdict
+```
+
+That works with Claude Code, Codex, Cursor, Gemini CLI, GitHub Copilot, VS Code,
+OpenCode, Amp and any other agent that reads the format. The skill lives at
+[`skills/openverdict/`](./skills/openverdict) (`SKILL.md`,
+`references/reference.md`, `references/faq.md`, `scripts/ov.sh`,
+`scripts/run.sh`); `.claude/skills/openverdict-audit` and
+`.agents/skills/openverdict` are two of the discovery paths agents scan, both
+symlinked to that one folder, so the skill loads on its own inside the repo.
+
+**The public CLI `ov`** is what the skill's launchers run, and it stands on its
+own. After `pnpm install` it needs no API key, no wallet and no database: it
+reads and writes only the public API.
+
+```bash
+git clone https://github.com/Marcussy34/OpenVerdict.git
+cd OpenVerdict && pnpm install
 pnpm ov help
 ```
 
 **The raw public API** is documented in [docs/API.md](./docs/API.md). Base URL
 `https://app.openverdict.info/api`. Every read route is open; the write routes
 sit behind a public-writes flag plus rate limiting.
-
-For Claude Code specifically, the skill in
-[`.claude/skills/openverdict-audit/`](./.claude/skills/openverdict-audit)
-wraps both. It loads on its own inside the repo, and `ln -s "$(pwd)/.claude/skills/openverdict-audit" ~/.claude/skills/openverdict-audit`
-makes it available from any folder.
 
 ## The journey
 
@@ -48,9 +74,9 @@ pnpm ov weather
 One line per row (DeepSeek, MiniMax, Kimi, Web search), then `clear` or
 `not clear`, then how old the probe is. Clear means the last probe is under
 five minutes old and all four rows answered, so a submission launches at once.
-Not clear means at least one row failed, so a submission is queued instead of
-started. No recent probe means the weather is unknown, and unknown never holds
-a submission back.
+Not clear means at least one row failed, so a submission is refused rather
+than started. No recent probe means the weather is unknown, and unknown never
+holds a submission back.
 
 ### 2. Extract: turn a page or a paragraph into a checkable claim
 
@@ -73,30 +99,41 @@ pnpm ov submit "The first Bitcoin halving happened in November 2012." \
 ```
 
 Two outcomes. HTTP 200 returns a claim id and the link
-`https://app.openverdict.info/claims/<id>`: the jury starts now. HTTP 202
-returns a queue id and the link `/fact-check/queue/<id>`: the weather was not
-clear, so the engine holds the submission and launches it on the first clear
-probe. Queued launches are spaced ten minutes apart and a queued item expires
-after six hours.
+`https://app.openverdict.info/claims/<id>`: the jury starts now. HTTP 503
+`WEATHER_NOT_CLEAR` means a model family or web search is down, so the jury
+cannot sit: nothing is stored, nothing waits in the background, and you try
+again when `pnpm ov weather` says clear. The CLI exits 5 and prints the rows.
 
-### 4. Status and queue: one-shot state
+### 4. Status and the board: one-shot state
 
 ```bash
 pnpm ov status <claim id or link>
-pnpm ov queue <queueId>
-pnpm ov board --limit 20
+pnpm ov board --limit 20        # pnpm ov claims is the same command
+pnpm ov agents
+pnpm ov agent <seat id or prefix>
 ```
 
 `status` prints the statement, the state in plain words, seats committed and
 revealed out of five, the attempt out of three, the next deadline, and the
-result with its certificate link once settled. `queue` prints QUEUED,
-LAUNCHED (with the claim), EXPIRED or CANCELLED plus the current weather.
-`board` lists every claim, newest first.
+result with its certificate link once settled. `board` lists every claim,
+newest first.
+
+`agents` prints the jury roster: every seat with its model, role, stake,
+lifetime jury rewards and track record, plus how many seats each model family
+holds and how many carry a staker's bond rather than the operator's. A family
+with too few active seats is the structural reason a submission is refused,
+because every committee must span all three. `agent <id>` takes a full seat id, the
+prefix the roster prints, or an agent page link, and adds the seat's published
+manifest: the prompt spec and its hash, the tool policy with its budgets and
+hash, the evidence policy and hash. Those hashes are what that seat's runs are
+checked against, so this is the honest answer to "what prompt did this juror
+run under". Staking itself needs a wallet signature and stays out of the CLI:
+use the `/agents` page.
 
 ### 5. Watch: follow the jury live
 
 ```bash
-pnpm ov watch <claim id, claim link or queue id> --for 9m [--since <sequence>]
+pnpm ov watch <claim id or claim link> --for 9m [--since <sequence>]
 ```
 
 One dated line per event, `HH:MM:SSZ  <what happened>  <detail>`. History
@@ -152,8 +189,8 @@ holds seat n minus one.
 
 - **Never submit without the person's explicit go.** Confirm the exact claim
   wording first.
-- **Never resubmit the same statement in a row.** Point at the claim or queue
-  link that already exists.
+- **Never resubmit the same statement in a row.** Point at the claim link that
+  already exists.
 - Claim length 5 to 1000 characters. Evidence text up to 20000 characters. Up
   to five https URLs of at most 2048 characters each. Resolution criteria up
   to 2000 characters.
@@ -162,8 +199,8 @@ holds seat n minus one.
 - A deployment can refuse public writes entirely. HTTP 403 `writes_disabled`
   and CLI exit 5. Stop and offer an audit of a settled claim instead.
 - Timing: a one-round verdict lands about 11 to 12 minutes after launch, a
-  two-round verdict about 32 minutes. A queued submission adds an unknowable
-  wait for clear weather plus the ten-minute launch spacing.
+  two-round verdict about 32 minutes. A submission refused on bad weather is
+  not stored, so it costs nothing but the retry.
 - `UNRESOLVED` is a real outcome, not an error. Either four or more jurors
   revealed UNSURE, or no four jurors matched after the debate and the table
   vote. The certificate still exists and the truth score still stands as the
@@ -214,6 +251,7 @@ rule, never an identity claim.
 - [docs/API.md](./docs/API.md): the full public API reference.
 - [README.md](./README.md): the product, the architecture and the honest limits.
 - [docs/PRD.md](./docs/PRD.md): complete protocol semantics.
-- [.claude/skills/openverdict-audit/](./.claude/skills/openverdict-audit): the
-  Claude Code skill, with `reference.md` and `faq.md`.
+- [skills/openverdict/](./skills/openverdict): the agent skill in the open
+  Agent Skills format, with `references/reference.md`, `references/faq.md` and
+  the two launchers under `scripts/`.
 - [docs/demo/runbook.md](./docs/demo/runbook.md): preserved live testnet claim ids.

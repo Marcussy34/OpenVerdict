@@ -4,13 +4,15 @@
  * table vote, attempt, certificate, truth score). Pure functions, no I/O.
  */
 import type {
+  AgentDirectoryEntry,
   AttemptChain,
   ClaimInspection,
-  QueuedFactCheck,
   WeatherReport,
 } from "../engine/contract";
+import type { AgentManifestDocument } from "../protocol/types";
 import { shortHex } from "../audit/audit-claim";
 import { CLAIM_STATE, OUTCOME } from "../protocol/constants";
+import { formatSui } from "../web/format-sui";
 import { OvError, asArray, asNumber, asString, isRecord, type Json, type StreamEvent } from "./api";
 
 const SUIVISION = "https://testnet.suivision.xyz";
@@ -223,8 +225,8 @@ export function claimLink(base: string, claimId: string): string {
   return `${base}/claims/${claimId}`;
 }
 
-export function queueLink(base: string, queueId: string): string {
-  return `${base}/fact-check/queue/${queueId}`;
+export function agentLink(base: string, agentProfileId: string): string {
+  return `${base}/agents/${agentProfileId}`;
 }
 
 export function suivisionObject(id: string): string {
@@ -268,7 +270,7 @@ export function weatherSummary(report: WeatherReport, nowMs: number): string {
   return `${report.clear ? "clear" : "not clear"}, ${probed}`;
 }
 
-/** Compact one-liner for watch and queue lines: "DeepSeek 429, MiniMax ok, Kimi TIMEOUT, Web search ok". */
+/** Compact one-liner for watch lines: "DeepSeek 429, MiniMax ok, Kimi TIMEOUT, Web search ok". */
 export function weatherInline(report: WeatherReport): string {
   const families = [...(report.families ?? [])].sort(
     (left, right) => familyRank(left.family) - familyRank(right.family),
@@ -280,7 +282,7 @@ export function weatherInline(report: WeatherReport): string {
 }
 
 export const NOT_CLEAR_NOTE =
-  "not clear means new submissions queue until all four families answer a probe";
+  "not clear means new submissions are refused until all four families answer a probe";
 
 // ---------------------------------------------------------------------------
 // Claim status block
@@ -386,49 +388,6 @@ export function renderStatus(inspection: ClaimInspection, base: string, nowMs: n
 }
 
 // ---------------------------------------------------------------------------
-// Queue block
-// ---------------------------------------------------------------------------
-
-/** The `ov queue` block. */
-export function renderQueue(item: QueuedFactCheck, base: string, nowMs: number): string[] {
-  const lines = [`queue      ${item.queueId}`, `status     ${queueStatusWords(item)}`];
-  if (item.status === "LAUNCHED" && item.claimId) {
-    lines.push(`claim      ${item.claimId}`, `link       ${claimLink(base, item.claimId)}`, `watch it   ov watch ${item.claimId}`);
-  } else {
-    lines.push(`link       ${queueLink(base, item.queueId)}`);
-  }
-  lines.push(`statement  ${item.statement}`);
-  const created = Date.parse(item.createdAt);
-  const expires = Date.parse(item.expiresAt);
-  lines.push(`created    ${isoTime(item.createdAt)}${Number.isFinite(created) ? ` (${formatDuration(Math.max(0, nowMs - created))} ago)` : ""}`);
-  if (item.status === "QUEUED") {
-    lines.push(`expires    ${isoTime(item.expiresAt)}${Number.isFinite(expires) ? ` (${formatRelative(expires, nowMs)})` : ""}`);
-  }
-  if (item.launchError) lines.push(`launch error ${item.launchError}`);
-  if (item.weather) {
-    lines.push("weather");
-    for (const line of weatherLines(item.weather)) lines.push(`  ${line}`);
-    lines.push(`  ${weatherSummary(item.weather, nowMs)}`);
-  }
-  return lines;
-}
-
-export function queueStatusWords(item: QueuedFactCheck): string {
-  switch (item.status) {
-    case "QUEUED":
-      return "QUEUED, waiting for clear weather (the engine launches it when all four families answer)";
-    case "LAUNCHED":
-      return "LAUNCHED";
-    case "EXPIRED":
-      return "EXPIRED (queued items expire after six hours)";
-    case "CANCELLED":
-      return "CANCELLED";
-    default:
-      return String(item.status);
-  }
-}
-
-// ---------------------------------------------------------------------------
 // Extract
 // ---------------------------------------------------------------------------
 
@@ -450,6 +409,108 @@ export function renderExtract(body: Json): string[] {
   if (sourceUrl) lines.push(`source: ${sourceUrl}`);
   const first = claims[0] ? asString(claims[0].claim) : undefined;
   if (first) lines.push(`next: ov submit ${JSON.stringify(first)}`);
+  return lines;
+}
+
+// ---------------------------------------------------------------------------
+// Jury roster
+// ---------------------------------------------------------------------------
+
+/** "0.1 SUI" for a MIST string; "-" when the amount is missing or malformed. */
+function suiAmount(mist: string | undefined): string {
+  if (mist === undefined) return "-";
+  const formatted = formatSui(mist);
+  return formatted === null ? "-" : `${formatted} SUI`;
+}
+
+/** "0.1 SUI staked" on a staked seat, "operator" when the operator posted the bond. */
+function stakeWords(agent: AgentDirectoryEntry): string {
+  return agent.stakeMist === undefined ? "operator" : suiAmount(agent.stakeMist);
+}
+
+/** "24 seats, 7 committed, 2 revealed, 1 agreed" or "no seats yet". */
+function trackRecordWords(agent: AgentDirectoryEntry): string {
+  const record = agent.trackRecord;
+  if (!record || record.seatsServed === 0) return "no seats yet";
+  return `${record.seatsServed} seats, ${record.committed} committed, ${record.revealed} revealed, ${record.agreedWithCertificate} agreed`;
+}
+
+/** The `ov agents` table: the jury roster, one row per seat, newest ordering left to the API. */
+export function renderAgents(agents: AgentDirectoryEntry[], base: string): string[] {
+  const families = new Map<string, number>();
+  for (const agent of agents) {
+    const name = modelName(agent.modelId);
+    families.set(name, (families.get(name) ?? 0) + 1);
+  }
+  const active = agents.filter((agent) => agent.active).length;
+  const staked = agents.filter((agent) => agent.stakeMist !== undefined).length;
+  const familyLine = [...families.entries()].map(([name, count]) => `${name} ${count}`).join(", ");
+  const rows = agents.map((agent, index) => {
+    const seat = `${shortHex(agent.agentProfileId)}${agent.active ? "" : " (inactive)"}`;
+    return `| ${index + 1} | ${seat} | ${modelLabel(agent.modelId)} | ${agent.role} | ${stakeWords(agent)} | ${suiAmount(agent.earnedMist)} | ${trackRecordWords(agent)} |`;
+  });
+  return [
+    `# OpenVerdict jury (${agents.length} seats, ${active} active)`,
+    "",
+    `families: ${familyLine || "none"}`,
+    `staked seats: ${staked} of ${agents.length} (the rest carry a bond the operator posted)`,
+    "",
+    "| # | Seat | Model | Role | Stake | Earned | Track record |",
+    "| --- | --- | --- | --- | --- | --- | --- |",
+    ...rows,
+    "",
+    "Full ids and links:",
+    ...agents.map((agent, index) => `- ${index + 1}: ${agent.agentProfileId} ${agentLink(base, agent.agentProfileId)}`),
+    "",
+    `one seat: ov agent <id>. Stake on a seat at ${base}/agents (0.1 SUI minimum, a browser wallet or a Google sign-in through zkLogin).`,
+  ];
+}
+
+/** The `ov agent <id>` block: one seat and its published manifest. */
+export function renderAgent(
+  agent: AgentDirectoryEntry,
+  manifest: AgentManifestDocument | undefined,
+  base: string,
+): string[] {
+  const record = agent.trackRecord;
+  const lines = [
+    `seat       ${agent.agentProfileId}`,
+    `link       ${agentLink(base, agent.agentProfileId)}`,
+    `model      ${agent.modelId} (${modelLabel(agent.modelId)})`,
+    `role       ${agent.role}`,
+    `active     ${agent.active ? "yes" : "no"}`,
+    agent.staker === undefined
+      ? "stake      the operator posted this seat's bond"
+      : `stake      ${suiAmount(agent.stakeMist)} staked by ${agent.staker}`,
+    `earned     ${suiAmount(agent.earnedMist)} in jury reward tickets (lifetime, awarded on chain, withdrawn or not)`,
+    record
+      ? `track      ${record.seatsServed} seats served, ${record.committed} committed, ${record.revealed} revealed, ${record.agreedWithCertificate} agreed with the certificate`
+      : "track      no track record recorded",
+    `owner      ${agent.owner} (the seat's operational signing key)`,
+    `manifest   ${agent.manifestHash}`,
+  ];
+  if (!manifest) {
+    lines.push("           no manifest document published for this seat (404 manifest_not_found)");
+    return lines;
+  }
+  // The tool policy grew fields with every manifest version, so read it as a
+  // plain record and print only the fields this document actually carries.
+  const toolPolicy: Json = (manifest.toolPolicy ?? {}) as unknown as Json;
+  const budgets = [
+    asNumber(toolPolicy.maxSearches) === undefined ? undefined : `${asNumber(toolPolicy.maxSearches)} searches`,
+    asNumber(toolPolicy.maxOpens) === undefined ? undefined : `${asNumber(toolPolicy.maxOpens)} opens`,
+    asNumber(toolPolicy.maxTurns) === undefined ? undefined : `${asNumber(toolPolicy.maxTurns)} turns`,
+  ].filter((part): part is string => part !== undefined);
+  lines.push(
+    `           version ${manifest.version}, network ${manifest.network}, provider ${manifest.providerId}`,
+    `prompt     spec v${manifest.promptSpec.version}, hash ${manifest.promptHash}`,
+    `tools      policy v${asString(toolPolicy.version) ?? "?"}, hash ${manifest.toolPolicyHash}${
+      asArray(toolPolicy.tools).length > 0 ? `, ${asArray(toolPolicy.tools).join(" and ")}` : ""
+    }${budgets.length > 0 ? `, at most ${budgets.join(", ")}` : ""}`,
+    `evidence   ${manifest.evidencePolicyId}, hash ${manifest.evidencePolicyHash}`,
+    // humanBackingHash is the on-chain field name; in words it is the staker hash.
+    `staker     hash ${manifest.humanBackingHash} (${manifest.humanVerificationProvider}); a staker hash, never an identity`,
+  );
   return lines;
 }
 

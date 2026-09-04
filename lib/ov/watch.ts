@@ -5,10 +5,7 @@
  * A small state machine with injected fetch (through Api), clock and sleep,
  * so the tests drive it through a virtual clock and run instantly:
  *
- *   resolve target      claim link -> CLAIM, queue link -> QUEUE,
- *                       bare id -> try the claim, then the queue
- *   QUEUE               poll every 30 s, print weather changes, LAUNCHED -> CLAIM,
- *                       EXPIRED or CANCELLED -> exit 3, budget spent -> exit 4
+ *   resolve target      a claim link or a bare id -> CLAIM
  *   CLAIM               read the claim record (seats, chain); GAVE_UP -> exit 3;
  *                       VOIDED -> relaunched ? CLAIM(new) : VOID_WAIT; otherwise
  *                       race three tasks, first outcome wins, the rest are aborted:
@@ -21,7 +18,7 @@
  * Every request has a timeout and the SSE reader is aborted on every exit
  * path, so the process never hangs.
  */
-import type { AttemptChain, ClaimInspection, FinalizeReport, QueuedFactCheck } from "../engine/contract";
+import type { AttemptChain, ClaimInspection, FinalizeReport } from "../engine/contract";
 import { CLAIM_STATE } from "../protocol/constants";
 import { Api, OvError, asArray, asString, type Sleep, type StreamEvent } from "./api";
 import {
@@ -32,18 +29,15 @@ import {
   formatScore,
   gaveUpWords,
   isFinalState,
-  queueStatusWords,
   renderEvent,
   stateWords,
   suivisionObject,
   voidWords,
-  weatherInline,
   type EventContext,
   type SeatIndex,
 } from "./render";
 
 export const DEFAULT_WATCH_BUDGET_MS = 9 * 60_000;
-const QUEUE_POLL_MS = 30_000;
 const CLAIM_POLL_MS = 60_000;
 const RECONNECT_BASE_MS = 1_000;
 const MAX_RECONNECTS = 5;
@@ -51,8 +45,8 @@ const MAX_RECONNECTS = 5;
 const REFRESH_MIN_GAP_MS = 10_000;
 
 export type WatchTarget = {
-  /** "id" is a bare 0x id that may be a claim or a queue item. */
-  kind: "claim" | "queue" | "id";
+  /** "id" is a bare 0x id; "claim" came from a claim link. Both name a claim. */
+  kind: "claim" | "id";
   id: string;
 };
 
@@ -71,7 +65,6 @@ export type WatchOptions = {
   out: (line: string) => void;
   /** stderr: notes that must not pollute --json output. */
   err: (line: string) => void;
-  queuePollMs?: number;
   claimPollMs?: number;
   streamIdleMs?: number;
   reconnectBaseMs?: number;
@@ -81,7 +74,6 @@ export type WatchOptions = {
 export type WatchResult = {
   exitCode: 0 | 2 | 3 | 4;
   claimId?: string;
-  queueId?: string;
   state?: number;
   lastSequence: number;
   result?: FinalizeReport | null;
@@ -101,11 +93,10 @@ type Outcome =
 
 type Context = WatchOptions & {
   deadlineMs: number;
-  queuePollMs: number;
   claimPollMs: number;
   reconnectBaseMs: number;
   maxReconnects: number;
-  /** The first claim or queue id the user asked for, for the "run again" hint. */
+  /** The claim id the user asked for, for the "run again" hint. */
   requested: string;
 };
 
@@ -117,7 +108,6 @@ export async function watch(options: WatchOptions): Promise<WatchResult> {
   const context: Context = {
     ...options,
     deadlineMs: options.now() + options.budgetMs,
-    queuePollMs: options.queuePollMs ?? QUEUE_POLL_MS,
     claimPollMs: options.claimPollMs ?? CLAIM_POLL_MS,
     reconnectBaseMs: options.reconnectBaseMs ?? RECONNECT_BASE_MS,
     maxReconnects: options.maxReconnects ?? MAX_RECONNECTS,
@@ -126,14 +116,7 @@ export async function watch(options: WatchOptions): Promise<WatchResult> {
   let result: WatchResult;
   try {
     const resolved = await resolveTarget(context);
-    const since = options.since ?? 0;
-    if (resolved.kind === "queue") {
-      const handoff = await followQueue(context, resolved.id);
-      result = handoff.kind === "launched" ? await followClaim(context, handoff.claimId, since, undefined) : handoff.result;
-      result.queueId = resolved.id;
-    } else {
-      result = await followClaim(context, resolved.id, since, resolved.inspection);
-    }
+    result = await followClaim(context, resolved.id, options.since ?? 0, resolved.inspection);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     context.err(`error: ${message}`);
@@ -148,7 +131,6 @@ function summaryOf(result: WatchResult): Record<string, unknown> {
   return {
     kind: "watch_summary",
     claimId: result.claimId ?? null,
-    queueId: result.queueId ?? null,
     state: result.state ?? null,
     stateLabel: result.state === undefined ? null : stateWords(result.state),
     lastSequence: result.lastSequence,
@@ -159,20 +141,13 @@ function summaryOf(result: WatchResult): Record<string, unknown> {
   };
 }
 
-type Resolved =
-  | { kind: "claim"; id: string; inspection?: ClaimInspection }
-  | { kind: "queue"; id: string };
+type Resolved = { kind: "claim"; id: string; inspection?: ClaimInspection };
 
-/** A bare id is tried as a claim first, then as a queue item. */
 async function resolveTarget(context: Context): Promise<Resolved> {
   const { target, api } = context;
-  if (target.kind === "queue") return { kind: "queue", id: target.id };
   const inspection = await api.claim(target.id);
   if (inspection) return { kind: "claim", id: target.id, inspection };
-  if (target.kind === "claim") throw new OvError(`claim not found: ${target.id}`);
-  const item = await api.queue(target.id);
-  if (item) return { kind: "queue", id: target.id };
-  throw new OvError(`not found as a claim or a queue item: ${target.id}`);
+  throw new OvError(`claim not found: ${target.id}`);
 }
 
 function remainingMs(context: Context): number {
@@ -184,59 +159,6 @@ function say(context: Context, kind: string, detail: string): void {
   const line = `${clockTime(context.now())}  ${kind.padEnd(17)}  ${detail}`;
   if (context.json) context.err(line);
   else context.out(line);
-}
-
-// ---------------------------------------------------------------------------
-// QUEUE
-// ---------------------------------------------------------------------------
-
-type QueueHandoff = { kind: "launched"; claimId: string } | { kind: "ended"; result: WatchResult };
-
-async function followQueue(context: Context, queueId: string): Promise<QueueHandoff> {
-  let lastLine: string | undefined;
-  let lastError: string | undefined;
-  for (;;) {
-    const item = await context.api.queue(queueId);
-    if (!item) throw new OvError(`queue item not found: ${queueId}`);
-    if (context.json) context.out(JSON.stringify(queueStatusEvent(context, item)));
-    if (item.status === "LAUNCHED" && item.claimId) {
-      say(context, "launched", `claim ${item.claimId} ${claimLink(context.api.base, item.claimId)}`);
-      return { kind: "launched", claimId: item.claimId };
-    }
-    if (item.status === "EXPIRED" || item.status === "CANCELLED") {
-      const reason = `${queueStatusWords(item)}${item.launchError ? `: ${item.launchError}` : ""}`;
-      say(context, item.status.toLowerCase(), reason);
-      return { kind: "ended", result: { exitCode: 3, queueId, lastSequence: 0, reason } };
-    }
-    const line = `waiting for clear weather: ${weatherInline(item.weather)}`;
-    if (line !== lastLine) {
-      say(context, "queued", line);
-      lastLine = line;
-    }
-    if (item.launchError && item.launchError !== lastError) {
-      say(context, "launch error", item.launchError);
-      lastError = item.launchError;
-    }
-    const remaining = remainingMs(context);
-    if (remaining <= 0) {
-      const reason = `still queued; run again with: ov watch ${queueId}`;
-      say(context, "stopped", reason);
-      return { kind: "ended", result: { exitCode: 4, queueId, lastSequence: 0, reason } };
-    }
-    await context.sleep(Math.min(context.queuePollMs, remaining));
-  }
-}
-
-function queueStatusEvent(context: Context, item: QueuedFactCheck): Record<string, unknown> {
-  return {
-    kind: "queue_status",
-    at: new Date(context.now()).toISOString(),
-    queueId: item.queueId,
-    status: item.status,
-    ...(item.claimId ? { claimId: item.claimId } : {}),
-    ...(item.launchError ? { launchError: item.launchError } : {}),
-    weather: item.weather,
-  };
 }
 
 // ---------------------------------------------------------------------------

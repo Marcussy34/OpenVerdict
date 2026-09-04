@@ -9,6 +9,17 @@ resolution certificates anyone can recompute, with every opened page, run
 bundle and evidence manifest public on Walrus. Live on Sui testnet. Anyone can
 stake 0.1 SUI on a juror seat and earn that seat's jury rewards.
 
+## Give this to your agent
+
+    Set up https://app.openverdict.info/SKILL.md and take it from there.
+
+That URL serves the repository's `skills/openverdict/SKILL.md` from disk. It is
+the whole agent contract: what OpenVerdict is, how to set yourself up at
+whichever rung you can reach (plain HTTPS, the `ov` CLI, or the skill folder), a
+map of every page and every API route, and how to present a verdict. Works with
+any agent that can read a link. This file stays the zero-install fallback for an
+agent with nothing but HTTP.
+
 ## Docs
 
 The technical reference is on the web at https://docs.openverdict.info, the
@@ -16,7 +27,7 @@ same deployment as the app and served at /docs on the other hosts: how a
 verdict happens, the trust model, staking, the agent guide, the Gonka
 integration, the API, the contracts, the limits, an audit guide and a
 glossary. The repository files below are the record. Their paths are relative
-to the repository root; no public repository URL is published yet.
+to the root of https://github.com/Marcussy34/OpenVerdict.
 
 - `README.md`: the product, the architecture, the honest limits.
 - `AGENTS.md`: how a coding or chat agent uses OpenVerdict.
@@ -55,7 +66,8 @@ Check it against sources that are not ours:
 - Sui JSON-RPC: `https://sui-testnet-rpc.publicnode.com` or
   `https://fullnode.testnet.sui.io:443` (`sui_getObject`,
   `sui_getTransactionBlock`).
-- Sui explorer: `https://testnet.suivision.xyz/txblock/<digest>` and `/object/<id>`.
+- Sui explorers: `https://suiscan.xyz/testnet/tx/<digest>` for a transaction and
+  `https://testnet.suivision.xyz/object/<id>` for an object.
 - Walrus: `https://aggregator.walrus-testnet.walrus.space/v1/blobs/<blobId>`.
 - GonkaRouter: `https://api.gonkarouter.io/v1/receipts/<gatewayRequestId>`.
 
@@ -86,11 +98,38 @@ from the public sources and prints one line per check, `pnpm ov trace <link>`
 prints the research trail, and https://app.openverdict.info/verify does the
 same checks in the browser.
 
-## Optional
+## The skill and the CLI in full
 
-- `.claude/skills/openverdict-audit/`: Claude Code skill that audits a verdict
-  or runs a verification end to end from chat.
+One agent skill plus one CLI cover the whole app, not only the audit: the claim
+board, the jury roster and one seat's manifest, the weather, claim extraction,
+submission, the live watch, the audit and the research trail.
+
+The skill is written in the open Agent Skills format (https://agentskills.io),
+so any agent that reads that format can load it. Install it with the `skills`
+CLI (https://skills.sh):
+
+```
+npx skills add Marcussy34/OpenVerdict
+```
+
+That works with Claude Code, Codex, Cursor, Gemini CLI, GitHub Copilot, VS Code,
+OpenCode, Amp and any other agent that reads the format.
+
+The skill's two launchers run the repository's own code, so clone it for the
+`ov` CLI:
+
+```
+git clone https://github.com/Marcussy34/OpenVerdict.git
+cd OpenVerdict && pnpm install
+pnpm ov help
+```
+
+`ov` needs no key, no wallet and no database. Commands: weather, board (alias
+claims), agents, agent, extract, submit, status, watch, audit, trace.
+
+The skill lives at `skills/openverdict/`: `SKILL.md`, `references/reference.md`,
+`references/faq.md`, and the launchers `scripts/ov.sh` and `scripts/run.sh`.
+`.claude/skills/openverdict-audit` and `.agents/skills/openverdict` are symlinks
+to that one folder, so both discovery conventions find the same skill.
+
 - `docs/demo/runbook.md`: preserved live testnet claim ids.
-- Terminal: `pnpm install && pnpm ov help` gives the public CLI (weather,
-  board, extract, submit, queue, status, watch, audit, trace). No key, no
-  wallet, no database.

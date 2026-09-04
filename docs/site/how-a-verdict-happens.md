@@ -86,7 +86,7 @@ sequenceDiagram
     participant S as Sui
 
     U->>API: POST /api/fact-checks
-    API->>E: queue or launch (weather gate)
+    API->>E: launch or refuse (weather gate)
     E->>W: write statement and criteria blobs
     E->>S: create_claim (state REVIEW_REQUESTED)
     E->>W: write evidence artifacts, then the manifest
@@ -172,7 +172,7 @@ proposal < challenge < first_commit < first_reveal
 
 The whole ladder is capped by `MAX_TOTAL_DURATION_MS`, thirty days
 (`claim.move:28`). The hosted offsets the engine uses, measured from the create
-transaction, are set in `defaultDeadlines` at `lib/engine/engine.ts:6188-6198`:
+transaction, are set in `defaultDeadlines` at `lib/engine/engine.ts:6095-6105`:
 
 | Deadline | Offset from creation | Window it opens |
 | --- | --- | --- |
@@ -192,7 +192,7 @@ those writes take roughly thirty-five seconds on testnet.
 
 Localnet uses a shorter ladder: evidence cutoff 45 s, proposal 50 s, challenge
 55 s, first commit 360 s, first reveal 480 s, discussion 600 s, second commit
-720 s, second reveal 840 s (`lib/engine/engine.ts:6130-6142`).
+720 s, second reveal 840 s (`lib/engine/engine.ts:6037-6049`).
 
 ### The acceptance window
 
@@ -277,7 +277,7 @@ artifacts on top of the phase-one set:
 | Round-one public record | `round-1-public-record:<claimId>` | `urn:openverdict:round-1-public-record` |
 | Deliberation transcript | `deliberation-transcript:<claimId>` | `urn:openverdict:deliberation-transcript` |
 
-Source: `lib/engine/engine.ts:218-222`, `:6378-6382`. An empty artifact set is
+Source: `lib/engine/engine.ts:216-220`, `:6263-6267`. An empty artifact set is
 an error, not an empty freeze.
 
 `DEFAULT_EVIDENCE_FREEZE_LEAD_MS` is 30000 ms, overridable by
@@ -498,7 +498,7 @@ records `coreHash = blake2b256(canonicalJson(core))`. Before the commit only
 the ciphertext is on Walrus, cited by `approve_run` as both `run_blob_id` and
 `tool_blob_id`. At the reveal the plaintext core plus the key is published as
 the reveal argument blob (`lib/engine/runBundle.ts:194-231`,
-`lib/engine/engine.ts:2815-2837`, `:1865-1917`).
+`lib/engine/engine.ts:2722-2744`, `:1772-1824`).
 
 A seat that fails still leaves a public record: an `InferenceFailureV1`
 document with its status, message, failure time, the transcript at that moment
@@ -553,7 +553,7 @@ the order **is** the contract.
 | 15 | `requested_at_ms` | `u64` | 8 little-endian |
 | 16 | `completed_at_ms` | `u64` | 8 little-endian |
 
-Source: `lib/protocol/bcs.ts:20-37`, built at `lib/engine/engine.ts:2762-2780`.
+Source: `lib/protocol/bcs.ts:20-37`, built at `lib/engine/engine.ts:2669-2687`.
 
 For a table vote the transcript is null and `tool_transcript_hash` is
 `EMPTY_TOOL_TRANSCRIPT_HASH`, which is `blake2b256` over a **one-byte preimage
@@ -669,7 +669,7 @@ never be forced into a yes or a no.
 
 A split first round opens a debate. It is deliberation spec V4 by default;
 `selectedDeliberationSpec` returns V3 only when `OPENVERDICT_DELIBERATION_SPEC`
-is exactly `"3"` (`lib/engine/engine.ts:283`).
+is exactly `"3"` (`lib/engine/engine.ts:279`).
 
 `MAX_DELIBERATION_EXCHANGES` is 3. An **exchange** is one full pass in which
 every debater speaks exactly once. The per-turn budget is 60000 ms. The
@@ -701,7 +701,7 @@ The output contract is exactly eight keys and no others
 | `confidenceBps` | Integer 0 to 10000. | |
 | `citations` | Copied exactly from `allowedCitations`. | at most 8 unique |
 
-Bounds live at `lib/engine/engine.ts:273-276`; the citation cap at `:228`. The
+Bounds live at `lib/engine/engine.ts:269-272`; the citation cap at `:226`. The
 spec runs at temperature 0 with a 1100-token output cap. The stored turn also
 keeps an `argument` field composed as the analysis and the position joined by a
 space, so transcripts from earlier spec versions keep hashing identically.
@@ -740,7 +740,7 @@ flowchart TB
 ```
 
 The speaking order and the question hand-off, deliberation spec V4. Source:
-`lib/engine/debateOrder.ts:55-240` and `lib/engine/engine.ts:5013-5102`.
+`lib/engine/debateOrder.ts:55-240` and `lib/engine/engine.ts:4920-5009`.
 
 Two details the diagram compresses. A question aimed at a seat that already
 spoke is **carried** and delivered on that seat's next turn. And if a sibling
@@ -871,7 +871,7 @@ seat.
 | `MISSING_COMMITTEE` | The claim was still in `REVIEW_REQUESTED` at the first commit deadline, so no committee can ever be drawn | `workers/resolution-worker.ts:177-183` |
 | `MISSING_COMMIT` | Not all expected seats committed by the phase's commit deadline | `workers/resolution-worker.ts:194-200` |
 | `MISSING_REVEAL` | Not all expected seats revealed by the phase's reveal deadline | `workers/resolution-worker.ts:225-231` |
-| `INVALID_SCHEMA` | A run produced no valid output | `lib/engine/engine.ts:3990-3996` |
+| `INVALID_SCHEMA` | A run produced no valid output | `lib/engine/engine.ts:3897-3903` |
 | `CITATION_INVALID` | Citation rules unmet after the nudges and repairs | same |
 | `TIMEOUT` | The run did not finish in its budget | same |
 | `PROVIDER_ERROR` | The gateway failed the run | same |
@@ -901,16 +901,18 @@ flowchart TB
 ```
 
 The attempt ladder: at most three attempts, and a relaunch only when the models
-are demonstrably answering. Source: `lib/engine/engine.ts:865-1025`.
+are demonstrably answering. Source: `lib/engine/engine.ts:822-932`.
 
 **The weather gate** exists because a jury with no web search answers UNSURE on
 everything. The engine probes the three model families and the research
 provider together. A report is marked stale after five minutes, and it is clear
 only when it is fresh and every family answered. A submission arriving under
-clear or stale weather launches immediately; otherwise it is queued with a hold
-reason of `WEATHER` and a six-hour lifetime, and the queue launches at most one
-jury every ten minutes. That spacing exists because three concurrent juries
-drew a rate-limit storm from the shared gateway on 2026-09-03.
+clear or stale weather launches immediately; under fresh bad weather it is
+refused outright, with a 503 carrying the weather report and a `Retry-After`
+header, and nothing is stored. There is no queue: the submitter decides when to
+send it again. Relaunches of voided attempts are spaced at one every ten
+minutes, because three concurrent juries drew a rate-limit storm from the
+shared gateway on 2026-09-03.
 
 ## 11. Every timing constant
 
@@ -919,21 +921,20 @@ drew a rate-limit storm from the shared gateway on 2026-09-03.
 | `ACCEPTANCE_WINDOW_MS` | 20000 ms | `move/openverdict/sources/jury.move:37` |
 | `MAX_TOTAL_DURATION_MS` | 2592000000 ms (30 days) | `move/openverdict/sources/claim.move:28` |
 | `WITHDRAWAL_DELAY_MS` | 86400000 ms (24 hours) | `move/openverdict/sources/agent_registry.move:42` |
-| `DEFAULT_EVIDENCE_FREEZE_LEAD_MS` | 30000 ms | `lib/engine/engine.ts:227` |
-| `MAX_DELIBERATION_EXCHANGES` | 3 | `lib/engine/engine.ts:231` |
-| `MAX_VERIFICATION_ATTEMPTS` | 3 | `lib/engine/engine.ts:233` |
-| `PER_TURN_BUDGET_MS` | 60000 ms | `lib/engine/engine.ts:223` |
-| `SEAT_COMMIT_MARGIN_MS` | 60000 ms | `lib/engine/engine.ts:5866` |
-| `COMMIT_PUMP_INTERVAL_MS` | 5000 ms | `lib/engine/engine.ts:5868` |
-| `RELAUNCH_GIVE_UP_MS` | 21600000 ms (6 hours) | `lib/engine/engine.ts:237` |
-| `RELAUNCH_PROBE_TIMEOUT_MS` | 60000 ms | `lib/engine/engine.ts:239` |
-| `RELAUNCH_WEATHER_CACHE_MS` | 120000 ms | `lib/engine/engine.ts:235` |
-| `WEATHER_PROBE_INTERVAL_MS` | 120000 ms | `lib/engine/engine.ts:241` |
-| `WEATHER_STALE_MS` | 300000 ms | `lib/engine/engine.ts:243` |
-| `QUEUE_TTL_MS` | 21600000 ms (6 hours) | `lib/engine/engine.ts:245` |
-| `QUEUE_LAUNCH_SPACING_MS` | 600000 ms (10 minutes) | `lib/engine/engine.ts:257` |
-| `RESEARCH_PROBE_TIMEOUT_MS` | 15000 ms | `lib/engine/engine.ts:249` |
-| `STAKE_RESERVATION_TTL_MS` | 900000 ms (15 minutes) | `lib/engine/engine.ts:211` |
+| `DEFAULT_EVIDENCE_FREEZE_LEAD_MS` | 30000 ms | `lib/engine/engine.ts:225` |
+| `MAX_DELIBERATION_EXCHANGES` | 3 | `lib/engine/engine.ts:229` |
+| `MAX_VERIFICATION_ATTEMPTS` | 3 | `lib/engine/engine.ts:231` |
+| `PER_TURN_BUDGET_MS` | 60000 ms | `lib/engine/engine.ts:221` |
+| `SEAT_COMMIT_MARGIN_MS` | 60000 ms | `lib/engine/engine.ts:5817` |
+| `COMMIT_PUMP_INTERVAL_MS` | 5000 ms | `lib/engine/engine.ts:5819` |
+| `RELAUNCH_GIVE_UP_MS` | 21600000 ms (6 hours) | `lib/engine/engine.ts:235` |
+| `RELAUNCH_PROBE_TIMEOUT_MS` | 60000 ms | `lib/engine/engine.ts:237` |
+| `RELAUNCH_WEATHER_CACHE_MS` | 120000 ms | `lib/engine/engine.ts:233` |
+| `WEATHER_PROBE_INTERVAL_MS` | 120000 ms | `lib/engine/engine.ts:239` |
+| `WEATHER_STALE_MS` | 300000 ms | `lib/engine/engine.ts:241` |
+| `RELAUNCH_SPACING_MS` | 600000 ms (10 minutes) | `lib/engine/engine.ts:253` |
+| `RESEARCH_PROBE_TIMEOUT_MS` | 15000 ms | `lib/engine/engine.ts:245` |
+| `STAKE_RESERVATION_TTL_MS` | 900000 ms (15 minutes) | `lib/engine/engine.ts:209` |
 | `maxLoopMs` | 600000 ms | `lib/gonka/promptSpec.ts:93`, `:143` |
 | `MIN_RETRY_CALL_MS` | 20000 ms | `lib/research/loop.ts:249` |
 | `NO_EVIDENCE_GRACE_MS` | 60000 ms | `workers/evidence-worker.ts:13` |

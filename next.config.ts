@@ -22,6 +22,10 @@ const nextConfig: NextConfig = {
       "./AGENTS.md",
     ],
     "/sitemap.xml": ["./docs/site/*.md"],
+    // /SKILL.md and /skill/<file> serve the canonical skill folder from disk,
+    // so the tracer has to follow it into the bundle the same way.
+    "/SKILL.md": ["./skills/openverdict/**"],
+    "/skill/[...path]": ["./skills/openverdict/**"],
   },
   // CSP is omitted because wallet extensions and the Enoki sign-in popup
   // inject scripts.

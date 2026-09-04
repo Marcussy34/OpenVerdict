@@ -32,7 +32,7 @@ flowchart TB
 ```
 
 The stake lifecycle. Source: `move/openverdict/sources/agent_registry.move:231-360`,
-`jury.move:973-1015`, `settlement.move:240-276`, `lib/engine/engine.ts:4388-4594`.
+`jury.move:973-1015`, `settlement.move:240-276`, `lib/engine/engine.ts:4295-4501`.
 
 ## The minimum stake
 

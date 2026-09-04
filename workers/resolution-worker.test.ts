@@ -414,7 +414,7 @@ describe("resolution worker triage", () => {
     expect(ordered[4]).toBe(CLAIM_STATE.DISCUSSION);
   });
 
-  it("runs weather, relaunch, and queue work independently in order", async () => {
+  it("runs weather and relaunch work independently in order", async () => {
     const calls: string[] = [];
     const engine = {
       weatherTick: vi.fn(async () => {
@@ -426,17 +426,13 @@ describe("resolution worker triage", () => {
         calls.push("relaunch");
         throw new Error("relaunch failed");
       }),
-      queueTick: vi.fn(async () => {
-        calls.push("queue");
-        throw new Error("queue failed");
-      }),
     };
     getServerEngineMock.mockResolvedValue(engine);
     const stderr = vi.spyOn(process.stderr, "write").mockReturnValue(true);
 
     await expect(resolutionWorkerTick()).resolves.toBe(false);
 
-    expect(calls).toEqual(["weather", "relaunch", "queue"]);
-    expect(stderr).toHaveBeenCalledTimes(3);
+    expect(calls).toEqual(["weather", "relaunch"]);
+    expect(stderr).toHaveBeenCalledTimes(2);
   });
 });

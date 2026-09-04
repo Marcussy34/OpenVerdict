@@ -26,13 +26,11 @@ describe("Api", () => {
       "GET /api/claims/0x1": () => json({ error: "claim_not_found", message: "claim was not found: 0x1" }, 404),
       "GET /api/claims/0x2": () => json({ error: "internal_error", message: "claim was not found: 0x2" }, 500),
       "GET /api/claims/0x3": () => json({ error: "internal_error", message: "database down" }, 500),
-      "GET /api/fact-checks/queue/0x4": () => json({ error: "not_found" }, 404),
     });
     const api = new Api({ base: BASE, fetch: net.fetch });
     expect(await api.claim("0x1")).toBeUndefined();
     expect(await api.claim("0x2")).toBeUndefined();
     await expect(api.claim("0x3")).rejects.toThrow("claim request failed: internal_error: database down");
-    expect(await api.queue("0x4")).toBeUndefined();
   });
 
   it("wraps network failures and timeouts as OvError exit 2", async () => {

@@ -353,83 +353,13 @@ describe("watch: live claims", () => {
     expect(h.out).toEqual(["10:00:00Z  gave up            attempt 2 of 3 gave up: WEATHER_TIMEOUT; no more attempts"]);
   });
 
-  it("exits 2 for an id that is neither a claim nor a queue item", async () => {
+  it("exits 2 for an id that is not a claim", async () => {
     const h = harness({ kind: "id", id: "0x0" });
     h.net.route("GET /api/claims/0x0", () => json({ error: "internal_error", message: "claim was not found: 0x0" }, 500));
-    h.net.route("GET /api/fact-checks/queue/0x0", () => json({ error: "not_found" }, 404));
     const result = await h.run();
 
     expect(result.exitCode).toBe(2);
-    expect(h.err).toEqual(["error: not found as a claim or a queue item: 0x0"]);
-  });
-});
-
-describe("watch: queue hand-off", () => {
-  const QUEUE_ID = `0x${"9f".repeat(32)}`;
-  const weatherNotClear = {
-    probedAtMs: START_MS - 30_000,
-    stale: false,
-    clear: false,
-    families: [
-      { modelId: "deepseek-ai/DeepSeek-V4-Flash-0731", family: "deepseek", ok: false, latencyMs: 60_005, status: "429" },
-      { modelId: "MiniMaxAI/MiniMax-M2.7", family: "minimax", ok: true, latencyMs: 700, status: "200" },
-      { modelId: "moonshotai/Kimi-K2.6", family: "kimi", ok: false, latencyMs: 60_005, status: "TIMEOUT" },
-      { modelId: "research:firecrawl", family: "research", ok: true, latencyMs: 300, status: "200" },
-    ],
-  };
-  const weatherClear = { ...weatherNotClear, clear: true, families: weatherNotClear.families.map((family) => ({ ...family, ok: true, status: "200" })) };
-  const queued = (weather: unknown, extra: Record<string, unknown> = {}) => ({
-    queueId: QUEUE_ID,
-    status: "QUEUED",
-    statement: "The Eiffel Tower was completed in 1889.",
-    createdAt: new Date(START_MS - 60_000).toISOString(),
-    expiresAt: new Date(START_MS + 6 * 3_600_000).toISOString(),
-    weather,
-    ...extra,
-  });
-
-  it("polls the queue, prints weather changes, then follows the launched claim", async () => {
-    const h = harness({ kind: "queue", id: QUEUE_ID });
-    h.net.route(
-      `GET /api/fact-checks/queue/${QUEUE_ID}`,
-      sequence([
-        { body: queued(weatherNotClear) },
-        { body: queued(weatherNotClear) },
-        { body: queued(weatherClear) },
-        { body: queued(weatherClear, { status: "LAUNCHED", claimId: FINALIZED_ID }) },
-      ]),
-    );
-    Object.entries(finalizedRoutes(h.clock)).forEach(([key, route]) => h.net.route(key, route));
-    const result = await h.run();
-
-    expect(result.exitCode).toBe(0);
-    expect(result.queueId).toBe(QUEUE_ID);
-    expect(result.claimId).toBe(FINALIZED_ID);
-    expect(h.out.slice(0, 3)).toEqual([
-      "10:00:00Z  queued             waiting for clear weather: DeepSeek 429, MiniMax ok, Kimi TIMEOUT, Web search ok",
-      "10:01:00Z  queued             waiting for clear weather: DeepSeek ok, MiniMax ok, Kimi ok, Web search ok",
-      `10:01:30Z  launched           claim ${FINALIZED_ID} ${BASE}/claims/${FINALIZED_ID}`,
-    ]);
-    expect(h.out.at(-1)).toBe(`audit it: ov audit ${FINALIZED_ID}`);
-    expect(h.clock.pending()).toBe(0);
-  });
-
-  it("exits 3 when the queue item expired", async () => {
-    const h = harness({ kind: "queue", id: QUEUE_ID });
-    h.net.route(`GET /api/fact-checks/queue/${QUEUE_ID}`, () => json(queued(weatherNotClear, { status: "EXPIRED" })));
-    const result = await h.run();
-    expect(result.exitCode).toBe(3);
-    expect(h.out).toEqual(["10:00:00Z  expired            EXPIRED (queued items expire after six hours)"]);
-  });
-
-  it("exits 4 when the budget ends while still queued", async () => {
-    const h = harness({ kind: "id", id: QUEUE_ID });
-    h.net.route(`GET /api/claims/${QUEUE_ID}`, () => json({ error: "claim_not_found" }, 404));
-    h.net.route(`GET /api/fact-checks/queue/${QUEUE_ID}`, () => json(queued(weatherNotClear)));
-    const result = await h.run({ budgetMs: 2 * 60_000 });
-    expect(result.exitCode).toBe(4);
-    expect(h.out.at(-1)).toBe(`10:02:00Z  stopped            still queued; run again with: ov watch ${QUEUE_ID}`);
-    expect(h.clock.pending()).toBe(0);
+    expect(h.err).toEqual(["error: claim not found: 0x0"]);
   });
 });
 

@@ -130,8 +130,8 @@ Four things are genuinely operator-only:
    disclosed and must be encrypted at rest before any mainnet use.
 2. **Reveal keys before publication.** The engine holds each run's AES key until
    the reveal. The Seal escrow below is the mitigation.
-3. **The weather probe history and the submission queue.** Both have public
-   read endpoints but no chain or Walrus backing.
+3. **The weather probe history.** It has a public read endpoint but no chain
+   or Walrus backing.
 4. **Stake reservations.** Pre-transaction bookkeeping only.
 
 Everything else in the database is re-derivable from Sui objects and events
@@ -342,8 +342,8 @@ The operator **can**, and this is disclosed rather than defended:
 
 - run the whole pipeline upstream of the commitment, because the run attestor
   and evidence freezer capabilities are single and team-held;
-- decide when claims launch, through the queue and the weather gate, and pause,
-  deploy or simply fail to run;
+- decide when claims launch, through the weather gate, and pause, deploy or
+  simply fail to run;
 - hold Seal keys and salts in plaintext in the testnet database.
 
 ## The Seal escrow

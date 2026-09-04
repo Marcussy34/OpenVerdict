@@ -142,22 +142,13 @@ export async function resolutionWorkerTick(): Promise<boolean> {
       throw error;
     }
   });
-  // Relaunch and queue reuse this tick's probe, so it must have settled first.
+  // The relaunch reuses this tick's probe, so it must have settled first.
   await weather;
   try {
     await engine.relaunchTick();
   } catch (error) {
     process.stderr.write(
       `resolution-worker: relaunch: ${
-        error instanceof Error ? error.message : String(error)
-      }\n`,
-    );
-  }
-  try {
-    await engine.queueTick();
-  } catch (error) {
-    process.stderr.write(
-      `resolution-worker: queue: ${
         error instanceof Error ? error.message : String(error)
       }\n`,
     );

@@ -2,9 +2,10 @@
 /**
  * `ov`: the public OpenVerdict CLI (docs/superpowers/specs/2026-09-03-ov-cli-design.md).
  *
- *   pnpm ov <command> [options]      (or .claude/skills/openverdict-audit/ov.sh)
+ *   pnpm ov <command> [options]      (or skills/openverdict/scripts/ov.sh)
  *
- * Commands: weather, board, extract, submit, queue, status, watch, audit, trace, help.
+ * Commands: weather, board (alias claims), agents, agent, extract, submit,
+ * status, watch, audit, trace, help.
  * Global options: --base <url>, --json, --no-banner, --no-color, --timeout <duration>.
  * Exit codes: 0 success, 2 input or request error, 3 the claim voided or gave
  * up (watch), 4 watch stopped before the end, 5 rate limited or writes disabled.
@@ -13,12 +14,14 @@
 import { Api, DEFAULT_BASE, OvError, realSleep } from "../lib/ov/api";
 import { renderBanner, wantsColor } from "../lib/ov/banner";
 import {
+  agentCommand,
+  agentsCommand,
   auditCommand,
   boardCommand,
   extractCommand,
   helpText,
   isCommand,
-  queueCommand,
+  resolveCommand,
   statusCommand,
   submitCommand,
   traceCommand,
@@ -177,11 +180,17 @@ function one(options: CliOptions, what: string): string {
 }
 
 async function run(options: CliOptions, env: CommandEnv): Promise<number> {
-  switch (options.command) {
+  // `ov claims` is the board under the name the console uses.
+  switch (options.command === undefined ? undefined : resolveCommand(options.command)) {
     case "weather":
       return weatherCommand(env);
     case "board":
       return boardCommand(env, options.limit === undefined ? {} : { limit: options.limit });
+    case "agents":
+      if (options.positionals.length > 0) throw new OvError("agents takes no argument; one seat is ov agent <id>");
+      return agentsCommand(env);
+    case "agent":
+      return agentCommand(env, one(options, "a seat id, id prefix or link"));
     case "extract":
       if (options.positionals.length > 0) throw new OvError("extract takes --url, --text or --file, not a bare argument");
       return extractCommand(env, {
@@ -196,13 +205,11 @@ async function run(options: CliOptions, env: CommandEnv): Promise<number> {
         urls: options.urls,
         ...(options.criteria === undefined ? {} : { criteria: options.criteria }),
       });
-    case "queue":
-      return queueCommand(env, one(options, "a queue id or link"));
     case "status":
       return statusCommand(env, one(options, "a claim id or link"));
     case "watch":
       return watchCommand(env, {
-        target: one(options, "a claim id, claim link or queue id"),
+        target: one(options, "a claim id or claim link"),
         ...(options.forMs === undefined ? {} : { budgetMs: options.forMs }),
         ...(options.since === undefined ? {} : { since: options.since }),
         verbose: options.verbose,

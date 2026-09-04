@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import type { ClaimInspection, QueuedFactCheck, WeatherReport } from "../engine/contract";
+import type {
+  AgentDirectoryEntry,
+  ClaimInspection,
+  WeatherReport,
+} from "../engine/contract";
+import type { AgentManifestDocument } from "../protocol/types";
 import { OvError, type StreamEvent } from "./api";
 import { clone, fixture } from "./fixtures.test-utils";
 import {
@@ -17,9 +22,10 @@ import {
   modelName,
   parseDuration,
   phaseWords,
+  renderAgent,
+  renderAgents,
   renderEvent,
   renderExtract,
-  renderQueue,
   renderStatus,
   stateWords,
   voidWords,
@@ -35,6 +41,8 @@ const BASE = "https://ov.test";
 const FINALIZED = fixture<ClaimInspection>("claim-finalized.json");
 const VOIDED = fixture<ClaimInspection>("claim-voided.json");
 const GAVE_UP = fixture<ClaimInspection>("claim-gave-up.json");
+const AGENTS = fixture<AgentDirectoryEntry[]>("agents.json");
+const MANIFEST = fixture<AgentManifestDocument>("agent-manifest.json");
 const NOW = Date.parse("2026-09-03T10:00:00Z");
 
 const WEATHER: WeatherReport = {
@@ -153,7 +161,7 @@ describe("weather", () => {
     expect(weatherSummary(WEATHER, NOW)).toBe("not clear, probed 42 s ago");
     expect(weatherSummary({ ...WEATHER, clear: true, stale: true, probedAtMs: null }, NOW)).toBe("clear, no recent probe");
     expect(weatherInline(WEATHER)).toBe("DeepSeek 429, MiniMax ok, Kimi TIMEOUT, Web search ok");
-    expect(NOT_CLEAR_NOTE).toContain("queue until all four");
+    expect(NOT_CLEAR_NOTE).toContain("refused until all four");
   });
 });
 
@@ -201,37 +209,7 @@ describe("status block", () => {
   });
 });
 
-describe("queue and extract blocks", () => {
-  const item: QueuedFactCheck = {
-    queueId: `0x${"9f".repeat(32)}`,
-    status: "QUEUED",
-    statement: "The Eiffel Tower was completed in 1889.",
-    createdAt: new Date(NOW - 300_000).toISOString(),
-    expiresAt: new Date(NOW + 5 * 3_600_000 + 55 * 60_000).toISOString(),
-    weather: WEATHER,
-  };
-
-  it("renders a queued item with created, expires and the weather", () => {
-    const lines = renderQueue(item, BASE, NOW);
-    expect(lines[1]).toBe("status     QUEUED, waiting for clear weather (the engine launches it when all four families answer)");
-    expect(lines).toContain(`link       ${BASE}/fact-check/queue/${item.queueId}`);
-    expect(lines).toContain("created    2026-09-03T09:55:00Z (5 min ago)");
-    expect(lines).toContain("expires    2026-09-03T15:55:00Z (in 5 h 55 min)");
-    expect(lines).toContain("  Kimi        TIMEOUT");
-    expect(lines.at(-1)).toBe("  not clear, probed 42 s ago");
-  });
-
-  it("renders a launched item with the claim link and a cancelled one with its error", () => {
-    const launched = renderQueue({ ...item, status: "LAUNCHED", claimId: FINALIZED.claimId }, BASE, NOW);
-    expect(launched).toContain(`link       ${BASE}/claims/${FINALIZED.claimId}`);
-    expect(launched).toContain(`watch it   ov watch ${FINALIZED.claimId}`);
-    const cancelled = renderQueue({ ...item, status: "CANCELLED", launchError: "claim statement too short" }, BASE, NOW);
-    expect(cancelled).toContain("status     CANCELLED");
-    expect(cancelled).toContain("launch error claim statement too short");
-    const expired = renderQueue({ ...item, status: "EXPIRED" }, BASE, NOW);
-    expect(expired).toContain("status     EXPIRED (queued items expire after six hours)");
-  });
-
+describe("extract block", () => {
   it("renders extracted candidates with the next step", () => {
     const lines = renderExtract({
       claims: [
@@ -247,6 +225,50 @@ describe("queue and extract blocks", () => {
     expect(lines).toContain("   why: A dated construction fact.");
     expect(lines).toContain('   quote: "completed in 1889"');
     expect(lines.at(-1)).toBe('next: ov submit "The Eiffel Tower was completed in 1889."');
+  });
+});
+
+describe("jury roster blocks", () => {
+  it("renders the roster table with families, stake, rewards and track record", () => {
+    const lines = renderAgents(AGENTS, BASE);
+    const text = lines.join("\n");
+    expect(lines[0]).toBe("# OpenVerdict jury (3 seats, 2 active)");
+    expect(text).toContain("families: DeepSeek 1, MiniMax 1, Kimi 1");
+    expect(text).toContain("staked seats: 1 of 3 (the rest carry a bond the operator posted)");
+    // An operator seat shows "operator" where a staked seat shows the bond.
+    expect(text).toContain(
+      "| 1 | 0x4ee8af57\u2026 | DeepSeek V4 Flash | SOURCE_AUTHENTICITY | operator | 0.0066 SUI | 32 seats, 13 committed, 4 revealed, 1 agreed |",
+    );
+    expect(text).toContain(
+      "| 2 | 0x1047c939\u2026 | MiniMax M2.7 | SKEPTIC | 0.1 SUI | 0 SUI | no seats yet |",
+    );
+    expect(text).toContain("| 3 | 0x19e6bda3\u2026 (inactive) | Kimi K2.6 | SKEPTIC |");
+    expect(text).toContain(`- 1: ${AGENTS[0]!.agentProfileId} ${BASE}/agents/${AGENTS[0]!.agentProfileId}`);
+    expect(text).toContain(`Stake on a seat at ${BASE}/agents (0.1 SUI minimum`);
+  });
+
+  it("renders one seat with its manifest, and says so when there is none", () => {
+    const staked = renderAgent(AGENTS[1]!, MANIFEST, BASE).join("\n");
+    expect(staked).toContain(`link       ${BASE}/agents/${AGENTS[1]!.agentProfileId}`);
+    expect(staked).toContain(`stake      0.1 SUI staked by ${AGENTS[1]!.staker}`);
+    expect(staked).toContain("track      0 seats served, 0 committed, 0 revealed, 0 agreed with the certificate");
+
+    const operator = renderAgent(AGENTS[0]!, MANIFEST, BASE).join("\n");
+    expect(operator).toContain("stake      the operator posted this seat's bond");
+    expect(operator).toContain("earned     0.0066 SUI in jury reward tickets");
+    expect(operator).toContain("           version 6, network testnet, provider gonkarouter");
+    expect(operator).toContain(`prompt     spec v4, hash ${MANIFEST.promptHash}`);
+    expect(operator).toContain(
+      `tools      policy v4, hash ${MANIFEST.toolPolicyHash}, search and open, at most 4 searches, 5 opens, 10 turns`,
+    );
+    expect(operator).toContain(`evidence   OPENVERDICT_EVIDENCE_POLICY_V1, hash ${MANIFEST.evidencePolicyHash}`);
+    // The on-chain field is humanBackingHash; the words say staker hash.
+    expect(operator).toContain("staker     hash 0x5465859212");
+    expect(operator).toContain("a staker hash, never an identity");
+
+    const bare = renderAgent(AGENTS[0]!, undefined, BASE).join("\n");
+    expect(bare).toContain("no manifest document published for this seat (404 manifest_not_found)");
+    expect(bare).not.toContain("prompt     spec");
   });
 });
 

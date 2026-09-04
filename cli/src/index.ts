@@ -10,13 +10,14 @@ import { z } from "zod";
 import { buildHandler as buildClaimExtractionHandler } from "../../lib/claim-extraction/handler";
 import type {
   Engine,
-  FactCheckSubmission,
   ResolutionEvent,
 } from "../../lib/engine/contract";
+import { EngineError } from "../../lib/engine/errors";
 import {
   getServerClaimExtractionRuntime,
   getServerEngine,
 } from "../../lib/engine/server";
+import { weatherRefusalMessage } from "../../lib/web/weather-copy";
 import { OUTCOME, type VoteOutcome } from "../../lib/protocol";
 import { SignerRegistry } from "../../lib/sui";
 
@@ -145,9 +146,13 @@ export function createCliProgram(dependencies: CliDependencies = {}): Command {
       });
       const result = await service.factCheckSubmit(request);
       const json = jsonMode(command);
-      if (result.kind === "queued") {
-        writer.value(json ? result : formatQueuedSubmission(result), json);
-        return;
+      // Bad weather refuses the submission outright: nothing was stored, so
+      // this is a failed command, not a pending one.
+      if (result.kind === "refused") {
+        throw new EngineError(
+          result.reason,
+          weatherRefusalMessage(result.weather),
+        );
       }
       const launched = { claimId: result.claimId };
       writer.value(launched, json);
@@ -518,18 +523,6 @@ function formatExtractedClaims(
   return claims
     .map(({ claim, quote }, index) => `${index + 1}. ${claim}\n   ${quote}`)
     .join("\n");
-}
-
-function formatQueuedSubmission(
-  submission: Extract<FactCheckSubmission, { kind: "queued" }>,
-): string {
-  return [
-    `Queue ID: ${submission.queueId}`,
-    ...submission.weather.families.map(
-      (family) =>
-        `${family.family}: ${family.ok ? "ok" : "down"} (${family.latencyMs} ms, status ${family.status})`,
-    ),
-  ].join("\n");
 }
 
 function stableErrorCode(error: unknown): string {

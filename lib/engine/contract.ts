@@ -522,31 +522,17 @@ export type WeatherReport = {
   families: WeatherFamily[];
 };
 
+/**
+ * A submission either launches at once or is refused outright. Bad weather is
+ * never held: nothing is stored and the visitor submits again themselves.
+ */
 export type FactCheckSubmission =
   | { kind: "claim"; claimId: string }
-  | { kind: "queued"; queueId: string; weather: WeatherReport };
-
-export type QueuedFactCheckStatus = "QUEUED" | "LAUNCHED" | "EXPIRED" | "CANCELLED";
-
-/** A submission held until all three families answer a probe. */
-export type QueuedFactCheck = {
-  queueId: string;
-  status: QueuedFactCheckStatus;
-  statement: string;
-  createdAt: string;
-  expiresAt: string;
-  claimId?: string;
-  launchError?: string;
-  weather: WeatherReport;
-};
+  | { kind: "refused"; reason: "WEATHER_NOT_CLEAR"; weather: WeatherReport };
 
 export interface Engine {
-  /** Submit a fact check: launch now on clear or unknown weather, queue otherwise. */
+  /** Submit a fact check: launch on clear or unknown weather, refuse on bad weather. */
   factCheckSubmit(req: FactCheckRequest): Promise<FactCheckSubmission>;
-  getQueuedFactCheck(queueId: string): Promise<QueuedFactCheck | undefined>;
-  listQueuedFactChecks(): Promise<QueuedFactCheck[]>;
-  /** Launch queued submissions (one per tick) once the weather is clear; expire old ones. */
-  queueTick(): Promise<void>;
   /** Probe the three families when the stored probe is older than the interval. */
   weatherTick(): Promise<void>;
   weather(): Promise<WeatherReport>;

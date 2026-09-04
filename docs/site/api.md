@@ -94,7 +94,7 @@ to the database:
 | `verification_gave_up` | the chain gives up | `claim_id`, `verification_id`, `attempt`, `reason` |
 
 Every kind above is emitted through one helper, `Engine.emit`
-(`lib/engine/engine.ts:4903-4938`), which drops payload keys whose value is
+(`lib/engine/engine.ts:4810-4845`), which drops payload keys whose value is
 undefined before storing. The route reference below documents the transport and
 the envelope at `docs/API.md` lines 303 to 366; its list of kinds is an
 open-ended example rather than a catalogue, so this table is the complete one.

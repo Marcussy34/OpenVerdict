@@ -230,28 +230,6 @@ export const gonkaWeather = pgTable("gonka_weather", {
   probedAt: timestamp("probed_at", { withTimezone: true, mode: "string" }).notNull(),
 });
 
-/** Public submissions held until every model family answers. */
-export const factCheckQueue = pgTable(
-  "fact_check_queue",
-  {
-    queueId: text("queue_id").primaryKey(),
-    status: text("status").notNull(),
-    request: jsonb("request").notNull(),
-    holdReason: text("hold_reason").notNull(),
-    launchError: text("launch_error"),
-    launchedClaimId: text("launched_claim_id"),
-    createdAt: timestamp("created_at", { withTimezone: true, mode: "string" }).notNull(),
-    updatedAt: timestamp("updated_at", { withTimezone: true, mode: "string" }).notNull(),
-    expiresAt: timestamp("expires_at", { withTimezone: true, mode: "string" }).notNull(),
-  },
-  (table) => [
-    index("fact_check_queue_status_created_idx").on(
-      table.status,
-      table.createdAt,
-    ),
-  ],
-);
-
 export const toolCalls = pgTable(
   "tool_calls",
   {
@@ -435,7 +413,6 @@ export const storageSchema = {
   deliberationTurns,
   verificationAttempts,
   gonkaWeather,
-  factCheckQueue,
   toolCalls,
   runApprovals,
   votePackages,

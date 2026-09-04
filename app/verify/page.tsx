@@ -18,7 +18,7 @@ import { computeTruthScoreBps, agentProbabilityBps } from "@/lib/protocol/truthS
 import { toHex, fromHex } from "@/lib/protocol/hash";
 import { OUTCOME, type VoteOutcome } from "@/lib/protocol/constants";
 import type { VotePreimageV1 } from "@/lib/protocol/types";
-import { claimHref, parseClaimLink } from "@/lib/verify/claim-link";
+import { parseClaimLink } from "@/lib/verify/claim-link";
 import {
   readClaimRecord,
   shortModel,
@@ -145,8 +145,6 @@ export default function VerifyPage() {
 
   const parsedLink = useMemo(() => parseClaimLink(linkInput), [linkInput]);
   const link = parsedLink.ok ? parsedLink.link : null;
-  const href = link ? claimHref(link, origin) : null;
-  const linkOrigin = link?.origin ?? origin;
 
   const [record, setRecord] = useState<ClaimRecord | null>(null);
   const [recordError, setRecordError] = useState<string | null>(null);
@@ -447,8 +445,8 @@ export default function VerifyPage() {
             </ToggleGroupItem>
           </ToggleGroup>
         </div>
-        {/* The link field belongs to the by-hand path only: the agent prompt
-            carries a placeholder the reader replaces (owner). */}
+        {/* The link field belongs to the by-hand path only: the agent path is
+            one setup line and needs no claim (owner). */}
         {path === "manual" && (
           <>
         <div className="space-y-1.5">
@@ -508,7 +506,7 @@ export default function VerifyPage() {
       </div>
 
       {path === "agent" ? (
-        <AgentHandoff href={href} origin={linkOrigin} />
+        <AgentHandoff origin={origin} />
       ) : (
         <div className="space-y-5">
           {/* -------------------------------------- Fill from the record -- */}

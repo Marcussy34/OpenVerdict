@@ -25,7 +25,7 @@ export type ClaimLinkResult =
 /**
  * Accepts a claim link (/claims/<id>, /claims/<id>/report,
  * /claims/<id>/runs/<runId>, the /api/ forms of those) or a bare 0x id.
- * A queue link is rejected by name: a queued submission has no verdict yet.
+ * A queue link is rejected by name: the submission queue no longer exists.
  */
 export function parseClaimLink(input: string): ClaimLinkResult {
   const trimmed = input.trim();
@@ -49,7 +49,10 @@ export function parseClaimLink(input: string): ClaimLinkResult {
   if (segments[0] === "api") segments.shift();
 
   if (segments[0] === "fact-check" && segments[1] === "queue") {
-    return { ok: false, reason: "That is a queued submission, not a claim yet." };
+    return {
+      ok: false,
+      reason: "Queue links no longer exist: a submission either starts a jury at once or is refused.",
+    };
   }
   if (segments[0] !== "claims" || segments[1] === undefined) {
     return { ok: false, reason: "That is not a claim link or id." };

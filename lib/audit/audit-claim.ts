@@ -25,7 +25,8 @@ import {
 // Public types
 // ---------------------------------------------------------------------------
 
-export type AuditTargetKind = "claim" | "queue";
+// The submission queue was removed: a claim is the only auditable target.
+export type AuditTargetKind = "claim";
 
 export type AuditTarget = {
   base: string;
@@ -80,8 +81,7 @@ export type AuditClaimStatus =
   | "IN_PROGRESS"
   | "VOIDED"
   | "GAVE_UP"
-  | "CANCELLED"
-  | "QUEUED";
+  | "CANCELLED";
 
 export type VoteAudit = {
   phase: ClaimPhase;
@@ -239,7 +239,6 @@ export type AuditResult = {
     label: string;
     proves: string;
   };
-  queue?: Record<string, unknown>;
   jury: JurorRow[];
   votes: VoteAudit[];
   runs: RunAudit[];
@@ -304,6 +303,8 @@ export const DEFAULT_WALRUS_AGGREGATOR =
   "https://aggregator.walrus-testnet.walrus.space";
 export const DEFAULT_RECEIPTS_BASE = "https://api.gonkarouter.io/v1/receipts/";
 const SUIVISION = "https://testnet.suivision.xyz";
+// Transactions open on Suiscan, objects on SuiVision.
+const SUISCAN = "https://suiscan.xyz/testnet";
 // publicnode answers 403 to Node's default user agent.
 const USER_AGENT = "Mozilla/5.0 (OpenVerdict audit)";
 const DEFAULT_TIMEOUT_MS = 20_000;
@@ -516,9 +517,9 @@ function outcomeCode(label: string | undefined): number | undefined {
   return entry === undefined ? undefined : Number(entry[0]);
 }
 
-// SuiVision calls a transaction page a "txblock".
-function suivisionTx(digest: string): string {
-  return `${SUIVISION}/txblock/${digest}`;
+// Suiscan keeps the network in the path and calls the page /tx.
+function suiscanTx(digest: string): string {
+  return `${SUISCAN}/tx/${digest}`;
 }
 
 function suivisionObject(id: string): string {
@@ -531,9 +532,13 @@ function suivisionObject(id: string): string {
 
 const HEX_ID = /^0x[0-9a-fA-F]{1,64}$/;
 
+// Submissions are no longer parked: the API either starts a jury or refuses.
+const QUEUE_GONE =
+  "queue links no longer exist: a submission either starts a jury at once or is refused";
+
 /**
  * Accepts a claim link (/claims/<id>, /claims/<id>/report, /claims/<id>/runs/<runId>),
- * a queue link (/fact-check/queue/<id>), an /api/claims link, or a bare 0x id.
+ * an /api/claims link, or a bare 0x id. A queue link is an input error.
  * `options.base` overrides the origin of a link (for another deployment).
  */
 export function parseAuditTarget(
@@ -567,10 +572,10 @@ export function parseAuditTarget(
     }
     return target;
   }
-  if (segments[0] === "fact-check" && segments[1] === "queue" && segments[2] !== undefined) {
-    return { base, claimId: segments[2], kind: "queue" };
+  if (segments[0] === "fact-check" && segments[1] === "queue") {
+    throw new AuditInputError(QUEUE_GONE);
   }
-  throw new AuditInputError(`not a claim or queue link: ${trimmed}`);
+  throw new AuditInputError(`not a claim link: ${trimmed}`);
 }
 
 function normalizeBase(base: string): string {
@@ -1605,7 +1610,7 @@ function auditVote(world: World, seat: Seat): VoteAudit {
     );
   } else if (!seat.commitTxData || !seat.commitTxData.ok) {
     const outcome = seat.commitTxData ?? { ok: false as const, kind: "unavailable" as const, reason: "not fetched", url: "" };
-    vote.checks.push(rpcFailure("C1", "votes", labels.C1, outcome, suivisionTx(seat.commitTx), "the commit transaction"));
+    vote.checks.push(rpcFailure("C1", "votes", labels.C1, outcome, suiscanTx(seat.commitTx), "the commit transaction"));
   } else {
     const event = parseCommitEvent(seat.commitTxData.result);
     if (!event) {
@@ -1613,7 +1618,7 @@ function auditVote(world: World, seat: Seat): VoteAudit {
         check("C1", "votes", labels.C1, "FAIL", {
           expected: seat.commitment,
           detail: "the transaction emits no VoteCommitted event",
-          url: suivisionTx(seat.commitTx),
+          url: suiscanTx(seat.commitTx),
         }),
       );
     } else {
@@ -1639,7 +1644,7 @@ function auditVote(world: World, seat: Seat): VoteAudit {
             expected: seat.commitment,
             actual: event.commitment,
             ...(notes.length > 0 ? { detail: notes.join("; ") } : {}),
-            url: suivisionTx(seat.commitTx),
+            url: suiscanTx(seat.commitTx),
           }),
         );
       }
@@ -1671,12 +1676,12 @@ function auditVote(world: World, seat: Seat): VoteAudit {
     );
   } else if (!seat.revealTxData || !seat.revealTxData.ok) {
     const outcome = seat.revealTxData ?? { ok: false as const, kind: "unavailable" as const, reason: "not fetched", url: "" };
-    vote.checks.push(rpcFailure("C2", "votes", labels.C2, outcome, suivisionTx(seat.revealTx), "the reveal transaction"));
+    vote.checks.push(rpcFailure("C2", "votes", labels.C2, outcome, suiscanTx(seat.revealTx), "the reveal transaction"));
   } else if (!seat.revealInputs) {
     vote.checks.push(
       check("C2", "votes", labels.C2, "FAIL", {
         detail: "the reveal_vote inputs could not be decoded from the transaction",
-        url: suivisionTx(seat.revealTx),
+        url: suiscanTx(seat.revealTx),
       }),
     );
   } else if (!root) {
@@ -1735,13 +1740,13 @@ function auditVote(world: World, seat: Seat): VoteAudit {
       }
     }
     if (failure !== undefined) {
-      vote.checks.push(check("C2", "votes", labels.C2, "FAIL", { detail: failure, url: suivisionTx(seat.revealTx) }));
+      vote.checks.push(check("C2", "votes", labels.C2, "FAIL", { detail: failure, url: suiscanTx(seat.revealTx) }));
     } else if (!expectedCommitment) {
       vote.checks.push(
         check("C2", "votes", labels.C2, "UNAVAILABLE", {
           actual: recomputed,
           detail: "neither the commit transaction nor the record supplied a commitment to compare with",
-          url: suivisionTx(seat.revealTx),
+          url: suiscanTx(seat.revealTx),
         }),
       );
     } else {
@@ -1757,7 +1762,7 @@ function auditVote(world: World, seat: Seat): VoteAudit {
           expected: expectedCommitment,
           actual: recomputed,
           ...(notes.length > 0 || !ok ? { detail: [...(ok ? [] : ["the recomputed commitment differs: the revealed vote is not the committed one"]), ...notes].join("; ") } : {}),
-          url: suivisionTx(seat.revealTx),
+          url: suiscanTx(seat.revealTx),
         }),
       );
     }
@@ -1770,7 +1775,7 @@ function auditVote(world: World, seat: Seat): VoteAudit {
       check("C3", "votes", labels.C3, status, {
         ...(reported ? { expected: `${outcomeLabel(reported.outcome)} ${reported.confidenceBps} bps` } : {}),
         detail: "the reveal transaction inputs are not available",
-        url: seat.revealTx ? suivisionTx(seat.revealTx) : claimUrl,
+        url: seat.revealTx ? suiscanTx(seat.revealTx) : claimUrl,
       }),
     );
   } else if (!reported) {
@@ -1794,7 +1799,7 @@ function auditVote(world: World, seat: Seat): VoteAudit {
         actual: `${outcomeLabel(chain.outcome)} ${chain.confidenceBps} bps`,
         ...(ok ? {} : { detail: eventAgrees ? "the reported vote differs from the on-chain reveal" : "the VoteRevealed event differs from the transaction inputs" }),
         ...(reported.valid === false ? { detail: "the report marks this reveal invalid (it does not enter the score)" } : {}),
-        url: seat.revealTx ? suivisionTx(seat.revealTx) : claimUrl,
+        url: seat.revealTx ? suiscanTx(seat.revealTx) : claimUrl,
       }),
     );
   }
@@ -1963,7 +1968,7 @@ async function auditRun(world: World, seat: Seat): Promise<RunAudit> {
               ? "approval and recomputation agree, but the reveal transaction was not found on Sui"
               : "approval and recomputation agree; the reveal transaction input could not be fetched to confirm the on-chain value"
             : "the approved run hash differs from the recomputed run hash",
-          url: seat.revealTx ? suivisionTx(seat.revealTx) : claimLink(world.base, world.claimId),
+          url: seat.revealTx ? suiscanTx(seat.revealTx) : claimLink(world.base, world.claimId),
         }),
       );
     } else {
@@ -1973,7 +1978,7 @@ async function auditRun(world: World, seat: Seat): Promise<RunAudit> {
           expected: approved,
           actual: `${recomputedRunHash ?? "-"} (recomputed), ${revealRunHash} (reveal input)`,
           ...(ok ? {} : { detail: "the approved, recomputed and revealed run hashes do not all agree" }),
-          url: seat.revealTx ? suivisionTx(seat.revealTx) : claimLink(world.base, world.claimId),
+          url: seat.revealTx ? suiscanTx(seat.revealTx) : claimLink(world.base, world.claimId),
         }),
       );
     }
@@ -2601,7 +2606,7 @@ function provesSentence(result: Pick<AuditResult, "status" | "summary" | "votes"
 }
 
 /**
- * Audit one claim (or a queued submission) from public sources only.
+ * Audit one claim from public sources only.
  * Throws AuditInputError when there is nothing to audit; every other failure
  * is reported inside the result as UNAVAILABLE checks.
  */
@@ -2682,25 +2687,6 @@ export function renderBoard(rows: BoardRow[]): string {
 export async function auditClaim(target: AuditTarget, options: AuditOptions): Promise<AuditResult> {
   const net = new Net(options);
   const now = (options.now ?? Date.now)();
-  if (target.kind === "queue") {
-    const url = `${target.base}/api/fact-checks/queue/${encodeURIComponent(target.claimId)}`;
-    net.log(`fetching queue item ${target.claimId}`);
-    const outcome = await net.request(url);
-    if (!outcome.ok) {
-      if (isNotFound(outcome)) throw new AuditInputError(`queued submission not found: ${target.claimId} (${url})`);
-      throw new AuditInputError(`could not fetch ${url}: ${outcome.reason}`);
-    }
-    const item = isRecord(outcome.body) ? outcome.body : {};
-    const launchedClaimId = asString(item.claimId);
-    if (launchedClaimId && HEX_ID.test(launchedClaimId)) {
-      const result = await auditClaim({ base: target.base, claimId: launchedClaimId.toLowerCase(), kind: "claim" }, options);
-      result.queue = item;
-      result.target = target;
-      result.urls = [...new Set([url, ...result.urls])];
-      return result;
-    }
-    return queueOnlyResult(target, item, net, now);
-  }
 
   const world = await gatherSources(target, options, net);
   net.log("recomputing commitments, run hashes and the score");
@@ -2783,7 +2769,7 @@ export async function auditClaim(target: AuditTarget, options: AuditOptions): Pr
               ? { transactionDigest: inspection.result?.digest ?? certificateObject?.previousTransaction }
               : {}),
             objectLink: suivisionObject(world.certificateId),
-            ...(inspection.result?.digest ? { transactionLink: suivisionTx(inspection.result.digest) } : {}),
+            ...(inspection.result?.digest ? { transactionLink: suiscanTx(inspection.result.digest) } : {}),
           },
         }
       : {}),
@@ -2817,61 +2803,6 @@ export async function auditClaim(target: AuditTarget, options: AuditOptions): Pr
   }
   audit.verdict.proves = provesSentence(audit);
   return audit;
-}
-
-function queueOnlyResult(target: AuditTarget, item: Json, net: Net, now: number): AuditResult {
-  const status = asString(item.status) ?? "QUEUED";
-  const weather = isRecord(item.weather) ? item.weather : {};
-  const families = asArray(weather.families).filter(isRecord);
-  const pending = [
-    `queued submission ${target.claimId} is ${status}${asString(item.launchError) ? ` (${asString(item.launchError)})` : ""}`,
-    `the weather gate holds a submission until every model family answers a probe: ${families.length === 0 ? "no probe recorded" : families.map((family) => `${asString(family.modelId) ?? asString(family.family) ?? "?"} ${family.ok ? "ok" : asString(family.status) ?? "down"}`).join(", ")}${weather.clear === true ? " (clear)" : weather.stale === true ? " (stale)" : ""}`,
-    `created ${asString(item.createdAt) ?? "?"}, expires ${asString(item.expiresAt) ?? "?"}`,
-  ];
-  const empty = summarize([]);
-  return {
-    version: 1,
-    generatedAt: isoTime(now),
-    target,
-    status: "QUEUED",
-    claim: {
-      claimId: target.claimId,
-      link: `${target.base}/fact-check/queue/${target.claimId}`,
-      statement: asString(item.statement) ?? "(queued submission)",
-      resolutionCriteria: "",
-      mode: "-",
-      state: -1,
-      stateLabel: status,
-      deadlines: {},
-      twoRound: false,
-      pending,
-    },
-    verdict: { result: null, truthScoreBps: null, label: status, proves: "No claim exists yet for this submission, so there is no jury record to audit." },
-    queue: item,
-    jury: [],
-    votes: [],
-    runs: [],
-    claimChecks: [],
-    timeline: [],
-    timelineSource: "record",
-    score: { formula: "", terms: [], sumBps: 0, count: 0, meanBps: null, reportBps: null, certificateBps: null },
-    urls: [...net.urls],
-    sources: {
-      inspection: { claimId: target.claimId } as unknown as ClaimInspection,
-      report: null,
-      agents: null,
-      events: [],
-      proofs: {},
-      transactions: {},
-      objects: {},
-      receipts: {},
-      manifests: {},
-      walrus: {},
-      failures: net.failures,
-    },
-    summary: empty,
-    exitCode: 0,
-  };
 }
 
 // ---------------------------------------------------------------------------
@@ -3019,8 +2950,8 @@ function renderVotes(result: AuditResult): string {
     const facts = [
       `- Seat ${vote.jurySeatId}, agent ${vote.agentProfileId}${vote.modelId ? `, model ${vote.modelId}` : ""}`,
       `- Commitment (record): ${vote.commitment ?? "-"}; on chain: ${vote.onChainCommitment ?? "-"}`,
-      `- Commit tx: ${vote.commitTx ? `${vote.commitTx} (${suivisionTx(vote.commitTx)})` : "-"}`,
-      `- Reveal tx: ${vote.revealTx ? `${vote.revealTx} (${suivisionTx(vote.revealTx)})` : "-"}`,
+      `- Commit tx: ${vote.commitTx ? `${vote.commitTx} (${suiscanTx(vote.commitTx)})` : "-"}`,
+      `- Reveal tx: ${vote.revealTx ? `${vote.revealTx} (${suiscanTx(vote.revealTx)})` : "-"}`,
       `- Recomputed commitment: ${vote.recomputedCommitment ?? "-"}`,
     ];
     if (vote.preimage) {

@@ -1,16 +1,19 @@
 import { describe, expect, it } from "vitest";
 
-import type { ClaimInspection, WeatherReport } from "../engine/contract";
+import type { AgentDirectoryEntry, ClaimInspection, WeatherReport } from "../engine/contract";
+import type { AgentManifestDocument } from "../protocol/types";
 import { Api, OvError } from "./api";
 import {
   EXIT_CODES,
+  agentCommand,
+  agentsCommand,
   auditCommand,
   boardCommand,
   extractCommand,
   helpText,
   isCommand,
-  queueCommand,
   resolveClaimPrefix,
+  resolveCommand,
   statusCommand,
   submitCommand,
   watchCommand,
@@ -25,6 +28,8 @@ const NOW = Date.parse("2026-09-03T10:00:00Z");
 const FINALIZED = fixture<ClaimInspection>("claim-finalized.json");
 const VOIDED = fixture<ClaimInspection>("claim-voided.json");
 const EVENTS = fixture<Array<Record<string, unknown>>>("events-finalized.json");
+const AGENTS = fixture<AgentDirectoryEntry[]>("agents.json");
+const MANIFEST = fixture<AgentManifestDocument>("agent-manifest.json");
 const QUEUE_ID = `0x${"9f".repeat(32)}`;
 
 const NOT_CLEAR: WeatherReport = {
@@ -75,7 +80,7 @@ function requestBody(net: FakeFetch, index = 0): Record<string, unknown> {
 }
 
 describe("weather", () => {
-  it("prints one line per family, the summary and the queue note when not clear", async () => {
+  it("prints one line per family, the summary and the refusal note when not clear", async () => {
     const s = setup({ "GET /api/weather": () => json(NOT_CLEAR) });
     expect(await weatherCommand(s.env)).toBe(0);
     expect(s.out).toEqual([
@@ -84,7 +89,7 @@ describe("weather", () => {
       "Kimi        TIMEOUT",
       "Web search  ok 0.3 s",
       "not clear, probed 42 s ago",
-      "not clear means new submissions queue until all four families answer a probe",
+      "not clear means new submissions are refused until all four families answer a probe",
     ]);
   });
 
@@ -211,19 +216,39 @@ describe("submit", () => {
     ]);
   });
 
-  it("202: prints the queue id, link, weather and the waiting note; --json adds link and kind", async () => {
-    const body = { queued: true, queueId: QUEUE_ID, weather: NOT_CLEAR };
-    const s = setup({ "POST /api/fact-checks": () => json(body, 202) });
-    expect(await submitCommand(s.env, { claim, urls: [] })).toBe(0);
-    expect(requestBody(s.net)).toEqual({ claim });
-    expect(s.out[0]).toBe(`queued: ${QUEUE_ID}`);
-    expect(s.out[1]).toBe(`link: ${BASE}/fact-check/queue/${QUEUE_ID}`);
-    expect(s.out).toContain("  Kimi        TIMEOUT");
-    expect(s.out).toContain("the engine launches it when all four answer; queued items expire after six hours");
-    expect(s.out.at(-1)).toBe(`watch it: ov watch ${QUEUE_ID}`);
-    const j = setup({ "POST /api/fact-checks": () => json(body, 202) }, { json: true });
-    await submitCommand(j.env, { claim, urls: [] });
-    expect(JSON.parse(j.out.join("\n"))).toMatchObject({ queued: true, queueId: QUEUE_ID, kind: "queued", link: `${BASE}/fact-check/queue/${QUEUE_ID}` });
+  it("503 WEATHER_NOT_CLEAR: relays the route's sentence, prints the rows, exits 5", async () => {
+    // The frozen contract: one sentence naming the down families, plus the report.
+    const body = {
+      error: "WEATHER_NOT_CLEAR",
+      message: "The jury cannot sit right now: DeepSeek and Kimi are down.",
+      weather: NOT_CLEAR,
+    };
+    const s = setup({ "POST /api/fact-checks": () => json(body, 503) });
+    const error = await failure(submitCommand(s.env, { claim, urls: [] }));
+    expect(error.exitCode).toBe(5);
+    // The sentence is relayed once, never wrapped in a second one.
+    expect(error.message).toBe(
+      "The jury cannot sit right now: DeepSeek and Kimi are down. Nothing was stored. Run ov weather and submit again when all four rows answer.",
+    );
+    expect(s.out).toContain("Kimi        TIMEOUT");
+    expect(s.out.at(-1)).toBe("not clear, probed 42 s ago");
+
+    // A body without the sentence falls back to the wording the console uses.
+    const bare = setup({ "POST /api/fact-checks": () => json({ error: "WEATHER_NOT_CLEAR", weather: NOT_CLEAR }, 503) });
+    expect((await failure(submitCommand(bare.env, { claim, urls: [] }))).message).toBe(
+      "The jury cannot sit right now: DeepSeek and Kimi are down. Nothing was stored. Run ov weather and submit again when all four rows answer.",
+    );
+
+    const j = setup({ "POST /api/fact-checks": () => json(body, 503) }, { json: true });
+    await failure(submitCommand(j.env, { claim, urls: [] }));
+    expect(JSON.parse(j.out.join("\n"))).toMatchObject({ error: "WEATHER_NOT_CLEAR", weather: { clear: false } });
+
+    // The other 503 on this route stays an engine problem, not a weather one.
+    const wired = setup({ "POST /api/fact-checks": () => json({ error: "engine_not_wired" }, 503) });
+    const other = await failure(submitCommand(wired.env, { claim, urls: [] }));
+    expect(other.exitCode).toBe(2);
+    expect(other.message).toMatch(/engine is not wired/);
+
     const k = setup({ "POST /api/fact-checks": () => json({ claimId: "0xabc" }) }, { json: true });
     await submitCommand(k.env, { claim, urls: [] });
     expect(JSON.parse(k.out.join("\n"))).toEqual({ claimId: "0xabc", kind: "claim", link: `${BASE}/claims/0xabc` });
@@ -253,35 +278,7 @@ describe("submit", () => {
   });
 });
 
-describe("queue and status", () => {
-  const item = {
-    queueId: QUEUE_ID,
-    status: "QUEUED",
-    statement: "The Eiffel Tower was completed in 1889.",
-    createdAt: new Date(NOW - 60_000).toISOString(),
-    expiresAt: new Date(NOW + 6 * 3_600_000).toISOString(),
-    weather: NOT_CLEAR,
-  };
-
-  it("prints every queue status and 'not found' with exit 2", async () => {
-    for (const [status, expected] of [
-      ["QUEUED", "status     QUEUED, waiting for clear weather (the engine launches it when all four families answer)"],
-      ["LAUNCHED", "status     LAUNCHED"],
-      ["EXPIRED", "status     EXPIRED (queued items expire after six hours)"],
-      ["CANCELLED", "status     CANCELLED"],
-    ] as const) {
-      const s = setup({ [`GET /api/fact-checks/queue/${QUEUE_ID}`]: () => json({ ...item, status, ...(status === "LAUNCHED" ? { claimId: FINALIZED.claimId } : {}) }) });
-      expect(await queueCommand(s.env, status === "QUEUED" ? `${BASE}/fact-check/queue/${QUEUE_ID}` : QUEUE_ID)).toBe(0);
-      expect(s.out[1]).toBe(expected);
-      if (status === "LAUNCHED") expect(s.out).toContain(`watch it   ov watch ${FINALIZED.claimId}`);
-    }
-    const s = setup({ "GET /api/fact-checks/queue/0x0": () => json({ error: "not_found" }, 404) });
-    const error = await failure(queueCommand(s.env, "0x0"));
-    expect(error.exitCode).toBe(2);
-    expect(error.message).toBe("queue item not found: 0x0");
-    expect((await failure(queueCommand(s.env, "nonsense"))).message).toBe("not a queue id or link: nonsense");
-  });
-
+describe("status", () => {
   it("status shows the claim in three states and accepts links", async () => {
     const active = clone(FINALIZED);
     active.state = 5;
@@ -304,17 +301,11 @@ describe("queue and status", () => {
     expect(s.out.some((line) => /^next       reveal window closes passed/.test(line))).toBe(true);
   });
 
-  it("status falls back to the queue for a bare id and prints JSON with --json", async () => {
-    const s = setup({
-      [`GET /api/claims/${QUEUE_ID}`]: () => json({ error: "claim_not_found" }, 404),
-      [`GET /api/fact-checks/queue/${QUEUE_ID}`]: () => json(item),
-    });
-    expect(await statusCommand(s.env, QUEUE_ID)).toBe(0);
-    expect(s.out[0]).toBe(`queue      ${QUEUE_ID}`);
+  it("status prints JSON with --json and says plainly when the claim is unknown", async () => {
     const j = setup({ [`GET /api/claims/${FINALIZED.claimId}`]: () => json(FINALIZED) }, { json: true });
     await statusCommand(j.env, FINALIZED.claimId);
     expect((JSON.parse(j.out.join("\n")) as ClaimInspection).claimId).toBe(FINALIZED.claimId);
-    const missing = setup({ "GET /api/claims/0x1": () => json({ error: "claim_not_found" }, 404), "GET /api/fact-checks/queue/0x1": () => json({}, 404) });
+    const missing = setup({ "GET /api/claims/0x1": () => json({ error: "claim_not_found" }, 404) });
     expect((await failure(statusCommand(missing.env, "0x1"))).message).toBe("claim not found: 0x1");
   });
 
@@ -344,9 +335,8 @@ describe("queue and status", () => {
     expect(several.exitCode).toBe(2);
     expect(several.message).toBe(`0x273220b5 matches 2 claims, give more of the id:\n  ${FINALIZED.claimId}\n  ${twin.claimId}`);
     expect(s.err).toEqual([]);
-    // Short ids below eight hex digits and queue ids keep the old behaviour.
+    // Short ids below eight hex digits keep the old behaviour.
     expect(watchTargetOf("0x2732")).toEqual({ kind: "id", id: "0x2732" });
-    expect(watchTargetOf(`${BASE}/fact-check/queue/${QUEUE_ID}`)).toEqual({ kind: "queue", id: QUEUE_ID });
   });
 
   it("watch and audit resolve short ids through the same helper", async () => {
@@ -367,11 +357,63 @@ describe("queue and status", () => {
     expect(net.calls.filter((call) => call === "GET /api/claims?limit=200").length).toBe(2);
   });
 
-  it("recognises claim links, queue links and bare ids", () => {
+  it("recognises claim links and bare ids, and says queue links are gone", () => {
     expect(watchTargetOf(`${BASE}/claims/${FINALIZED.claimId}`)).toEqual({ kind: "claim", id: FINALIZED.claimId });
-    expect(watchTargetOf(`${BASE}/fact-check/queue/${QUEUE_ID}`)).toEqual({ kind: "queue", id: QUEUE_ID });
+    expect(() => watchTargetOf(`${BASE}/fact-check/queue/${QUEUE_ID}`)).toThrow("queue links no longer exist");
     expect(watchTargetOf(FINALIZED.claimId.toUpperCase().replace("0X", "0x"))).toEqual({ kind: "id", id: FINALIZED.claimId });
     expect(() => watchTargetOf("what")).toThrow(OvError);
+  });
+});
+
+describe("agents and agent", () => {
+  const roster = { "GET /api/agents": () => json({ agents: AGENTS }) };
+
+  it("prints the roster, and the raw directory under --json", async () => {
+    const s = setup(roster);
+    expect(await agentsCommand(s.env)).toBe(0);
+    expect(s.out[0]).toBe("# OpenVerdict jury (3 seats, 2 active)");
+    expect(s.net.calls).toEqual(["GET /api/agents"]);
+
+    const j = setup(roster, { json: true });
+    await agentsCommand(j.env);
+    expect((JSON.parse(j.out.join("\n")) as { agents: unknown[] }).agents.length).toBe(3);
+
+    const empty = setup({ "GET /api/agents": () => json({ agents: [] }) });
+    expect(await agentsCommand(empty.env)).toBe(0);
+    expect(empty.out).toEqual(["no seats in the registry on this deployment"]);
+  });
+
+  it("resolves a seat by id, prefix or link and fetches its manifest", async () => {
+    const seat = AGENTS[0]!.agentProfileId;
+    const routes = { ...roster, [`GET /api/agents/${seat}/manifest`]: () => json(MANIFEST) };
+    for (const input of [seat, "0x4ee8af57", `${BASE}/agents/${seat}`]) {
+      const s = setup(routes);
+      expect(await agentCommand(s.env, input)).toBe(0);
+      expect(s.out[0]).toBe(`seat       ${seat}`);
+      expect(s.out.join("\n")).toContain("prompt     spec v4");
+    }
+    const j = setup(routes, { json: true });
+    await agentCommand(j.env, seat);
+    const parsed = JSON.parse(j.out.join("\n")) as { agent: { role: string }; manifest: { version: string } };
+    expect(parsed.agent.role).toBe("SOURCE_AUTHENTICITY");
+    expect(parsed.manifest.version).toBe("6");
+  });
+
+  it("says so when the seat has no manifest, and rejects unknown or ambiguous input", async () => {
+    const seat = AGENTS[0]!.agentProfileId;
+    const s = setup({ ...roster, [`GET /api/agents/${seat}/manifest`]: () => json({ error: "manifest_not_found" }, 404) });
+    expect(await agentCommand(s.env, seat)).toBe(0);
+    expect(s.out.join("\n")).toContain("no manifest document published for this seat");
+
+    const missing = setup(roster);
+    expect((await failure(agentCommand(missing.env, `0x${"c".repeat(64)}`))).message).toContain("seat not found");
+    expect((await failure(agentCommand(missing.env, "nonsense"))).message).toBe("not a seat id or link: nonsense");
+
+    // Two seats sharing a prefix must not resolve to either of them.
+    const twins = clone(AGENTS);
+    twins[1]!.agentProfileId = `${twins[0]!.agentProfileId.slice(0, 12)}${"9".repeat(54)}`;
+    const many = setup({ "GET /api/agents": () => json({ agents: twins }) });
+    expect((await failure(agentCommand(many.env, "0x4ee8af57"))).message).toContain("matches 2 seats");
   });
 });
 
@@ -394,13 +436,20 @@ describe("watch command and help", () => {
 
   it("help lists every command with an example and the exit codes", () => {
     const text = helpText();
-    for (const name of ["weather", "board", "extract", "submit", "queue", "status", "watch", "audit", "trace", "help"]) {
+    for (const name of ["weather", "board", "agents", "agent", "extract", "submit", "status", "watch", "audit", "trace", "help"]) {
       expect(text).toContain(`  ${name}`);
       expect(isCommand(name)).toBe(true);
     }
-    expect(text.match(/example: ov /g)?.length).toBe(9);
+    expect(text.match(/example: ov /g)?.length).toBe(10);
     for (const line of EXIT_CODES) expect(text).toContain(line);
-    expect(helpText("watch")).toContain("usage: ov watch <claim id, claim link or queue id> [--for <duration>] [--since <sequence>] [--verbose]");
+    // `ov claims` is the board under the console's own name.
+    expect(resolveCommand("claims")).toBe("board");
+    expect(isCommand("claims")).toBe(true);
+    expect(helpText("claims")).toBe(helpText("board"));
+    expect(helpText("board")).toContain("usage: ov board [--limit <n>]   (alias: ov claims)");
+    expect(helpText("agents")).toContain("usage: ov agents");
+    expect(helpText("agent")).toContain("usage: ov agent <seat id, id prefix or link>");
+    expect(helpText("watch")).toContain("usage: ov watch <claim id or claim link> [--for <duration>] [--since <sequence>] [--verbose]");
     expect(helpText("audit")).toContain("exit codes: 0 every check passed or was unavailable, 1 any FAIL, 2 input or fetch error");
     expect(helpText("trace")).toContain("usage: ov trace <claim id or link> [--juror <n>] [--round 1|2] [--full]");
     expect(helpText("trace")).toContain("--full adds the pinned system prompt once and every message verbatim, page texts included.");

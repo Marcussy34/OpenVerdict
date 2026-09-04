@@ -1,8 +1,6 @@
 import type {
   ClaimCreateRequest,
   DeliberationTurnPublic,
-  FactCheckRequest,
-  QueuedFactCheckStatus,
   ResolutionEvent,
 } from "../engine/contract";
 import type {
@@ -251,18 +249,6 @@ export interface GonkaWeatherRecord {
   latencyMs: number;
   status: string;
   probedAt: string;
-}
-
-export interface FactCheckQueueRecord {
-  queueId: string;
-  status: QueuedFactCheckStatus;
-  request: FactCheckRequest;
-  holdReason: "WEATHER";
-  launchError?: string;
-  launchedClaimId?: string;
-  createdAt: string;
-  updatedAt: string;
-  expiresAt: string;
 }
 
 export interface RunApprovalRecord {
