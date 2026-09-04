@@ -2569,3 +2569,43 @@ while the weather was closed; verified in the browser on 0x273220b5
 (cards read "5 steps", expanded card lists searched (challenge), opened 3
 pages, searched (support), opened 2 pages, drafting the answer, then the
 answer). Seeder re-armed. Tree clean at a7c0ce9 + this note.
+
+## 3ap. 2026-09-04 16:00 to 17:10: LIVE VIEW REDESIGN (read 3ao then this)
+
+OWNER: "make sure all the UI is done rightly and nicely ... doesn't look
+professional and clean"; then "clear background, similar to our product
+pages, aligned with my landing page ... clean and minimalistic UI, nothing
+fancy or cluttering". One Opus worker with the frontend-design-guidelines
+and design-taste skills, three review rounds by the lead in the browser.
+
+SHIPPED (pushed and deployed, last deploy 17:05 SUCCESS):
+- 9253d56 design(live): the claim page shell, rail, chrome and the Live
+  view moved to the landing's paper ground (#f7f7f5), white hairline
+  cards, the landing's own furniture (CornerPin, Hairline, SplitButton,
+  dashed guide as the timeline rail, 6px semantic squares as marks), one
+  sea accent (links, live dot, pin, active segment), semantic colour only
+  for YES/NO/UNSURE, sealed, failed; type scale 19/15/13/11; segmented
+  Live / Graph / Replay control (Radix ToggleGroup). The dark graph
+  canvas stays inside its frame (its 600 lines are hardcoded dark); the
+  in-transcript graph preview became a quiet card with "Open graph".
+- 0538b52 design(live): compact juror tiles (24px family initial tile,
+  one-line status "NO, 95 percent", one-word role chip with the full role
+  in the title, "Show trail · 5 steps" on one line) in one row of five at
+  1280 and up, three at 1024, one on mobile; an expanded juror opens a
+  full-width JurorTrailPanel below the row (steps as a mini timeline, the
+  sealed line or the answer with badge, confidence bar, findings,
+  citations, counter-evidence, receipt, seat id), several open at once in
+  juror order; the open tile carries a sea hairline; the stage pill lives
+  in a chrome bar in the flow (paper backdrop, hairline bottom) instead of
+  floating over the text. components/ui/collapsible.tsx removed again
+  (aria-expanded + aria-controls instead); toggle-group.tsx stays.
+- Verified on production in the browser (Chrome tools) on 0x273220b5:
+  screenshot scratchpad/live-light-final.jpg. 877 tests, build green.
+
+NOTES: the local dev server (pnpm dev on :3000, started by a worker)
+serves a localnet dataset (34 claims), so production ids 404 there; check
+visuals on production or use a local claim id. A stray
+/Users/marcus/pnpm-workspace.yaml makes pnpm treat the home directory as a
+workspace root when a shell drifts there (owner to delete). Owner-owned
+untracked folders now: docs/demo/deck/, docs/demo/devfolio/,
+public/brand/, scripts/generate-brand-assets.py.
