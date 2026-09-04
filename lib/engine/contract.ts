@@ -410,8 +410,8 @@ export type AgentDirectoryEntry = {
  * stake message, and the engine records blake2b-256 of its address as the
  * staker hash. Any account may stake on as many seats as it likes; the Move
  * draw caps seats per model, family and operational key and needs a Skeptic
- * and a Source-authenticity seat, with no cap per staker.
- * diversity rule, never an identity claim. Staking economics only.
+ * and a Source-authenticity seat, with no cap per staker: a diversity rule,
+ * never an identity claim. Staking economics only.
  */
 export type ZkBackedRegistrationRequest = {
   /** The staking account's address (zkLogin or any wallet). */
