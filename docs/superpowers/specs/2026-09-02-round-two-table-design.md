@@ -225,6 +225,23 @@ kinds through the contract (9).
   shows `tableVotePromptHash` for all seven, canary claim on a 3/3 window
   watched end to end.
 
+## Amended 2026-09-04: the debate is a conversation (spec V4)
+
+The V3 debate above shipped and read as monologues: one free-text
+`argument` per turn, instructions that ended with "state your stance", and
+a fixed seat-order plan that let like-minded seats speak back to back.
+Deliberation prompt spec V4 replaces the output contract with
+`answering`, `theirPoint`, `analysis`, `question`, `position`, `stance`,
+`confidenceBps` and `citations`, so a turn answers a named seat's specific
+point first and states its position last, and it may put one question to a
+named seat. The static plan is replaced by a pure ordering function: a
+dissenting seat opens each exchange, the sides alternate by seat index, and
+a seat that is asked a question speaks next. Everything above still holds:
+three exchanges, convergence on "nobody moved", the frozen-record citation
+rule, the sealed table vote, manifest v6 and bundle v6. V1 to V3 turns keep
+their exact bytes, roots and audit results. See
+`docs/superpowers/specs/2026-09-04-deliberation-conversation-design.md`.
+
 ## Out of scope (recorded as roadmap)
 
 On-chain void, escalation to a second jury, committee expansion, a Kimi

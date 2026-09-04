@@ -202,6 +202,7 @@ function fakeEngine(): Engine {
       humanBackingHash: "0xbacking",
       backingKind: "ZKLOGIN_BACKED",
       digest: "digest-register",
+      role: "SKEPTIC",
     }),
     // Staking runs through the web app and pnpm stake:seat, never the CLI.
     prepareStake: async () => {

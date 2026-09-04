@@ -278,6 +278,15 @@ export type DeliberationTurnPublic = {
   exchange: 1 | 2 | 3;
   stance?: "YES" | "NO" | "UNSURE";
   confidenceBps?: number;
+  /** Which deliberation prompt spec ran this turn; absent on V1 to V3 turns. */
+  specVersion?: "4";
+  /** V4 conversation fields, all absent on V1 to V3 turns. `argument` stays
+   * the composed analysis plus position, so older readers need no change. */
+  answering?: number | null;
+  theirPoint?: string;
+  analysis?: string;
+  question?: { seat: number; text: string };
+  position?: string;
   /** Bounded plain-text argument (no markdown), at most 1200 chars. */
   argument: string;
   /** Evidence ids from the phase-1 manifest or URLs from this juror's own
@@ -410,8 +419,11 @@ export type ZkBackedRegistrationRequest = {
   signature: string;
   /** Model id from the release manifest catalog. */
   modelId: string;
-  /** Role label, e.g. SKEPTIC / SOURCE_AUTHENTICITY. */
-  role: string;
+  /**
+   * Role label, e.g. SKEPTIC / SOURCE_AUTHENTICITY. Optional: the engine
+   * assigns the least represented role on this model when none is named.
+   */
+  role?: string;
 };
 
 /** Stake kinds a signed registration can produce; the demo allowlist is seeded. */
@@ -425,6 +437,8 @@ export type ZkBackedRegistrationResult = {
   humanBackingHash: `0x${string}`;
   backingKind: StakedAgentBackingKind;
   digest: string;
+  /** The role recorded for the seat: the caller's, or the engine's assignment. */
+  role: string;
 };
 
 /**
@@ -438,13 +452,19 @@ export type StakePreparationRequest = {
   stakerAddress: string;
   /** Model id from the release manifest catalog. */
   modelId: string;
-  /** Role label, e.g. SKEPTIC / SOURCE_AUTHENTICITY / INVESTIGATOR. */
-  role: string;
+  /**
+   * Role label, e.g. SKEPTIC / SOURCE_AUTHENTICITY / INVESTIGATOR. Optional:
+   * the engine assigns the least represented role on this model when none is
+   * named, so the browser card sends nothing here.
+   */
+  role?: string;
 };
 
 export type StakePreparation = {
   reservationId: string;
   expiresAt: string;
+  /** The seat's debate role: the one the caller named, or the engine's pick. */
+  role: string;
   target: {
     packageId: string;
     registryObjectId: string;

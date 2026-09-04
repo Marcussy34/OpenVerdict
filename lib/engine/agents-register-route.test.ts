@@ -23,6 +23,7 @@ function stakeResult() {
     humanBackingHash: `0x${"22".repeat(32)}`,
     backingKind: "WALLET_STAKED" as const,
     digest: "digest-1",
+    role: "INVESTIGATOR",
   };
 }
 
@@ -73,6 +74,40 @@ describe("agent stake route", () => {
       modelId: "model-a",
       role: "INVESTIGATOR",
     });
+  });
+
+  it("sends no role when the caller names none: the engine assigns it", async () => {
+    const engine = engineFixture();
+    serverMocks.getServerEngine.mockResolvedValue(engine);
+
+    const response = await postStake({
+      address: STAKER_ADDRESS,
+      signature: "c2lnbmF0dXJl",
+      modelId: "model-a",
+    });
+
+    expect(response.status).toBe(201);
+    await expect(response.json()).resolves.toMatchObject({ role: "INVESTIGATOR" });
+    expect(engine.registerZkBackedAgent).toHaveBeenCalledWith({
+      zkLoginAddress: STAKER_ADDRESS,
+      signature: "c2lnbmF0dXJl",
+      modelId: "model-a",
+    });
+  });
+
+  it("rejects a role that is not a bounded string", async () => {
+    const engine = engineFixture();
+    serverMocks.getServerEngine.mockResolvedValue(engine);
+
+    const response = await postStake({
+      address: STAKER_ADDRESS,
+      signature: "c2lnbmF0dXJl",
+      modelId: "model-a",
+      role: "S".repeat(33),
+    });
+
+    expect(response.status).toBe(400);
+    expect(engine.registerZkBackedAgent).not.toHaveBeenCalled();
   });
 
   it("still accepts the legacy zkLoginAddress field", async () => {

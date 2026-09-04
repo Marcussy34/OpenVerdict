@@ -106,7 +106,8 @@ process); the five seats form the **committee**, and **4 of 5** is the
 
 **Step 4: Public debate**
 
-- Revealed jurors bring their round-one evidence and vote **to the table** and **argue in seat order**, streamed **live**; every turn is its own GonkaRouter run
+- Revealed jurors bring their round-one evidence and vote **to the table** and **argue it out**, streamed **live**; every turn is its own GonkaRouter run
+- It is a **conversation, not a row of briefs**: each turn **answers a named seat's specific point**, weighs it against the record, may **put one question to a named seat**, and states its **position last**. A **dissenting seat opens** each exchange and the sides **speak alternately**; a seat that is asked a question **speaks next and answers it first**
 - Each turn states a **current stance and confidence**; up to **three exchanges**, and the debate **stops early when nobody moves**
 - They cross-examine each other's **interpretations of the frozen evidence root**; a juror may cite **only evidence ids from the frozen record**, and a turn that cites anything else is rejected, so no new or invented facts enter the debate
 - The transcript is **frozen into the evidence on Walrus**

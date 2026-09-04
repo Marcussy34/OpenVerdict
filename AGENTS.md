@@ -131,7 +131,11 @@ Per juror: its searches (the intent, the query and the results it saw), the
 pages it opened, its answer with reasoning, findings and quotes, and the
 GonkaRouter receipt line. `--full` adds the pinned system prompt once and
 every message verbatim, page texts included. On a two-round claim the trail
-also carries the debate turns and the table votes.
+also carries the debate turns and the table votes. A debate turn is a
+conversation move: it answers a named seat's specific point, may put one
+question to a named seat, and states its position last, and a dissenting seat
+opens each exchange. Describe it that way, never as jurors taking turns in
+seat order.
 
 ## Rules an agent must respect
 
@@ -179,8 +183,10 @@ sponsored through Shinami, so a Google sign-in can stake with 0.1 SUI and
 nothing else. The staker receives that seat's jury reward tickets, keeps the
 bond locked while the seat is active, and gets it back 24 hours after
 unstaking. Use the `/agents` page in the app, or `pnpm stake:seat` from the
-terminal. Any account may stake on as many seats as it likes: this is staking
-economics. The committee draw stays diverse on its own terms, at most two
+terminal. A staker picks the model and nothing else: research is identical for
+every seat, so the engine assigns the seat's debate role, taking the least
+represented role among the active seats on that model. Any account may stake
+on as many seats as it likes: this is staking economics. The committee draw stays diverse on its own terms, at most two
 seats per model family, three families per jury, and at most one seat per
 operational signing key, with no cap per staker. Those caps are a diversity
 rule, never an identity claim.

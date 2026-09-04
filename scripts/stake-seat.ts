@@ -2,9 +2,10 @@
 /**
  * Stake 0.1 SUI on a juror seat through the public API, end to end.
  *
- *   pnpm stake:seat --base http://127.0.0.1:3000 --model <id> --role SKEPTIC
+ *   pnpm stake:seat --base http://127.0.0.1:3000 --model <id>
  *   pnpm stake:seat --base https://app.openverdict.info --key suiprivkey1...
  *   pnpm stake:seat --no-sponsor            the staking key pays its own gas
+ *   pnpm stake:seat --role SKEPTIC          pin the role the engine would pick
  *
  * Exactly the flow the stake card runs in the browser: POST /api/agents/stake/
  * prepare, build the one register_staked_agent transaction from what came back,
@@ -33,7 +34,6 @@ import type { StakeConfirmation, StakePreparation } from "../lib/engine/contract
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const DEFAULT_MANIFEST = "config/release.testnet.json";
 const DEFAULT_BASE = "http://127.0.0.1:3000";
-const DEFAULT_ROLE = "SKEPTIC";
 /** Enough for the stake plus a few transactions when the key pays its own gas. */
 const THROWAWAY_FUNDING_MIST = 200_000_000n;
 
@@ -198,7 +198,8 @@ async function assertCanPayOwnGas(
 
 async function main(): Promise<void> {
   const base = (flag("base") ?? DEFAULT_BASE).replace(/\/+$/, "");
-  const role = flag("role") ?? DEFAULT_ROLE;
+  // No --role means the engine assigns the seat's debate role, as the card does.
+  const role = flag("role");
   const noSponsor = process.argv.includes("--no-sponsor");
   const manifestPath = join(
     repositoryRoot,
@@ -217,17 +218,18 @@ async function main(): Promise<void> {
   console.log(`base      ${base}`);
   console.log(`network   ${manifest.network}`);
   console.log(`staker    ${stakerAddress}${providedKey ? "" : " (throwaway)"}`);
-  console.log(`seat      ${modelId} / ${role}`);
+  console.log(`seat      ${modelId} / ${role ?? "role assigned by the engine"}`);
 
   const prepared = await postJson(`${base}/api/agents/stake/prepare`, {
     address: stakerAddress,
     modelId,
-    role,
+    ...(role === undefined ? {} : { role }),
   });
   if (prepared.status !== 200) {
     throw new Error(`prepare failed (${prepared.status}): ${describe(prepared.json)}`);
   }
   const preparation = prepared.json as StakePreparation;
+  console.log(`role      ${preparation.role}`);
   console.log(`prepared  slot ${preparation.args.operationalOwner}`);
   console.log(`manifest  ${preparation.args.manifestBlobId} on Walrus`);
   console.log(`stake     ${sui(preparation.minStakeMist)} SUI minimum`);

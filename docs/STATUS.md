@@ -86,6 +86,30 @@ Postgres. Tests: 512 vitest, 70 Move.
   a research run under manifest v6 (pins TABLE_VOTE_PROMPT_SPEC_V1) and
   run bundle v6; four matching table votes settle the claim, otherwise it
   ends UNRESOLVED with the truth score.
+  The debate became a conversation SHIPPED 2026-09-04: deliberation prompt
+  spec V4 replaces the single free-text argument with answering, theirPoint,
+  analysis, question and position (position last), so a turn answers a named
+  seat's specific point instead of opening with "I maintain my NO vote".
+  The static seat-order plan is gone: a dissenting seat opens each exchange
+  (the SKEPTIC seat when the jury is unanimous) and the sides speak
+  alternately by seat index, and a seat that is asked a question speaks next
+  and answers it first, with a question to a seat that already spoke carried
+  to its next turn. The order is a pure function of the persisted turns
+  (lib/engine/debateOrder.ts), so a restarted worker continues the same
+  conversation. Validation stays fail closed with a label per broken part
+  (INVALID_ANSWERING, INVALID_QUESTION, INVALID_LENGTH beside the old
+  INVALID_OUTPUT and INVALID_CITATIONS). The stored turn and
+  DeliberationTurnPublic gain those fields plus specVersion, all optional and
+  absent on V1 to V3 turns, and argument stays required as analysis plus
+  position, so every existing reader and every old transcript's bytes, root
+  and audit result are unchanged. OPENVERDICT_DELIBERATION_SPEC picks the
+  contract ("4" default, "3" allowed) and the choice is recorded per turn,
+  in the frozen transcript and in the sealed table-vote input
+  (deliberationSpecVersion). V4 also numbers seats from 1, so a seat number
+  is the juror number the console and ov trace print (Seat 1 is juror 1); the
+  engine keeps the 0-based seat index internally and translates at the model
+  boundary, and the table-vote input of a V4 claim carries seatNumber beside
+  seatIndex. V1 to V3 transcripts keep their 0-based numbering.
 - Track amendments SHIPPED 2026-08-31: URL claim extraction live on GonkaRouter (verified live: the full en.wikipedia Bitcoin article yields the Satoshi whitepaper claim, `devshard-67842-201`), round-two jurors receive the revealed round-one public record (also frozen as phase-2 evidence `round-1-public-record:<claimId>`), the deliberation canvas + explorer landing + open-verification language shipped across the product, and `docs/GONKA-INTEGRATION.md` documents the integration for judges.
 - Live testnet canary COMPLETE (2026-08-27): full lifecycle with live GonkaRouter juries — 5/5 SCHEMA_VALID across 3 model families, YES @ 9700 bps recomputed == on-chain, certificate `0x8efdabe0…1a8634` (see docs/demo/runbook.md table).
 - Live GonkaRouter inference VERIFIED 2026-08-27: account catalog = deepseek-ai/DeepSeek-V4-Flash-0731, MiniMaxAI/MiniMax-M2.7, moonshotai/Kimi-K2.6 (3 families); real completion returned id `devshard-…` (the OpenAI-compatible endpoint id shape — preserved verbatim as the Gonka Request ID). Full live jury round runs at the testnet canary.

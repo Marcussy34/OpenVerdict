@@ -22,6 +22,7 @@ import {
   DELIBERATION_PROMPT_SPEC_V1,
   DELIBERATION_PROMPT_SPEC_V2,
   DELIBERATION_PROMPT_SPEC_V3,
+  DELIBERATION_PROMPT_SPEC_V4,
   TABLE_VOTE_PROMPT_SPEC_V1,
   createFakeGonkaAdapter,
   hashCanonicalJson,
@@ -597,6 +598,64 @@ async function runLifecycle(
         deliberationTurns.some((turn) => turn.status === "SPOKEN"),
         `${options.label} must record at least one spoken deliberation turn`,
       );
+      // The debate ran the V4 conversation contract: every spoken turn names
+      // the seat it answers, and one seat put a question to a named seat.
+      const spokenTurns = deliberationTurns.filter(
+        (turn) => turn.status === "SPOKEN",
+      );
+      assert.ok(
+        spokenTurns.every((turn) => turn.specVersion === "4"),
+        `${options.label} must run the debate on deliberation spec V4`,
+      );
+      assert.ok(
+        spokenTurns
+          .slice(1)
+          .every(
+            (turn) =>
+              typeof turn.answering === "number" &&
+              (turn.theirPoint ?? "").length > 0 &&
+              (turn.analysis ?? "").length > 0 &&
+              (turn.position ?? "").length > 0,
+          ),
+        `${options.label} must answer a named seat in every turn after the first`,
+      );
+      const asked = spokenTurns.find((turn) => turn.question !== undefined);
+      assert.ok(
+        asked !== undefined,
+        `${options.label} must put one question to a named seat`,
+      );
+      // The hand-off: the seat that was asked speaks next and answers it.
+      // V4 seat numbers are 1-based, so they are the seat index plus one.
+      const seatOrder =
+        (frozenDiscussion.rounds ?? []).find((round) => round.phase === 1)
+          ?.expectedJurySeatIds ?? [];
+      const seatNumberOf = (jurySeatId: string): number =>
+        seatOrder.indexOf(jurySeatId) + 1;
+      const nextTurn = [...deliberationTurns]
+        .sort((left, right) => left.ordinal - right.ordinal)
+        .find((turn) => turn.ordinal > asked.ordinal);
+      assert.ok(
+        spokenTurns.every(
+          (turn) =>
+            turn.answering === null ||
+            turn.answering === undefined ||
+            (turn.answering >= 1 && turn.answering <= seatOrder.length),
+        ),
+        `${options.label} must number seats from 1 in a V4 debate`,
+      );
+      assert.equal(
+        seatNumberOf(nextTurn?.jurySeatId ?? ""),
+        asked.question?.seat,
+        `${options.label} must hand the floor to the seat it questioned`,
+      );
+      assert.equal(
+        nextTurn?.answering,
+        seatNumberOf(asked.jurySeatId),
+        `${options.label} must answer the seat that asked the question`,
+      );
+      logDetail(
+        `${options.label}: debate ran on spec V4, ${spokenTurns.length} spoken turns, seat ${seatNumberOf(asked.jurySeatId)} questioned seat ${asked.question?.seat} and it answered next`,
+      );
     }
     logDetail(`${options.label}: froze ${deliberationTurns.length} deliberation turns`);
     const secondSelectionStarted = Date.now();
@@ -1169,6 +1228,115 @@ function buildLocalnetResearchContent(
   });
 }
 
+/** One turn of the scripted localnet debate, valid under deliberation spec V4. */
+export function buildLocalnetDebateContent(request: CompletionRequest): string {
+  const input = parseJsonRecord(
+    request.messages.find((message) => message.role === "user")?.content ?? "",
+  );
+  if (!input) throw new Error("v4 fake debate requires the turn input");
+  const self = isRecord(input.self) ? input.self : {};
+  // Every seat number in a V4 turn input is 1-based, so this fixture works
+  // entirely in seat numbers and never sees a 0-based index.
+  const seatIndex = typeof self.seatIndex === "number" ? self.seatIndex : 0;
+  const outcome = typeof self.outcome === "string" ? self.outcome : "UNSURE";
+  const exchange = typeof input.exchange === "number" ? input.exchange : 1;
+  const answering = typeof input.answerSeat === "number" ? input.answerSeat : null;
+  const pending = isRecord(input.pendingQuestion) ? input.pendingQuestion : undefined;
+  const askedBy = typeof pending?.from === "number" ? pending.from : undefined;
+  const debateSoFar = Array.isArray(input.debateSoFar) ? input.debateSoFar : [];
+  const citations = Array.isArray(input.allowedCitations)
+    ? input.allowedCitations.filter((value): value is string => typeof value === "string")
+    : [];
+  const source = citations[0] ?? "";
+
+  // Round-one sides, read from the frozen public record in the turn input.
+  const record = isRecord(input.roundOneRecord) ? input.roundOneRecord : {};
+  const seats = (Array.isArray(record.seats) ? record.seats : [])
+    .filter(isRecord)
+    .map((seat) => ({
+      seatIndex: typeof seat.seatIndex === "number" ? seat.seatIndex : 0,
+      outcome: typeof seat.outcome === "string" ? seat.outcome : "UNSURE",
+    }));
+  const counts = new Map<string, number>();
+  for (const seat of seats) counts.set(seat.outcome, (counts.get(seat.outcome) ?? 0) + 1);
+  const majorityOutcome = [...counts.entries()].sort(
+    (left, right) => right[1] - left[1] || left[0].localeCompare(right[0]),
+  )[0]?.[0] ?? outcome;
+  const dissenters = seats
+    .filter((seat) => seat.outcome !== majorityOutcome)
+    .map((seat) => seat.seatIndex)
+    .sort((left, right) => left - right);
+  const majoritySeats = seats
+    .filter((seat) => seat.outcome === majorityOutcome)
+    .map((seat) => seat.seatIndex)
+    .sort((left, right) => left - right);
+  // The last dissenter concedes once it has heard the majority answer.
+  const concedingSeat = dissenters.at(-1);
+  const stance = seatIndex === concedingSeat ? majorityOutcome : outcome;
+  const conceded = stance !== outcome;
+  const questionTarget = majoritySeats.at(-1);
+  // Only the seat that opens exchange one asks a question, so the floor is
+  // handed to the seat it names before the base order resumes.
+  const asksQuestion =
+    exchange === 1 &&
+    debateSoFar.length === 0 &&
+    questionTarget !== undefined &&
+    questionTarget !== seatIndex;
+
+  // Where this seat stands relative to the seat it answers, so an endorsement
+  // does not read like a dispute.
+  const spokenBySeat = debateSoFar.filter(isRecord);
+  const alreadySpoke = spokenBySeat.some((prior) => prior.seat === seatIndex);
+  const answeringStance = [...spokenBySeat]
+    .reverse()
+    .find((prior) => prior.seat === answering && typeof prior.stance === "string")
+    ?.stance
+    ?? seats.find((seat) => seat.seatIndex === answering)?.outcome;
+  const sameSide = answeringStance === stance;
+
+  const theirPoint = answering === null
+    ? ""
+    : askedBy !== undefined
+      ? `Seat ${askedBy} asked which line of the record states the claim in the words under test.`
+      : sameSide
+        ? `Seat ${answering} rests its ${stance} on the same page I do, ${source}.`
+        : `Seat ${answering} treats ${source} as settling the claim outright.`;
+  const analysis = askedBy !== undefined
+    ? `Answering Seat ${askedBy} first: the line is in ${source}, and it is dated inside the cutoff, so that part of their reading holds. What it does not cover is the second half of the claim, which no page in the frozen record states in those words.`
+    : answering === null
+      ? `Nobody has spoken yet, so I put my reason first: ${source} is the only page in the record that speaks to the claim as written, and it stops short of the wording under test.`
+      : conceded && !alreadySpoke
+        ? `Seat ${answering} is right that ${source} is dated inside the cutoff, and I had read it as later. That concession costs me my ${outcome} reading. What is left is a narrower point about wording, and it is not enough to hold the line.`
+        : conceded
+          ? `I moved to ${stance} in the last exchange for the reason Seat ${answering} gives, and nothing since has pulled me back. The wording point is the same one I already weighed and it does not reopen the date.`
+          : sameSide
+            ? `Seat ${answering} and I read ${source} the same way, so I will add what their reading leaves implicit: the page is dated inside the cutoff, which is what makes it usable at all here.`
+            : `Seat ${answering} leans on ${source} for more than it says. It does support the first half of the claim, and I read that page the same way, but the wording under test is still not stated there.`;
+  const position = conceded && !alreadySpoke
+    ? `I change to ${stance}: the dated page decides it.`
+    : conceded
+      ? `I hold ${stance}, the position I moved to, and raise my confidence.`
+      : exchange === 1
+        ? `I hold ${stance} and keep my confidence: nothing new is on the table yet.`
+        : `I hold ${stance} and lower my confidence: the record is thinner than I first read it.`;
+
+  return JSON.stringify({
+    answering,
+    theirPoint,
+    analysis,
+    question: asksQuestion
+      ? {
+          seat: questionTarget,
+          text: "Which line of the record states the claim in the words under test?",
+        }
+      : null,
+    position,
+    stance,
+    confidenceBps: 7_000 + seatIndex * 100 + (exchange - 1) * 200,
+    citations: source === "" ? [] : [source],
+  });
+}
+
 function lastSearchUrl(request: CompletionRequest): string {
   const content = request.messages.findLast((message) => message.role === "user")?.content;
   const payload = content === undefined ? undefined : parseJsonRecord(content);
@@ -1300,18 +1468,20 @@ function createFakeController(): FakeController {
         const systemPrompt = request.messages[0]?.content;
         const requestKind = systemPrompt === TABLE_VOTE_PROMPT_SPEC_V1.systemPrompt
           ? "TABLE_VOTE"
-          : systemPrompt === DELIBERATION_PROMPT_SPEC_V1.systemPrompt ||
-              systemPrompt === DELIBERATION_PROMPT_SPEC_V2.systemPrompt ||
-              systemPrompt === DELIBERATION_PROMPT_SPEC_V3.systemPrompt
-            ? "DELIBERATION"
-            : "RESEARCH";
+          : systemPrompt === DELIBERATION_PROMPT_SPEC_V4.systemPrompt
+            ? "DELIBERATION_V4"
+            : systemPrompt === DELIBERATION_PROMPT_SPEC_V1.systemPrompt ||
+                systemPrompt === DELIBERATION_PROMPT_SPEC_V2.systemPrompt ||
+                systemPrompt === DELIBERATION_PROMPT_SPEC_V3.systemPrompt
+              ? "DELIBERATION"
+              : "RESEARCH";
         let adapter = completionAdapters.get(request.attempts);
         if (!adapter) {
           // Debate turns reuse the revealed round-one vote without consuming round two.
           adapter = adapterFor(
             request.input,
             request.manifest,
-            requestKind !== "DELIBERATION",
+            requestKind !== "DELIBERATION" && requestKind !== "DELIBERATION_V4",
           );
           completionAdapters.set(request.attempts, adapter);
         }
@@ -1324,6 +1494,11 @@ function createFakeController(): FakeController {
               latestVoteFor(request.input, request.manifest),
             ),
           );
+        }
+        // A scripted V4 debate: a dissenter opens, a question hands the floor
+        // over, one seat concedes, and every turn states its position last.
+        if (requestKind === "DELIBERATION_V4" && completion.ok) {
+          rewriteFakeCompletion(completion, buildLocalnetDebateContent(request));
         }
         return completion;
       },

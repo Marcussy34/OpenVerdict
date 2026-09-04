@@ -22,7 +22,6 @@ import { MetaTag } from "@/components/viz/page-header";
 import { Input } from "@/components/ui/input";
 import { formatStakeSui } from "@/components/agents/stake-line";
 import { cn } from "@/lib/utils";
-import { ZKLOGIN_AGENT_ROLES } from "@/lib/engine/zklogin";
 
 /** The Move minimum bond (MIN_STAKE_MIST). Shown before the preparation
  * arrives; the transaction always posts the amount the server returned. */
@@ -32,6 +31,8 @@ const MIN_STAKE_LABEL = "0.1 SUI";
 type StakePreparation = {
   reservationId: string;
   expiresAt: string;
+  /** The debate role the engine assigned to this seat. */
+  role?: string;
   target: { packageId: string; registryObjectId: string; clockObjectId: string };
   args: {
     manifestHash: string;
@@ -114,13 +115,14 @@ function StakeSeatForm({
   const dAppKit = useDAppKit();
   const [models, setModels] = useState<string[]>([]);
   const [modelId, setModelId] = useState("");
-  const [role, setRole] = useState<string>(ZKLOGIN_AGENT_ROLES[0]);
   const [phase, setPhase] = useState<StakePhase>("idle");
   const [error, setError] = useState<string | null>(null);
   const [engineOffline, setEngineOffline] = useState(false);
   const [result, setResult] = useState<{
     confirmation: StakeConfirmation;
     payer: GasPayer;
+    /** The role the engine assigned, when the preparation named one. */
+    role?: string;
   } | null>(null);
 
   // The catalog the prepare route validates against: the same three families
@@ -171,7 +173,8 @@ function StakeSeatForm({
 
     try {
       setPhase("preparing");
-      const preparation = await prepareStake(account.address, selectedModel, role);
+      // No role travels with the request: the engine assigns the seat's role.
+      const preparation = await prepareStake(account.address, selectedModel);
 
       setPhase("sponsoring");
       const sender = account.address;
@@ -213,7 +216,11 @@ function StakeSeatForm({
       setPhase("confirming");
       const confirmation = await confirmStake(preparation.reservationId, digest);
 
-      setResult({ confirmation, payer });
+      setResult({
+        confirmation,
+        payer,
+        ...(preparation.role === undefined ? {} : { role: preparation.role }),
+      });
       setPhase("done");
       await onStaked();
     } catch (caught) {
@@ -243,7 +250,8 @@ function StakeSeatForm({
           is real money: you receive that seat&apos;s jury rewards, and the bond
           stays locked until you unstake (it returns 24 hours later). Seats are
           standardized, so the protocol
-          pins every juror&apos;s model, prompts and tools. OpenVerdict pays the
+          pins every juror&apos;s model, prompts and tools, and it assigns the
+          seat&apos;s debate role to keep the pool balanced. OpenVerdict pays the
           gas where sponsorship is on.
         </p>
       </div>
@@ -320,6 +328,8 @@ function StakeSeatForm({
                 : "Gas paid by your wallet"}
             </p>
             <p className="text-xs leading-relaxed text-muted-foreground">
+              {/* Named only when the preparation carried the assigned role. */}
+              {result.role ? `${roleSentence(result.role)} ` : ""}
               This seat&apos;s jury rewards go to your address. You may unstake
               any time; the bond returns 24 hours later, and the seat stops being
               drawn as soon as you ask. You can stake on as many seats as you
@@ -387,28 +397,6 @@ function StakeSeatForm({
                   </p>
                 </div>
               )}
-
-              <fieldset className="space-y-2">
-                <legend className="text-sm font-semibold text-ocean">Debate role</legend>
-                <div className="flex flex-wrap gap-1.5">
-                  {ZKLOGIN_AGENT_ROLES.map((candidate) => (
-                    <Chip
-                      key={candidate}
-                      label={candidate.replace(/_/g, " ")}
-                      selected={role === candidate}
-                      onSelect={() => setRole(candidate)}
-                    />
-                  ))}
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Research is the same for every seat. The role is written into
-                  the seat&apos;s manifest and, when a jury goes to a round-two
-                  debate, it sets the juror&apos;s instructions: the Skeptic attacks
-                  the weakest link in the majority reasoning even when it shares
-                  the vote, Source authenticity weighs how reliable the cited
-                  sources are, the Investigator argues only from the record.
-                </p>
-              </fieldset>
             </div>
 
             {busy && <StepList phase={phase} />}
@@ -472,7 +460,14 @@ function StakeSeatForm({
   );
 }
 
-/** One selectable chip, used for both the model and the role choice. */
+/** "Registered as an Investigator seat.", with SOURCE_AUTHENTICITY spelled out. */
+function roleSentence(role: string): string {
+  const words = role.replace(/_/g, " ").toLowerCase();
+  const label = words.charAt(0).toUpperCase() + words.slice(1);
+  return `Registered as ${/^[aeiou]/i.test(label) ? "an" : "a"} ${label} seat.`;
+}
+
+/** One selectable chip, used for the model choice. */
 function Chip({
   label,
   selected,
@@ -587,12 +582,11 @@ function buildStakeTransaction(
 async function prepareStake(
   address: string,
   modelId: string,
-  role: string,
 ): Promise<StakePreparation> {
   const response = await fetch("/api/agents/stake/prepare", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ address, modelId, role }),
+    body: JSON.stringify({ address, modelId }),
   });
   const body = await readJsonObject(response);
   if (!response.ok) {

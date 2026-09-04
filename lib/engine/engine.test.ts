@@ -7,6 +7,7 @@ import { getZkLoginSignature } from "@mysten/sui/zklogin";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   DELIBERATION_PROMPT_SPEC_V3,
+  DELIBERATION_PROMPT_SPEC_V4,
   DEFAULT_PROMPT_SPEC_V2,
   DEFAULT_PROMPT_SPEC_V3,
   DEFAULT_PROMPT_SPEC_V4,
@@ -89,6 +90,8 @@ import {
   debateConvergedAfterExchange,
   defaultDeadlines,
   deliberationTurnInstructions,
+  deliberationTurnInstructionsV4,
+  validateDeliberationOutputV4,
   ChainReadError,
   EngineCapacityError,
   EngineNoEvidenceError,
@@ -2261,11 +2264,236 @@ describe("deliberationTurnInstructions", () => {
   });
 });
 
+describe("validateDeliberationOutputV4", () => {
+  const ctx = {
+    allowedCitations: new Set(["https://allowed.test/page"]),
+    // V4 numbers seats from 1; this juror sits in seat 2 of three.
+    seatNumbers: new Set([1, 2, 3]),
+    selfSeatNumber: 2,
+    opensDebate: false,
+  };
+  const valid = {
+    answering: 1,
+    theirPoint: "Seat 1 read the filing as a completed sale.",
+    analysis: "The escrow language does not close the sale.",
+    question: { seat: 3, text: "Which clause closes it?" },
+    position: "I hold NO and lower my confidence.",
+    stance: "NO" as const,
+    confidenceBps: 6_200,
+    citations: ["https://allowed.test/page"],
+  };
+  const validate = (output: unknown, over: Partial<typeof ctx> = {}) =>
+    validateDeliberationOutputV4(JSON.stringify(output), { ...ctx, ...over });
+
+  it("accepts the contract and composes the argument", () => {
+    expect(validate(valid)).toEqual({
+      ok: true,
+      content: {
+        argument:
+          "The escrow language does not close the sale. I hold NO and lower my confidence.",
+        citations: ["https://allowed.test/page"],
+        stance: "NO",
+        confidenceBps: 6_200,
+        answering: 1,
+        theirPoint: "Seat 1 read the filing as a completed sale.",
+        analysis: "The escrow language does not close the sale.",
+        question: { seat: 3, text: "Which clause closes it?" },
+        position: "I hold NO and lower my confidence.",
+      },
+    });
+  });
+
+  it("accepts an opening turn that answers nobody", () => {
+    const opening = validate(
+      { ...valid, answering: null, theirPoint: "" },
+      { opensDebate: true },
+    );
+    expect(opening.ok).toBe(true);
+  });
+
+  it("rejects anything that is not exactly the eight keys", () => {
+    for (const output of [
+      { ...valid, extra: 1 },
+      { ...valid, position: undefined },
+      { ...valid, analysis: "" },
+      { ...valid, position: "  " },
+      { ...valid, confidenceBps: 10_001 },
+      { ...valid, stance: "MAYBE" },
+      { ...valid, question: { seat: 3 } },
+      { ...valid, citations: [1] },
+    ]) {
+      expect(validate(output)).toEqual({
+        ok: false,
+        failureStatus: "INVALID_OUTPUT",
+      });
+    }
+    expect(validateDeliberationOutputV4("not json", ctx)).toEqual({
+      ok: false,
+      failureStatus: "INVALID_OUTPUT",
+    });
+  });
+
+  it("labels an over-long field", () => {
+    for (const output of [
+      { ...valid, theirPoint: "x".repeat(241) },
+      { ...valid, analysis: "x".repeat(901) },
+      { ...valid, position: "x".repeat(241) },
+      { ...valid, question: { seat: 3, text: "x".repeat(241) } },
+    ]) {
+      expect(validate(output)).toEqual({
+        ok: false,
+        failureStatus: "INVALID_LENGTH",
+      });
+    }
+  });
+
+  it("labels a broken answering field", () => {
+    for (const output of [
+      // null on a turn that does not open the debate
+      { ...valid, answering: null, theirPoint: "" },
+      // a seat that is not at the table, the 0-based number, and its own seat
+      { ...valid, answering: 9 },
+      { ...valid, answering: 0 },
+      { ...valid, answering: 2 },
+      // theirPoint must be empty exactly when answering is null
+      { ...valid, answering: null },
+      { ...valid, theirPoint: "" },
+    ]) {
+      expect(validate(output)).toEqual({
+        ok: false,
+        failureStatus: "INVALID_ANSWERING",
+      });
+    }
+  });
+
+  it("labels a question to a seat that cannot answer it", () => {
+    for (const output of [
+      { ...valid, question: { seat: 9, text: "Who says so?" } },
+      { ...valid, question: { seat: 0, text: "Who says so?" } },
+      { ...valid, question: { seat: 2, text: "Who says so?" } },
+      { ...valid, question: { seat: 3, text: "   " } },
+    ]) {
+      expect(validate(output)).toEqual({
+        ok: false,
+        failureStatus: "INVALID_QUESTION",
+      });
+    }
+  });
+
+  it("labels a citation outside the allowed set", () => {
+    expect(validate({ ...valid, citations: ["https://other.test/page"] })).toEqual({
+      ok: false,
+      failureStatus: "INVALID_CITATIONS",
+    });
+  });
+
+  it("normalizes whitespace and em dashes before bounding a field", () => {
+    const result = validate({
+      ...valid,
+      analysis: `  The filing\u2014read closely\u2014says   little.  `,
+    });
+    expect(result).toMatchObject({
+      ok: true,
+      content: { analysis: "The filing, read closely, says little." },
+    });
+  });
+});
+
+describe("deliberationTurnInstructionsV4", () => {
+  const base = {
+    exchange: 1 as const,
+    role: "ANALYST",
+    outcome: "NO" as const,
+    // V4 numbers seats from 1: this juror is Seat 3 of five.
+    seatNumber: 3,
+    roundOneSeats: [
+      { seatNumber: 1, outcome: "YES" as const },
+      { seatNumber: 2, outcome: "YES" as const },
+      { seatNumber: 3, outcome: "NO" as const },
+    ],
+    answerSeat: 1,
+    opensDebate: true,
+    lastSpeakerThisExchange: null,
+    movedSoFar: false,
+  };
+
+  it("tells the opener to address the strongest opposing seat", () => {
+    const instructions = deliberationTurnInstructionsV4(base);
+    expect(instructions).toContain(
+      "You open the debate: Seat 1 is the strongest opposing seat, so set answering to 1",
+    );
+    expect(instructions).toContain("Seat 1 voted YES and Seat 2 voted YES");
+    expect(instructions).toContain("Ask one pointed question of a named seat");
+    expect(instructions).toContain("position is your one-line conclusion");
+    expect(instructions).not.toContain("Seat 0");
+  });
+
+  it("puts a pending question before everything else", () => {
+    const instructions = deliberationTurnInstructionsV4({
+      ...base,
+      opensDebate: false,
+      lastSpeakerThisExchange: 2,
+      pendingQuestion: { from: 1, text: "Which clause closes it?" },
+    });
+    expect(instructions).toContain(
+      "Seat 1 asked you: 'Which clause closes it?' Answer it first",
+    );
+    expect(instructions).not.toContain("Seat 2 spoke last");
+  });
+
+  it("answers the last speaker of the exchange when no question is pending", () => {
+    expect(
+      deliberationTurnInstructionsV4({
+        ...base,
+        opensDebate: false,
+        lastSpeakerThisExchange: 2,
+      }),
+    ).toContain("Seat 2 spoke last: answer their point first, set answering to 2");
+  });
+
+  it("asks the opener of a later exchange for the strongest objection", () => {
+    const instructions = deliberationTurnInstructionsV4({
+      ...base,
+      exchange: 3,
+      opensDebate: false,
+      movedSoFar: true,
+    });
+    expect(instructions).toMatch(
+      /^Exchange three\. At least one seat changed its stance/,
+    );
+    expect(instructions).toContain("No seat has spoken yet in this exchange");
+    expect(instructions).toContain("This is the last exchange:");
+    expect(instructions).toContain("Do not ask a question in the last exchange");
+  });
+
+  it("keeps the unanimous steelman and the role sentence", () => {
+    const instructions = deliberationTurnInstructionsV4({
+      ...base,
+      exchange: 2,
+      role: "SKEPTIC",
+      outcome: "NO",
+      roundOneSeats: [
+        { seatNumber: 1, outcome: "NO" },
+        { seatNumber: 3, outcome: "NO" },
+      ],
+      answerSeat: 1,
+      opensDebate: false,
+      lastSpeakerThisExchange: 1,
+    });
+    expect(instructions).toContain("Every seat agrees with you, so present the best case for YES");
+    expect(instructions).toContain("You hold the SKEPTIC role");
+  });
+});
+
 describe("public deliberation", () => {
   it("stops after one converged exchange and freezes the public stances", async () => {
     const setup = await discussionSetup(2, {
       0: [deliberationResponse("Seat 0 opening", [], "YES", 8_200)],
-      1: [deliberationResponse("Seat 1 opening", [], "YES", 7_900)],
+      1: [
+        deliberationResponse("Seat 1 opening", [], "YES", 7_900, {
+          answering: 1,
+        }),
+      ],
     });
     const callsBefore = setup.gonkaComplete.mock.calls.length;
 
@@ -2299,7 +2527,7 @@ describe("public deliberation", () => {
     ]);
     expect(stored.every((turn) => turn.gonkaRequestId !== undefined)).toBe(true);
     expect(stored.every(
-      (turn) => turn.promptSpecHash === promptSpecHash(DELIBERATION_PROMPT_SPEC_V3),
+      (turn) => turn.promptSpecHash === promptSpecHash(DELIBERATION_PROMPT_SPEC_V4),
     )).toBe(true);
 
     const events = (await repository.listResolutionEvents(setup.claimId)).filter(
@@ -2348,7 +2576,7 @@ describe("public deliberation", () => {
     expect(requests).toHaveLength(2);
     expect(requests.every(([request]) => request.messages.length === 2)).toBe(true);
     expect(requests[0]?.[0].messages[0]?.content).toBe(
-      DELIBERATION_PROMPT_SPEC_V3.systemPrompt,
+      DELIBERATION_PROMPT_SPEC_V4.systemPrompt,
     );
     const firstInput = JSON.parse(
       requests[0]?.[0].messages[1]?.content ?? "null",
@@ -2360,8 +2588,10 @@ describe("public deliberation", () => {
       debateSoFar: [],
       exchange: 1,
       mostRecentSpeaker: null,
-      turnInstructions: expect.stringContaining("Exchange one"),
-      self: { seatIndex: 0, role: expect.any(String) },
+      answerSeat: null,
+      pendingQuestion: null,
+      turnInstructions: expect.stringContaining("You open the debate"),
+      self: { seatIndex: 1, role: expect.any(String) },
       allowedCitations: expect.any(Array),
     });
     const secondInput = JSON.parse(
@@ -2369,8 +2599,9 @@ describe("public deliberation", () => {
     ) as Record<string, unknown>;
     expect(secondInput).toMatchObject({
       exchange: 1,
-      mostRecentSpeaker: 0,
-      turnInstructions: expect.stringContaining("Begin by answering Seat 0"),
+      mostRecentSpeaker: 1,
+      answerSeat: 1,
+      turnInstructions: expect.stringContaining("Seat 1 spoke last"),
     });
     const phaseOneManifest = await repository.getEvidenceManifest(setup.claimId, 1);
     const allowedCitations = firstInput.allowedCitations as string[];
@@ -2387,11 +2618,13 @@ describe("public deliberation", () => {
     const setup = await discussionSetup(2, {
       0: [
         deliberationResponse("Seat 0 moves", [], "NO"),
-        deliberationResponse("Seat 0 holds", [], "NO"),
+        deliberationResponse("Seat 0 holds", [], "NO", 8_000, { answering: 2 }),
       ],
       1: [
-        deliberationResponse("Seat 1 holds", [], "YES"),
-        deliberationResponse("Seat 1 still holds", [], "YES"),
+        deliberationResponse("Seat 1 holds", [], "YES", 8_000, { answering: 1 }),
+        deliberationResponse("Seat 1 still holds", [], "YES", 8_000, {
+          answering: 1,
+        }),
       ],
     });
     const callsBefore = setup.gonkaComplete.mock.calls.length;
@@ -2408,13 +2641,21 @@ describe("public deliberation", () => {
     const setup = await discussionSetup(2, {
       0: [
         deliberationResponse("Seat 0 moves", [], "NO"),
-        deliberationResponse("Seat 0 moves back", [], "YES"),
-        deliberationResponse("Seat 0 moves again", [], "NO"),
+        deliberationResponse("Seat 0 moves back", [], "YES", 8_000, {
+          answering: 2,
+        }),
+        deliberationResponse("Seat 0 moves again", [], "NO", 8_000, {
+          answering: 2,
+        }),
       ],
       1: [
-        deliberationResponse("Seat 1 holds", [], "YES"),
-        deliberationResponse("Seat 1 still holds", [], "YES"),
-        deliberationResponse("Seat 1 finally holds", [], "YES"),
+        deliberationResponse("Seat 1 holds", [], "YES", 8_000, { answering: 1 }),
+        deliberationResponse("Seat 1 still holds", [], "YES", 8_000, {
+          answering: 1,
+        }),
+        deliberationResponse("Seat 1 finally holds", [], "YES", 8_000, {
+          answering: 1,
+        }),
       ],
     });
     const callsBefore = setup.gonkaComplete.mock.calls.length;
@@ -2438,10 +2679,17 @@ describe("public deliberation", () => {
 
   it("skips malformed output and continues later turns", async () => {
     const setup = await discussionSetup(2, {
-      0: ["not-json", deliberationResponse("Seat 0 response")],
+      0: [
+        "not-json",
+        deliberationResponse("Seat 0 response", [], "YES", 8_000, {
+          answering: 2,
+        }),
+      ],
       1: [
         deliberationResponse("Seat 1 opening"),
-        deliberationResponse("Seat 1 response"),
+        deliberationResponse("Seat 1 response", [], "YES", 8_000, {
+          answering: 1,
+        }),
       ],
     });
 
@@ -2460,11 +2708,15 @@ describe("public deliberation", () => {
     const setup = await discussionSetup(2, {
       0: [
         deliberationResponse("Seat 0 opening", ["not-allowed"]),
-        deliberationResponse("Seat 0 response"),
+        deliberationResponse("Seat 0 response", [], "YES", 8_000, {
+          answering: 2,
+        }),
       ],
       1: [
         deliberationResponse("Seat 1 opening"),
-        deliberationResponse("Seat 1 response"),
+        deliberationResponse("Seat 1 response", [], "YES", 8_000, {
+          answering: 1,
+        }),
       ],
     });
 
@@ -2588,7 +2840,11 @@ describe("public deliberation", () => {
   it("freezes phase two as soon as the debate converges", async () => {
     const setup = await discussionSetup(2, {
       0: [deliberationResponse("Seat 0 opening", [], "YES", 8_200)],
-      1: [deliberationResponse("Seat 1 opening", [], "YES", 7_900)],
+      1: [
+        deliberationResponse("Seat 1 opening", [], "YES", 7_900, {
+          answering: 1,
+        }),
+      ],
     });
     const repository = createRepository(setup.db);
     await expect(
@@ -2634,6 +2890,277 @@ describe("public deliberation", () => {
     expect(
       phaseTwoFreezes(await repository.listResolutionEvents(setup.claimId)),
     ).toBe(0);
+  });
+
+  it("records the V4 conversation and composes the argument from it", async () => {
+    const setup = await discussionSetup(2, {
+      0: [
+        deliberationResponse("Seat 1 reads the filing as an escrow.", [], "YES", 8_200, {
+          question: { seat: 2, text: "Which clause closes the sale?" },
+        }),
+      ],
+      1: [
+        deliberationResponse("The escrow clause does not close the sale.", [], "YES", 7_900, {
+          answering: 1,
+          theirPoint: "Seat 1 read the 2024 filing as a completed sale.",
+          position: "I hold YES and lower my confidence.",
+        }),
+      ],
+    });
+    const callsBefore = setup.gonkaComplete.mock.calls.length;
+
+    await setup.engine.runDeliberation(setup.claimId);
+
+    const repository = createRepository(setup.db);
+    const [first, second] = await repository.listDeliberationTurns(setup.claimId);
+    expect(first).toMatchObject({
+      specVersion: "4",
+      answering: null,
+      theirPoint: "",
+      analysis: "Seat 1 reads the filing as an escrow.",
+      question: { seat: 2, text: "Which clause closes the sale?" },
+      position: "The position stands on the frozen record.",
+      argument:
+        "Seat 1 reads the filing as an escrow. The position stands on the frozen record.",
+    });
+    expect(second).toMatchObject({
+      specVersion: "4",
+      answering: 1,
+      theirPoint: "Seat 1 read the 2024 filing as a completed sale.",
+      position: "I hold YES and lower my confidence.",
+      argument:
+        "The escrow clause does not close the sale. I hold YES and lower my confidence.",
+    });
+    expect(second?.argument.length).toBeLessThanOrEqual(1_141);
+    expect(second?.question).toBeUndefined();
+
+    // The transcript that enters the phase-two root carries the same fields.
+    const artifact = await repository.getEvidenceArtifact(
+      `deliberation-transcript:${setup.claimId}`,
+    );
+    if (!artifact) throw new Error("expected a deliberation transcript artifact");
+    const transcript = JSON.parse(
+      new TextDecoder().decode(
+        await setup.walrus.get(artifact.canonicalWalrusBlobId),
+      ),
+    ) as { turns: Array<Record<string, unknown>> };
+    expect(transcript.turns[0]).toMatchObject({
+      specVersion: "4",
+      answering: null,
+      question: { seat: 2, text: "Which clause closes the sale?" },
+    });
+    // The hashed transcript is exactly what the API and the auditor read.
+    expect(transcript.turns).toEqual(
+      (await setup.engine.inspect(setup.claimId)).deliberation,
+    );
+    expect(Object.keys(transcript.turns[1] ?? {}).sort()).toEqual([
+      "agentProfileId",
+      "analysis",
+      "answering",
+      "argument",
+      "atMs",
+      "citations",
+      "claimId",
+      "confidenceBps",
+      "exchange",
+      "jurySeatId",
+      "modelId",
+      "ordinal",
+      "position",
+      "specVersion",
+      "stance",
+      "status",
+      "theirPoint",
+    ]);
+
+    // The second turn is told to answer the question it was asked.
+    const requests = setup.gonkaComplete.mock.calls.slice(callsBefore);
+    const secondInput = JSON.parse(
+      requests[1]?.[0].messages[1]?.content ?? "null",
+    ) as Record<string, unknown>;
+    // Everything the model sees is 1-based: the seat that spoke, the seat it
+    // must answer, and the seat its question named.
+    expect(secondInput).toMatchObject({
+      answerSeat: 1,
+      mostRecentSpeaker: 1,
+      pendingQuestion: { from: 1, text: "Which clause closes the sale?" },
+      turnInstructions: expect.stringContaining(
+        "Seat 1 asked you: 'Which clause closes the sale?'",
+      ),
+      self: { seatIndex: 2 },
+      roundOneRecord: { seats: [{ seatIndex: 1 }, { seatIndex: 2 }] },
+      debateSoFar: [
+        {
+          seat: 1,
+          answering: null,
+          theirPoint: "",
+          question: { seat: 2, text: "Which clause closes the sale?" },
+          position: "The position stands on the frozen record.",
+        },
+      ],
+    });
+  });
+
+  it("runs the V3 contract when the env selects it", async () => {
+    vi.stubEnv("OPENVERDICT_DELIBERATION_SPEC", "3");
+    try {
+      const setup = await discussionSetup(2, {
+        0: [deliberationResponseV3("Seat 0 opening", [], "YES", 8_200)],
+        1: [deliberationResponseV3("Seat 1 opening", [], "YES", 7_900)],
+      });
+      const callsBefore = setup.gonkaComplete.mock.calls.length;
+
+      await setup.engine.runDeliberation(setup.claimId);
+
+      const stored = await createRepository(setup.db).listDeliberationTurns(
+        setup.claimId,
+      );
+      expect(stored).toHaveLength(2);
+      expect(
+        stored.every(
+          (turn) =>
+            turn.status === "SPOKEN" &&
+            turn.specVersion === undefined &&
+            turn.answering === undefined &&
+            turn.promptSpecHash === promptSpecHash(DELIBERATION_PROMPT_SPEC_V3),
+        ),
+      ).toBe(true);
+      expect(stored[0]?.argument).toBe("Seat 0 opening");
+      const requests = setup.gonkaComplete.mock.calls.slice(callsBefore);
+      expect(requests[0]?.[0].messages[0]?.content).toBe(
+        DELIBERATION_PROMPT_SPEC_V3.systemPrompt,
+      );
+      const input = JSON.parse(
+        requests[0]?.[0].messages[1]?.content ?? "null",
+      ) as Record<string, unknown>;
+      expect(input.answerSeat).toBeUndefined();
+      expect(input.pendingQuestion).toBeUndefined();
+      expect(input.turnInstructions).toEqual(
+        expect.stringContaining("You speak first"),
+      );
+
+      // Parity: a V1 to V3 transcript carries exactly the keys it always did,
+      // so its hash, the phase-two root and the audit checks over it are
+      // unchanged by V4.
+      const artifact = await createRepository(setup.db).getEvidenceArtifact(
+        `deliberation-transcript:${setup.claimId}`,
+      );
+      if (!artifact) throw new Error("expected a deliberation transcript artifact");
+      const transcript = JSON.parse(
+        new TextDecoder().decode(
+          await setup.walrus.get(artifact.canonicalWalrusBlobId),
+        ),
+      ) as { turns: Array<Record<string, unknown>> };
+      for (const turn of transcript.turns) {
+        expect(Object.keys(turn).sort()).toEqual([
+          "agentProfileId",
+          "argument",
+          "atMs",
+          "citations",
+          "claimId",
+          "confidenceBps",
+          "exchange",
+          "jurySeatId",
+          "modelId",
+          "ordinal",
+          "stance",
+          "status",
+        ]);
+      }
+      // The transcript that is hashed is exactly what the API publishes.
+      expect(transcript.turns).toEqual(
+        (await setup.engine.inspect(setup.claimId)).deliberation,
+      );
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it("drops a turn that another worker already stored for that seat", async () => {
+    const setup = await discussionSetup(2, {
+      0: [deliberationResponse("Seat 0 opening")],
+      1: [
+        deliberationResponse("Seat 1 answers", [], "YES", 7_900, {
+          answering: 0,
+        }),
+      ],
+    });
+    const repository = createRepository(setup.db);
+    // Take the spy off so the fake adapter's own implementation is reachable.
+    setup.gonkaComplete.mockRestore();
+    const complete = setup.gonka.complete.bind(setup.gonka);
+    let raced = false;
+    // The evidence worker drives the same debate from another process: while
+    // this turn is at the provider, the sibling stores its own turn for the
+    // same seat, and this one must be dropped rather than written twice.
+    vi.spyOn(setup.gonka, "complete").mockImplementation(async (request) => {
+      const result = await complete(request);
+      const input = JSON.parse(
+        request.messages[1]?.content ?? "null",
+      ) as { self?: { jurySeatId?: string } };
+      const jurySeatId = input.self?.jurySeatId;
+      if (!raced && jurySeatId !== undefined) {
+        raced = true;
+        const timestamp = new Date(setup.now()).toISOString();
+        await repository.saveDeliberationTurn({
+          turnId: `${setup.claimId}:0`,
+          claimId: setup.claimId,
+          jurySeatId,
+          agentProfileId: request.manifest.agentProfileId,
+          modelId: request.manifest.modelId,
+          ordinal: 0,
+          exchange: 1,
+          argument: "A sibling worker spoke here.",
+          citations: [],
+          stance: "YES",
+          confidenceBps: 8_000,
+          status: "SPOKEN",
+          atMs: setup.now(),
+          promptSpecHash: promptSpecHash(DELIBERATION_PROMPT_SPEC_V4),
+          createdAt: timestamp,
+          updatedAt: timestamp,
+        });
+      }
+      return result;
+    });
+
+    await setup.engine.runDeliberation(setup.claimId);
+
+    const turns = await repository.listDeliberationTurns(setup.claimId);
+    expect(turns.map((turn) => turn.ordinal)).toEqual([0, 1]);
+    expect(new Set(turns.map((turn) => turn.jurySeatId)).size).toBe(2);
+    expect(turns[0]?.argument).toBe("A sibling worker spoke here.");
+  });
+
+  it("skips a turn that answers a seat outside the jury", async () => {
+    const answersUnknownSeat = JSON.stringify({
+      // 0 is never a seat number under V4, and this jury has no Seat 9 either.
+      answering: 9,
+      theirPoint: "Seat 9 said something.",
+      analysis: "There is no Seat 9 at this table.",
+      question: null,
+      position: "The position stands.",
+      stance: "YES",
+      confidenceBps: 8_000,
+      citations: [],
+    });
+    const setup = await discussionSetup(2, {
+      0: [answersUnknownSeat],
+      1: [answersUnknownSeat],
+    });
+
+    await setup.engine.runDeliberation(setup.claimId);
+
+    const turns = await createRepository(setup.db).listDeliberationTurns(
+      setup.claimId,
+    );
+    expect(
+      turns.map((turn) => [turn.status, turn.failureStatus, turn.argument]),
+    ).toEqual([
+      ["SKIPPED", "INVALID_ANSWERING", ""],
+      ["SKIPPED", "INVALID_ANSWERING", ""],
+    ]);
+    expect(turns.every((turn) => turn.specVersion === undefined)).toBe(true);
   });
 });
 
@@ -2703,6 +3230,7 @@ describe("wallet-signed seat staking", () => {
       humanBackingHash: expectedBackingHash,
       backingKind: "ZKLOGIN_BACKED",
       digest: "fake-0001-register_agent",
+      role: "INVESTIGATOR",
     });
     expect(setup.gateway.registrations).toHaveLength(1);
     expect(setup.gateway.registrations[0]).toMatchObject({
@@ -2757,6 +3285,23 @@ describe("wallet-signed seat staking", () => {
     await expect(
       setup.engine.agentManifestDocument(setup.gateway.agents[0]!.agentProfileId),
     ).resolves.toBeNull();
+  });
+
+  it("assigns a role when a signed registration names none", async () => {
+    const setup = await registrationSetup({ verifierResult: true });
+
+    const result = await setup.engine.registerZkBackedAgent({
+      zkLoginAddress: stakerAddress,
+      signature,
+      modelId: "model-b",
+    });
+
+    // The one seeded seat runs model-a, so model-b holds no role yet and the
+    // tie goes to the first role in the assignment order.
+    expect(result.role).toBe("INVESTIGATOR");
+    await expect(
+      createRepository(setup.db).getAgentManifest(result.agentProfileId),
+    ).resolves.toMatchObject({ role: "INVESTIGATOR" });
   });
 
   it("registers a browser wallet signature as a WALLET_STAKED seat", async () => {
@@ -3106,6 +3651,82 @@ describe("real stake on a juror seat", () => {
         role: "SKEPTIC",
       }),
     ).rejects.toThrow("canonical lowercase 32-byte Sui address");
+  });
+
+  it("assigns the least represented role on the model when none is named", async () => {
+    // Two model-a skeptics and no investigator: the seat fills the gap.
+    const setup = await registrationSetup({
+      verifierResult: true,
+      signerCount: 4,
+      initialAgentCount: 3,
+      seats: [
+        { modelId: "model-a", role: "SKEPTIC" },
+        { modelId: "model-a", role: "SKEPTIC" },
+        { modelId: "model-a", role: "SOURCE_AUTHENTICITY" },
+      ],
+    });
+
+    const preparation = await setup.engine.prepareStake({
+      stakerAddress,
+      modelId: "model-a",
+    });
+
+    expect(preparation.role).toBe("INVESTIGATOR");
+    expect(preparation.args.roleHash).toBe(
+      toHex(blake2b256(new TextEncoder().encode("OPENVERDICT_ROLE_INVESTIGATOR"))),
+    );
+    expect(
+      parseAgentManifestDocument(
+        await setup.walrus.get(preparation.args.manifestBlobId),
+      ),
+    ).toMatchObject({ modelId: "model-a", role: "INVESTIGATOR" });
+  });
+
+  it("skips an assigned role no committee could seat", async () => {
+    // The incident roster plus one model-a investigator: model-a holds no
+    // skeptic, so balance wants one, but every source seat runs model-a and a
+    // jury takes at most two of them, which would leave four skeptics.
+    const setup = await registrationSetup({
+      verifierResult: true,
+      signerCount: 10,
+      initialAgentCount: 8,
+      seats: [
+        { modelId: "model-a", role: "SOURCE_AUTHENTICITY" },
+        { modelId: "model-a", role: "SOURCE_AUTHENTICITY" },
+        { modelId: "model-a", role: "SOURCE_AUTHENTICITY" },
+        { modelId: "model-a", role: "INVESTIGATOR" },
+        { modelId: "model-b", role: "SKEPTIC" },
+        { modelId: "model-b", role: "SKEPTIC" },
+        { modelId: "model-c", role: "SKEPTIC" },
+        { modelId: "model-c", role: "SKEPTIC" },
+      ],
+    });
+
+    const preparation = await setup.engine.prepareStake({
+      stakerAddress,
+      modelId: "model-a",
+    });
+
+    expect(preparation.role).toBe("INVESTIGATOR");
+  });
+
+  it("keeps the role an API caller names", async () => {
+    const setup = await registrationSetup({ verifierResult: true });
+
+    const preparation = await setup.engine.prepareStake({
+      stakerAddress,
+      modelId: "model-a",
+      role: "SOURCE_AUTHENTICITY",
+    });
+
+    expect(preparation.role).toBe("SOURCE_AUTHENTICITY");
+    expect(preparation.args.roleHash).toBe(
+      toHex(
+        blake2b256(
+          new TextEncoder().encode("OPENVERDICT_ROLE_SOURCE_AUTHENTICITY"),
+        ),
+      ),
+    );
   });
 
   it("refuses a seat no committee could hold and takes the one that fits", async () => {
@@ -3727,7 +4348,37 @@ async function discussionSetup(
   return { ...setup, claimId };
 }
 
+/** A valid V4 turn. `answering` is a 1-based seat number (seat 0 is Seat 1),
+ * and must name another seat unless the turn opens the debate. */
 function deliberationResponse(
+  analysis: string,
+  citations: string[] = [],
+  stance: TableVoteStance = "YES",
+  confidenceBps = 8_000,
+  extra: {
+    answering?: number | null;
+    question?: { seat: number; text: string } | null;
+    theirPoint?: string;
+    position?: string;
+  } = {},
+): string {
+  const answering = extra.answering ?? null;
+  return JSON.stringify({
+    answering,
+    theirPoint:
+      extra.theirPoint ??
+      (answering === null ? "" : `Seat ${answering} read the record as decisive.`),
+    analysis,
+    question: extra.question ?? null,
+    position: extra.position ?? "The position stands on the frozen record.",
+    stance,
+    confidenceBps,
+    citations,
+  });
+}
+
+/** The V3 contract, still reachable through OPENVERDICT_DELIBERATION_SPEC. */
+function deliberationResponseV3(
   argument: string,
   citations: string[] = [],
   stance: TableVoteStance = "YES",
@@ -3744,6 +4395,16 @@ function publicDeliberationTurn(record: DeliberationTurnRecord) {
     ...(record.modelId === undefined ? {} : { modelId: record.modelId }),
     ordinal: record.ordinal,
     exchange: record.exchange,
+    ...(record.specVersion === undefined
+      ? {}
+      : { specVersion: record.specVersion }),
+    ...(record.answering === undefined ? {} : { answering: record.answering }),
+    ...(record.theirPoint === undefined
+      ? {}
+      : { theirPoint: record.theirPoint }),
+    ...(record.analysis === undefined ? {} : { analysis: record.analysis }),
+    ...(record.question === undefined ? {} : { question: record.question }),
+    ...(record.position === undefined ? {} : { position: record.position }),
     argument: record.argument,
     citations: record.citations,
     ...(record.stance === undefined ? {} : { stance: record.stance }),

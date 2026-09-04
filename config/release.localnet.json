@@ -2,9 +2,9 @@
   "network": "localnet",
   "suiRpcUrl": "http://127.0.0.1:9000",
   "suiFaucetUrl": "http://127.0.0.1:9123/v2/gas",
-  "packageId": "0xba3ddc62c7fedffb22365ca0e57269b573cdf8379d91c1150be1b953f3abb127",
-  "registryObjectId": "0xb9bca3458f1d91ba4ceb61e9254f62155038ac20427ea4bee547c9f60022d404",
-  "demoPoolObjectId": "0x90e9c2b67c4345d721f93cf8074d6b43640907ac66dccb505717c5218c710430",
+  "packageId": "0x84b1d64bead77f15d185e84a5f7a394f50b8dd9756288439e45566e9e9ae9fb7",
+  "registryObjectId": "0x6f39b8c39b2d52c212a9b05d46d784951fe1c2adbd13bc1bac64018d8008e21c",
+  "demoPoolObjectId": "0x3458f15b10ff6e860ffa66796bd9171849f242ea3d651e060ee7ca204f0fc912",
   "clockObjectId": "0x6",
   "randomObjectId": "0x8",
   "coinType": "0x2::sui::SUI",
@@ -28,8 +28,8 @@
     "minDistinctModels": 3
   },
   "explorerTxTemplate": "",
-  "adminCapObjectId": "0xb0d7e9ee8ffaa84633bfc4d0a2b613244c6e7146d450e39f1c8fe8993532da72",
-  "pauseCapObjectId": "0x72c769fd71c30aa197864564718d763ea974435ebd64642ab41c6a0b39c32ab5",
-  "evidenceCapObjectId": "0xd2692ec7b0396c268ab5d5c4b4f84b50633097c5c320426ef42dbd28fcfea3b0",
-  "runAttestorCapObjectId": "0x8f99959b389d48867e84d7cda8e048ea3adeb00048180b1f9382d857f9c7cd5e"
+  "adminCapObjectId": "0x1b2e7032d0671b9d0330e93834dcaecc6e897195284a0c33f9b4ce0c4edcf6b8",
+  "pauseCapObjectId": "0xb93dd3e4642722f3c8b48d280f772298e3e6f38abb1f56b735db737481ca4fda",
+  "evidenceCapObjectId": "0x4377305ddb1b0dc9c02c43f84f57535ef33c34654bf1eb111e5bbfb193444c11",
+  "runAttestorCapObjectId": "0x9e9c8428807f7dc75e78d7160843ee8d5a8f647f2626594921ccbd4f9bb0845a"
 }

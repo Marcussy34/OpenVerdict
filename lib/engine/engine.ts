@@ -15,6 +15,7 @@ import {
 } from "../evidence";
 import {
   DELIBERATION_PROMPT_SPEC_V3,
+  DELIBERATION_PROMPT_SPEC_V4,
   EMPTY_TOOL_TRANSCRIPT_HASH,
   TABLE_VOTE_PROMPT_SPEC_V1,
   GonkaRunError,
@@ -170,6 +171,13 @@ import {
   buildAgentManifestDocument,
   parseAgentManifestDocument,
 } from "./agentManifestDocument";
+import {
+  nextDebateTurn,
+  type DebateSeat,
+  type DebateTurnFacts,
+  type DebateTurnPlan,
+} from "./debateOrder";
+import { rankDebateRoles } from "./debate-role";
 import { rosterAdmitsDraw, rosterCanSeat } from "./draw-feasibility";
 import { researchStepEvent } from "./research-feed";
 import {
@@ -247,9 +255,35 @@ export const RESEARCH_PROBE_TIMEOUT_MS = 15_000;
  * A direct submission on clear weather still launches at once.
  */
 export const QUEUE_LAUNCH_SPACING_MS = 10 * 60_000;
-const DELIBERATION_PROMPT_SPEC_HASH = promptSpecHash(
-  DELIBERATION_PROMPT_SPEC_V3,
-);
+/** The two live deliberation contracts; V1 and V2 stay published history. */
+const DELIBERATION_SPEC_V3 = {
+  version: "3",
+  systemPrompt: DELIBERATION_PROMPT_SPEC_V3.systemPrompt,
+  maxOutputTokens: DELIBERATION_PROMPT_SPEC_V3.maxOutputTokens as number,
+  promptSpecHash: promptSpecHash(DELIBERATION_PROMPT_SPEC_V3),
+} as const;
+const DELIBERATION_SPEC_V4 = {
+  version: "4",
+  systemPrompt: DELIBERATION_PROMPT_SPEC_V4.systemPrompt,
+  maxOutputTokens: DELIBERATION_PROMPT_SPEC_V4.maxOutputTokens as number,
+  promptSpecHash: promptSpecHash(DELIBERATION_PROMPT_SPEC_V4),
+} as const;
+type DeliberationSpec = typeof DELIBERATION_SPEC_V3 | typeof DELIBERATION_SPEC_V4;
+/** Bounds on the V4 conversation fields; argument stays under its 1200 bound. */
+const MAX_DELIBERATION_THEIR_POINT = 240;
+const MAX_DELIBERATION_ANALYSIS = 900;
+const MAX_DELIBERATION_POSITION = 240;
+const MAX_DELIBERATION_QUESTION = 240;
+
+/**
+ * Which contract this debate runs on. Read once when the debate starts so an
+ * exchange can never be split across two contracts, and recorded per turn.
+ */
+export function selectedDeliberationSpec(): DeliberationSpec {
+  return process.env.OPENVERDICT_DELIBERATION_SPEC === "3"
+    ? DELIBERATION_SPEC_V3
+    : DELIBERATION_SPEC_V4;
+}
 
 export function agentBackingStatus(
   humanVerificationProvider: string,
@@ -301,6 +335,10 @@ type DeliberationFailureStatus =
   | "TIMEOUT"
   | "INVALID_OUTPUT"
   | "INVALID_CITATIONS"
+  // V4 labels each broken part of the conversation contract on its own.
+  | "INVALID_LENGTH"
+  | "INVALID_ANSWERING"
+  | "INVALID_QUESTION"
   | "WINDOW_EXHAUSTED";
 
 type DeliberationDebater = {
@@ -320,6 +358,21 @@ type DeliberationPlanTurn = {
   debater: DeliberationDebater;
   ordinal: number;
   exchange: 1 | 2 | 3;
+  /** Who this turn answers, and any question it must answer first. */
+  plan: DebateTurnPlan;
+};
+
+/** Everything a spoken turn contributes to the public record. */
+type DeliberationTurnContent = {
+  argument: string;
+  citations: string[];
+  stance?: TableVoteStance;
+  confidenceBps?: number;
+  answering?: number | null;
+  theirPoint?: string;
+  analysis?: string;
+  question?: { seat: number; text: string };
+  position?: string;
 };
 
 type DeliberationConvergenceTurn = Pick<
@@ -1596,6 +1649,7 @@ class OpenVerdictEngine implements Engine {
               priorRound,
               tableVoteContext.debate,
               tableVoteContext.convergedAfterExchange,
+              tableVoteContext.deliberationSpecVersion,
               seatDeadlineMs,
               commitFloorMs,
             );
@@ -3239,6 +3293,7 @@ class OpenVerdictEngine implements Engine {
     priorRound: PriorRoundPublicRecord,
     debate: TableVoteDebateTurn[],
     convergedAfterExchange: 1 | 2 | 3 | null,
+    deliberationSpecVersion: "4" | undefined,
     seatDeadlineMs: number,
     commitFloorMs: number,
   ): Promise<void> {
@@ -3320,11 +3375,28 @@ class OpenVerdictEngine implements Engine {
           resolutionCriteria: claim.resolutionCriteria,
         },
         evidenceManifest,
-        priorRound,
+        // A V4 transcript numbers seats from 1, so the table sees both the
+        // index it always had and the number the debate used.
+        priorRound: deliberationSpecVersion === undefined
+          ? priorRound
+          : {
+              ...priorRound,
+              seats: priorRound.seats.map((seat) => ({
+                ...seat,
+                seatNumber: seat.seatIndex + 1,
+              })),
+            },
         debate,
         convergedAfterExchange,
+        // Which debate contract produced the transcript above, when not V3.
+        ...(deliberationSpecVersion === undefined
+          ? {}
+          : { deliberationSpecVersion }),
         self: {
           seatIndex,
+          ...(deliberationSpecVersion === undefined
+            ? {}
+            : { seatNumber: seatIndex + 1 }),
           role: agent.role,
           roundOneOutcome: outcomeLabel(firstReveal.outcome),
           roundOneConfidenceBps: firstReveal.confidenceBps,
@@ -4159,6 +4231,8 @@ class OpenVerdictEngine implements Engine {
     // One account may stake on several seats, so nothing here rejects a repeat
     // staker hash: the Move draw rule seats at most one of them per committee.
     const slot = await this.allocateOperationalSlot();
+    // Nobody picks a debate role: the engine assigns one when none is named.
+    const role = req.role ?? (await this.assignSeatRole(slot.address, req.modelId));
 
     // Persist only the pseudonymous staker hash; the staking address and its
     // signature are used for authentication and deliberately not stored.
@@ -4168,7 +4242,7 @@ class OpenVerdictEngine implements Engine {
       humanBackingHash,
       humanVerificationProvider: verificationProvider,
       operationalOwner: slot.address as `0x${string}`,
-      role: req.role,
+      role,
       modelId: req.modelId,
       promptSpec: this.#gonka.promptSpec(),
       toolPolicy: this.#gonka.toolPolicy(),
@@ -4193,9 +4267,7 @@ class OpenVerdictEngine implements Engine {
       manifestHash: fromHex(built.manifestHash),
       manifestBlobId: manifestUpload.blobId,
       modelHash: blake2b256(new TextEncoder().encode(req.modelId)),
-      roleHash: blake2b256(
-        new TextEncoder().encode(`OPENVERDICT_ROLE_${req.role}`),
-      ),
+      roleHash: blake2b256(new TextEncoder().encode(`OPENVERDICT_ROLE_${role}`)),
       humanBackingHash: fromHex(humanBackingHash),
     });
 
@@ -4219,7 +4291,7 @@ class OpenVerdictEngine implements Engine {
     };
     await this.#repository.saveAgentManifest({
       manifest,
-      role: req.role,
+      role,
       ...(result.agentCapId === undefined
         ? {}
         : { agentCapId: result.agentCapId }),
@@ -4234,6 +4306,7 @@ class OpenVerdictEngine implements Engine {
       humanBackingHash,
       backingKind,
       digest: result.digest,
+      role,
     };
   }
 
@@ -4293,6 +4366,33 @@ class OpenVerdictEngine implements Engine {
   }
 
   /**
+   * The debate role a seat gets when its staker names none. Research is the
+   * same for every seat, so nobody picks a role: the engine keeps the pool
+   * balanced (the least represented role among the active seats on this model)
+   * and skips a role no committee could seat, since the staker can no longer
+   * pick a different one after a refusal. assertSeatIsDrawable still has the
+   * last word when nothing fits.
+   */
+  private async assignSeatRole(
+    owner: string,
+    modelId: string,
+  ): Promise<ZkLoginAgentRole> {
+    const roster = (await this.#repository.listAgentManifests()).map((agent) => ({
+      owner: agent.manifest.owner,
+      modelId: agent.manifest.modelId,
+      role: agent.role,
+      active: agent.active,
+    }));
+    const ranked = rankDebateRoles(roster, modelId);
+    // A roster that cannot draw a jury yet refuses nothing, so balance decides.
+    if (!rosterAdmitsDraw(roster).ok) return ranked[0]!;
+    const drawable = ranked.find(
+      (role) => rosterCanSeat(roster, { owner, modelId, role, active: true }).ok,
+    );
+    return drawable ?? ranked[0]!;
+  }
+
+  /**
    * Real stake, step one. Validates the seat's model and role, reserves a
    * signing slot under the registration lock, publishes the seat's manifest
    * document to Walrus, and returns the register_staked_agent arguments the
@@ -4305,14 +4405,16 @@ class OpenVerdictEngine implements Engine {
     const stakerHash = toHex(blake2b256(fromHex(req.stakerAddress)));
     return this.withRegistrationLock(async () => {
       const slot = await this.allocateOperationalSlot();
-      await this.assertSeatIsDrawable(slot.address, req.modelId, req.role);
+      // Nobody picks a debate role: the engine assigns one when none is named.
+      const role = req.role ?? (await this.assignSeatRole(slot.address, req.modelId));
+      await this.assertSeatIsDrawable(slot.address, req.modelId, role);
       const built = buildAgentManifestDocument({
         network: this.#manifest.network,
         backingKind: "WALLET_STAKED",
         humanBackingHash: stakerHash,
         humanVerificationProvider: WALLET_STAKE_VERIFICATION_PROVIDER,
         operationalOwner: slot.address as `0x${string}`,
-        role: req.role,
+        role,
         modelId: req.modelId,
         promptSpec: this.#gonka.promptSpec(),
         toolPolicy: this.#gonka.toolPolicy(),
@@ -4337,7 +4439,7 @@ class OpenVerdictEngine implements Engine {
         slotIndex: slot.index,
         operationalOwner: slot.address,
         modelId: req.modelId,
-        role: req.role,
+        role,
         manifestHash: built.manifestHash,
         manifestBlobId: upload.blobId,
         documentVersion: built.document.version,
@@ -4356,6 +4458,7 @@ class OpenVerdictEngine implements Engine {
       return {
         reservationId: reservation.reservationId,
         expiresAt: reservation.expiresAt,
+        role,
         target: {
           packageId: this.#manifest.packageId,
           registryObjectId: this.#manifest.registryObjectId,
@@ -4366,7 +4469,7 @@ class OpenVerdictEngine implements Engine {
           manifestBlobId: upload.blobId,
           modelHash: toHex(blake2b256(new TextEncoder().encode(req.modelId))),
           roleHash: toHex(
-            blake2b256(new TextEncoder().encode(`OPENVERDICT_ROLE_${req.role}`)),
+            blake2b256(new TextEncoder().encode(`OPENVERDICT_ROLE_${role}`)),
           ),
           stakerHash,
           operationalOwner: slot.address as `0x${string}`,
@@ -4896,10 +4999,8 @@ class OpenVerdictEngine implements Engine {
     const claim = await this.claim(claimId);
     if (claim.state !== CLAIM_STATE.DISCUSSION) return;
 
+    const spec = selectedDeliberationSpec();
     const { priorRound, debaters } = await this.deliberationDebaters(claimId);
-    const persisted = await this.#repository.listDeliberationTurns(claimId);
-    const completedOrdinals = new Set(persisted.map((turn) => turn.ordinal));
-    const records = [...persisted];
     const roundOneStances = new Map(
       debaters.map((debater) => [debater.jurySeatId, debater.outcome]),
     );
@@ -4913,63 +5014,80 @@ class OpenVerdictEngine implements Engine {
     const seatIndexById = new Map(
       debaters.map((debater) => [debater.jurySeatId, debater.seatIndex]),
     );
+    const debaterBySeatId = new Map(
+      debaters.map((debater) => [debater.jurySeatId, debater]),
+    );
+    const seats = debaters.map<DebateSeat>((debater) => ({
+      jurySeatId: debater.jurySeatId,
+      seatIndex: debater.seatIndex,
+      role: debater.manifest?.role ?? "",
+    }));
 
     for (const exchange of [1, 2, MAX_DELIBERATION_EXCHANGES] as const) {
-      const ordinalOffset = (exchange - 1) * debaters.length;
-      const plan = debaters.map<DeliberationPlanTurn>((debater, index) => ({
-        debater,
-        exchange,
-        ordinal: ordinalOffset + index,
-      }));
-      const movedSoFar = debateMovedBeforeExchange(
-        records,
-        roundOneStances,
-        exchange,
-      );
-
-      for (const [planIndex, turn] of plan.entries()) {
-        if (completedOrdinals.has(turn.ordinal)) continue;
-        if (
+      // The next speaker is a pure function of the turns already stored, so a
+      // restarted worker continues the same conversation. The stored turns are
+      // re-read every turn because the evidence worker can drive the same
+      // debate from another process, and both must follow one order.
+      for (;;) {
+        const stored = await this.#repository.listDeliberationTurns(claimId);
+        const plan = nextDebateTurn({
+          seats,
+          turns: stored.map(toDebateTurnFacts),
+          roundOneStances,
+          exchange,
+        });
+        if (plan === undefined) break;
+        const debater = debaterBySeatId.get(plan.seat.jurySeatId);
+        if (debater === undefined) break;
+        const turn: DeliberationPlanTurn = {
+          debater,
+          exchange,
+          ordinal: plan.ordinal,
+          plan,
+        };
+        const windowExhausted =
           this.#now() + PER_TURN_BUDGET_MS >
-          claim.deadlines.discussionDeadlineMs - freezeLeadMs
-        ) {
-          for (const remaining of plan.slice(planIndex)) {
-            if (completedOrdinals.has(remaining.ordinal)) continue;
-            const skipped = this.deliberationTurnRecord(
-              remaining,
+          claim.deadlines.discussionDeadlineMs - freezeLeadMs;
+        const record = windowExhausted
+          ? this.deliberationTurnRecord(
+              turn,
+              spec,
               "SKIPPED",
-              "",
-              [],
+              { argument: "", citations: [] },
               "WINDOW_EXHAUSTED",
+            )
+          : await this.completeDeliberationTurn(
+              claim,
+              turn,
+              spec,
+              priorRound,
+              stored,
+              seatIndexById,
+              this.deliberationAllowedCitations(
+                turn.debater,
+                phaseOneManifest,
+                priorRound,
+              ),
+              debateMovedBeforeExchange(stored, roundOneStances, exchange),
             );
-            await this.persistDeliberationTurn(skipped);
-            records.push(skipped);
-            completedOrdinals.add(remaining.ordinal);
-          }
-          break;
+        // A sibling process may have spoken for this seat while the model ran.
+        // Its turn is the record; this one is dropped and the order re-planned.
+        const latest = await this.#repository.listDeliberationTurns(claimId);
+        if (
+          latest.some(
+            (other) =>
+              other.ordinal === turn.ordinal ||
+              (other.exchange === exchange &&
+                other.jurySeatId === turn.debater.jurySeatId),
+          )
+        ) {
+          continue;
         }
-
-        const allowedCitations = this.deliberationAllowedCitations(
-          turn.debater,
-          phaseOneManifest,
-          priorRound,
-        );
-        const record = await this.completeDeliberationTurn(
-          claim,
-          turn,
-          priorRound,
-          records,
-          seatIndexById,
-          allowedCitations,
-          movedSoFar,
-        );
         await this.persistDeliberationTurn(record);
-        records.push(record);
-        completedOrdinals.add(turn.ordinal);
       }
 
       const convergedAfterExchange = debateConvergedAfterExchange(
-        records,
+        await this.#repository.listDeliberationTurns(claimId),
         roundOneStances,
       );
       if (convergedAfterExchange === exchange) {
@@ -4997,10 +5115,11 @@ class OpenVerdictEngine implements Engine {
     await this.ensureDeliberationTranscriptArtifact(claim);
   }
 
-  /** Freeze spoken turns in round-one seat order for every table voter. */
+  /** Freeze the spoken turns in debate order for every table voter. */
   private async tableVoteDebate(claimId: string): Promise<{
     debate: TableVoteDebateTurn[];
     convergedAfterExchange: 1 | 2 | 3 | null;
+    deliberationSpecVersion?: "4";
   }> {
     const [tally, reveals, turns] = await Promise.all([
       this.requiredTally(claimId, 1),
@@ -5034,6 +5153,18 @@ class OpenVerdictEngine implements Engine {
           citations: turn.citations,
           stance: turn.stance,
           confidenceBps: turn.confidenceBps,
+          // The table reads the thread too, when the debate ran on V4. Its
+          // seat numbers are 1-based, so the speaker carries one as well.
+          ...(turn.specVersion === undefined
+            ? {}
+            : { seatNumber: seatIndex + 1 }),
+          ...(turn.answering === undefined || turn.answering === null
+            ? {}
+            : { answering: turn.answering }),
+          ...(turn.theirPoint === undefined || turn.theirPoint.length === 0
+            ? {}
+            : { theirPoint: turn.theirPoint }),
+          ...(turn.question === undefined ? {} : { question: turn.question }),
         };
       });
     const roundOneStances = new Map(
@@ -5042,12 +5173,18 @@ class OpenVerdictEngine implements Engine {
         outcomeLabel(reveal.outcome),
       ]),
     );
+    const specVersion = turns.find(
+      (turn) => turn.specVersion !== undefined,
+    )?.specVersion;
     return {
       debate,
       convergedAfterExchange: debateConvergedAfterExchange(
         turns,
         roundOneStances,
       ),
+      ...(specVersion === undefined
+        ? {}
+        : { deliberationSpecVersion: specVersion }),
     };
   }
 
@@ -5126,22 +5263,38 @@ class OpenVerdictEngine implements Engine {
   private async completeDeliberationTurn(
     claim: ClaimRecord,
     turn: DeliberationPlanTurn,
+    spec: DeliberationSpec,
     priorRound: PriorRoundPublicRecord,
     priorTurns: DeliberationTurnRecord[],
     seatIndexById: ReadonlyMap<string, number>,
     allowedCitations: string[],
     movedSoFar: boolean,
   ): Promise<DeliberationTurnRecord> {
-    const { debater } = turn;
-    if (debater.manifest === undefined || debater.input === undefined) {
-      return this.deliberationTurnRecord(
+    const { debater, plan } = turn;
+    const skipped = (
+      failureStatus: DeliberationFailureStatus,
+      gonkaRequestId?: string,
+    ): DeliberationTurnRecord =>
+      this.deliberationTurnRecord(
         turn,
+        spec,
         "SKIPPED",
-        "",
-        [],
-        "PROVIDER_ERROR",
+        { argument: "", citations: [] },
+        failureStatus,
+        gonkaRequestId,
       );
+    if (debater.manifest === undefined || debater.input === undefined) {
+      return skipped("PROVIDER_ERROR");
     }
+    // V4 addresses seats from 1, so its seat numbers equal the juror numbers
+    // the console and the CLI print. Everything inside the engine, including
+    // the speaking order, keeps the 0-based seat index.
+    const asSeen = (seatIndex: number): number =>
+      spec.version === "4" ? seatIndex + 1 : seatIndex;
+    const seatSeen = (jurySeatId: string): number | undefined => {
+      const seatIndex = seatIndexById.get(jurySeatId);
+      return seatIndex === undefined ? undefined : asSeen(seatIndex);
+    };
     const spokenPriorTurns = priorTurns
       .filter(
         (prior) => prior.ordinal < turn.ordinal && prior.status === "SPOKEN",
@@ -5150,9 +5303,9 @@ class OpenVerdictEngine implements Engine {
     const lastSpokenTurn = spokenPriorTurns.at(-1);
     const mostRecentSpeaker = lastSpokenTurn === undefined
       ? null
-      : (seatIndexById.get(lastSpokenTurn.jurySeatId) ?? null);
+      : (seatSeen(lastSpokenTurn.jurySeatId) ?? null);
     const debateSoFar = spokenPriorTurns.map((prior) => ({
-      seat: seatIndexById.get(prior.jurySeatId),
+      seat: seatSeen(prior.jurySeatId),
       exchange: prior.exchange,
       argument: prior.argument,
       citations: prior.citations,
@@ -5160,37 +5313,78 @@ class OpenVerdictEngine implements Engine {
       ...(prior.confidenceBps === undefined
         ? {}
         : { confidenceBps: prior.confidenceBps }),
+      // V4 turns show the thread they answered; V1 to V3 turns carry none.
+      ...(prior.answering === undefined ? {} : { answering: prior.answering }),
+      ...(prior.theirPoint === undefined
+        ? {}
+        : { theirPoint: prior.theirPoint }),
+      ...(prior.question === undefined ? {} : { question: prior.question }),
+      ...(prior.position === undefined ? {} : { position: prior.position }),
     }));
-    const turnInstructions = deliberationTurnInstructions({
-      exchange: turn.exchange,
-      role: debater.manifest.role,
-      outcome: debater.outcome,
-      seatIndex: debater.seatIndex,
-      roundOneSeats: priorRound.seats.map(({ seatIndex, outcome }) => ({
-        seatIndex,
-        outcome,
-      })),
-      mostRecentSpeaker,
-      movedSoFar,
-    });
+    const roundOneSeats = priorRound.seats.map(({ seatIndex, outcome }) => ({
+      seatIndex: asSeen(seatIndex),
+      outcome,
+    }));
+    const answerSeat = plan.answering === null ? null : asSeen(plan.answering);
+    const pendingQuestion = plan.pendingQuestion === undefined
+      ? undefined
+      : { from: asSeen(plan.pendingQuestion.from), text: plan.pendingQuestion.text };
+    const turnInstructions = spec.version === "4"
+      ? deliberationTurnInstructionsV4({
+          exchange: turn.exchange,
+          role: debater.manifest.role,
+          outcome: debater.outcome,
+          seatNumber: asSeen(debater.seatIndex),
+          roundOneSeats: roundOneSeats.map(({ seatIndex, outcome }) => ({
+            seatNumber: seatIndex,
+            outcome,
+          })),
+          answerSeat,
+          pendingQuestion,
+          opensDebate: plan.opensDebate,
+          lastSpeakerThisExchange: plan.lastSpeakerThisExchange === null
+            ? null
+            : asSeen(plan.lastSpeakerThisExchange),
+          movedSoFar,
+        })
+      : deliberationTurnInstructions({
+          exchange: turn.exchange,
+          role: debater.manifest.role,
+          outcome: debater.outcome,
+          seatIndex: debater.seatIndex,
+          roundOneSeats,
+          mostRecentSpeaker,
+          movedSoFar,
+        });
     const messages = [
-      {
-        role: "system" as const,
-        content: DELIBERATION_PROMPT_SPEC_V3.systemPrompt,
-      },
+      { role: "system" as const, content: spec.systemPrompt },
       {
         role: "user" as const,
         content: canonicalJsonString({
           statement: claim.statement,
           resolutionCriteria: claim.resolutionCriteria,
-          roundOneRecord: priorRound,
+          // V4 renumbers the record's seats for the model; the frozen
+          // round-one artifact itself is never touched.
+          roundOneRecord: spec.version === "4"
+            ? {
+                ...priorRound,
+                seats: priorRound.seats.map((seat) => ({
+                  ...seat,
+                  seatIndex: asSeen(seat.seatIndex),
+                })),
+              }
+            : priorRound,
           debateSoFar,
           exchange: turn.exchange,
           mostRecentSpeaker,
+          // V4 states the conversation duties as data, not only as prose.
+          ...(spec.version === "4"
+            ? { answerSeat, pendingQuestion: pendingQuestion ?? null }
+            : {}),
           turnInstructions,
           self: {
             jurySeatId: debater.jurySeatId,
-            seatIndex: debater.seatIndex,
+            seatIndex: asSeen(debater.seatIndex),
             role: debater.manifest.role,
             outcome: debater.outcome,
             confidenceBps: debater.confidenceBps,
@@ -5208,64 +5402,62 @@ class OpenVerdictEngine implements Engine {
         input: debater.input,
         attempts: [],
         timeoutMs: PER_TURN_BUDGET_MS,
-        maxOutputTokens: DELIBERATION_PROMPT_SPEC_V3.maxOutputTokens,
+        maxOutputTokens: spec.maxOutputTokens,
       });
-      if (!completion.ok) {
-        return this.deliberationTurnRecord(
-          turn,
-          "SKIPPED",
-          "",
-          [],
-          completion.status,
-        );
-      }
-      const validated = validateDeliberationOutput(
-        completion.content,
-        new Set(allowedCitations),
-      );
+      if (!completion.ok) return skipped(completion.status);
+      const validated = spec.version === "4"
+        ? validateDeliberationOutputV4(completion.content, {
+            allowedCitations: new Set(allowedCitations),
+            seatNumbers: new Set(
+              [...seatIndexById.values()].map((seatIndex) => asSeen(seatIndex)),
+            ),
+            selfSeatNumber: asSeen(debater.seatIndex),
+            opensDebate: plan.opensDebate,
+          })
+        : validateDeliberationOutput(
+            completion.content,
+            new Set(allowedCitations),
+          );
       if (!validated.ok) {
-        return this.deliberationTurnRecord(
-          turn,
-          "SKIPPED",
-          "",
-          [],
-          validated.failureStatus,
-          completion.gonkaRequestId,
-        );
+        return skipped(validated.failureStatus, completion.gonkaRequestId);
       }
       return this.deliberationTurnRecord(
         turn,
+        spec,
         "SPOKEN",
-        validated.argument,
-        validated.citations,
+        validated.content,
         undefined,
         completion.gonkaRequestId,
-        validated.stance,
-        validated.confidenceBps,
       );
     } catch (error) {
-      return this.deliberationTurnRecord(
-        turn,
-        "SKIPPED",
-        "",
-        [],
-        deliberationProviderFailure(error),
-      );
+      return skipped(deliberationProviderFailure(error));
     }
   }
 
   private deliberationTurnRecord(
     turn: DeliberationPlanTurn,
+    spec: DeliberationSpec,
     status: DeliberationTurnPublic["status"],
-    argument: string,
-    citations: string[],
+    content: DeliberationTurnContent,
     failureStatus?: DeliberationFailureStatus,
     gonkaRequestId?: string,
-    stance?: TableVoteStance,
-    confidenceBps?: number,
   ): DeliberationTurnRecord {
     const atMs = this.#now();
     const timestamp = new Date(atMs).toISOString();
+    // Only a spoken V4 turn carries the conversation fields, so a V1 to V3
+    // transcript keeps hashing to exactly the bytes it always did.
+    const conversation = status === "SPOKEN" && spec.version === "4"
+      ? {
+          specVersion: "4" as const,
+          answering: content.answering ?? null,
+          theirPoint: content.theirPoint ?? "",
+          analysis: content.analysis ?? "",
+          ...(content.question === undefined
+            ? {}
+            : { question: content.question }),
+          position: content.position ?? "",
+        }
+      : {};
     return {
       turnId: `${turn.debater.run.claimId}:${turn.ordinal}`,
       claimId: turn.debater.run.claimId,
@@ -5274,15 +5466,18 @@ class OpenVerdictEngine implements Engine {
       modelId: turn.debater.modelId,
       ordinal: turn.ordinal,
       exchange: turn.exchange,
-      argument,
-      citations,
-      ...(stance === undefined ? {} : { stance }),
-      ...(confidenceBps === undefined ? {} : { confidenceBps }),
+      ...conversation,
+      argument: content.argument,
+      citations: content.citations,
+      ...(content.stance === undefined ? {} : { stance: content.stance }),
+      ...(content.confidenceBps === undefined
+        ? {}
+        : { confidenceBps: content.confidenceBps }),
       status,
       ...(failureStatus === undefined ? {} : { failureStatus }),
       atMs,
       ...(gonkaRequestId === undefined ? {} : { gonkaRequestId }),
-      promptSpecHash: DELIBERATION_PROMPT_SPEC_HASH,
+      promptSpecHash: spec.promptSpecHash,
       createdAt: timestamp,
       updatedAt: timestamp,
     };
@@ -5481,7 +5676,8 @@ class OpenVerdictEngine implements Engine {
 
 type ValidatedZkBackedRegistrationRequest = ZkBackedRegistrationRequest & {
   zkLoginAddress: `0x${string}`;
-  role: ZkLoginAgentRole;
+  /** Absent is the normal case now: the engine assigns the seat's role. */
+  role?: ZkLoginAgentRole;
 };
 
 function validateZkBackedRegistrationRequest(
@@ -5512,20 +5708,29 @@ function validateZkBackedRegistrationRequest(
       "modelId must be present in the release manifest catalog",
     );
   }
-  if (typeof request.role !== "string" || !isZkLoginAgentRole(request.role)) {
-    throw new EngineValidationError(
-      `role must be one of ${ZKLOGIN_AGENT_ROLES.join(", ")}`,
-    );
-  }
+  assertOptionalRole(request.role);
 }
 
 function isZkLoginAgentRole(role: string): role is ZkLoginAgentRole {
   return ZKLOGIN_AGENT_ROLES.some((candidate) => candidate === role);
 }
 
+/** An API caller may still name a role; the browser card never does. */
+function assertOptionalRole(
+  role: string | undefined,
+): asserts role is ZkLoginAgentRole | undefined {
+  if (role === undefined) return;
+  if (typeof role !== "string" || !isZkLoginAgentRole(role)) {
+    throw new EngineValidationError(
+      `role must be one of ${ZKLOGIN_AGENT_ROLES.join(", ")}`,
+    );
+  }
+}
+
 type ValidatedStakePreparationRequest = StakePreparationRequest & {
   stakerAddress: `0x${string}`;
-  role: ZkLoginAgentRole;
+  /** Absent is the normal case now: the engine assigns the seat's role. */
+  role?: ZkLoginAgentRole;
 };
 
 function validateStakePreparationRequest(
@@ -5548,11 +5753,7 @@ function validateStakePreparationRequest(
       "modelId must be present in the release manifest catalog",
     );
   }
-  if (typeof request.role !== "string" || !isZkLoginAgentRole(request.role)) {
-    throw new EngineValidationError(
-      `role must be one of ${ZKLOGIN_AGENT_ROLES.join(", ")}`,
-    );
-  }
+  assertOptionalRole(request.role);
 }
 
 /** Sui transaction digests are base58; the bound keeps a stray blob out of SQL. */
@@ -5835,6 +6036,133 @@ export function deliberationTurnInstructions(input: {
   return sentences.join(" ");
 }
 
+/**
+ * V4 turn duties. Every turn answers a named seat first, may put one question
+ * to a named seat, and states its position last, so the debate reads as a
+ * conversation instead of a row of briefs.
+ */
+export function deliberationTurnInstructionsV4(input: {
+  exchange: 1 | 2 | 3;
+  role: string;
+  outcome: "YES" | "NO" | "UNSURE";
+  /** Every number here is a 1-based seat number, as the model sees them. */
+  seatNumber: number;
+  roundOneSeats: Array<{
+    seatNumber: number;
+    outcome: "YES" | "NO" | "UNSURE";
+  }>;
+  /** The seat the engine expects this turn to answer, null when it opens. */
+  answerSeat: number | null;
+  pendingQuestion?: { from: number; text: string };
+  opensDebate: boolean;
+  lastSpeakerThisExchange: number | null;
+  movedSoFar: boolean;
+}): string {
+  const others = input.roundOneSeats.filter(
+    (seat) => seat.seatNumber !== input.seatNumber,
+  );
+  const dissenters = others.filter((seat) => seat.outcome !== input.outcome);
+  const unanimous = dissenters.length === 0;
+  const oppositeOutcome = input.outcome === "YES"
+    ? "NO"
+    : input.outcome === "NO"
+      ? "YES"
+      : "a definite YES or NO";
+  const roleSentence = input.role === "SKEPTIC"
+    ? "You hold the SKEPTIC role: attack the weakest link in the majority reasoning even when you share the vote."
+    : input.role === "SOURCE_AUTHENTICITY"
+      ? "You hold the SOURCE_AUTHENTICITY role: weigh the reliability and relevance of the sources cited so far and say which deserve less weight."
+      : "Argue only from the evidence in the record.";
+
+  const sentences = [
+    input.exchange === 1
+      ? "Exchange one."
+      : input.exchange === 2
+        ? "Exchange two."
+        : "Exchange three.",
+  ];
+  if (input.movedSoFar) {
+    sentences.push(
+      "At least one seat changed its stance in the previous exchange; address that change directly.",
+    );
+  }
+
+  // Who this turn answers: a question to you wins, then the last speaker,
+  // then the opposing seat the engine picked for an opening turn.
+  const lastSpeaker =
+    input.lastSpeakerThisExchange !== null &&
+    input.lastSpeakerThisExchange !== input.seatNumber
+      ? input.lastSpeakerThisExchange
+      : null;
+  if (input.pendingQuestion !== undefined) {
+    sentences.push(
+      `Seat ${input.pendingQuestion.from} asked you: '${input.pendingQuestion.text}' Answer it first, set answering to ${input.pendingQuestion.from}, and restate their question in theirPoint.`,
+    );
+  } else if (lastSpeaker !== null) {
+    sentences.push(
+      `Seat ${lastSpeaker} spoke last: answer their point first, set answering to ${lastSpeaker}, and restate that point in theirPoint.`,
+    );
+  } else if (input.opensDebate) {
+    sentences.push(
+      input.answerSeat === null
+        ? "You open the debate and no seat opposes you: set answering to null and theirPoint to the empty string."
+        : `You open the debate: Seat ${input.answerSeat} is the strongest opposing seat, so set answering to ${input.answerSeat} and restate in theirPoint the round-one reasoning of theirs you dispute.`,
+    );
+  } else {
+    sentences.push(
+      input.answerSeat === null
+        ? "No seat has spoken yet in this exchange: answer the strongest objection raised against your position, name that seat in answering and restate it in theirPoint."
+        : `No seat has spoken yet in this exchange: answer the strongest objection raised against your position, name that seat in answering (Seat ${input.answerSeat} argued the other side last) and restate it in theirPoint.`,
+    );
+  }
+
+  if (input.exchange === 1) {
+    sentences.push(
+      `Then give the single strongest reason for your ${input.outcome} vote that no seat has stated yet.`,
+    );
+    sentences.push(
+      dissenters.length > 0
+        ? `${listSentence(
+            dissenters.map(
+              (seat) => `Seat ${seat.seatNumber} voted ${seat.outcome}`,
+            ),
+          )}, so dispute one specific citation or inference from at least one of them.`
+        : `Every revealed seat voted ${input.outcome}, so state the strongest objection to that consensus and answer it.`,
+    );
+  } else {
+    sentences.push(
+      unanimous
+        ? `Every seat agrees with you, so present the best case for ${oppositeOutcome} using the allowed source that supports it most, and explain why it does not change your vote.`
+        : "If a seat changed its reasoning or conceded a point, say plainly whether that moves you.",
+    );
+    sentences.push(
+      "Do not restate points already made in this debate; add only new reasoning or direct answers.",
+    );
+  }
+  if (input.exchange === 3) {
+    sentences.push(
+      "This is the last exchange: say plainly whether you now hold, raise, lower or change your vote, and what single piece of evidence decides it.",
+    );
+  }
+
+  sentences.push(
+    // Nobody speaks after the last exchange, so a question there is a dead end.
+    input.exchange === MAX_DELIBERATION_EXCHANGES
+      ? "Do not ask a question in the last exchange: set question to null."
+      : "Ask one pointed question of a named seat that the record can answer, or set question to null.",
+    "Write the analysis before the position: analysis is your new reasoning about the point you answered, position is your one-line conclusion and comes last.",
+    "State your current stance and confidence in the stance and confidenceBps fields.",
+    roleSentence,
+  );
+  return sentences.join(" ");
+}
+
+/** "a", "a and b", "a, b and c": one readable list, no Oxford comma. */
+function listSentence(items: readonly string[]): string {
+  if (items.length <= 1) return items[0] ?? "";
+  return `${items.slice(0, -1).join(", ")} and ${items.at(-1)}`;
+}
+
 export function defaultDeadlines(
   now: number,
   network: ReleaseManifest["network"],
@@ -6099,6 +6427,29 @@ function deliberationTranscriptEvidenceId(claimId: string): string {
   return `deliberation-transcript:${claimId}`;
 }
 
+/**
+ * Only the facts the speaking order depends on, in its own vocabulary. The
+ * order works on 0-based seat indexes, so a V4 question, which names a 1-based
+ * seat number, is translated back here.
+ */
+function toDebateTurnFacts(record: DeliberationTurnRecord): DebateTurnFacts {
+  return {
+    jurySeatId: record.jurySeatId,
+    ordinal: record.ordinal,
+    exchange: record.exchange,
+    status: record.status,
+    ...(record.stance === undefined ? {} : { stance: record.stance }),
+    ...(record.question === undefined
+      ? {}
+      : {
+          question: {
+            seat: record.question.seat - 1,
+            text: record.question.text,
+          },
+        }),
+  };
+}
+
 function toPublicDeliberationTurn(
   record: DeliberationTurnRecord,
 ): DeliberationTurnPublic {
@@ -6109,6 +6460,17 @@ function toPublicDeliberationTurn(
     ...(record.modelId === undefined ? {} : { modelId: record.modelId }),
     ordinal: record.ordinal,
     exchange: record.exchange,
+    // Absent on V1 to V3 turns, so their canonical bytes never change.
+    ...(record.specVersion === undefined
+      ? {}
+      : { specVersion: record.specVersion }),
+    ...(record.answering === undefined ? {} : { answering: record.answering }),
+    ...(record.theirPoint === undefined
+      ? {}
+      : { theirPoint: record.theirPoint }),
+    ...(record.analysis === undefined ? {} : { analysis: record.analysis }),
+    ...(record.question === undefined ? {} : { question: record.question }),
+    ...(record.position === undefined ? {} : { position: record.position }),
     argument: record.argument,
     citations: record.citations,
     ...(record.stance === undefined ? {} : { stance: record.stance }),
@@ -6198,17 +6560,8 @@ export function validateTableVote(
 }
 
 type DeliberationOutputValidation =
-  | {
-      ok: true;
-      argument: string;
-      citations: string[];
-      stance: TableVoteStance;
-      confidenceBps: number;
-    }
-  | {
-      ok: false;
-      failureStatus: "INVALID_OUTPUT" | "INVALID_CITATIONS";
-    };
+  | { ok: true; content: DeliberationTurnContent }
+  | { ok: false; failureStatus: DeliberationFailureStatus };
 
 function validateDeliberationOutput(
   content: string,
@@ -6260,10 +6613,152 @@ function validateDeliberationOutput(
   }
   return {
     ok: true,
-    argument,
-    citations,
-    stance: record.stance,
-    confidenceBps: record.confidenceBps,
+    content: {
+      argument,
+      citations,
+      stance: record.stance,
+      confidenceBps: record.confidenceBps,
+    },
+  };
+}
+
+/** Plain single-line text: the same normalization V3 applies to argument. */
+function normalizeDeliberationText(value: string): string {
+  return value.replace(/\u2014/g, ", ").replace(/\s+/g, " ").trim();
+}
+
+/**
+ * The V4 conversation contract. Everything that is not exactly the contract
+ * fails closed with the label that names the broken part, so a malformed turn
+ * is a visible SKIPPED seat and never a silently repaired argument.
+ */
+export function validateDeliberationOutputV4(
+  content: string,
+  ctx: {
+    allowedCitations: ReadonlySet<string>;
+    /** The 1-based seat numbers V4 shows the model, one per debater. */
+    seatNumbers: ReadonlySet<number>;
+    selfSeatNumber: number;
+    opensDebate: boolean;
+  },
+): DeliberationOutputValidation {
+  const invalid = (
+    failureStatus: DeliberationFailureStatus,
+  ): DeliberationOutputValidation => ({ ok: false, failureStatus });
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(content) as unknown;
+  } catch {
+    return invalid("INVALID_OUTPUT");
+  }
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+    return invalid("INVALID_OUTPUT");
+  }
+  const record = parsed as Record<string, unknown>;
+  const keys = Object.keys(record).sort().join(",");
+  if (
+    keys !==
+      "analysis,answering,citations,confidenceBps,position,question,stance,theirPoint" ||
+    typeof record.theirPoint !== "string" ||
+    typeof record.analysis !== "string" ||
+    typeof record.position !== "string" ||
+    (record.answering !== null &&
+      (typeof record.answering !== "number" ||
+        !Number.isInteger(record.answering))) ||
+    !Array.isArray(record.citations) ||
+    record.citations.length > MAX_DELIBERATION_CITATIONS ||
+    record.citations.some((citation) => typeof citation !== "string") ||
+    (record.stance !== "YES" &&
+      record.stance !== "NO" &&
+      record.stance !== "UNSURE") ||
+    typeof record.confidenceBps !== "number" ||
+    !Number.isInteger(record.confidenceBps) ||
+    record.confidenceBps < 0 ||
+    record.confidenceBps > 10_000
+  ) {
+    return invalid("INVALID_OUTPUT");
+  }
+
+  let question: { seat: number; text: string } | undefined;
+  if (record.question !== null) {
+    const raw = record.question;
+    if (
+      typeof raw !== "object" ||
+      raw === null ||
+      Array.isArray(raw) ||
+      Object.keys(raw).sort().join(",") !== "seat,text"
+    ) {
+      return invalid("INVALID_OUTPUT");
+    }
+    const asked = raw as { seat: unknown; text: unknown };
+    if (
+      typeof asked.seat !== "number" ||
+      !Number.isInteger(asked.seat) ||
+      typeof asked.text !== "string"
+    ) {
+      return invalid("INVALID_OUTPUT");
+    }
+    const text = normalizeDeliberationText(asked.text);
+    if (text.length > MAX_DELIBERATION_QUESTION) {
+      return invalid("INVALID_LENGTH");
+    }
+    if (
+      text.length === 0 ||
+      asked.seat === ctx.selfSeatNumber ||
+      !ctx.seatNumbers.has(asked.seat)
+    ) {
+      return invalid("INVALID_QUESTION");
+    }
+    question = { seat: asked.seat, text };
+  }
+
+  const theirPoint = normalizeDeliberationText(record.theirPoint);
+  const analysis = normalizeDeliberationText(record.analysis);
+  const position = normalizeDeliberationText(record.position);
+  if (
+    theirPoint.length > MAX_DELIBERATION_THEIR_POINT ||
+    analysis.length > MAX_DELIBERATION_ANALYSIS ||
+    position.length > MAX_DELIBERATION_POSITION
+  ) {
+    return invalid("INVALID_LENGTH");
+  }
+  if (analysis.length === 0 || position.length === 0) {
+    return invalid("INVALID_OUTPUT");
+  }
+
+  const answering = record.answering;
+  if (answering === null) {
+    // A turn may answer nobody only while nobody has spoken.
+    if (!ctx.opensDebate || theirPoint.length > 0) {
+      return invalid("INVALID_ANSWERING");
+    }
+  } else if (
+    answering === ctx.selfSeatNumber ||
+    !ctx.seatNumbers.has(answering) ||
+    theirPoint.length === 0
+  ) {
+    return invalid("INVALID_ANSWERING");
+  }
+
+  const citations = [...new Set(record.citations as string[])];
+  if (citations.some((citation) => !ctx.allowedCitations.has(citation))) {
+    return invalid("INVALID_CITATIONS");
+  }
+
+  return {
+    ok: true,
+    content: {
+      // Older readers see one bounded argument: the analysis then the position.
+      argument: `${analysis} ${position}`.trim(),
+      citations,
+      stance: record.stance,
+      confidenceBps: record.confidenceBps,
+      answering,
+      theirPoint,
+      analysis,
+      ...(question === undefined ? {} : { question }),
+      position,
+    },
   };
 }
 

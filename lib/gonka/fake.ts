@@ -10,6 +10,7 @@ import {
   DELIBERATION_PROMPT_SPEC_V1,
   DELIBERATION_PROMPT_SPEC_V2,
   DELIBERATION_PROMPT_SPEC_V3,
+  DELIBERATION_PROMPT_SPEC_V4,
   TABLE_VOTE_PROMPT_SPEC_V1,
 } from "./promptSpec";
 import type {
@@ -77,6 +78,68 @@ type ActiveFixture = {
 export type FakeGonkaAdapter = GonkaRouterAdapter & {
   setWeather(entries: { modelId: string; ok: boolean }[]): void;
 };
+
+/** Which deliberation contract this call runs, or undefined when it is not one. */
+function deliberationSpecOf(
+  systemPrompt: string | undefined,
+): "3" | "4" | undefined {
+  if (systemPrompt === DELIBERATION_PROMPT_SPEC_V4.systemPrompt) return "4";
+  if (
+    systemPrompt === DELIBERATION_PROMPT_SPEC_V1.systemPrompt ||
+    systemPrompt === DELIBERATION_PROMPT_SPEC_V2.systemPrompt ||
+    systemPrompt === DELIBERATION_PROMPT_SPEC_V3.systemPrompt
+  ) {
+    return "3";
+  }
+  return undefined;
+}
+
+/** The seat the engine told this turn to answer, when the input carries one. */
+function answerSeatOf(userMessage: string | undefined): number | null {
+  if (userMessage === undefined) return null;
+  try {
+    const parsed: unknown = JSON.parse(userMessage);
+    if (typeof parsed !== "object" || parsed === null) return null;
+    const value = (parsed as { answerSeat?: unknown }).answerSeat;
+    return typeof value === "number" && Number.isInteger(value) ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+/** A valid, deliberately flat turn for fixtures that script no debate. */
+function cannedDeliberation(
+  specVersion: "3" | "4",
+  userMessage: string | undefined,
+  source: FakeFixture,
+): string {
+  const stance = source.outcome ?? "UNSURE";
+  const confidenceBps = source.confidenceBps ?? 0;
+  const position = "This juror maintains the position in its revealed record.";
+  if (specVersion === "3") {
+    return JSON.stringify({
+      argument: position,
+      citations: [],
+      stance,
+      confidenceBps,
+    });
+  }
+  const answering = answerSeatOf(userMessage);
+  return JSON.stringify({
+    answering,
+    theirPoint:
+      answering === null
+        ? ""
+        : `Seat ${answering} read the frozen record as decisive.`,
+    analysis:
+      "This juror weighed that point against its own revealed record and found nothing in the frozen evidence that changes it.",
+    question: null,
+    position,
+    stance,
+    confidenceBps,
+    citations: [],
+  });
+}
 
 function completionResponse(
   active: ActiveFixture,
@@ -377,6 +440,8 @@ export function createFakeGonkaAdapter(fixtures: FakeFixture[]): FakeGonkaAdapte
   const nextDeliberation = (
     input: GonkaCompletionInput,
     manifest: AgentManifest,
+    specVersion: "3" | "4",
+    userMessage: string | undefined,
   ): { active: ActiveFixture; content: string } => {
     const queue = fixturesByAgent.get(manifest.agentProfileId);
     if (!queue || queue.length === 0) {
@@ -395,12 +460,7 @@ export function createFakeGonkaAdapter(fixtures: FakeFixture[]): FakeGonkaAdapte
     deliberationCursors.set(manifest.agentProfileId, responseIndex + 1);
     const responses = source.deliberationResponses ?? [];
     const content = responses.length === 0
-      ? JSON.stringify({
-          argument: "This juror maintains the position in its revealed record.",
-          citations: [],
-          stance: source.outcome ?? "UNSURE",
-          confidenceBps: source.confidenceBps ?? 0,
-        })
+      ? cannedDeliberation(specVersion, userMessage, source)
       : responses[Math.min(responseIndex, responses.length - 1)]!;
     return {
       active: {
@@ -438,12 +498,14 @@ export function createFakeGonkaAdapter(fixtures: FakeFixture[]): FakeGonkaAdapte
       }
       return createFixtureAdapter(active, JSON.stringify(fixtureOutput(active))).complete(request);
     }
-    if (
-      request.messages[0]?.content === DELIBERATION_PROMPT_SPEC_V1.systemPrompt ||
-      request.messages[0]?.content === DELIBERATION_PROMPT_SPEC_V2.systemPrompt ||
-      request.messages[0]?.content === DELIBERATION_PROMPT_SPEC_V3.systemPrompt
-    ) {
-      const deliberation = nextDeliberation(request.input, request.manifest);
+    const deliberationSpec = deliberationSpecOf(request.messages[0]?.content);
+    if (deliberationSpec !== undefined) {
+      const deliberation = nextDeliberation(
+        request.input,
+        request.manifest,
+        deliberationSpec,
+        request.messages[1]?.content,
+      );
       return createFixtureAdapter(deliberation.active, deliberation.content).complete(request);
     }
     let active = activeByAttempts.get(request.attempts);

@@ -177,6 +177,10 @@ export type DebateTurnRow = {
   status: string;
   argument: string;
   citations: number;
+  /** V4 conversation fields; absent on turns that ran on spec V1 to V3. */
+  specVersion?: string;
+  answering?: number;
+  question?: { seat: number; text: string };
 };
 
 export type ScoreTerm = {
@@ -2308,6 +2312,11 @@ function debateTurns(world: World): DebateTurnRow[] {
         status: asString(turn.status) ?? "SPOKEN",
         argument: asString(turn.argument) ?? "",
         citations: asArray(turn.citations).length,
+        ...(asString(turn.specVersion) ? { specVersion: asString(turn.specVersion) } : {}),
+        ...(asNumber(turn.answering) !== undefined ? { answering: asNumber(turn.answering)! } : {}),
+        ...(isRecord(turn.question) && asNumber(turn.question.seat) !== undefined && asString(turn.question.text)
+          ? { question: { seat: asNumber(turn.question.seat)!, text: asString(turn.question.text)! } }
+          : {}),
       };
     })
     .sort((left, right) => left.ordinal - right.ordinal);
@@ -2325,10 +2334,15 @@ function auditDebate(world: World, runs: RunAudit[]): AuditCheck[] {
     );
   } else {
     const spoken = turns.filter((turn) => turn.status === "SPOKEN").length;
+    // The turns name the deliberation contract they ran on; V1 to V3 name none.
+    const specVersion = turns.find((turn) => turn.specVersion !== undefined)?.specVersion;
+    const contract = specVersion === undefined
+      ? " on deliberation spec V1 to V3"
+      : ` on deliberation spec V${specVersion}`;
     checks.push(
       check("D1", "debate", "Debate transcript", "PASS", {
         expected: "turns with seat, exchange, stance, confidence and status",
-        actual: `${turns.length} turns (${spoken} SPOKEN, ${turns.length - spoken} SKIPPED) over ${new Set(turns.map((turn) => turn.exchange)).size} exchanges`,
+        actual: `${turns.length} turns (${spoken} SPOKEN, ${turns.length - spoken} SKIPPED) over ${new Set(turns.map((turn) => turn.exchange)).size} exchanges${contract}`,
       }),
     );
   }
@@ -3073,11 +3087,17 @@ function renderDebate(result: AuditResult): string {
   } else {
     lines.push(
       table(
-        ["Ordinal", "Exchange", "Juror", "Model", "Stance", "Confidence", "Status", "Argument", "Citations"],
+        ["Ordinal", "Exchange", "Juror", "Answers", "Model", "Stance", "Confidence", "Status", "Argument", "Citations"],
         debate.turns.map((turn) => [
           turn.ordinal,
           turn.exchange,
           turn.jurorIndex || "-",
+          turn.answering === undefined
+            ? "-"
+            // From V4 on a seat number is the juror number; older rows are 0-based.
+            : turn.specVersion === undefined
+              ? `seat ${turn.answering}`
+              : `juror ${turn.answering}`,
           turn.modelId ?? "-",
           turn.stance ?? "-",
           turn.confidenceBps === undefined ? "-" : `${turn.confidenceBps} bps`,
@@ -3089,6 +3109,22 @@ function renderDebate(result: AuditResult): string {
     );
   }
   lines.push("");
+  const v4 = debate.turns.some((turn) => turn.specVersion !== undefined);
+  lines.push(
+    v4
+      ? "- Seat numbers: from deliberation spec V4 on, a seat number is the juror number (seat 1 is juror 1)."
+      : "- Seat numbers: a V1 to V3 transcript numbers seats from 0, so juror n holds seat n minus one.",
+  );
+  const questions = debate.turns.filter((turn) => turn.question !== undefined);
+  if (questions.length > 0) {
+    lines.push("");
+    lines.push("Questions put to a named seat:");
+    for (const turn of questions) {
+      const asker = turn.jurorIndex > 0 ? `Juror ${turn.jurorIndex}` : "An unknown juror";
+      lines.push(`- ${asker} asked juror ${turn.question?.seat}: ${turn.question?.text}`);
+    }
+    lines.push("");
+  }
   lines.push(`- Convergence: ${debate.convergedAfterExchange === null ? "the debate did not converge early" : `converged after exchange ${debate.convergedAfterExchange}`}`);
   lines.push(`- Phase-two evidence root: ${debate.phaseTwoRoot ?? "-"}`);
   lines.push(`- Pinned table-vote prompt hash: ${debate.tableVotePromptHash}`);

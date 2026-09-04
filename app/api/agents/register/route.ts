@@ -25,6 +25,9 @@ const FIELD_LIMITS = {
  * A signature is not money: the operator posts the bond on this path, so it is
  * off unless OPENVERDICT_FREE_SEATS=enabled. Real seats come from
  * /api/agents/stake/prepare plus /confirm, where the staker posts the bond.
+ *
+ * `role` is optional here too: with none named the engine assigns the least
+ * represented debate role on that model and returns it as `role`.
  */
 export async function POST(req: Request) {
   try {
@@ -71,17 +74,18 @@ export async function POST(req: Request) {
     if (!modelId) {
       return validationResponse("modelId is required and must be at most 128 characters");
     }
-    const role = boundedField(payload, "role", FIELD_LIMITS.role);
-    if (!role) {
-      return validationResponse("role is required and must be at most 32 characters");
+    // No role means the engine assigns one; a named role must still fit.
+    const role = optionalBoundedField(payload, "role", FIELD_LIMITS.role);
+    if (role === INVALID_FIELD) {
+      return validationResponse("role must be at most 32 characters");
     }
 
-    // Pick only the four public stake fields; ignore all caller extras.
+    // Pick only the public stake fields; ignore all caller extras.
     const registration: ZkBackedRegistrationRequest = {
       zkLoginAddress,
       signature,
       modelId,
-      role,
+      ...(role === undefined ? {} : { role }),
     };
     const engine = await getServerEngine();
     const result = await engine.registerZkBackedAgent(registration);
@@ -135,6 +139,20 @@ function boundedField(
   if (typeof value !== "string") return null;
   const trimmed = value.trim();
   return trimmed.length > 0 && trimmed.length <= maxLength ? trimmed : null;
+}
+
+/** Present but unusable, kept apart from "absent" so only the former is a 400. */
+const INVALID_FIELD = Symbol("invalid_field");
+
+/** An omitted or null field stays absent; anything else must be a bounded string. */
+function optionalBoundedField(
+  payload: Record<string, unknown>,
+  field: keyof typeof FIELD_LIMITS,
+  maxLength: number,
+): string | undefined | typeof INVALID_FIELD {
+  const value = payload[field];
+  if (value === undefined || value === null) return undefined;
+  return boundedField(payload, field, maxLength) ?? INVALID_FIELD;
 }
 
 function validationResponse(message: string): NextResponse {

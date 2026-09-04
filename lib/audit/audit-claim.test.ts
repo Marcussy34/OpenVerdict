@@ -91,6 +91,8 @@ type WorldSpec = {
   seats: SeatSpec[];
   state: number;
   twoRound?: boolean;
+  /** Which deliberation contract the debate turns ran on. Defaults to V3. */
+  debateSpec?: "3" | "4";
   result?: "YES" | "NO" | "UNRESOLVED";
   attemptChain?: AttemptChain;
   tamper?: { recordCommitment?: boolean; certificateScore?: boolean };
@@ -589,7 +591,22 @@ export function buildWorld(spec: WorldSpec): FakeWorld {
     if (phase === 1 && twoRound) {
       const speakers = seats.filter((seat) => seat.phase === 1 && seat.revealTx);
       speakers.forEach((seat, ordinal) => {
-        push("DELIBERATION_TURN", "DISCUSSION", T0 + 800_000 + ordinal * 10_000, { atMs: T0 + 800_000 + ordinal * 10_000, status: "SPOKEN", claimId, jurySeatId: seat.jurySeatId, agentProfileId: seat.agentProfileId, modelId: seat.spec.model, ordinal, exchange: 1, argument: `I keep my ${seat.vote?.outcome ?? "?"} vote.`, citations: ["evidence-table-1"], stance: seat.vote?.outcome, confidenceBps: seat.vote?.confidenceBps }, { source: "GONKA_ROUTER" });
+        // V4 turns answer a named seat and may ask one a question; a V3 turn
+        // carries only the composed argument, exactly as it always did.
+        const analysis = `The record still reads ${seat.vote?.outcome ?? "?"} to me.`;
+        const position = `I keep my ${seat.vote?.outcome ?? "?"} vote.`;
+        // V4 numbers seats from 1, so a seat number is the juror number.
+        const conversation = spec.debateSpec === "4"
+          ? {
+              specVersion: "4",
+              answering: ordinal === 0 ? null : 1,
+              theirPoint: ordinal === 0 ? "" : "Seat 1 read the trial as decisive.",
+              analysis,
+              ...(ordinal === 0 ? { question: { seat: 2, text: "Which trial arm is it?" } } : {}),
+              position,
+            }
+          : {};
+        push("DELIBERATION_TURN", "DISCUSSION", T0 + 800_000 + ordinal * 10_000, { atMs: T0 + 800_000 + ordinal * 10_000, status: "SPOKEN", claimId, jurySeatId: seat.jurySeatId, agentProfileId: seat.agentProfileId, modelId: seat.spec.model, ordinal, exchange: 1, ...conversation, argument: spec.debateSpec === "4" ? `${analysis} ${position}` : position, citations: ["evidence-table-1"], stance: seat.vote?.outcome, confidenceBps: seat.vote?.confidenceBps }, { source: "GONKA_ROUTER" });
       });
     }
   }
@@ -1104,6 +1121,44 @@ describe("auditClaim on a two-round claim", () => {
     expect(markdown).toContain("## Debate and round two");
     expect(markdown).toContain("settled in round two after the cascade");
     expect(markdown).toContain("| D3 | Table votes bind the pinned prompt |");
+    // A V1 to V3 transcript carries no conversation fields, and still passes.
+    expect(find(result, "D1", "PASS")[0]?.actual).toContain(
+      "on deliberation spec V1 to V3",
+    );
+    expect(result.debate?.turns.every((turn) => turn.specVersion === undefined)).toBe(true);
+    expect(result.debate?.turns.every((turn) => turn.answering === undefined)).toBe(true);
+    expect(renderMarkdown(result)).toContain(
+      "- Seat numbers: a V1 to V3 transcript numbers seats from 0, so juror n holds seat n minus one.",
+    );
+  });
+
+  it("reads the conversation fields of a V4 debate", async () => {
+    const world = buildWorld({ ...TWO_ROUND_CLAIM, debateSpec: "4" });
+    const result = await runAudit(world);
+
+    expect(result.exitCode).toBe(0);
+    expect(find(result, "D1", "PASS")[0]?.actual).toContain(
+      "on deliberation spec V4",
+    );
+    expect(result.debate?.turns.map((turn) => turn.answering)).toEqual([
+      undefined,
+      1,
+      1,
+      1,
+    ]);
+    expect(result.debate?.turns[0]?.question).toEqual({
+      seat: 2,
+      text: "Which trial arm is it?",
+    });
+    expect(result.debate?.turns.every((turn) => turn.specVersion === "4")).toBe(true);
+    const markdown = renderMarkdown(result);
+    expect(markdown).toContain("| Ordinal | Exchange | Juror | Answers |");
+    expect(markdown).toContain("| juror 1 |");
+    expect(markdown).toContain(
+      "- Seat numbers: from deliberation spec V4 on, a seat number is the juror number",
+    );
+    expect(markdown).toContain("Questions put to a named seat:");
+    expect(markdown).toContain("Juror 1 asked juror 2: Which trial arm is it?");
   });
 
   it("settles UNRESOLVED when round two has no quorum", async () => {

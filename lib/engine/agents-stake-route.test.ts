@@ -29,6 +29,7 @@ function preparation() {
   return {
     reservationId: "11111111-2222-3333-4444-555555555555",
     expiresAt: "2026-09-04T00:15:00.000Z",
+    role: "INVESTIGATOR",
     target: {
       packageId: `0x${"15".repeat(32)}`,
       registryObjectId: `0x${"40".repeat(32)}`,
@@ -113,6 +114,40 @@ describe("stake prepare route", () => {
       modelId: "model-a",
       role: "SKEPTIC",
     });
+  });
+
+  it("sends no role when the caller names none: the engine assigns it", async () => {
+    const engine = engineFixture();
+    serverMocks.getServerEngine.mockResolvedValue(engine);
+
+    const response = await postPrepare({
+      address: STAKER_ADDRESS,
+      modelId: "model-a",
+    });
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({ role: "INVESTIGATOR" });
+    expect(engine.prepareStake).toHaveBeenCalledWith({
+      stakerAddress: STAKER_ADDRESS,
+      modelId: "model-a",
+    });
+  });
+
+  it("rejects a role that is not a bounded string", async () => {
+    const engine = engineFixture();
+    serverMocks.getServerEngine.mockResolvedValue(engine);
+
+    const response = await postPrepare({
+      address: STAKER_ADDRESS,
+      modelId: "model-a",
+      role: "S".repeat(33),
+    });
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({
+      error: "validation_error",
+    });
+    expect(engine.prepareStake).not.toHaveBeenCalled();
   });
 
   it("rejects a request with no address at all", async () => {

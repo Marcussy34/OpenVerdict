@@ -157,6 +157,8 @@ export type OracleInferenceInput = {
     phase: 1;
     seats: Array<{
       seatIndex: number;
+      /** The 1-based seat number a V4 debate uses; equals the juror number. */
+      seatNumber?: number;
       modelId?: string;
       outcome: OracleInferenceOutput["outcome"];
       confidenceBps: number;
@@ -208,6 +210,12 @@ export type TableVoteDebateTurn = {
   citations: string[];
   stance: TableVoteStance;
   confidenceBps: number;
+  /** V4 conversation fields; absent on turns that ran on spec V1 to V3.
+   * `answering`, `question.seat` and `seatNumber` are 1-based seat numbers. */
+  seatNumber?: number;
+  answering?: number;
+  theirPoint?: string;
+  question?: { seat: number; text: string };
 };
 
 /** The sealed round-two input contains only frozen public evidence. */
@@ -221,8 +229,12 @@ export type TableVoteInput = {
   priorRound: NonNullable<OracleInferenceInput["priorRound"]>;
   debate: TableVoteDebateTurn[];
   convergedAfterExchange: 1 | 2 | 3 | null;
+  /** Which deliberation prompt spec produced the debate above, when not V3. */
+  deliberationSpecVersion?: "4";
   self: {
     seatIndex: number;
+    /** The 1-based seat number a V4 debate uses; equals the juror number. */
+    seatNumber?: number;
     role: string;
     roundOneOutcome: TableVoteStance;
     roundOneConfidenceBps: number;
@@ -394,6 +406,15 @@ export type DeliberationPromptSpecV3 = {
   systemPrompt: string;
   temperature: 0;
   maxOutputTokens: 800;
+  responseFormat: "json_object";
+};
+/** V4 splits a turn into the point answered, the analysis and the position. */
+export type DeliberationPromptSpecV4 = {
+  version: "4";
+  providerId: "gonkarouter";
+  systemPrompt: string;
+  temperature: 0;
+  maxOutputTokens: 1100;
   responseFormat: "json_object";
 };
 export type PromptSpec =
