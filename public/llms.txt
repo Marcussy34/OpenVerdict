@@ -28,6 +28,57 @@ published yet.
 - Submit a claim: https://app.openverdict.info/fact-check
 - Recompute a verdict in the browser: https://app.openverdict.info/verify
 
+## How to audit a claim
+
+No key, no wallet, no database. Start from a claim link
+(`https://app.openverdict.info/claims/<claimId>`) or a bare 0x id.
+
+Read the record:
+
+- `GET /api/claims/<claimId>`: state, phase, deadlines, attempt.
+- `GET /api/claims/<claimId>/report`: the verdict, the final-round votes and
+  `auditBundle` (committee, evidence roots per phase, runs, run approvals,
+  commitments, reveals, certificate). The spine of an audit.
+- `GET /api/claims/<claimId>/runs/<runId>/proof`: one juror run, its hashes,
+  its sealed and revealed Walrus blob ids, and the Sui objects behind it.
+- `GET /api/claims/<claimId>/events?snapshot=1`: the resolution event log
+  (leave off `snapshot` for the live Server-Sent Events stream).
+- `GET /api/gateway-receipts/<gatewayRequestId>`: GonkaRouter's public receipt,
+  proxied only because the gateway sends no CORS headers.
+
+Check it against sources that are not ours:
+
+- Sui JSON-RPC: `https://sui-testnet-rpc.publicnode.com` or
+  `https://fullnode.testnet.sui.io:443` (`sui_getObject`,
+  `sui_getTransactionBlock`).
+- Sui explorer: `https://suiscan.xyz/testnet/tx/<digest>` and `/object/<id>`.
+- Walrus: `https://aggregator.walrus-testnet.walrus.space/v1/blobs/<blobId>`.
+- GonkaRouter: `https://api.gonkarouter.io/v1/receipts/<gatewayRequestId>`.
+
+Three recomputations say whether the record is intact:
+
+1. Vote commitment: `blake2b256(BCS(VotePreimageV1 {claim_id,
+   agent_profile_id, jury_seat_id, phase u8, outcome u8, confidence_bps u16,
+   evidence_root, output_hash, run_hash, salt}))`, in that order, and it must
+   equal the commitment Sui stored before the reveal. The salt is published
+   nowhere: it is the fifth argument of the `reveal_vote` transaction.
+2. Run hash: `blake2b256(BCS(RunRecordV1 {run_id, claim_object_id,
+   agent_profile_id, jury_seat_id, phase, attempt, provider_id, model_id,
+   gonka_request_id, prompt_hash, input_hash, output_hash,
+   tool_transcript_hash, evidence_root, requested_at_ms, completed_at_ms}))`,
+   and it must equal the run hash in the run approval on Sui.
+3. Truth score: each valid final-round reveal becomes a probability in basis
+   points (YES its confidence, NO 10000 minus it, UNSURE 5000); the score is
+   `(sum + floor(N/2)) / N` in integer arithmetic, and it must equal the score
+   on the resolution certificate.
+
+Outcome codes are 1 YES, 2 NO, 3 UNSURE, and claim results add 4 UNRESOLVED.
+`docs/API.md` has every route with its statuses and limits, `docs/PRD.md` the
+semantics. Running it end to end: `pnpm ov audit <link>` recomputes all three
+from the public sources and prints one line per check, `pnpm ov trace <link>`
+prints the research trail, and https://app.openverdict.info/verify does the
+same checks in the browser.
+
 ## Optional
 
 - `.claude/skills/openverdict-audit/`: Claude Code skill that audits a verdict
