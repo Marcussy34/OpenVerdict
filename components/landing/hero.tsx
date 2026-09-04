@@ -85,14 +85,14 @@ export function Hero({
 
           {/* The reference's hero blurb (Archivo 19px / 500 / lh 25.65px /
               #F3F3F3); widened from the measured 409px to 480px so the Gonka
-              line fits in four rows (owner request, 2026-08-31). */}
+              line fits in four rows (owner request, 2026-08-31).
+              Copy shortened to ~22 words for above-the-fold scanning
+              (owner request, 2026-09-04); the deeper mechanics stay in
+              the FAQ and learn page. */}
           <p className="max-w-[480px] text-[19px] leading-[25.65px] font-medium text-[#F3F3F3] lg:col-span-5">
-            An adversarial AI jury protocol, not an agent swarm: five juror
-            seats from three model families research and cite each claim on
-            Gonka&apos;s decentralized inference network, seal their ballots
-            under commit-reveal, and cross-examine a deadlock over the frozen
-            record. Sui settles a recomputable Truth Score and an immutable
-            certificate.
+            Five AI jurors from three model families argue every claim.
+            Sealed votes, cited evidence, cross-examined deadlocks. Verified on
+            Gonka, settled on Sui.
           </p>
 
           <div className="lg:col-span-4">
