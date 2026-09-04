@@ -1,11 +1,6 @@
 "use client";
 
 import { Badge } from "@/components/ui/badge";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
 import { Progress } from "@/components/ui/progress";
 import { HashChip } from "@/components/viz/hash-chip";
 import { LiveDot } from "@/components/viz/live-dot";
@@ -207,163 +202,296 @@ function JurorAnswer({ proof }: { proof: BrowserRunProof }) {
 
 /** The one mark in front of the status line: what this seat is doing now. */
 function StateMark({ state }: { state: TranscriptJurorView["state"] }) {
-  if (state === "researching") return <LiveDot tone="chain" className="mt-1" />;
+  if (state === "researching") return <LiveDot tone="chain" />;
   if (state === "sealed") {
-    return <Lock size="13" variant="Bold" className="mt-0.5 shrink-0 text-sealed" />;
+    return <Lock size="13" variant="Bold" className="shrink-0 text-sealed" />;
   }
   if (state === "revealed") {
-    return <TickCircle size="13" variant="Bold" className="mt-0.5 shrink-0 text-yes" />;
+    return <TickCircle size="13" variant="Bold" className="shrink-0 text-yes" />;
   }
   if (state === "failed") {
-    return <ShieldCross size="13" variant="Bold" className="mt-0.5 shrink-0 text-no" />;
+    return <ShieldCross size="13" variant="Bold" className="shrink-0 text-no" />;
   }
+  return <span aria-hidden className="size-1.5 shrink-0 rounded-full bg-muted-foreground/50" />;
+}
+
+/**
+ * The status line has to hold one line inside a five-column card, so the long
+ * public phrasings get a compact form here and the full sentence stays in the
+ * title. Presentation only: lib/viz/transcript.ts keeps the words it prints,
+ * and the wording matches the research trail's own ("searched (challenge)").
+ */
+function shortStatus(status: string): string {
+  const revealed = /^revealed (.+) at (.+)$/.exec(status);
+  if (revealed) return `${revealed[1]}, ${revealed[2]}`;
+  // "reading a.org, b.org, +2 more" keeps the first site; the rest is in the title.
+  const reading = /^reading ([^,]+),/.exec(status);
+  if (reading) return `reading ${reading[1]}…`;
+  const failedBefore = /^failed before commit: (.+)$/.exec(status);
+  if (failedBefore) return `failed: ${failedBefore[1]}`;
+  if (status === "searching for evidence against the claim") return "searching (challenge)";
+  if (status === "searching for evidence for the claim") return "searching (support)";
+  if (status === "research finished, run approved on Sui") return "research finished";
+  if (status === "seat drawn, waiting to start") return "waiting to start";
+  return status;
+}
+
+/** The family tile: one monochrome initial tinted by the seat's model family. */
+function SeatGlyph({ juror }: { juror: TranscriptJuror }) {
+  const family = modelFamily(juror.modelId);
   return (
-    <span aria-hidden className="mt-1.5 size-1.5 shrink-0 rounded-full bg-muted-foreground/50" />
+    <span
+      aria-hidden
+      className={cn(
+        "grid size-6 shrink-0 place-items-center border text-[11px] font-semibold",
+        family.chip,
+      )}
+    >
+      {family.key === "other" ? "?" : family.name.charAt(0)}
+    </span>
+  );
+}
+
+/** "Juror 3  Kimi" on one line; a long model id ellipsises rather than wraps. */
+function SeatName({ juror }: { juror: TranscriptJuror }) {
+  return (
+    <p className="flex items-baseline gap-x-1.5 text-[13px] leading-tight whitespace-nowrap">
+      <span className="shrink-0 font-semibold text-foreground">Juror {juror.index}</span>
+      <span className="min-w-0 truncate text-muted-foreground" title={juror.modelId}>
+        {juror.modelId ? modelName(juror.modelId) : "model pending"}
+      </span>
+    </p>
+  );
+}
+
+/** The role, shortened to its first word in a narrow chip; title holds it all. */
+function RoleChip({ role, className }: { role: string; className?: string }) {
+  return (
+    <Badge
+      variant="outline"
+      title={role}
+      className={cn(
+        "ov-micro ov-micro-sm block h-auto max-w-full truncate border-border px-1.5 py-0.5 tracking-[0.6px] text-muted-foreground",
+        className,
+      )}
+    >
+      {role.split(" ")[0] ?? role}
+    </Badge>
+  );
+}
+
+/** The line saying what this seat is doing now, short enough for one line. */
+function StatusLine({ view, className }: { view: TranscriptJurorView; className?: string }) {
+  return (
+    <p
+      title={view.status}
+      className={cn(
+        "flex items-center gap-1.5 text-[13px] leading-snug text-muted-foreground",
+        className,
+      )}
+    >
+      <StateMark state={view.state} />
+      <span className="min-w-0 flex-1 truncate">{shortStatus(view.status)}</span>
+    </p>
+  );
+}
+
+/** The one control on a tile and at the head of its panel. */
+function TrailButton({
+  expanded,
+  steps,
+  panelId,
+  onToggle,
+  className,
+}: {
+  expanded: boolean;
+  steps: number;
+  panelId: string;
+  onToggle: () => void;
+  className?: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-expanded={expanded}
+      // Only points at a panel while one exists.
+      {...(expanded ? { "aria-controls": panelId } : {})}
+      className={cn(
+        "flex min-h-10 items-center gap-1.5 text-left text-[13px] font-medium whitespace-nowrap",
+        "text-foreground/70 transition-colors hover:text-foreground",
+        "focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
+        className,
+      )}
+    >
+      <ArrowDown2
+        size="12"
+        variant="Bold"
+        className={cn("shrink-0 transition-transform", expanded && "rotate-180")}
+      />
+      {/* Label and count read as one line; a five-column tile has no room for
+          "Show the trail" plus a counter, so the article goes. */}
+      <span className="truncate">{expanded ? "Hide trail" : "Show trail"}</span>
+      {steps > 0 && (
+        <span className="shrink-0 font-mono text-[11px] text-muted-foreground tabular-nums">
+          · {steps} step{steps === 1 ? "" : "s"}
+        </span>
+      )}
+    </button>
   );
 }
 
 /**
- * One juror in the live transcript: its identity, the line saying what it is
- * doing right now, and, expanded, its research steps and (after the reveal)
- * the answer it committed to. Nothing here guesses a sealed vote.
+ * One juror as a compact tile in the jury row: who it is, what it is doing,
+ * and the one control that opens its trail. The trail itself opens in a
+ * full-width panel below the row, so a narrow column never has to hold it.
  */
 export function JurorCard({
   juror,
   view,
   expanded,
   onToggle,
-  proof,
-  loadingProof,
+  panelId,
+  className,
 }: {
   juror: TranscriptJuror;
   view: TranscriptJurorView;
   expanded: boolean;
   onToggle: () => void;
+  panelId: string;
+  className?: string;
+}) {
+  return (
+    <div
+      className={cn(
+        "flex h-full flex-col border bg-card p-3 transition-colors",
+        // The open seat carries the accent hairline, so the panel below it has
+        // an owner even when several are open at once.
+        expanded ? "border-sea" : "border-border",
+        className,
+      )}
+    >
+      <div className="flex items-start gap-2">
+        <SeatGlyph juror={juror} />
+        <div className="min-w-0 flex-1">
+          <SeatName juror={juror} />
+          {juror.role && (
+            <RoleChip role={juror.role.replace(/_/g, " ")} className="mt-1.5" />
+          )}
+        </div>
+      </div>
+
+      <StatusLine view={view} className="mt-2.5" />
+
+      {/* The control closes the tile, so every tile in a row ends the same. */}
+      <TrailButton
+        expanded={expanded}
+        steps={view.steps.length}
+        panelId={panelId}
+        onToggle={onToggle}
+        className="mt-auto w-full border-t border-border/60 pt-2.5"
+      />
+    </div>
+  );
+}
+
+/**
+ * One juror's opened trail, full width below the jury row: the research steps,
+ * the sealed line while the vote is still sealed, and the revealed answer once
+ * it opens. Headed by the seat's own identity, so a stack of panels reads.
+ */
+export function JurorTrailPanel({
+  juror,
+  view,
+  onToggle,
+  panelId,
+  proof,
+  loadingProof,
+  className,
+}: {
+  juror: TranscriptJuror;
+  view: TranscriptJurorView;
+  onToggle: () => void;
+  panelId: string;
   proof?: BrowserRunProof;
   loadingProof?: boolean;
+  className?: string;
 }) {
-  const family = modelFamily(juror.modelId);
   const revealed = view.state === "revealed";
   const failed = view.state === "failed";
   const steps = view.steps.length;
 
   return (
-    <Collapsible
-      open={expanded}
-      onOpenChange={onToggle}
+    <section
+      id={panelId}
+      aria-label={`Juror ${juror.index} research trail`}
       className={cn(
-        "flex h-full flex-col border bg-card p-3 transition-colors",
-        expanded ? "border-foreground/25" : "border-border",
+        "border border-sea bg-card motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-top-1",
+        className,
       )}
     >
-      <div className="flex items-start gap-2.5">
-        {/* One monochrome initial in a tile tinted by model family. Committee
-            diversity is a protocol guarantee, so the hue earns its cue. */}
-        <span
-          aria-hidden
-          className={cn(
-            "grid size-7 shrink-0 place-items-center border text-[12px] font-semibold",
-            family.chip,
-          )}
-        >
-          {family.key === "other" ? "?" : family.name.charAt(0)}
-        </span>
-        <div className="min-w-0 flex-1">
-          <p className="flex flex-wrap items-baseline gap-x-1.5 text-[13px] leading-tight">
-            <span className="font-semibold text-foreground">Juror {juror.index}</span>
-            <span className="min-w-0 truncate text-muted-foreground" title={juror.modelId}>
-              {juror.modelId ? modelName(juror.modelId) : "model pending"}
-            </span>
-          </p>
-          {juror.role && (
-            <Badge
-              variant="outline"
-              // A long role wraps rather than pushing out of a narrow column.
-              className="ov-micro ov-micro-sm mt-1.5 h-auto max-w-full justify-start border-border px-1.5 py-0.5 text-left whitespace-normal text-muted-foreground"
-            >
-              {juror.role.replace(/_/g, " ")}
-            </Badge>
-          )}
-        </div>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-border px-4 py-2.5">
+        <SeatGlyph juror={juror} />
+        <SeatName juror={juror} />
+        {juror.role && <RoleChip role={juror.role.replace(/_/g, " ")} />}
+        <StatusLine view={view} className="min-w-0" />
+        <TrailButton
+          expanded
+          steps={steps}
+          panelId={panelId}
+          onToggle={onToggle}
+          className="ml-auto"
+        />
       </div>
 
-      <p className="mt-2.5 flex items-start gap-1.5 text-[13px] leading-snug text-muted-foreground">
-        <StateMark state={view.state} />
-        <span className="min-w-0 flex-1">{view.status}</span>
-      </p>
-
-      {/* The trail control closes the card, so a stretched row still reads as
-          one shelf: identity at the top, the same control on every bottom. */}
-      <CollapsibleTrigger
-        className={cn(
-          "mt-auto flex min-h-10 w-full items-center gap-1.5 border-t border-border/60 pt-2.5 text-left",
-          "text-[13px] font-medium text-foreground/70 transition-colors",
-          "hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
+      <div className="space-y-4 px-4 py-4">
+        {steps > 0 ? (
+          <ResearchFeed steps={view.steps} />
+        ) : revealed || failed ? null : (
+          // A seat still working says what will appear; a finished one whose
+          // proof carries no trail (a table vote) says nothing at all.
+          <p className="text-[13px] text-muted-foreground">
+            Research steps appear here as they happen.
+          </p>
         )}
-      >
-        <ArrowDown2
-          size="12"
-          variant="Bold"
-          className={cn("shrink-0 transition-transform", expanded && "rotate-180")}
-        />
-        {expanded ? "Hide the trail" : "Show the trail"}
-        {steps > 0 && (
-          <span className="ml-auto font-mono text-[11px] text-muted-foreground tabular-nums">
-            {steps} step{steps === 1 ? "" : "s"}
-          </span>
+
+        {failed && juror.failureStatus && (
+          <p className="flex items-start gap-1.5 text-[13px] leading-snug text-no">
+            <ShieldCross size="13" variant="Bold" className="mt-0.5 shrink-0" />
+            <span>
+              This seat failed before it committed ({juror.failureStatus}). It cast no vote,
+              and the whole attempt is void.
+            </span>
+          </p>
         )}
-      </CollapsibleTrigger>
 
-      <CollapsibleContent className="overflow-hidden data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:slide-in-from-top-1">
-        <div className="space-y-3 pt-3">
-          {steps > 0 ? (
-            <ResearchFeed steps={view.steps} />
-          ) : revealed || failed ? null : (
-            // A seat still working says what will appear; a finished one whose
-            // proof carries no trail (a table vote) says nothing at all.
-            <p className="text-[13px] text-muted-foreground">
-              Research steps appear here as they happen.
-            </p>
-          )}
+        {!revealed && !failed && (
+          <p className="flex items-start gap-1.5 text-[13px] leading-snug text-sealed">
+            <Lock size="13" variant="Bold" className="mt-0.5 shrink-0" />
+            <span>The vote and the reasoning stay sealed on chain until the reveal.</span>
+          </p>
+        )}
 
-          {failed && juror.failureStatus && (
-            <p className="flex items-start gap-1.5 text-[13px] leading-snug text-no">
-              <ShieldCross size="13" variant="Bold" className="mt-0.5 shrink-0" />
-              <span>
-                This seat failed before it committed ({juror.failureStatus}). It cast no vote,
-                and the whole attempt is void.
-              </span>
-            </p>
-          )}
+        {revealed && loadingProof && (
+          <p className="flex items-center gap-1.5 text-[13px] text-muted-foreground">
+            <Refresh size="13" variant="Bold" className="motion-safe:animate-spin" />
+            Opening the revealed run
+          </p>
+        )}
 
-          {!revealed && !failed && (
-            <p className="flex items-start gap-1.5 text-[13px] leading-snug text-sealed">
-              <Lock size="13" variant="Bold" className="mt-0.5 shrink-0" />
-              <span>The vote and the reasoning stay sealed on chain until the reveal.</span>
-            </p>
-          )}
+        {revealed && proof !== undefined && <JurorAnswer proof={proof} />}
 
-          {revealed && loadingProof && (
-            <p className="flex items-center gap-1.5 text-[13px] text-muted-foreground">
-              <Refresh size="13" variant="Bold" className="motion-safe:animate-spin" />
-              Opening the revealed run
-            </p>
-          )}
-
-          {revealed && proof !== undefined && <JurorAnswer proof={proof} />}
-
-          <div className="flex flex-wrap gap-1">
-            {juror.seats.map((seat) => (
-              <HashChip
-                key={seat.seatId}
-                value={seat.seatId}
-                label={seat.phase === 2 ? "seat, round two" : "seat"}
-                tone="muted"
-              />
-            ))}
-          </div>
+        <div className="flex flex-wrap gap-1">
+          {juror.seats.map((seat) => (
+            <HashChip
+              key={seat.seatId}
+              value={seat.seatId}
+              label={seat.phase === 2 ? "seat, round two" : "seat"}
+              tone="muted"
+            />
+          ))}
         </div>
-      </CollapsibleContent>
-    </Collapsible>
+      </div>
+    </section>
   );
 }

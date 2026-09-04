@@ -387,7 +387,9 @@ function StageBanner({
   // the live event stream (amber SYNCING while the stream catches up).
   const live = !replaying && !stranded && !attemptStopped && claim.state < 9;
   return (
-    <div className="pointer-events-none absolute inset-x-0 top-16 z-30 flex flex-col items-center gap-2 px-4 xl:top-4">
+    // Sits inside the stage's control bar, so it never floats over the record.
+    // Only the voided-attempt notice still overlays, hung under the bar.
+    <div className="relative flex min-w-0 items-center">
       <motion.div
         key={`${stage.key}-${claim.attemptChain?.status ?? "none"}-${replaying ? "replay" : "live"}`}
         initial={{ opacity: 0, y: -12, scale: 0.94 }}
@@ -434,7 +436,7 @@ function StageBanner({
         ) : null}
       </motion.div>
       {attemptStopped && claim.attemptChain !== undefined ? (
-        <div className="pointer-events-auto flex max-w-2xl flex-col items-center gap-3 border border-no/30 bg-card/95 px-5 py-4 text-[13px] text-muted-foreground backdrop-blur-md">
+        <div className="absolute top-full right-0 z-30 mt-3 flex w-max max-w-[min(42rem,80vw)] flex-col items-center gap-3 border border-no/30 bg-card px-5 py-4 text-[13px] text-muted-foreground shadow-lg">
           <div className="flex w-full flex-col gap-1 text-center">
             <span className="flex items-center justify-center gap-2 font-medium text-foreground">
               <CloseCircle size="16" variant="Bold" className="shrink-0 text-no" />
@@ -646,7 +648,7 @@ function StageControls({
   };
 }) {
   return (
-    <div className="absolute top-4 left-4 z-40 flex items-center gap-1 border border-border bg-card/95 p-1 text-foreground backdrop-blur">
+    <div className="flex shrink-0 items-center gap-1 border border-border bg-card p-1 text-foreground">
       <ToggleGroup
         type="single"
         value={view}
@@ -1683,22 +1685,29 @@ function ClaimCanvasContent({ params }: ClaimCanvasPageProps) {
         <LeftRail claim={claim} now={now} replay={replay} />
       </CollapsibleRail>
 
-      <main className="relative h-dvh flex-1 overflow-hidden">
-        <StageBanner claim={claim} graph={graph} replay={replay} now={now} streamStatus={streamStatus} />
-        <StageControls
-          view={resolvedView}
-          onChange={setView}
-          replay={{
-            available: replayable,
-            active: replay.active,
-            onReplay: () => {
-              replay.setSpeed(TRANSCRIPT_REPLAY_SPEED);
-              replay.start();
-            },
-            onSkipToEnd: replay.stop,
-          }}
-        />
+      <main className="relative flex h-dvh flex-1 flex-col overflow-hidden">
+        {/* One chrome bar across the stage: the view switcher, the replay
+            control and the protocol stage. Paper ground and a hairline, and in
+            the flow rather than over it, so the record scrolls beneath it
+            instead of under a floating pill. */}
+        <div className="relative z-40 flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-border bg-background px-4 py-3">
+          <StageControls
+            view={resolvedView}
+            onChange={setView}
+            replay={{
+              available: replayable,
+              active: replay.active,
+              onReplay: () => {
+                replay.setSpeed(TRANSCRIPT_REPLAY_SPEED);
+                replay.start();
+              },
+              onSkipToEnd: replay.stop,
+            }}
+          />
+          <StageBanner claim={claim} graph={graph} replay={replay} now={now} streamStatus={streamStatus} />
+        </div>
 
+        <div className="relative min-h-0 flex-1">
         {resolvedView === "live" ? (
           <LiveTranscript
             claimId={claim.claimId}
@@ -1760,6 +1769,7 @@ function ClaimCanvasContent({ params }: ClaimCanvasPageProps) {
             Inspect
           </button>
         )}
+        </div>
       </main>
 
       {/* The inspector exists only while a node is selected; clicking empty

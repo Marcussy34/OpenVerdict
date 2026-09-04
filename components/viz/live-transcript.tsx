@@ -1,10 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { motion, useReducedMotion } from "motion/react";
 
 import { CornerPin, Hairline, SplitButton } from "@/components/landing/primitives";
-import { JurorCard } from "@/components/viz/juror-card";
+import { JurorCard, JurorTrailPanel } from "@/components/viz/juror-card";
 import { ExportSquare, Judge } from "@/components/icons";
 import { cn } from "@/lib/utils";
 import { suiObjectUrl, suiTransactionUrl } from "@/lib/web/explorer";
@@ -202,9 +202,11 @@ export function LiveTranscript({
       <Hairline className="mt-3" />
 
       {/* One row of five once the column is wide enough; three, then one,
-          below that. Equal rows keep a multi-column shelf level as trails
-          open; a single-column stack keeps each card its own height. */}
-      <div className="mt-4 grid grid-cols-1 gap-3 @xl/jury:auto-rows-fr @xl/jury:grid-cols-3 @4xl/jury:grid-cols-5">
+          below that. An opened trail is a full-width panel: on a wide row the
+          tiles are ordered ahead of every panel, so the row stays five across
+          and the panels stack under it; in a single column the panel keeps its
+          place directly under the tile it belongs to. */}
+      <div className="mt-4 grid grid-cols-1 gap-3 @xl/jury:grid-cols-3 @4xl/jury:grid-cols-5">
         {jurors.map((juror) => {
           const runIds = juror.seats.map((seat) =>
             deriveRunId(claimId, seat.seatId, seat.phase),
@@ -213,19 +215,35 @@ export function LiveTranscript({
             .map((runId) => proofsByRunId[runId])
             .filter((entry): entry is BrowserRunProof => entry !== undefined)
             .at(-1);
+          const view = jurorAt(juror, t);
+          const isOpen = expanded.has(juror.index);
+          const panelId = `juror-trail-${juror.index}`;
+          const onToggle = () => {
+            if (!isOpen) onRequestProof(runIds);
+            toggle(juror.index);
+          };
           return (
-            <JurorCard
-              key={juror.index}
-              juror={juror}
-              view={jurorAt(juror, t)}
-              expanded={expanded.has(juror.index)}
-              onToggle={() => {
-                if (!expanded.has(juror.index)) onRequestProof(runIds);
-                toggle(juror.index);
-              }}
-              {...(proof === undefined ? {} : { proof })}
-              loadingProof={runIds.some((runId) => loadingRunIds.has(runId))}
-            />
+            <Fragment key={juror.index}>
+              <JurorCard
+                juror={juror}
+                view={view}
+                expanded={isOpen}
+                onToggle={onToggle}
+                panelId={panelId}
+                className="@xl/jury:order-1"
+              />
+              {isOpen && (
+                <JurorTrailPanel
+                  juror={juror}
+                  view={view}
+                  onToggle={onToggle}
+                  panelId={panelId}
+                  {...(proof === undefined ? {} : { proof })}
+                  loadingProof={runIds.some((runId) => loadingRunIds.has(runId))}
+                  className="@xl/jury:order-2 @xl/jury:col-span-full"
+                />
+              )}
+            </Fragment>
           );
         })}
       </div>
@@ -235,9 +253,7 @@ export function LiveTranscript({
   return (
     <div
       ref={scrollRef}
-      // The stage pill floats lower than xl until the stage is wide, so the
-      // column starts below it rather than under it.
-      className="ov-scroll h-full overflow-y-auto bg-background px-5 pt-32 pb-24 md:px-7 xl:pt-24"
+      className="ov-scroll h-full overflow-y-auto bg-background px-5 pt-8 pb-24 md:px-7"
     >
       <div className="mx-auto w-full max-w-4xl space-y-8">
         {/* The claim itself, stated once and quietly, above its record. */}
