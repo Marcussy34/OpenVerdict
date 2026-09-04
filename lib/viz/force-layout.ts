@@ -34,8 +34,10 @@ function coordinate(value: number | undefined, fallback: number): number {
 
 function collisionRadius(node: LayoutNode): number {
   if (node.kind === "juror") return node.satellite === true ? 22 : 26;
-  // The genesis circle plus the statement label under it need breathing room.
-  if (node.kind === "claim") return 62;
+  // The claim is no longer drawn (owner, 2026-09-04): it is only the pinned
+  // anchor the jury sits around, so it holds the middle open for the
+  // certificate instead of reserving room for a circle and a statement.
+  if (node.kind === "claim") return 34;
   return 14;
 }
 
@@ -47,7 +49,13 @@ export function createSimulation(
   positions: () => Map<string, { x: number; y: number }>;
 } {
   const centre = { x: size.width / 2, y: size.height / 2 };
-  const radialRadius = Math.min(size.width, size.height) / 3.2;
+  // The stage is rarely square: the debate dock takes the bottom of it and
+  // leaves a wide, short room. The seat ring is an ELLIPSE that spends what
+  // each axis actually has, so a short room gets a wide oval of jurors rather
+  // than a small circle sized by its shortest side and a lot of empty margin.
+  const radiusX = size.width / 2.9;
+  const radiusY = size.height / 4.2;
+  const radialRadius = Math.min(radiusX, radiusY);
   const jurorCount = graph.nodes.filter(
     (node) => node.kind === "juror" && node.satellite !== true,
   ).length;
@@ -79,10 +87,16 @@ export function createSimulation(
       angle = ((slot % 5) / 5) * Math.PI * 2 - Math.PI / 2;
     }
     jurorHomes.set(node.id, {
-      x: centre.x + Math.cos(angle) * radialRadius,
-      y: centre.y + Math.sin(angle) * radialRadius,
+      x: centre.x + Math.cos(angle) * radiusX,
+      y: centre.y + Math.sin(angle) * radiusY,
       angle,
     });
+  }
+  // How far each seat actually sits from the centre. Its spoke is given this
+  // length, so a spoke never drags an elliptical ring back into a circle.
+  const seatDistance = new Map<string, number>();
+  for (const [id, home] of jurorHomes) {
+    seatDistance.set(id, Math.hypot(home.x - centre.x, home.y - centre.y));
   }
 
   // Every research-trail node gets a home on its OWN juror's outward ray:
@@ -109,7 +123,9 @@ export function createSimulation(
   );
   const trailHomes = new Map<string, { x: number; y: number }>();
   const trailDepth = new Map<string, number>();
-  const maxExtra = Math.max(90, Math.min(size.width, size.height) / 2 - radialRadius - 48);
+  // Room a trail may take beyond its seat, averaged over the two axes: a wide
+  // room lets research fan out instead of piling every step onto one spot.
+  const maxExtra = Math.max(90, (size.width + size.height) / 4 - radialRadius - 48);
   for (const [jurorId, home] of jurorHomes) {
     // Each first-hop branch off the juror gets its own fanned angle, so the
     // round-1 trail, the verdict, and a round-2 satellite chain spread out
@@ -206,7 +222,13 @@ export function createSimulation(
   // distance piled every node under the juror discs).
   const linkDistance = (link: LinkWithKind): number => {
     switch (link.kind) {
-      case "seat": return radialRadius;
+      case "seat": {
+        // d3 has already resolved the endpoints to nodes by the time this is
+        // asked, so the spoke can carry its own seat's radius.
+        const target = link.target;
+        const id = typeof target === "object" ? target.id : String(target);
+        return seatDistance.get(id) ?? radialRadius;
+      }
       case "round": return 96;
       case "verdict": return 84;
       case "settle": return 110;

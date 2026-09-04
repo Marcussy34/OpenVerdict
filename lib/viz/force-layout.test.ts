@@ -91,7 +91,11 @@ describe("force layout", () => {
   it("seeds seat-indexed jurors on stable pentagon slots", () => {
     const size = { width: 640, height: 480 };
     const centre = { x: 320, y: 240 };
-    const radius = Math.min(size.width, size.height) / 3.2;
+    // The ring is an ellipse: it spends what each axis has, so a wide, short
+    // stage gets a wide oval of seats rather than a circle sized by its
+    // shortest side.
+    const radiusX = size.width / 2.9;
+    const radiusY = size.height / 4.2;
     const graph: DeliberationGraph = {
       nodes: [
         { id: "claim", kind: "claim", label: "Claim", atMs: 0 },
@@ -119,8 +123,11 @@ describe("force layout", () => {
     for (let index = 0; index < 5; index += 1) {
       const angle = (index / 5) * Math.PI * 2 - Math.PI / 2;
       const seed = seeds.get(`seat:${index}`);
-      expect(seed?.x).toBeCloseTo(centre.x + Math.cos(angle) * radius, 6);
-      expect(seed?.y).toBeCloseTo(centre.y + Math.sin(angle) * radius, 6);
+      expect(seed?.x).toBeCloseTo(centre.x + Math.cos(angle) * radiusX, 6);
+      expect(seed?.y).toBeCloseTo(centre.y + Math.sin(angle) * radiusY, 6);
     }
+    // The ring is wider than it is tall, whatever the exact radii: that is
+    // what lets it fill the wide, short room the debate dock leaves.
+    expect(radiusX).toBeGreaterThan(radiusY);
   });
 });
