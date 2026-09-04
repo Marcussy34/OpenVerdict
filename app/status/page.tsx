@@ -202,10 +202,16 @@ export default function StatusPage() {
             >
               <Row label="Network">{status.network}</Row>
               <Row label="Package id">
-                <HashChip value={status.packageId} tone="chain" head={10} tail={8} />
+                <HashChip value={status.packageId} kind="object" tone="chain" head={10} tail={8} />
               </Row>
               <Row label="Registry object">
-                <HashChip value={status.registryObjectId} tone="chain" head={10} tail={8} />
+                <HashChip
+                  value={status.registryObjectId}
+                  kind="object"
+                  tone="chain"
+                  head={10}
+                  tail={8}
+                />
               </Row>
               {status.latestCheckpoint !== undefined && (
                 <Row label="Latest checkpoint">#{status.latestCheckpoint}</Row>

@@ -445,9 +445,13 @@ export function SeatSeal({
 
       {/* Identifiers — never dropped, just rehoused into chips. */}
       <div className="mt-auto flex flex-wrap gap-1 border-t border-border/60 pt-2">
-        {agentProfileId && <HashChip value={agentProfileId} label="agent" tone="muted" />}
-        {jurySeatId && <HashChip value={jurySeatId} label="seat" tone="muted" />}
-        {gonkaRequestId && <HashChip value={gonkaRequestId} label="gonka" tone="muted" />}
+        {agentProfileId && (
+          <HashChip value={agentProfileId} label="agent" kind="object" tone="muted" />
+        )}
+        {jurySeatId && <HashChip value={jurySeatId} label="seat" kind="object" tone="muted" />}
+        {gonkaRequestId && (
+          <HashChip value={gonkaRequestId} label="gonka" kind="id" tone="muted" />
+        )}
         {footer}
       </div>
     </div>

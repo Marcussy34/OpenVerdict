@@ -421,6 +421,7 @@ export function SystemPromptAndBudgets({ bundle }: { bundle: TransparentBundle }
             <HashChip
               value={bundle.promptHash ?? "Not recorded"}
               label="prompt hash"
+              kind={bundle.promptHash ? "hash" : undefined}
               tone="sealed"
               head={10}
               tail={8}
@@ -436,6 +437,7 @@ export function SystemPromptAndBudgets({ bundle }: { bundle: TransparentBundle }
             <HashChip
               value={bundle.toolPolicyHash ?? "Not recorded"}
               label="policy hash"
+              kind={bundle.toolPolicyHash ? "hash" : undefined}
               tone="chain"
               head={10}
               tail={8}
@@ -473,7 +475,7 @@ function EvidenceReference({
     // A bare content hash with no opened page behind it: short chip, full
     // value on hover and click-to-copy, instead of a 64-char wall.
     return (
-      <HashChip value={evidenceId} label="evidence" tone="muted" head={12} tail={8} />
+      <HashChip value={evidenceId} label="evidence" kind="id" tone="muted" head={12} tail={8} />
     );
   }
 
@@ -488,7 +490,7 @@ function EvidenceReference({
         <span className="min-w-0">{page.title ?? evidenceId}</span>
         <ExportSquare size="13" className="mt-0.5 shrink-0" />
       </a>
-      <HashChip value={evidenceId} label="evidence" tone="muted" head={12} tail={8} />
+      <HashChip value={evidenceId} label="evidence" kind="id" tone="muted" head={12} tail={8} />
     </div>
   );
 }

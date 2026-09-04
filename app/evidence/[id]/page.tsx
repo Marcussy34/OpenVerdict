@@ -4,7 +4,6 @@ import { use } from "react";
 import { PageHeader, MetaTag } from "@/components/viz/page-header";
 import { Panel, FieldLabel, Well } from "@/components/viz/panel";
 import { HashChip } from "@/components/viz/hash-chip";
-import { suiObjectUrl, walrusBlobUrl } from "@/lib/web/explorer";
 import { TimeDisplay } from "@/components/time-display";
 import { DocumentText, ShieldTick, Global, Clock, Box, Lock } from "@/components/icons";
 
@@ -69,7 +68,7 @@ export default function EvidenceDetailPage({ params }: EvidenceDetailPageProps) 
         }
       >
         <div className="mt-4">
-          <HashChip value={evidence.evidenceId} label="evidence" tone="chain" head={12} tail={10} />
+          <HashChip value={evidence.evidenceId} label="evidence" kind="id" tone="chain" head={12} tail={10} />
         </div>
       </PageHeader>
 
@@ -99,7 +98,7 @@ export default function EvidenceDetailPage({ params }: EvidenceDetailPageProps) 
           {HASHES.map((h) => (
             <div key={h.label} className="space-y-1.5 rounded-xl border border-border bg-surface p-3">
               <FieldLabel>{h.label}</FieldLabel>
-              <HashChip value={h.value} tone="sealed" full />
+              <HashChip value={h.value} kind="hash" tone="sealed" full />
               <p className="text-[11px] text-muted-foreground">{h.hint}</p>
             </div>
           ))}
@@ -111,11 +110,11 @@ export default function EvidenceDetailPage({ params }: EvidenceDetailPageProps) 
         <dl className="grid gap-3 sm:grid-cols-2">
           <div className="space-y-1.5">
             <FieldLabel>Blob id</FieldLabel>
-            <HashChip value={evidence.walrusBlobId} tone="chain" full href={walrusBlobUrl(evidence.walrusBlobId)} />
+            <HashChip value={evidence.walrusBlobId} kind="blob" tone="chain" full />
           </div>
           <div className="space-y-1.5">
             <FieldLabel>Blob object id</FieldLabel>
-            <HashChip value={evidence.walrusBlobObjectId} tone="chain" full href={evidence.walrusBlobObjectId ? suiObjectUrl(evidence.walrusBlobObjectId) : undefined} />
+            <HashChip value={evidence.walrusBlobObjectId} kind="object" tone="chain" full />
           </div>
           <div className="space-y-1.5">
             <FieldLabel>Retention end epoch</FieldLabel>

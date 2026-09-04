@@ -88,7 +88,7 @@ export function VerdictSpotlight({ claim }: { claim: ClaimInspection }) {
               Claim object
             </dt>
             <dd>
-              <HashChip value={claim.claimId} tone="chain" head={6} tail={4} />
+              <HashChip value={claim.claimId} kind="object" tone="chain" head={6} tail={4} />
             </dd>
           </div>
           <div className="space-y-1">
@@ -98,6 +98,7 @@ export function VerdictSpotlight({ claim }: { claim: ClaimInspection }) {
             <dd>
               <HashChip
                 value={claim.result?.certificateId ?? claim.committeeId}
+                kind="object"
                 tone={claim.result?.certificateId ? "yes" : "sealed"}
                 head={6}
                 tail={4}

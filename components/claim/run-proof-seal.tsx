@@ -19,7 +19,6 @@ import {
 } from "@/components/ui/card";
 import { HashChip } from "@/components/viz/hash-chip";
 import { FieldLabel } from "@/components/viz/panel";
-import { suiObjectUrl } from "@/lib/web/explorer";
 import {
   isProofRecord,
   type TransparentRunProof,
@@ -361,9 +360,9 @@ export function RunProofSeal({ proof }: { proof: TransparentRunProof }) {
               <HashChip
                 value={metadata.value.packageId}
                 tone="sealed"
+                kind="object"
                 head={12}
                 tail={10}
-                href={suiObjectUrl(metadata.value.packageId)}
               />
             </div>
             <div className="rounded-lg border border-border bg-card p-2.5">
@@ -381,11 +380,11 @@ export function RunProofSeal({ proof }: { proof: TransparentRunProof }) {
             </div>
             <div className="rounded-lg border border-border bg-card p-2.5 @xs:col-span-2">
               <FieldLabel>Identity claim</FieldLabel>
-              <HashChip value={metadata.value.identity.claimId} head={12} tail={10} href={suiObjectUrl(metadata.value.identity.claimId)} />
+              <HashChip value={metadata.value.identity.claimId} kind="object" head={12} tail={10} />
             </div>
             <div className="rounded-lg border border-border bg-card p-2.5 @xs:col-span-2">
               <FieldLabel>Identity seat</FieldLabel>
-              <HashChip value={metadata.value.identity.jurySeatId} head={12} tail={10} href={suiObjectUrl(metadata.value.identity.jurySeatId)} />
+              <HashChip value={metadata.value.identity.jurySeatId} kind="object" head={12} tail={10} />
             </div>
           </div>
 
@@ -426,7 +425,7 @@ export function RunProofSeal({ proof }: { proof: TransparentRunProof }) {
                   className="rounded-lg border border-border bg-card p-2.5"
                 >
                   <div className="flex flex-wrap items-center gap-2">
-                    <HashChip value={server.objectId} head={10} tail={8} href={suiObjectUrl(server.objectId)} />
+                    <HashChip value={server.objectId} kind="object" head={10} tail={8} />
                     <span className="ml-auto text-[10px] font-semibold tracking-wide text-muted-foreground uppercase">
                       weight {server.weight}
                     </span>
@@ -514,6 +513,7 @@ export function RunProofSeal({ proof }: { proof: TransparentRunProof }) {
                     ? "yes"
                     : "muted"
                 }
+                kind="id"
                 head={12}
                 tail={10}
               />
@@ -536,6 +536,7 @@ export function RunProofSeal({ proof }: { proof: TransparentRunProof }) {
                   <HashChip
                     value={result.coreHash}
                     tone={result.coreHashMatches ? "yes" : "muted"}
+                    kind="hash"
                     head={12}
                     tail={10}
                   />

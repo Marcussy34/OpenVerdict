@@ -9,6 +9,7 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { RunProofDetails } from "@/components/claim/run-proof";
 import { AgentHandoff } from "@/components/verify/agent-handoff";
 import { MetaTag } from "@/components/viz/page-header";
+import { HashChip } from "@/components/viz/hash-chip";
 import { Panel, FieldLabel, Well } from "@/components/viz/panel";
 import { VerdictGauge } from "@/components/viz/verdict-gauge";
 import { cn } from "@/lib/utils";
@@ -812,9 +813,14 @@ export default function VerifyPage() {
                         </span>
                       )}
                     </div>
-                    <p className="rounded-lg border border-border bg-card p-3 font-mono text-xs font-semibold break-all text-ocean">
-                      {computedCommitmentHex}
-                    </p>
+                    {/* A commitment is a Blake2b-256 hash, so the chip says so
+                        and copies rather than pretending to be a link. */}
+                    <HashChip
+                      value={computedCommitmentHex}
+                      kind="hash"
+                      full
+                      className="w-full p-3 text-xs font-semibold text-ocean"
+                    />
                   </div>
                 )}
               </Panel>

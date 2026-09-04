@@ -1,12 +1,12 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import Link from "next/link";
+import { useEffect, useState, type ReactNode, type FormEvent } from "react";
 import { useCurrentAccount, useDAppKit } from "@mysten/dapp-kit-react";
 import type { ClientWithCoreApi } from "@mysten/sui/client";
 import { Transaction } from "@mysten/sui/transactions";
 import { fromBase64, fromHex, toBase64 } from "@mysten/sui/utils";
 import {
-  Flash,
   MoneyRecive,
   Refresh,
   ShieldTick,
@@ -15,17 +15,26 @@ import {
   Warning2,
 } from "@/components/icons";
 import { WalletConnectButton } from "@/components/wallet/connect-button";
+import { useSuiBalance } from "@/components/wallet/use-sui-balance";
 import { Button } from "@/components/ui/button";
 import { Panel, FieldLabel } from "@/components/viz/panel";
 import { HashChip } from "@/components/viz/hash-chip";
 import { MetaTag } from "@/components/viz/page-header";
+import { modelFamily } from "@/components/viz/model-badge";
 import { Input } from "@/components/ui/input";
 import { formatStakeSui } from "@/components/agents/stake-line";
+import { isBelowMinimumStake } from "@/lib/web/stake-balance";
 import { cn } from "@/lib/utils";
 
 /** The Move minimum bond (MIN_STAKE_MIST). Shown before the preparation
  * arrives; the transaction always posts the amount the server returned. */
 const MIN_STAKE_LABEL = "0.1 SUI";
+
+/** Testnet SUI, for a connected wallet that cannot cover the bond yet. */
+const FAUCET_URL = "https://faucet.sui.io";
+
+/** No faucet exists on mainnet, so the low-balance line drops the link there. */
+const IS_MAINNET = process.env.NEXT_PUBLIC_SUI_NETWORK === "mainnet";
 
 /** mirrors StakePreparation in lib/engine/contract.ts */
 type StakePreparation = {
@@ -121,9 +130,19 @@ function StakeSeatForm({
   const [result, setResult] = useState<{
     confirmation: StakeConfirmation;
     payer: GasPayer;
+    /** The model this seat was staked on, kept so the summary never drifts. */
+    model: string;
     /** The role the engine assigned, when the preparation named one. */
     role?: string;
   } | null>(null);
+
+  // The wallet's own balance, for the one question this card asks before a
+  // stake: can this account cover the bond? A failed read stays null and the
+  // button is left alone.
+  const { mist: balanceMist, formatted: balanceLabel } = useSuiBalance(
+    account?.address ?? null,
+  );
+  const lowBalance = balanceLabel !== null && isBelowMinimumStake(balanceMist);
 
   // The catalog the prepare route validates against: the same three families
   // the public weather probe reports, minus the web search row.
@@ -219,6 +238,7 @@ function StakeSeatForm({
       setResult({
         confirmation,
         payer,
+        model: selectedModel,
         ...(preparation.role === undefined ? {} : { role: preparation.role }),
       });
       setPhase("done");
@@ -277,76 +297,16 @@ function StakeSeatForm({
             <WalletConnectButton />
           </div>
         ) : confirmation ? (
-          <div
-            className="space-y-4 rounded-xl border border-yes/30 bg-yes/6 p-4"
-            role="status"
-          >
-            <div className="flex items-center gap-2 text-yes">
-              <TickCircle size="19" variant="Bold" aria-hidden="true" />
-              <p className="font-semibold">Seat staked</p>
-              <MetaTag tone="yes">Wallet stake</MetaTag>
-            </div>
-            <dl className="grid gap-3 text-xs sm:grid-cols-2">
-              <div className="space-y-1">
-                <dt>
-                  <FieldLabel>Agent profile</FieldLabel>
-                </dt>
-                <dd>
-                  <HashChip value={confirmation.agentProfileId} tone="chain" full />
-                </dd>
-              </div>
-              <div className="space-y-1">
-                <dt>
-                  <FieldLabel>Transaction digest</FieldLabel>
-                </dt>
-                <dd>
-                  <HashChip value={confirmation.digest} tone="chain" full />
-                </dd>
-              </div>
-              <div className="space-y-1">
-                <dt>
-                  <FieldLabel>Stake posted</FieldLabel>
-                </dt>
-                <dd className="font-mono text-sm font-semibold text-ocean tabular-nums">
-                  {formatStakeSui(confirmation.stakeMist)} SUI
-                </dd>
-              </div>
-              <div className="space-y-1">
-                <dt>
-                  <FieldLabel>Staker</FieldLabel>
-                </dt>
-                <dd>
-                  <HashChip value={confirmation.staker} tone="sealed" full />
-                </dd>
-              </div>
-            </dl>
-            <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-              <Flash size="14" variant="Bold" aria-hidden="true" />
-              {result.payer === "sponsor"
-                ? "Gas paid by OpenVerdict (Shinami Gas Station)"
-                : "Gas paid by your wallet"}
-            </p>
-            <p className="text-xs leading-relaxed text-muted-foreground">
-              {/* Named only when the preparation carried the assigned role. */}
-              {result.role ? `${roleSentence(result.role)} ` : ""}
-              This seat&apos;s jury rewards go to your address. You may unstake
-              any time; the bond returns 24 hours later, and the seat stops being
-              drawn as soon as you ask. You can stake on as many seats as you
-              like: a committee draws at most two seats per model family and one
-              per operational key.
-            </p>
-            <Button
-              type="button"
-              variant="outline"
-              className="min-h-[44px]"
-              onClick={() => {
-                setResult(null);
-                setPhase("idle");
-              }}
-            >
-              Stake on another seat
-            </Button>
-          </div>
+          <StakeResult
+            confirmation={confirmation}
+            payer={result.payer}
+            model={result.model}
+            {...(result.role === undefined ? {} : { role: result.role })}
+            onReset={() => {
+              setResult(null);
+              setPhase("idle");
+            }}
+          />
         ) : (
           <form className="space-y-5" onSubmit={submitStake} noValidate>
             <div className="grid gap-4">
@@ -430,14 +390,46 @@ function StakeSeatForm({
             )}
 
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <p className="max-w-2xl text-xs leading-relaxed text-muted-foreground">
-                Your wallet shows the whole transaction before you sign.
+              <p
+                id="stake-balance-note"
+                className="max-w-2xl text-xs leading-relaxed text-muted-foreground"
+              >
+                {lowBalance ? (
+                  <>
+                    {/* The wallet cannot cover the bond, so this line says so
+                        and points at the only fix. Gas is deliberately not
+                        promised here: the card's intro already hedges it,
+                        because sponsorship can fall back to wallet gas. On
+                        mainnet there is no faucet, so the sentence stops. */}
+                    This wallet holds {balanceLabel} SUI; the stake needs{" "}
+                    {MIN_STAKE_LABEL}.
+                    {IS_MAINNET ? null : (
+                      <>
+                        {" "}
+                        <a
+                          href={FAUCET_URL}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="font-medium text-sea-ink underline decoration-sea-ink/30 underline-offset-[3px] transition-colors hover:decoration-sea-ink focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                        >
+                          Get testnet SUI
+                        </a>
+                        .
+                      </>
+                    )}
+                  </>
+                ) : (
+                  "Your wallet shows the whole transaction before you sign."
+                )}
               </p>
               <Button
                 type="submit"
                 className="min-h-[44px] shrink-0 px-4"
-                disabled={busy}
+                disabled={busy || lowBalance}
                 aria-busy={busy}
+                // A disabled button says nothing on its own: the low-balance
+                // line above is what explains why, so it names it.
+                aria-describedby={lowBalance ? "stake-balance-note" : undefined}
               >
                 {busy ? (
                   <Refresh
@@ -459,11 +451,111 @@ function StakeSeatForm({
   );
 }
 
-/** "Registered as an Investigator seat.", with SOURCE_AUTHENTICITY spelled out. */
-function roleSentence(role: string): string {
+/**
+ * The state after a stake lands: a quiet confirmation, not a receipt. Heading,
+ * one line of what was staked, the four values worth keeping, and the way out.
+ * No tinted panel; the check mark is the card's one success signal.
+ *
+ * Exported so the state can be rendered on its own with a fixed confirmation.
+ */
+export function StakeResult({
+  confirmation,
+  payer,
+  model,
+  role,
+  onReset,
+}: {
+  confirmation: StakeConfirmation;
+  payer: GasPayer;
+  model: string;
+  role?: string;
+  onReset: () => void;
+}) {
+  return (
+    <div className="space-y-4" role="status">
+      <div className="space-y-1.5">
+        <div className="flex items-center gap-2">
+          <TickCircle
+            size="18"
+            variant="Bold"
+            className="text-yes"
+            aria-hidden="true"
+          />
+          <p className="text-sm font-semibold text-ocean">Seat staked</p>
+        </div>
+        <p className="text-xs leading-relaxed text-muted-foreground">
+          {/* The role is named only when the preparation carried one. */}
+          {seatLine(model, role)} Rewards go to your address. Unstake any time;
+          the stake returns 24 hours later.
+        </p>
+      </div>
+
+      <dl className="border-y border-border">
+        <ResultRow label="Seat">
+          {/* The seat's own page, not the explorer: the profile id is the one
+              id a staker comes back to. */}
+          <HashChip
+            value={confirmation.agentProfileId}
+            tone="chain"
+            href={`/agents/${confirmation.agentProfileId}`}
+          />
+        </ResultRow>
+        <ResultRow label="Transaction">
+          {/* `tx` resolves to suiTransactionUrl through the shared chip
+              mapping, so this digest lands on SuiVision like every other. */}
+          <HashChip value={confirmation.digest} tone="chain" kind="tx" />
+        </ResultRow>
+        <ResultRow label="Stake">
+          <span className="font-mono text-xs font-semibold text-ocean tabular-nums">
+            {formatStakeSui(confirmation.stakeMist)} SUI
+          </span>
+        </ResultRow>
+        <ResultRow label="Gas">
+          <span className="text-xs text-muted-foreground">
+            {payer === "sponsor" ? "paid by OpenVerdict" : "paid by your wallet"}
+          </span>
+        </ResultRow>
+      </dl>
+
+      <div className="flex flex-wrap items-center gap-2">
+        <Button asChild variant="outline" className="min-h-[44px]">
+          <Link href={`/agents/${confirmation.agentProfileId}`}>View seat</Link>
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          className="min-h-[44px]"
+          onClick={onReset}
+        >
+          Stake on another seat
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * "Investigator seat on DeepSeek-V4-Flash-0731": the role spelled out the way
+ * SOURCE_AUTHENTICITY reads in words, and the model in the short form the
+ * agents page uses rather than the full provider path.
+ */
+function seatLine(modelId: string, role?: string): string {
+  const model = modelFamily(modelId).short;
+  if (!role) return `Seat on ${model}.`;
   const words = role.replace(/_/g, " ").toLowerCase();
-  const label = words.charAt(0).toUpperCase() + words.slice(1);
-  return `Registered as ${/^[aeiou]/i.test(label) ? "an" : "a"} ${label} seat.`;
+  return `${words.charAt(0).toUpperCase()}${words.slice(1)} seat on ${model}.`;
+}
+
+/** One key/value row of the confirmation: micro label left, value right. */
+function ResultRow({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="flex items-center justify-between gap-3 border-b border-border py-2 last:border-b-0">
+      <dt className="shrink-0">
+        <FieldLabel>{label}</FieldLabel>
+      </dt>
+      <dd className="flex min-w-0 justify-end text-right">{children}</dd>
+    </div>
+  );
 }
 
 /** One selectable chip, used for the model choice. */

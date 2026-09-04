@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { Copy, ExportSquare, TickCircle } from "@/components/icons";
+import { chipHref, chipTitle, type ChipKind } from "@/lib/web/chip-link";
 import { cn } from "@/lib/utils";
 
 const TONE = {
@@ -16,29 +17,37 @@ const TONE = {
 /**
  * Every hash, object id, blob id and tx digest in the app renders through this
  * chip: truncated mono head/tail, full value on hover (title) and click-to-copy.
- * With `href` the chip opens the value on its public explorer instead, and the
- * copy affordance moves onto the small copy icon. Nothing is dropped — long
- * values are rehoused, not removed.
+ * `kind` says what the value is, and the chip derives its own explorer link
+ * from it: a Sui object, account or transaction opens on SuiVision, a Walrus
+ * blob on the aggregator, and a hash says it is a hash instead of pretending
+ * to be a link. An explicit `href` still wins, for internal pages. Nothing is
+ * dropped: long values are rehoused, not removed.
  */
 export function HashChip({
   value,
   label,
+  kind,
   head = 6,
   tail = 4,
   tone = "default",
   className,
   full = false,
   href,
+  title,
 }: {
   value: string | null | undefined;
   label?: string;
+  /** What the value is; the chip derives its explorer link from it. */
+  kind?: ChipKind;
+  /** Overrides the composed hover title, for a chip that cannot show a label. */
+  title?: string;
   head?: number;
   tail?: number;
   tone?: keyof typeof TONE;
   className?: string;
   /** Render the entire value (wrapping) instead of the truncated form. */
   full?: boolean;
-  /** Public explorer URL; the chip becomes a link that opens it. */
+  /** Explorer or internal URL; overrides whatever `kind` would derive. */
   href?: string | null;
 }) {
   const [copied, setCopied] = React.useState(false);
@@ -53,6 +62,14 @@ export function HashChip({
     full || value.length <= head + tail + 3
       ? value
       : `${value.slice(0, head)}…${value.slice(-tail)}`;
+
+  // The kind carries the link; an explicit href (internal pages) still wins.
+  const link = href === undefined ? chipHref(kind, value) : href;
+  // A hash never links, so it says so: the label slot when that is free, a
+  // leading "#" when the label already names the field.
+  const marker = kind === "hash" && !label ? "hash" : label;
+  const hashGlyph = kind === "hash" && Boolean(label);
+  const hoverTitle = title ?? chipTitle({ value, label, kind, linked: Boolean(link) });
 
   const copy = async () => {
     try {
@@ -73,15 +90,20 @@ export function HashChip({
 
   const body = (
     <>
-      {label && (
+      {marker && (
         <span className="shrink-0 text-[9px] tracking-[0.12em] text-muted-foreground uppercase">
-          {label}
+          {marker}
+        </span>
+      )}
+      {hashGlyph && (
+        <span aria-hidden className="shrink-0 text-muted-foreground">
+          #
         </span>
       )}
       <span className={cn(!full && "truncate")}>{shown}</span>
       {copied ? (
         <TickCircle size="11" variant="Bold" className="shrink-0 text-yes" />
-      ) : href ? (
+      ) : link ? (
         <span
           role="button"
           tabIndex={-1}
@@ -102,17 +124,20 @@ export function HashChip({
           className="shrink-0 opacity-0 transition-opacity group-hover/hash:opacity-60"
         />
       )}
-      {href ? <ExportSquare size="11" className="shrink-0 opacity-70" /> : null}
+      {link ? <ExportSquare size="11" className="shrink-0 opacity-70" /> : null}
     </>
   );
 
-  if (href) {
+  // The kind stays in the DOM so a page audit can check that every explorable
+  // chip links and no hash does.
+  if (link) {
     return (
       <a
-        href={href}
+        href={link}
         target="_blank"
         rel="noreferrer"
-        title={`${label ? `${label}: ` : ""}${value} (opens explorer; copy icon copies)`}
+        title={hoverTitle}
+        data-chip-kind={kind}
         className={chipClass}
       >
         {body}
@@ -123,8 +148,15 @@ export function HashChip({
   return (
     <button
       type="button"
-      onClick={copy}
-      title={`${label ? `${label}: ` : ""}${value} (click to copy)`}
+      onClick={(event) => {
+        // A chip can sit inside a card that is itself a link: copying must
+        // never follow it.
+        event.preventDefault();
+        event.stopPropagation();
+        void copy();
+      }}
+      title={hoverTitle}
+      data-chip-kind={kind}
       className={chipClass}
     >
       {body}

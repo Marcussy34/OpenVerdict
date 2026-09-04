@@ -87,12 +87,19 @@ export default async function RootLayout({
             <ChromeVisibility>
               <SiteHeader consoleHost={consoleHost} docsHost={docsHost} />
             </ChromeVisibility>
-            <main id="main" className="flex-1 min-h-[72vh] pb-20">
+            {/* The 72vh floor used to include main's 5rem of bottom padding;
+                the spacer below carries that 5rem now, so the floor drops by
+                it and every short page keeps the height it had. */}
+            <main id="main" className="flex-1 min-h-[calc(72vh-5rem)]">
               {children}
             </main>
             {/* One footer for the whole product — the landing's deep-blue
-                close, on every route. */}
+                close, on every route. The 5rem of air above it was main's
+                bottom padding; it belongs to the chrome, so the canvas claim
+                route (which drops the chrome) is exactly one viewport tall
+                and never scrolls. */}
             <ChromeVisibility>
+              <div aria-hidden className="h-20 shrink-0" />
               <LandingFooter />
             </ChromeVisibility>
           </div>

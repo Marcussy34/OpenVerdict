@@ -123,15 +123,24 @@ export function EventRow({ event, animate = false }: EventRowProps) {
           </span>
         )}
 
-        {event.actorId && <HashChip value={event.actorId} label="seat agent" tone="muted" />}
+        {event.actorId && (
+          <HashChip value={event.actorId} label="seat agent" kind="object" tone="muted" />
+        )}
       </div>
 
       <div className="flex shrink-0 flex-wrap items-center gap-2">
         {event.artifactHash && (
-          <HashChip value={event.artifactHash} label="artifact" tone="muted" />
+          <HashChip value={event.artifactHash} label="artifact" kind="hash" tone="muted" />
         )}
         {event.transactionDigest && (
-          <HashChip value={event.transactionDigest} label="tx" tone="chain" head={8} tail={4} />
+          <HashChip
+            value={event.transactionDigest}
+            label="tx"
+            kind="tx"
+            tone="chain"
+            head={8}
+            tail={4}
+          />
         )}
         <TimeDisplay isoString={event.occurredAt} showLocal={false} />
       </div>

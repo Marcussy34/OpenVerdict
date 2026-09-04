@@ -539,9 +539,9 @@ function LeftRail({
           <HashChip
             value={claim.result?.certificateId}
             label="certificate"
+            kind="object"
             tone="yes"
             className="max-w-full"
-            href={claim.result?.certificateId ? suiObjectUrl(claim.result.certificateId) : undefined}
           />
         </div>
       ) : null}
@@ -726,9 +726,9 @@ function SeatInspector({
           <p className="mt-1 break-all text-[11px] leading-relaxed text-muted-foreground">
             {modelId ?? "Model id unavailable"}
           </p>
-          <p className="mt-1 font-mono text-[10px] tracking-tight text-muted-foreground">
-            Seat {seatId.slice(0, 8)}…{seatId.slice(-6)}
-          </p>
+          <div className="mt-1">
+            <HashChip value={seatId} label="seat" kind="object" tone="muted" head={8} tail={6} />
+          </div>
         </div>
       </div>
 
@@ -870,9 +870,7 @@ function NodeInspector({
           <p className="font-mono text-[10px] text-muted-foreground">Step {node.stepIndex + 1}</p>
         ) : null}
         {node.seatId !== undefined ? (
-          <p className="font-mono text-[10px] text-muted-foreground">
-            Seat {node.seatId.slice(0, 8)}…{node.seatId.slice(-6)}
-          </p>
+          <HashChip value={node.seatId} label="seat" kind="object" tone="muted" head={8} tail={6} />
         ) : null}
       </div>
     );
@@ -961,7 +959,7 @@ function NodeInspector({
           </p>
           <HashChip
             value={contentHash}
-            label="hash"
+            kind="hash"
             full
             className="max-w-full bg-surface text-muted-foreground"
           />
@@ -1003,9 +1001,7 @@ function NodeInspector({
           attempt log and research trail on the public record.
         </div>
         {node.seatId !== undefined ? (
-          <p className="font-mono text-[10px] text-muted-foreground">
-            Seat {node.seatId.slice(0, 8)}…{node.seatId.slice(-6)}
-          </p>
+          <HashChip value={node.seatId} label="seat" kind="object" tone="muted" head={8} tail={6} />
         ) : null}
         <p className="text-[11px] leading-relaxed text-muted-foreground">
           Click the juror avatar connected to this node for the full proof
@@ -1080,21 +1076,21 @@ function NodeInspector({
           <HashChip
             value={certificateId}
             label="certificate"
+            kind="object"
             tone={outcome === "YES" ? "yes" : "default"}
-            href={certificateId ? suiObjectUrl(certificateId) : undefined}
             className="max-w-full bg-surface"
           />
           <HashChip
             value={claim.claimId}
             label="claim"
-            href={suiObjectUrl(claim.claimId)}
+            kind="object"
             className="max-w-full bg-surface text-muted-foreground"
           />
           {digest !== undefined ? (
             <HashChip
               value={digest}
               label="finalize tx"
-              href={suiTransactionUrl(digest)}
+              kind="tx"
               className="max-w-full bg-surface text-muted-foreground"
             />
           ) : null}
@@ -1102,7 +1098,7 @@ function NodeInspector({
             <HashChip
               value={claim.committeeId}
               label="committee"
-              href={suiObjectUrl(claim.committeeId)}
+              kind="object"
               className="max-w-full bg-surface text-muted-foreground"
             />
           ) : null}
@@ -1168,8 +1164,8 @@ function NodeInspector({
             <HashChip
               value={result.certificateId}
               label="certificate"
+              kind="object"
               tone="yes"
-              href={suiObjectUrl(result.certificateId)}
               className="max-w-full bg-surface"
             />
           </div>
@@ -1225,14 +1221,14 @@ function NodeInspector({
           <HashChip
             value={claim.claimId}
             label="claim"
-            href={suiObjectUrl(claim.claimId)}
+            kind="object"
             className="max-w-full bg-surface text-muted-foreground"
           />
           {claim.committeeId !== undefined ? (
             <HashChip
               value={claim.committeeId}
               label="committee"
-              href={suiObjectUrl(claim.committeeId)}
+              kind="object"
               className="max-w-full bg-surface text-muted-foreground"
             />
           ) : null}
@@ -1647,7 +1643,7 @@ function ClaimCanvasContent({ params }: ClaimCanvasPageProps) {
         <p className="text-sm text-muted-foreground">
           No claim exists with this object id.
         </p>
-        <HashChip value={id} full className="max-w-md" />
+        <HashChip value={id} kind="object" full className="max-w-md" />
         <Button asChild size="sm" className="mt-2 min-h-[40px]">
           <Link href="/claims">Back to claims directory</Link>
         </Button>
@@ -1738,68 +1734,69 @@ function ClaimCanvasContent({ params }: ClaimCanvasPageProps) {
             Inspect
           </button>
         )}
+        {/* The inspector exists only while a node is selected; clicking empty
+            canvas deselects and gives the stage the full width. It OVERLAYS the
+            canvas (absolute, not in flow) so opening or closing it never
+            resizes the stage and the node positions stay exactly put. It lives
+            INSIDE the stage, not beside <main>, so inset-y-0 means "below the
+            chrome bar", never behind it. */}
+        {resolvedView === "graph" && selectedNode !== null && (
+          <aside
+            style={{ width: inspectorWidth }}
+            className="@container absolute inset-y-0 right-0 z-30 hidden overflow-hidden max-w-[calc(100vw-28rem)] border-l border-border bg-card shadow-[-28px_0_60px_rgb(0_0_0/8%)] lg:block"
+          >
+            {/* Drag this edge to widen or narrow the panel. */}
+            <div
+              role="separator"
+              aria-orientation="vertical"
+              aria-label="Resize inspector"
+              className="absolute inset-y-0 left-0 z-10 w-1.5 cursor-col-resize touch-none hover:bg-sea/40 active:bg-sea/60"
+              onPointerDown={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                event.currentTarget.setPointerCapture(event.pointerId);
+                resizePointerRef.current = event.pointerId;
+              }}
+              onPointerMove={(event) => {
+                if (resizePointerRef.current !== event.pointerId) return;
+                const max = Math.max(320, Math.min(680, window.innerWidth - 460));
+                const next = Math.round(window.innerWidth - event.clientX);
+                setInspectorWidth(Math.min(Math.max(next, 320), max));
+              }}
+              onPointerUp={(event) => {
+                if (resizePointerRef.current !== event.pointerId) return;
+                resizePointerRef.current = null;
+                if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+                  event.currentTarget.releasePointerCapture(event.pointerId);
+                }
+              }}
+              onPointerCancel={(event) => {
+                if (resizePointerRef.current !== event.pointerId) return;
+                resizePointerRef.current = null;
+                if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+                  event.currentTarget.releasePointerCapture(event.pointerId);
+                }
+              }}
+            />
+            {/* Only this region scrolls, so the resize handle spans the whole
+                panel edge no matter how far down the content goes. */}
+            <div className="ov-scroll h-full overflow-x-hidden overflow-y-auto overscroll-contain p-5">
+              <CanvasHighlightProvider onHighlight={setTrailHighlightId}>
+                <NodeInspector
+                  claim={claim}
+                  events={events}
+                  graph={graph}
+                  node={selectedNode}
+                  proofsByRunId={proofsByRunId}
+                  researchSteps={researchSteps}
+                  seatNumbers={seatNumbers}
+                />
+              </CanvasHighlightProvider>
+            </div>
+          </aside>
+        )}
         </div>
       </main>
-
-      {/* The inspector exists only while a node is selected; clicking empty
-          canvas deselects and gives the stage the full width. It OVERLAYS the
-          canvas (absolute, not in flow) so opening or closing it never
-          resizes the stage and the node positions stay exactly put. */}
-      {resolvedView === "graph" && selectedNode !== null && (
-        <aside
-          style={{ width: inspectorWidth }}
-          className="@container absolute inset-y-0 right-0 z-30 hidden overflow-hidden max-w-[calc(100vw-28rem)] border-l border-border bg-card shadow-[-28px_0_60px_rgb(0_0_0/8%)] lg:block"
-        >
-          {/* Drag this edge to widen or narrow the panel. */}
-          <div
-            role="separator"
-            aria-orientation="vertical"
-            aria-label="Resize inspector"
-            className="absolute inset-y-0 left-0 z-10 w-1.5 cursor-col-resize touch-none hover:bg-sea/40 active:bg-sea/60"
-            onPointerDown={(event) => {
-              event.preventDefault();
-              event.stopPropagation();
-              event.currentTarget.setPointerCapture(event.pointerId);
-              resizePointerRef.current = event.pointerId;
-            }}
-            onPointerMove={(event) => {
-              if (resizePointerRef.current !== event.pointerId) return;
-              const max = Math.max(320, Math.min(680, window.innerWidth - 460));
-              const next = Math.round(window.innerWidth - event.clientX);
-              setInspectorWidth(Math.min(Math.max(next, 320), max));
-            }}
-            onPointerUp={(event) => {
-              if (resizePointerRef.current !== event.pointerId) return;
-              resizePointerRef.current = null;
-              if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-                event.currentTarget.releasePointerCapture(event.pointerId);
-              }
-            }}
-            onPointerCancel={(event) => {
-              if (resizePointerRef.current !== event.pointerId) return;
-              resizePointerRef.current = null;
-              if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-                event.currentTarget.releasePointerCapture(event.pointerId);
-              }
-            }}
-          />
-          {/* Only this region scrolls, so the resize handle spans the whole
-              panel edge no matter how far down the content goes. */}
-          <div className="ov-scroll h-full overflow-x-hidden overflow-y-auto overscroll-contain p-5">
-            <CanvasHighlightProvider onHighlight={setTrailHighlightId}>
-              <NodeInspector
-                claim={claim}
-                events={events}
-                graph={graph}
-                node={selectedNode}
-                proofsByRunId={proofsByRunId}
-                researchSteps={researchSteps}
-                seatNumbers={seatNumbers}
-              />
-            </CanvasHighlightProvider>
-          </div>
-        </aside>
-      )}
 
       {leftOpen || inspectorOpen ? (
         <button

@@ -2,13 +2,39 @@
 
 import Link from "next/link";
 import { StateBadge, getStateConfig } from "./state-badge";
-import { OUTCOME_CHIP, shortClaimId, timeAgo } from "./claim-format";
+import { OUTCOME_CHIP, timeAgo } from "./claim-format";
+import { HashChip } from "@/components/viz/hash-chip";
 import { VerdictGauge } from "@/components/viz/verdict-gauge";
 import { useNow } from "@/components/use-now";
 import { isStrandedDiscussion } from "@/lib/engine/claim-lifecycle";
 import { cn } from "@/lib/utils";
 import type { ClaimInspection } from "@/lib/engine/contract";
 import { CLAIM_STATE } from "@/lib/protocol/constants";
+
+/**
+ * The claim's object id on a directory row or tile, copyable.
+ *
+ * The whole card is already a link to the claim, so this chip stays copy-only:
+ * `href={null}` keeps `kind="object"` from making it a nested anchor, and the
+ * chip's own click guard stops the card from navigating while it copies. It
+ * wears the footer's own mono size, and negative inset margins cancel the
+ * chip padding so the row reads exactly as the plain text it replaced: quiet
+ * on the card, with the chip ground and the copy icon arriving on hover.
+ */
+export function ClaimIdChip({ claimId }: { claimId: string }) {
+  return (
+    <HashChip
+      value={claimId}
+      kind="object"
+      href={null}
+      tone="muted"
+      head={8}
+      tail={4}
+      title="Claim object id, click to copy"
+      className="-mx-1.5 -my-0.5 min-w-0 bg-transparent hover:bg-surface"
+    />
+  );
+}
 
 interface ClaimCardProps {
   claim: ClaimInspection;
@@ -99,7 +125,7 @@ export function ClaimCard({ claim }: ClaimCardProps) {
       {/* Identifiers sit on the baseline, quiet. mt-auto pins them there so a
           short statement hugs the badge instead of floating mid-tile. */}
       <div className="mt-auto flex items-center justify-between gap-2 font-mono text-[11px] text-muted-foreground">
-        <span className="truncate">{shortClaimId(claim.claimId)}</span>
+        <ClaimIdChip claimId={claim.claimId} />
         {ago && <span className="shrink-0">{ago}</span>}
       </div>
     </Link>

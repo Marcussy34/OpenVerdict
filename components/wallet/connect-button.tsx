@@ -2,11 +2,7 @@
 
 import dynamic from "next/dynamic";
 import { useEffect, useRef, useState } from "react";
-import {
-  useCurrentClient,
-  useDAppKit,
-  useWalletConnection,
-} from "@mysten/dapp-kit-react";
+import { useDAppKit, useWalletConnection } from "@mysten/dapp-kit-react";
 import { isEnokiWallet, isGoogleWallet } from "@mysten/enoki";
 import {
   ArrowDown2,
@@ -29,7 +25,8 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { formatSui } from "@/lib/web/format-sui";
+import { SuiMark } from "@/components/brand/logos";
+import { useSuiBalance } from "@/components/wallet/use-sui-balance";
 
 // The v2 modal registers a browser custom element, so it must never be prerendered.
 const ConnectModal = dynamic(
@@ -38,16 +35,17 @@ const ConnectModal = dynamic(
   { ssr: false },
 );
 
+/** "0x67a4…227a": six characters, an ellipsis, four. One helper, so the header
+ *  chip and the menu's address row always show the same shape. */
 function truncateAddress(address: string) {
   return address.length > 11
-    ? `${address.slice(0, 5)}…${address.slice(-4)}`
+    ? `${address.slice(0, 6)}…${address.slice(-4)}`
     : address;
 }
 
 export function WalletConnectButton() {
   const dAppKit = useDAppKit();
   const connection = useWalletConnection();
-  const client = useCurrentClient();
   const connectedAddress = connection.account?.address ?? null;
   const [connectRequest, setConnectRequest] = useState(0);
   const [signInOpen, setSignInOpen] = useState(false);
@@ -59,38 +57,11 @@ export function WalletConnectButton() {
   const [disconnectError, setDisconnectError] = useState(false);
   const copyResetTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // The SUI balance shown in the dropdown (owner request). The read is carried
-  // with the address it was made for, so a reconnection never shows the last
-  // wallet's number, and it runs only while the menu is open: that is both the
-  // one place the number appears and the moment it should be fresh.
-  const [balanceRead, setBalanceRead] = useState<{
-    address: string;
-    value: string;
-  } | null>(null);
-
-  useEffect(() => {
-    if (!menuOpen || connectedAddress === null) return;
-    let cancelled = false;
-    client.core
-      .getBalance({ owner: connectedAddress, coinType: "0x2::sui::SUI" })
-      .then((result) => {
-        // Resolving later, so nothing here is set during the render pass.
-        const value = formatSui(result.balance.balance);
-        if (!cancelled && value !== null) {
-          setBalanceRead({ address: connectedAddress, value });
-        }
-      })
-      .catch(() => {
-        // A failed read shows nothing rather than a wrong number.
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [client, connectedAddress, menuOpen]);
-
-  // Derived, never stored: a read for another address simply does not apply.
-  const balance =
-    balanceRead?.address === connectedAddress ? balanceRead.value : null;
+  // The SUI balance shown in the dropdown (owner request), read through the
+  // shared hook the stake card also uses. It runs only while the menu is open:
+  // that is both the one place the number appears and the moment it should be
+  // fresh.
+  const { formatted: balance } = useSuiBalance(connectedAddress, menuOpen);
 
   useEffect(() => {
     return () => {
@@ -226,34 +197,33 @@ export function WalletConnectButton() {
       <PopoverContent align="end" className="w-64 p-2">
         <div className="border-b border-border px-2 pb-2">
           <p className="text-xs font-medium text-ocean">Connected wallet</p>
-          <p className="mt-1 break-all font-mono text-xs text-muted-foreground">
-            {address}
-          </p>
+          {/* One line, not all 66 characters: the shortened address with its
+              own copy control. See WalletAddressRow. */}
+          <WalletAddressRow
+            address={address}
+            copyState={copyState}
+            onCopy={() => void copyAddress(address)}
+          />
           {balance !== null && (
-            <p className="mt-1.5 font-mono text-xs text-foreground">
-              {balance} SUI
+            // One row: the Sui mark holds the left edge, the amount sits on
+            // the right in the mono face so digits line up between reads.
+            // The mark is ink, not the Sui brand blue: one palette everywhere.
+            <p className="mt-1.5 flex items-center justify-between gap-2">
+              <SuiMark className="size-3.5 text-muted-foreground" />
+              <span className="font-mono text-xs tabular-nums text-foreground">
+                {balance} <span className="text-muted-foreground">SUI</span>
+              </span>
             </p>
           )}
         </div>
 
-        <button
-          type="button"
-          className="flex min-h-[44px] w-full items-center gap-2 rounded-md px-2 text-left text-sm text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          onClick={() => void copyAddress(address)}
-        >
-          {copyState === "copied" ? (
-            <CopySuccess size="17" variant="Bold" aria-hidden="true" />
-          ) : (
-            <Copy size="17" variant="Linear" aria-hidden="true" />
-          )}
-          <span aria-live="polite">
-            {copyState === "copied"
-              ? "Copied"
-              : copyState === "error"
-                ? "Copy failed"
-                : "Copy address"}
-          </span>
-        </button>
+        {/* The "Copy address" item is gone: the address row above copies, and
+            one copy control is enough. A failed clipboard still needs saying. */}
+        {copyState === "error" && (
+          <p className="px-2 pb-1 text-xs text-destructive" role="alert">
+            Couldn&apos;t copy the address. Try again.
+          </p>
+        )}
 
         <button
           type="button"
@@ -273,5 +243,70 @@ export function WalletConnectButton() {
         )}
       </PopoverContent>
     </Popover>
+  );
+}
+
+/** How the menu's copy control is doing right now. */
+type CopyState = "idle" | "copied" | "error";
+
+/**
+ * The address line in the wallet menu: the same head-and-tail shape the header
+ * chip shows, in the mono face, with the copy control on the row itself. The
+ * whole address stays in the title attribute, and the row carries a full
+ * menu-row hit target because it is the menu's only copy control.
+ *
+ * Exported so the row can be rendered without a live wallet connection.
+ */
+export function WalletAddressRow({
+  address,
+  copyState,
+  onCopy,
+}: {
+  address: string;
+  copyState: CopyState;
+  onCopy: () => void;
+}) {
+  const label =
+    copyState === "copied"
+      ? "Address copied"
+      : copyState === "error"
+        ? "Copy failed"
+        : "Copy address";
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={onCopy}
+        title={address}
+        aria-label={label}
+        className="-ml-1.5 mt-0.5 inline-flex min-h-[44px] items-center gap-1.5 rounded-md px-1.5 transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+      >
+        <span className="font-mono text-xs text-muted-foreground">
+          {truncateAddress(address)}
+        </span>
+        {copyState === "copied" ? (
+          // The accent, not the yes green: green is reserved for protocol
+          // outcomes, and the filled glyph already reads as done.
+          <CopySuccess
+            size="14"
+            variant="Bold"
+            className="text-primary"
+            aria-hidden="true"
+          />
+        ) : (
+          <Copy
+            size="14"
+            variant="Linear"
+            className="text-muted-foreground"
+            aria-hidden="true"
+          />
+        )}
+      </button>
+      {/* The label change alone is not reliably announced, so say it. */}
+      <span className="sr-only" role="status">
+        {copyState === "copied" ? "Address copied" : ""}
+      </span>
+    </>
   );
 }

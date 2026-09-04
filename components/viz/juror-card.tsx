@@ -482,6 +482,7 @@ export function JurorTrailPanel({
               key={seat.seatId}
               value={seat.seatId}
               label={seat.phase === 2 ? "seat, round two" : "seat"}
+              kind="object"
               tone="muted"
             />
           ))}

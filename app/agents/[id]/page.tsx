@@ -6,7 +6,6 @@ import { Button } from "@/components/ui/button";
 import { PageHeader, MetaTag } from "@/components/viz/page-header";
 import { Panel, FieldLabel } from "@/components/viz/panel";
 import { HashChip } from "@/components/viz/hash-chip";
-import { suiObjectUrl, suiAccountUrl, walrusBlobUrl } from "@/lib/web/explorer";
 import { ModelBadge, modelFamily } from "@/components/viz/model-badge";
 import {
   formatStakeSui,
@@ -153,7 +152,7 @@ export default function AgentDetailPage({ params }: AgentDetailPageProps) {
           No AgentProfile object with this id was returned by the registry. It may have been
           retired, or it belongs to a different deployment.
         </p>
-        <HashChip value={id} full className="max-w-md" />
+        <HashChip value={id} kind="object" full className="max-w-md" />
         <Button asChild size="sm" className="mt-2 min-h-[40px]">
           <Link href="/agents">Back to registry</Link>
         </Button>
@@ -216,10 +215,10 @@ export default function AgentDetailPage({ params }: AgentDetailPageProps) {
 
           <dl className="space-y-2">
             {([
-              ["Agent profile object id", agent.agentProfileId, "chain", suiObjectUrl(agent.agentProfileId)],
-              ["Owner account address", agent.owner, "default", suiAccountUrl(agent.owner)],
-              ["Manifest Blake2b-256 hash", agent.manifestHash, "sealed", undefined],
-            ] as const).map(([label, value, tone, href]) => (
+              ["Agent profile object id", agent.agentProfileId, "chain", "object"],
+              ["Owner account address", agent.owner, "default", "account"],
+              ["Manifest Blake2b-256 hash", agent.manifestHash, "sealed", "hash"],
+            ] as const).map(([label, value, tone, kind]) => (
               <div
                 key={label}
                 className="flex flex-col gap-1.5 rounded-xl border border-border bg-surface px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between"
@@ -228,9 +227,9 @@ export default function AgentDetailPage({ params }: AgentDetailPageProps) {
                 <HashChip
                   value={value}
                   tone={tone}
+                  kind={kind}
                   head={12}
                   tail={10}
-                  href={href}
                 />
               </div>
             ))}
@@ -265,21 +264,21 @@ export default function AgentDetailPage({ params }: AgentDetailPageProps) {
 
             <div className="grid gap-2 sm:grid-cols-2">
               {([
-                ["Manifest hash", agent.manifestHash, "sealed", undefined],
-                ["Prompt hash", manifest.promptHash, "chain", undefined],
-                ["Tool policy hash", manifest.toolPolicyHash, "default", undefined],
-                ["Evidence policy hash", manifest.evidencePolicyHash, "default", undefined],
-                ["Staker hash", manifest.humanBackingHash, "sealed", undefined],
-                ["Operational owner", manifest.operationalOwner, "chain", manifest.operationalOwner ? suiAccountUrl(manifest.operationalOwner) : undefined],
-              ] as const).map(([label, value, tone, href]) => (
+                ["Manifest hash", agent.manifestHash, "sealed", "hash"],
+                ["Prompt hash", manifest.promptHash, "chain", "hash"],
+                ["Tool policy hash", manifest.toolPolicyHash, "default", "hash"],
+                ["Evidence policy hash", manifest.evidencePolicyHash, "default", "hash"],
+                ["Staker hash", manifest.humanBackingHash, "sealed", "hash"],
+                ["Operational owner", manifest.operationalOwner, "chain", "account"],
+              ] as const).map(([label, value, tone, kind]) => (
                 <div key={label} className="space-y-1.5 rounded-lg border border-border bg-card p-2.5">
                   <FieldLabel>{label}</FieldLabel>
                   <HashChip
                     value={value}
                     tone={tone}
+                    kind={kind}
                     head={12}
                     tail={10}
-                    href={href}
                   />
                 </div>
               ))}
@@ -288,7 +287,7 @@ export default function AgentDetailPage({ params }: AgentDetailPageProps) {
             <div className="space-y-1.5">
               <FieldLabel>Manifest blob id</FieldLabel>
               {manifestBlobId ? (
-                <HashChip value={manifestBlobId} tone="sealed" head={14} tail={10} href={walrusBlobUrl(manifestBlobId)} />
+                <HashChip value={manifestBlobId} tone="sealed" kind="blob" head={14} tail={10} />
               ) : (
                 <p className="text-[11px] text-muted-foreground">
                   The current agent directory response does not expose this blob id.
@@ -450,9 +449,9 @@ export default function AgentDetailPage({ params }: AgentDetailPageProps) {
                 <HashChip
                   value={agent.staker}
                   tone="sealed"
+                  kind="account"
                   head={12}
                   tail={10}
-                  href={suiAccountUrl(agent.staker)}
                 />
               </div>
             </div>

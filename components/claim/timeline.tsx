@@ -3,7 +3,6 @@
 import { motion, useReducedMotion } from "motion/react";
 import { TimeDisplay } from "@/components/time-display";
 import { HashChip } from "@/components/viz/hash-chip";
-import { suiTransactionUrl } from "@/lib/web/explorer";
 import { cn } from "@/lib/utils";
 import type { ClaimInspection } from "@/lib/engine/contract";
 import {
@@ -244,10 +243,10 @@ export function ClaimTimeline({ claim }: TimelineProps) {
                   <div className="mt-2 flex flex-wrap items-center gap-1.5 border-t border-border/70 pt-2">
                     {step.timestampMs && <TimeDisplay timestampMs={step.timestampMs} />}
                     {step.artifactHash && (
-                      <HashChip value={step.artifactHash} label="artifact" tone="muted" />
+                      <HashChip value={step.artifactHash} label="artifact" kind="hash" tone="muted" />
                     )}
                     {step.txDigest && (
-                      <HashChip value={step.txDigest} label="tx" tone="chain" head={8} href={suiTransactionUrl(step.txDigest)} />
+                      <HashChip value={step.txDigest} label="tx" kind="tx" tone="chain" head={8} />
                     )}
                   </div>
                 )}

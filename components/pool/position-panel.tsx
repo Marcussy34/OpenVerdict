@@ -550,7 +550,16 @@ export function PositionPanel() {
                     ? "Gas paid by OpenVerdict (Shinami Gas Station)"
                     : "Gas paid by your wallet"}
                 </p>
-                <HashChip value={digest} label="digest" tone="chain" full />
+                {/* The deployment's own explorer template wins; without one the
+                    tx kind falls back to SuiVision. */}
+                <HashChip
+                  value={digest}
+                  label="digest"
+                  kind="tx"
+                  tone="chain"
+                  full
+                  href={transactionUrl ?? undefined}
+                />
                 {transactionUrl && (
                   <a
                     href={transactionUrl}

@@ -431,6 +431,7 @@ function ResearchStepCard({
                   <HashChip
                     value={result.contentHash}
                     label="content"
+                    kind="hash"
                     tone="chain"
                     head={12}
                     tail={10}

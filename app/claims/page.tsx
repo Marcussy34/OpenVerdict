@@ -11,13 +11,8 @@ import {
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { StateBadge } from "@/components/claim/state-badge";
-import { ClaimCard } from "@/components/claim/claim-card";
-import {
-  OUTCOME_CHIP,
-  shortClaimId,
-  timeAgo,
-  truthScoreOf,
-} from "@/components/claim/claim-format";
+import { ClaimCard, ClaimIdChip } from "@/components/claim/claim-card";
+import { OUTCOME_CHIP, timeAgo, truthScoreOf } from "@/components/claim/claim-format";
 import { useNow } from "@/components/use-now";
 import { isStrandedDiscussion } from "@/lib/engine/claim-lifecycle";
 import { cn } from "@/lib/utils";
@@ -353,10 +348,10 @@ export default function ClaimsPage() {
                   >
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-medium text-ocean">{claim.statement}</p>
-                      <p className="mt-0.5 font-mono text-[11px] text-muted-foreground">
-                        {shortClaimId(claim.claimId)}
-                        {ago ? ` · ${ago}` : ""}
-                      </p>
+                      <div className="mt-0.5 flex min-w-0 items-center gap-1 font-mono text-[11px] text-muted-foreground">
+                        <ClaimIdChip claimId={claim.claimId} />
+                        {ago ? <span className="shrink-0">· {ago}</span> : null}
+                      </div>
                     </div>
                     {claim.result && (
                       <span

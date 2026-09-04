@@ -165,6 +165,7 @@ export function RunProofFailure({
                 <HashChip
                   value={failure.walrusBlobId}
                   label="failure blob"
+                  kind="blob"
                   tone="muted"
                 />
               )}

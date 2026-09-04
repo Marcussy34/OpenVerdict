@@ -10,6 +10,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { HashChip } from "@/components/viz/hash-chip";
+import type { ChipKind } from "@/lib/web/chip-link";
 import { FieldLabel } from "@/components/viz/panel";
 import {
   ArrowDown2,
@@ -52,10 +53,12 @@ import type {
 function ProofValue({
   label,
   value,
+  kind,
   tone = "default",
 }: {
   label: string;
   value: string | null | undefined;
+  kind?: ChipKind;
   tone?: "default" | "chain" | "sealed" | "yes" | "muted";
 }) {
   return (
@@ -64,6 +67,8 @@ function ProofValue({
       <HashChip
         value={value ?? "Not recorded"}
         tone={tone}
+        // A missing value falls back to a placeholder word: never a hash, never a link.
+        kind={value ? kind : undefined}
         head={12}
         tail={10}
       />
@@ -71,7 +76,20 @@ function ProofValue({
   );
 }
 
+/** Only these checks put a hash in their chips; the rest put a sentence. */
+const HASH_CHECK_KEYS = new Set<RunProofCheck["key"]>([
+  "promptHash",
+  "toolPolicyHash",
+  "systemPrompt",
+  "inputHash",
+  "outputHash",
+  "toolTranscriptHash",
+  "runHash",
+  "sealedCore",
+]);
+
 function CheckRow({ check }: { check: RunProofCheck }) {
+  const valueKind: ChipKind | undefined = HASH_CHECK_KEYS.has(check.key) ? "hash" : undefined;
   return (
     <li className="rounded-lg border border-border bg-card p-2.5">
       <div className="flex items-center gap-2">
@@ -90,12 +108,13 @@ function CheckRow({ check }: { check: RunProofCheck }) {
       <div className="mt-2 grid gap-1.5 @xs:grid-cols-2">
         <div className="space-y-1">
           <span className="text-[10px] text-muted-foreground">Expected</span>
-          <HashChip value={check.expected} tone="muted" head={10} tail={8} />
+          <HashChip value={check.expected} kind={valueKind} tone="muted" head={10} tail={8} />
         </div>
         <div className="space-y-1">
           <span className="text-[10px] text-muted-foreground">Computed</span>
           <HashChip
             value={check.actual ?? "Not available"}
+            kind={check.actual ? valueKind : undefined}
             tone={check.ok ? "yes" : "muted"}
             head={10}
             tail={8}
@@ -292,26 +311,31 @@ function ReexecuteRunBlock({
               <ProofValue
                 label="Recorded output hash"
                 value={proof.outputHash}
+                kind="hash"
                 tone="chain"
               />
               <ProofValue
                 label="Fresh output hash"
                 value={result.outputHash}
+                kind="hash"
                 tone={result.matches.outputHash ? "yes" : "muted"}
               />
               <ProofValue
                 label="Fresh served model"
                 value={result.servedModel}
+                kind="id"
                 tone={result.matches.servedModel ? "yes" : "muted"}
               />
               <ProofValue
                 label="Fresh gateway request id"
                 value={result.gatewayRequestId}
+                kind="id"
               />
-              <ProofValue label="Fresh devshard id" value={result.devshardId} />
+              <ProofValue label="Fresh devshard id" value={result.devshardId} kind="id" />
               <ProofValue
                 label="Fresh system fingerprint"
                 value={result.systemFingerprint}
+                kind="id"
               />
               <div className="rounded-lg border border-border bg-card p-2.5 sm:col-span-2">
                 <FieldLabel>Fresh latency</FieldLabel>
@@ -366,14 +390,23 @@ export function RunProofDetails({ proof }: { proof: TransparentRunProof }) {
       ) : (
         <>
           <div className="grid gap-2 @xs:grid-cols-2 @2xl:grid-cols-4">
-            <ProofValue label="Prompt hash" value={proof.promptHash} tone="sealed" />
-            <ProofValue label="Input hash" value={proof.inputHash} tone="chain" />
-            <ProofValue label="Output hash" value={proof.outputHash} tone="chain" />
-            <ProofValue label="Run hash" value={proof.runHash} tone="sealed" />
-            <ProofValue label="Gateway request id" value={proof.gateway?.gatewayRequestId} />
-            <ProofValue label="Devshard id" value={proof.gateway?.devshardId} />
-            <ProofValue label="Sealed blob id" value={proof.sealedBlobId} tone="sealed" />
-            <ProofValue label="Revealed blob id" value={proof.revealedBlobId} />
+            <ProofValue label="Prompt hash" value={proof.promptHash} kind="hash" tone="sealed" />
+            <ProofValue label="Input hash" value={proof.inputHash} kind="hash" tone="chain" />
+            <ProofValue label="Output hash" value={proof.outputHash} kind="hash" tone="chain" />
+            <ProofValue label="Run hash" value={proof.runHash} kind="hash" tone="sealed" />
+            <ProofValue
+              label="Gateway request id"
+              value={proof.gateway?.gatewayRequestId}
+              kind="id"
+            />
+            <ProofValue label="Devshard id" value={proof.gateway?.devshardId} kind="id" />
+            <ProofValue
+              label="Sealed blob id"
+              value={proof.sealedBlobId}
+              kind="blob"
+              tone="sealed"
+            />
+            <ProofValue label="Revealed blob id" value={proof.revealedBlobId} kind="blob" />
           </div>
 
           {bundle !== null && proof.gateway?.gatewayRequestId ? (
@@ -527,7 +560,7 @@ export function RunProof({
       <div className="border-t border-border p-3">
         <div className="mb-3 flex flex-wrap items-center gap-2">
           <FieldLabel>Run id</FieldLabel>
-          <HashChip value={runId} label="run" tone="muted" head={10} tail={8} />
+          <HashChip value={runId} label="run" kind="hash" tone="muted" head={10} tail={8} />
         </div>
         {loading && (
           <div

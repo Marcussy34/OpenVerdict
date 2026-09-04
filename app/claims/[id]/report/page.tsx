@@ -32,7 +32,6 @@ import { cn } from "@/lib/utils";
 import { deriveRunId, type BrowserRunProof } from "@/lib/verify/run-proof";
 import { debateStanding } from "@/lib/viz/debate-standing";
 import { buildTranscript, jurorAt, type TranscriptJuror } from "@/lib/viz/transcript";
-import { suiObjectUrl, walrusBlobUrl } from "@/lib/web/explorer";
 import type {
   ClaimInspection,
   DeliberationTurnPublic,
@@ -500,7 +499,7 @@ export default function ClaimReportPage({ params }: ClaimReportPageProps) {
       <div className="mx-auto flex max-w-2xl flex-col items-center gap-3 px-4 py-24 text-center">
         <h1 className="text-xl font-semibold text-ocean">Claim not found</h1>
         <p className="text-sm text-muted-foreground">No claim exists with this object id.</p>
-        <HashChip value={id} full className="max-w-md" />
+        <HashChip value={id} kind="object" full className="max-w-md" />
         <Button asChild size="sm" className="mt-2 min-h-[40px]">
           <Link href="/claims">Back to claims directory</Link>
         </Button>
@@ -567,11 +566,23 @@ export default function ClaimReportPage({ params }: ClaimReportPageProps) {
           All claims
         </Link>
 
-        {/* The statement is the title: nothing above it explains the page. */}
-        <h1 className="ov-display text-4xl text-ocean md:text-5xl">{claim.statement}</h1>
+        {/* The statement is the title: nothing above it explains the page. It
+            runs the full content column and breaks only at the column's edge.
+            The display face balances its lines by default, which pinched a
+            long statement into two short ones with a quarter of the column
+            empty; `.ov-display` is unlayered CSS, so a utility class would
+            lose to it and the override has to be inline. */}
+        <h1
+          style={{ textWrap: "pretty" }}
+          className="ov-display text-4xl text-ocean md:text-5xl"
+        >
+          {claim.statement}
+        </h1>
 
+        {/* The criteria run the column too, pretty so the last line is not a
+            single orphan word. */}
         {claim.resolutionCriteria && (
-          <p className="max-w-[78ch] text-[13px] leading-[1.6] text-muted-foreground">
+          <p className="text-[13px] leading-[1.6] text-pretty text-muted-foreground">
             {claim.resolutionCriteria}
           </p>
         )}
@@ -800,26 +811,18 @@ export default function ClaimReportPage({ params }: ClaimReportPageProps) {
         <div className="space-y-5 border-t border-border px-4 py-4">
           <div>
             <ProofRow label="Claim object">
-              <HashChip
-                value={claim.claimId}
-                tone="muted"
-                href={suiObjectUrl(claim.claimId)}
-              />
+              <HashChip value={claim.claimId} kind="object" tone="muted" />
             </ProofRow>
 
             {claim.committeeId && (
               <ProofRow label="Committee">
-                <HashChip
-                  value={claim.committeeId}
-                  tone="muted"
-                  href={suiObjectUrl(claim.committeeId)}
-                />
+                <HashChip value={claim.committeeId} kind="object" tone="muted" />
               </ProofRow>
             )}
 
             {certificateId && (
               <ProofRow label="Certificate">
-                <HashChip value={certificateId} tone="muted" href={suiObjectUrl(certificateId)} />
+                <HashChip value={certificateId} kind="object" tone="muted" />
               </ProofRow>
             )}
 
@@ -827,20 +830,20 @@ export default function ClaimReportPage({ params }: ClaimReportPageProps) {
               const blobId = manifests.get(bundle.phase);
               return (
                 <ProofRow key={bundle.bundleId} label={`Evidence, phase ${bundle.phase}`}>
-                  <HashChip value={bundle.root} label="root" tone="muted" />
+                  <HashChip value={bundle.root} label="root" kind="hash" tone="muted" />
                   {blobId === undefined ? (
                     <HashChip
                       value={bundle.bundleId}
                       label="manifest"
+                      kind="object"
                       tone="muted"
-                      href={suiObjectUrl(bundle.bundleId)}
                     />
                   ) : (
                     <HashChip
                       value={blobId}
                       label="manifest"
+                      kind="blob"
                       tone="muted"
-                      href={walrusBlobUrl(blobId)}
                     />
                   )}
                 </ProofRow>

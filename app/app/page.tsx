@@ -10,6 +10,7 @@ import { isStrandedDiscussion } from "@/lib/engine/claim-lifecycle";
 import { useNow } from "@/components/use-now";
 import { Arrow } from "@/components/landing/primitives";
 import { SuiMark, GonkaMark } from "@/components/brand/logos";
+import { BrandMark } from "@/components/site-header";
 import {
   DocumentText,
   People,
@@ -109,10 +110,13 @@ export default function AppHomePage() {
     <div className="mx-auto max-w-6xl space-y-10 px-5 py-10 md:px-7 lg:py-12">
       {/* Centered hero: the console reads as a dashboard, not a document. */}
       <div className="mx-auto max-w-2xl space-y-4 pt-4 text-center">
-        <p className="ov-micro ov-micro-sm text-muted-foreground">
-          Console · read-only
-        </p>
-        <h1 className="ov-display text-4xl text-ocean md:text-5xl">OpenVerdict</h1>
+        {/* Mark and wordmark as one lockup: the glyph is sized to the cap
+            height of the title and centred on it. The h1 keeps its own text,
+            so the page title still reads "OpenVerdict" to a screen reader. */}
+        <div className="flex items-center justify-center gap-3 text-ocean md:[&>svg]:size-10">
+          <BrandMark size={32} />
+          <h1 className="ov-display text-4xl text-ocean md:text-5xl">OpenVerdict</h1>
+        </div>
         <p className="text-base text-muted-foreground">
           An adversarial AI jury protocol on Sui. Every verdict public, auditable, replayable.
         </p>

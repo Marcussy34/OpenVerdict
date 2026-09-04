@@ -104,7 +104,7 @@ export function AgentCard({ agent, reportCard, showVoteDetails = false }: AgentC
               <div className="flex flex-wrap items-center gap-1">
                 <DocumentText size="12" variant="Bold" className="text-muted-foreground" />
                 {reportCard.evidenceIds.map((eid) => (
-                  <HashChip key={eid} value={eid} tone="muted" />
+                  <HashChip key={eid} value={eid} kind="id" tone="muted" />
                 ))}
               </div>
             )}
@@ -157,9 +157,11 @@ export function AgentCard({ agent, reportCard, showVoteDetails = false }: AgentC
 
         {/* Identifiers — copyable, never truncated away. */}
         <div className="mt-auto flex flex-wrap gap-1 border-t border-border pt-3">
-          <HashChip value={profileId} label="agent" tone="muted" />
-          {owner && <HashChip value={owner} label="owner" tone="muted" />}
-          {manifestHash && <HashChip value={manifestHash} label="manifest" tone="muted" />}
+          <HashChip value={profileId} label="agent" kind="object" tone="muted" />
+          {owner && <HashChip value={owner} label="owner" kind="account" tone="muted" />}
+          {manifestHash && (
+            <HashChip value={manifestHash} label="manifest" kind="hash" tone="muted" />
+          )}
         </div>
       </div>
 
