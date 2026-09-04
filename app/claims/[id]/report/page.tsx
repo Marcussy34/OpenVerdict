@@ -2,6 +2,7 @@
 
 import {
   Fragment,
+  Suspense,
   use,
   useCallback,
   useEffect,
@@ -11,8 +12,9 @@ import {
   useSyncExternalStore,
 } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { truthScoreOf } from "@/components/claim/claim-format";
+import { FullReport } from "@/components/claim/full-report";
 import { CommandRow } from "@/components/verify/agent-handoff";
 import { useClaimEvents } from "@/components/use-claim-events";
 import { useNow } from "@/components/use-now";
@@ -26,6 +28,7 @@ import {
 import { HashChip } from "@/components/viz/hash-chip";
 import { JurorTrailPanel } from "@/components/viz/juror-card";
 import { ModelLogo, modelVariantFor } from "@/components/viz/model-logo";
+import { VerdictGauge } from "@/components/viz/verdict-gauge";
 import { isStrandedDiscussion } from "@/lib/engine/claim-lifecycle";
 import { OUTCOME } from "@/lib/protocol/constants";
 import { cn } from "@/lib/utils";
@@ -272,10 +275,67 @@ function SideLink({ href, children }: { href: string; children: React.ReactNode 
   );
 }
 
-export default function ClaimReportPage({ params }: ClaimReportPageProps) {
+/** The title block both views share: the statement, then its criteria. */
+function ReportTitle({ claim }: { claim: ClaimInspection }) {
+  return (
+    // The reading measure holds in the full view too, where the panels below
+    // run the wider console frame.
+    <header className="max-w-4xl space-y-4">
+      <Link
+        href="/claims"
+        className="ov-micro ov-micro-sm inline-flex items-center gap-1.5 text-muted-foreground transition-colors hover:text-primary focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+      >
+        <ArrowLeft2 size="13" variant="Bold" />
+        All claims
+      </Link>
+
+      {/* The statement is the title: nothing above it explains the page. It
+          runs the full content column and breaks only at the column's edge.
+          The display face balances its lines by default, which pinched a
+          long statement into two short ones with a quarter of the column
+          empty; `.ov-display` is unlayered CSS, so a utility class would
+          lose to it and the override has to be inline. */}
+      <h1
+        style={{ textWrap: "pretty" }}
+        className="ov-display text-4xl text-ocean md:text-5xl"
+      >
+        {claim.statement}
+      </h1>
+
+      {/* The criteria run the column too, pretty so the last line is not a
+          single orphan word. */}
+      {claim.resolutionCriteria && (
+        <p className="text-[13px] leading-[1.6] text-pretty text-muted-foreground">
+          {claim.resolutionCriteria}
+        </p>
+      )}
+    </header>
+  );
+}
+
+/**
+ * The truth score in a card of its own: the dial the report used to carry, the
+ * figure inside it, one caption under it and nothing else. The scoring link
+ * lives in the Proof section, so the card only states the number.
+ */
+function TruthScoreCard({ scoreBps }: { scoreBps: number | null }) {
+  return (
+    <div className="flex w-full flex-col items-center gap-1.5 border border-border bg-card px-6 py-4 md:w-auto">
+      {/* Under 160px the dial keeps only the figure, which is all the card
+          wants: `compact` also drops the gauge's own tier chip. */}
+      <VerdictGauge scoreBps={scoreBps} size={140} compact emptyTitle="N/A" />
+      <span className="ov-micro ov-micro-sm text-muted-foreground">
+        {scoreBps === null ? "No score yet" : "Truth score"}
+      </span>
+    </div>
+  );
+}
+
+function ClaimReportContent({ params }: ClaimReportPageProps) {
   // Hooks run before the loading and error returns below (rules of hooks).
   const now = useNow();
   const { id } = use(params);
+  const searchParams = useSearchParams();
   const { events } = useClaimEvents(id);
   const hasClaimRef = useRef(false);
   const requestedProofsRef = useRef(new Set<string>());
@@ -510,7 +570,9 @@ export default function ClaimReportPage({ params }: ClaimReportPageProps) {
   // --- the verdict, from the record alone ---------------------------------
   const stranded = now !== null && isStrandedDiscussion(claim, now);
   const verdict = verdictOf(claim, stranded);
-  const score = truthScoreOf(claim);
+  // The whole report is a query on this same route, so a link to it is
+  // shareable and the browser's back button returns to the summary.
+  const full = searchParams.get("view") === "full";
   const seatById = new Map(claim.commitments.map((seat) => [seat.jurySeatId, seat]));
   const jurors = transcript.jurors;
   // A juror's last seat is its final-round seat, which is the vote that counted.
@@ -555,58 +617,38 @@ export default function ClaimReportPage({ params }: ClaimReportPageProps) {
     modelId: juror.modelId,
   }));
 
+  // The whole report, behind ?view=full: every panel, hash and id the record
+  // holds. It takes the console's wide frame, which the summary does not need,
+  // and the same title block and top controls, where the second one returns.
+  if (full) {
+    return (
+      <div className="mx-auto max-w-7xl space-y-8 px-5 py-10 md:px-7 lg:py-14">
+        <ReportTitle claim={claim} />
+        <Hairline />
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <SideLink href={`/claims/${id}`}>Live view</SideLink>
+          <SideLink href={`/claims/${id}/report`}>Summary</SideLink>
+        </div>
+        <FullReport claim={claim} report={report} events={events} stranded={stranded} />
+      </div>
+    );
+  }
+
   return (
     <div className="mx-auto max-w-4xl space-y-8 px-5 py-10 md:px-7 lg:py-14">
-      <header className="space-y-4">
-        <Link
-          href="/claims"
-          className="ov-micro ov-micro-sm inline-flex items-center gap-1.5 text-muted-foreground transition-colors hover:text-primary focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-        >
-          <ArrowLeft2 size="13" variant="Bold" />
-          All claims
-        </Link>
-
-        {/* The statement is the title: nothing above it explains the page. It
-            runs the full content column and breaks only at the column's edge.
-            The display face balances its lines by default, which pinched a
-            long statement into two short ones with a quarter of the column
-            empty; `.ov-display` is unlayered CSS, so a utility class would
-            lose to it and the override has to be inline. */}
-        <h1
-          style={{ textWrap: "pretty" }}
-          className="ov-display text-4xl text-ocean md:text-5xl"
-        >
-          {claim.statement}
-        </h1>
-
-        {/* The criteria run the column too, pretty so the last line is not a
-            single orphan word. */}
-        {claim.resolutionCriteria && (
-          <p className="text-[13px] leading-[1.6] text-pretty text-muted-foreground">
-            {claim.resolutionCriteria}
-          </p>
-        )}
-      </header>
+      <ReportTitle claim={claim} />
 
       <Hairline />
 
       {/* ------------------------------------------------------- The verdict */}
-      <section className="flex flex-wrap items-start justify-between gap-x-8 gap-y-5">
-        <div className="min-w-0 space-y-2">
+      <section className="flex flex-col gap-5 md:flex-row md:items-start md:justify-between md:gap-8">
+        <div className="min-w-0 space-y-2 md:flex-1">
           <div className="flex flex-wrap items-baseline gap-x-5 gap-y-2">
             <p className={cn("ov-display text-4xl md:text-5xl", verdict.className)}>
               {verdict.word}
             </p>
             {verdict.phase && (
               <p className="text-[15px] text-muted-foreground">{verdict.phase}</p>
-            )}
-            {score !== null && (
-              <p className="flex items-baseline gap-2">
-                <span className="font-mono text-2xl text-ocean tabular-nums md:text-3xl">
-                  {score} / 100
-                </span>
-                <span className="ov-micro ov-micro-sm text-muted-foreground">Truth score</span>
-              </p>
             )}
           </div>
 
@@ -657,9 +699,14 @@ export default function ClaimReportPage({ params }: ClaimReportPageProps) {
           )}
         </div>
 
-        <div className="flex shrink-0 items-center gap-2">
-          <SideLink href={`/claims/${id}`}>Live view</SideLink>
-          <SideLink href="/verify">Audit</SideLink>
+        {/* The two ways on, and the score. On a phone the card comes first,
+            straight under the verdict text, and the controls follow. */}
+        <div className="flex shrink-0 flex-col-reverse gap-3 md:flex-col md:items-end">
+          <div className="flex items-center gap-2">
+            <SideLink href={`/claims/${id}`}>Live view</SideLink>
+            <SideLink href={`/claims/${id}/report?view=full`}>Full view</SideLink>
+          </div>
+          <TruthScoreCard scoreBps={claim.result?.truthScoreBps ?? null} />
         </div>
       </section>
 
@@ -923,5 +970,23 @@ export default function ClaimReportPage({ params }: ClaimReportPageProps) {
         </div>
       </details>
     </div>
+  );
+}
+
+export default function ClaimReportPage(props: ClaimReportPageProps) {
+  // `useSearchParams` reads the ?view= switch, so the tree needs a boundary.
+  return (
+    <Suspense
+      fallback={
+        <div className="mx-auto max-w-4xl space-y-6 px-5 py-10 md:px-7 lg:py-14">
+          <div className="h-12 animate-pulse bg-surface" />
+          <div className="h-4 w-2/3 animate-pulse bg-surface" />
+          <div className="h-16 w-1/2 animate-pulse bg-surface" />
+          <div className="h-24 animate-pulse bg-surface" />
+        </div>
+      }
+    >
+      <ClaimReportContent {...props} />
+    </Suspense>
   );
 }
