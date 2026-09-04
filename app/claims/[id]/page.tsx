@@ -37,8 +37,11 @@ import {
   Warning2,
 } from "@/components/icons";
 import { Button } from "@/components/ui/button";
+import { Separator } from "@/components/ui/separator";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { useClaimEvents, type EventStreamStatus } from "@/components/use-claim-events";
 import { useNow } from "@/components/use-now";
+import { Hairline, SplitButton } from "@/components/landing/primitives";
 import { CanvasHighlightProvider } from "@/components/viz/canvas-highlight";
 import { DeliberationCanvas } from "@/components/viz/deliberation-canvas";
 import { DeliberationChat } from "@/components/viz/deliberation-chat";
@@ -213,13 +216,15 @@ const FAILURE_EXPLANATIONS: Record<string, string> = {
     "This seat failed before committing a valid vote and was excluded from settlement.",
 };
 
+// Paper chip with a hairline in the stage's own colour: the tone is carried by
+// the mark and the words, never by a filled ground.
 const STAGE_TONE: Record<StageTone, string> = {
-  form: "border-[#2f8bff]/50 bg-[#0b2a55]/95 text-[#a8cbff]",
-  research: "border-[#2f8bff]/50 bg-[#0b2a55]/95 text-[#a8cbff]",
-  reveal: "border-[#b3a7ff]/50 bg-[#231d55]/95 text-[#cdc5ff]",
-  discuss: "border-[#ffc65c]/50 bg-[#3a2a0c]/95 text-[#ffd98c]",
-  yes: "border-[#43e5a0]/50 bg-[#0b3527]/95 text-[#43e5a0]",
-  no: "border-[#ff8d84]/50 bg-[#3a1512]/95 text-[#ff8d84]",
+  form: "border-chain/35 bg-card/95 text-chain",
+  research: "border-chain/35 bg-card/95 text-chain",
+  reveal: "border-sealed/35 bg-card/95 text-sealed",
+  discuss: "border-unsure/35 bg-card/95 text-unsure",
+  yes: "border-yes/35 bg-card/95 text-yes",
+  no: "border-no/35 bg-card/95 text-no",
 };
 
 function earliestAt(
@@ -389,7 +394,7 @@ function StageBanner({
         animate={{ opacity: 1, y: 0, scale: 1 }}
         transition={{ duration: 0.35, ease: "easeOut" }}
         className={cn(
-          "flex items-center gap-2.5 rounded-full border px-4 py-2 shadow-xl backdrop-blur-md",
+          "flex items-center gap-2.5 border px-3.5 py-2 backdrop-blur-md",
           STAGE_TONE[stage.tone],
         )}
       >
@@ -404,20 +409,18 @@ function StageBanner({
           </span>
         )}
         {showAttempt ? (
-          <span className="rounded-full border border-white/15 bg-black/15 px-2 py-0.5 text-[9px] font-extrabold tracking-[0.14em] whitespace-nowrap uppercase">
+          <span className="ov-micro ov-micro-sm border border-current/25 px-1.5 whitespace-nowrap">
             Attempt {claim.attemptChain?.attempt} of {claim.attemptChain?.maxAttempts}
           </span>
         ) : null}
-        <span className="text-[11px] font-bold tracking-[0.16em] whitespace-nowrap uppercase">
+        <span className="ov-micro ov-micro-sm whitespace-nowrap">
           {replaying ? `Replay · ${stage.label}` : stage.label}
         </span>
         {live ? (
           <span
             className={cn(
-              "flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[9px] font-extrabold tracking-[0.22em]",
-              streamStatus === "connected"
-                ? "bg-[#ff4545]/15 text-[#ff7a70]"
-                : "bg-[#ffc65c]/15 text-[#ffd98c]",
+              "ov-micro ov-micro-sm flex items-center gap-1.5",
+              streamStatus === "connected" ? "text-chain" : "text-unsure",
             )}
           >
             <span aria-hidden className="relative flex size-1.5">
@@ -431,13 +434,13 @@ function StageBanner({
         ) : null}
       </motion.div>
       {attemptStopped && claim.attemptChain !== undefined ? (
-        <div className="pointer-events-auto flex max-w-2xl flex-col items-center gap-3 rounded-2xl border border-[#ff8d84]/30 bg-[#07162f]/95 px-5 py-4 text-xs text-white/75 shadow-xl backdrop-blur-md">
+        <div className="pointer-events-auto flex max-w-2xl flex-col items-center gap-3 border border-no/30 bg-card/95 px-5 py-4 text-[13px] text-muted-foreground backdrop-blur-md">
           <div className="flex w-full flex-col gap-1 text-center">
-            <span className="flex items-center justify-center gap-2 font-medium text-white">
-              <CloseCircle size="16" variant="Bold" className="shrink-0 text-[#ff8d84]" />
+            <span className="flex items-center justify-center gap-2 font-medium text-foreground">
+              <CloseCircle size="16" variant="Bold" className="shrink-0 text-no" />
               <span className="break-words">{attemptFailureSentence(claim)}</span>
             </span>
-            <p className="text-[11px] text-white/60">
+            <p className="text-[13px] leading-[1.5] text-muted-foreground">
               {claim.attemptChain.status === "GAVE_UP"
                 ? "All-or-nothing: no partial verdict was finalized. This verification gave up; submit the claim again to start a fresh one."
                 : "All-or-nothing: no partial verdict is ever finalized. The engine relaunches automatically once all three families and web search answer."}
@@ -445,21 +448,21 @@ function StageBanner({
           </div>
 
           {/* The weather only matters while a relaunch is still possible. */}
-          {claim.attemptChain.status === "VOIDED" ? <WeatherStrip compact tone="dark" /> : null}
+          {claim.attemptChain.status === "VOIDED" ? <WeatherStrip compact /> : null}
 
           {claim.attemptChain.status === "VOIDED" && !claim.attemptChain.relaunchedAs && claim.attemptChain.void?.atMs ? (
-            <p className="text-[11px] text-white/50">
+            <p className="font-mono text-[11px] text-muted-foreground/80">
               gives up at {formatLocalHourMinute(claim.attemptChain.void.atMs + 6 * 60 * 60 * 1000)}
             </p>
           ) : null}
 
           {(claim.attemptChain.previousAttempts.length > 0 || claim.attemptChain.relaunchedAs !== undefined) && (
-            <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-2 border-t border-white/10 pt-2">
+            <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-2 border-t border-border pt-2">
               {claim.attemptChain.previousAttempts.map((attempt) => (
                 <Link
                   key={attempt.claimId}
                   href={`/claims/${attempt.claimId}`}
-                  className="inline-flex min-h-10 items-center gap-1 rounded px-1 font-semibold text-[#72b6ff] transition-colors hover:text-white focus-visible:ring-2 focus-visible:ring-white/80 focus-visible:outline-none"
+                  className="inline-flex min-h-10 items-center gap-1 px-1 font-medium text-chain hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ov-accent)]"
                 >
                   <ArrowLeft2 size="13" variant="Bold" />
                   Previous attempt {attempt.attempt}
@@ -468,7 +471,7 @@ function StageBanner({
               {claim.attemptChain.relaunchedAs !== undefined ? (
                 <Link
                   href={`/claims/${claim.attemptChain.relaunchedAs}`}
-                  className="inline-flex min-h-10 items-center gap-1 rounded px-1 font-semibold text-[#72b6ff] transition-colors hover:text-white focus-visible:ring-2 focus-visible:ring-white/80 focus-visible:outline-none"
+                  className="inline-flex min-h-10 items-center gap-1 px-1 font-medium text-chain hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ov-accent)]"
                 >
                   <Refresh size="13" variant="Bold" />
                   Relaunched as attempt {Math.min(
@@ -500,62 +503,50 @@ function LeftRail({
   const revealedCount = claim.commitments.filter((commitment) => commitment.revealed).length;
 
   return (
-    <div className="flex min-h-full flex-col gap-6 p-5 text-white">
-      <div className="space-y-3">
+    <div className="flex min-h-full flex-col gap-7 p-5 md:p-6">
+      <div className="relative space-y-3">
         <Link
           href="/claims"
-          className="-ml-1 inline-flex w-fit items-center gap-1.5 rounded-full px-1 py-0.5 text-[11px] font-semibold text-white/60 transition-colors hover:text-white"
+          className="-ml-1 inline-flex min-h-8 w-fit items-center gap-1.5 px-1 text-[13px] font-medium text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ov-accent)]"
         >
           <ArrowLeft2 size="13" />
           All claims
         </Link>
-        <p className="text-[10px] font-semibold tracking-[0.16em] text-white/45 uppercase">
-          Claim assertion
-        </p>
-        <p className="text-[15px] leading-relaxed font-medium text-white/90">
+        <p className="ov-micro ov-micro-sm text-muted-foreground">Claim assertion</p>
+        <p className="text-[17px] leading-snug font-medium tracking-[-0.01em] text-foreground">
           {claim.statement}
         </p>
       </div>
 
-      <div className="space-y-3 border-t border-white/10 pt-5">
+      <div className="space-y-3">
+        <Hairline />
         <StateBadge
           state={claim.state}
           stranded={stranded}
           attemptStatus={claim.attemptChain?.status}
-          className="border-white/15 bg-white/5 text-white/80"
         />
-        <p className="flex items-center gap-2 text-xs text-white/60 tabular-nums">
-          <Clock size="14" variant="Bold" className="text-[#72b6ff]" />
+        <p className="flex items-center gap-2 text-[13px] text-muted-foreground tabular-nums">
+          <Clock size="14" variant="Bold" className="text-chain" />
           {nextDeadlineLine(claim, now)}
         </p>
       </div>
 
-      <dl className="grid grid-cols-2 gap-2">
-        <div className="rounded-xl border border-white/10 bg-white/[0.04] p-3">
-          <dt className="text-[10px] font-semibold tracking-[0.12em] text-white/45 uppercase">
-            Sealed
-          </dt>
-          <dd className="mt-1 font-mono text-xl font-semibold text-white">
-            {sealedCount}/5
-          </dd>
+      <dl className="grid grid-cols-2 gap-3">
+        <div className="border border-border bg-card p-3">
+          <dt className="ov-micro ov-micro-sm text-muted-foreground">Sealed</dt>
+          <dd className="mt-1 font-mono text-xl font-medium text-foreground">{sealedCount}/5</dd>
         </div>
-        <div className="rounded-xl border border-white/10 bg-white/[0.04] p-3">
-          <dt className="text-[10px] font-semibold tracking-[0.12em] text-white/45 uppercase">
-            Revealed
-          </dt>
-          <dd className="mt-1 font-mono text-xl font-semibold text-white">
-            {revealedCount}/5
-          </dd>
+        <div className="border border-border bg-card p-3">
+          <dt className="ov-micro ov-micro-sm text-muted-foreground">Revealed</dt>
+          <dd className="mt-1 font-mono text-xl font-medium text-foreground">{revealedCount}/5</dd>
         </div>
       </dl>
 
       {terminal ? (
-        <div className="space-y-3 rounded-xl border border-yes/25 bg-yes/8 p-4">
+        <div className="space-y-3 border border-yes/30 bg-yes/5 p-4">
           <div>
-            <p className="text-[10px] font-semibold tracking-[0.12em] text-white/45 uppercase">
-              Truth Score
-            </p>
-            <p className="mt-1 font-mono text-2xl font-semibold text-yes">
+            <p className="ov-micro ov-micro-sm text-muted-foreground">Truth Score</p>
+            <p className="mt-1 font-mono text-2xl font-medium text-yes">
               {truthScoreLabel(claim.result?.truthScoreBps)}
             </p>
           </div>
@@ -563,21 +554,20 @@ function LeftRail({
             value={claim.result?.certificateId}
             label="certificate"
             tone="yes"
-            className="max-w-full bg-white/5"
+            className="max-w-full"
             href={claim.result?.certificateId ? suiObjectUrl(claim.result.certificateId) : undefined}
           />
         </div>
       ) : null}
 
       {terminal ? (
-        <div className="space-y-3 border-t border-white/10 pt-5">
+        <div className="space-y-3">
+          <Hairline />
           <div className="flex items-center justify-between gap-3">
             <div>
-              <p className="text-[10px] font-semibold tracking-[0.16em] text-white/45 uppercase">
-                Replay
-              </p>
+              <p className="ov-micro ov-micro-sm text-muted-foreground">Replay</p>
               {!replay.active && (
-                <p className="mt-0.5 text-[11px] text-white/55">
+                <p className="mt-1 text-[13px] text-muted-foreground">
                   Watch this verification at 30x
                 </p>
               )}
@@ -585,7 +575,7 @@ function LeftRail({
             <button
               type="button"
               onClick={replay.toggle}
-              className="inline-flex min-h-9 items-center gap-2 rounded-lg bg-[#0e76ff] px-3 text-xs font-semibold text-white transition-colors hover:bg-[#2a87ff] focus-visible:ring-2 focus-visible:ring-white/80 focus-visible:outline-none"
+              className="ov-micro ov-micro-sm inline-flex min-h-9 items-center gap-2 bg-primary px-3 text-primary-foreground transition-colors hover:bg-[var(--ov-accent)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ov-accent)]"
             >
               {replay.playing ? (
                 <Pause size="14" variant="Bold" />
@@ -603,7 +593,7 @@ function LeftRail({
             step={500}
             value={replay.t}
             onChange={(event) => replay.seek(Number(event.currentTarget.value))}
-            className="w-full accent-[#0e76ff]"
+            className="w-full accent-[var(--ov-accent)]"
           />
           <div className="grid grid-cols-3 gap-2">
             {([1, 10, 30] as const).map((speed) => (
@@ -613,10 +603,10 @@ function LeftRail({
                 aria-pressed={replay.speed === speed}
                 onClick={() => replay.setSpeed(speed)}
                 className={cn(
-                  "min-h-8 rounded-lg border text-xs font-semibold transition-colors",
+                  "ov-micro ov-micro-sm min-h-9 border transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ov-accent)]",
                   replay.speed === speed
-                    ? "border-[#0e76ff] bg-[#0e76ff]/20 text-white"
-                    : "border-white/10 bg-white/[0.04] text-white/55 hover:text-white",
+                    ? "border-transparent bg-primary text-primary-foreground"
+                    : "border-border bg-card text-muted-foreground hover:text-foreground",
                 )}
               >
                 {speed}x
@@ -626,53 +616,73 @@ function LeftRail({
         </div>
       ) : null}
 
-      <Link
-        href={`/claims/${claim.claimId}/report`}
-        className="mt-auto inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-white/15 bg-white/[0.04] px-3 text-xs font-semibold text-white/80 transition-colors hover:bg-white/10 hover:text-white"
-      >
-        <DocumentText size="15" variant="Bold" />
-        Full report
-      </Link>
+      <div className="mt-auto pt-2">
+        <SplitButton href={`/claims/${claim.claimId}/report`} tone="muted" stretch>
+          Full report
+        </SplitButton>
+      </div>
     </div>
   );
 }
 
 /**
- * The two views of one claim. The label of the segment you are not on names
- * where it takes you, so the graph always offers the way back to live.
+ * The stage's control cluster: the segmented Live / Graph switcher, and on the
+ * live view the replay control beside it, so view and time read as one group.
+ * The label of the segment you are not on names where it takes you, so the
+ * graph always offers the way back to live.
  */
-function ViewSwitcher({
+function StageControls({
   view,
   onChange,
+  replay,
 }: {
   view: ClaimView;
   onChange: (next: ClaimView) => void;
+  replay: {
+    available: boolean;
+    active: boolean;
+    onReplay: () => void;
+    onSkipToEnd: () => void;
+  };
 }) {
-  const segment = (
-    target: ClaimView,
-    label: string,
-    Icon: typeof Radar,
-  ) => (
-    <button
-      type="button"
-      onClick={() => onChange(target)}
-      aria-pressed={view === target}
-      className={cn(
-        "inline-flex min-h-8 items-center gap-1.5 rounded-full px-3 text-[11px] font-semibold transition-colors focus-visible:ring-2 focus-visible:ring-white/80 focus-visible:outline-none",
-        view === target
-          ? "bg-[#0e76ff] text-white"
-          : "text-white/60 hover:text-white",
-      )}
-    >
-      <Icon size="13" variant="Bold" />
-      {label}
-    </button>
-  );
-
   return (
-    <div className="absolute top-4 left-4 z-40 flex items-center gap-1 rounded-full border border-white/15 bg-[#07162f]/90 p-1 shadow-xl backdrop-blur">
-      {segment("live", view === "graph" ? "Back to live" : "Live", Radar)}
-      {segment("graph", "Graph", Hierarchy)}
+    <div className="absolute top-4 left-4 z-40 flex items-center gap-1 border border-border bg-card/95 p-1 text-foreground backdrop-blur">
+      <ToggleGroup
+        type="single"
+        value={view}
+        onValueChange={(next) => {
+          // Radix clears the value when the pressed segment is pressed again;
+          // one view is always showing, so only a real target moves it.
+          if (next === "live" || next === "graph") onChange(next);
+        }}
+      >
+        <ToggleGroupItem value="live">
+          <Radar size="13" variant="Bold" />
+          {view === "graph" ? "Back to live" : "Live"}
+        </ToggleGroupItem>
+        <ToggleGroupItem value="graph">
+          <Hierarchy size="13" variant="Bold" />
+          Graph
+        </ToggleGroupItem>
+      </ToggleGroup>
+
+      {view === "live" && replay.available && (
+        <>
+          <Separator orientation="vertical" className="mx-0.5 h-5" />
+          <button
+            type="button"
+            onClick={replay.active ? replay.onSkipToEnd : replay.onReplay}
+            className="ov-micro ov-micro-sm inline-flex h-9 items-center gap-1.5 px-3 text-muted-foreground transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+          >
+            {replay.active ? (
+              <Refresh size="13" variant="Bold" />
+            ) : (
+              <Play size="13" variant="Bold" />
+            )}
+            {replay.active ? "Skip to end" : "Replay"}
+          </button>
+        </>
+      )}
     </div>
   );
 }
@@ -1288,23 +1298,30 @@ function NodeInspector({
 function MobileSheet({
   title,
   onClose,
+  dark = false,
   children,
 }: {
   title: string;
   onClose: () => void;
+  /** The graph inspector keeps the canvas's dark scope; everything else is paper. */
+  dark?: boolean;
   children: ReactNode;
 }) {
   return (
-    <div className="fixed inset-x-0 bottom-0 z-50 max-h-[70vh] overflow-auto rounded-t-2xl border-t border-white/15 bg-[#07162f] shadow-2xl lg:hidden">
-      <div className="sticky top-0 z-10 flex items-center justify-between border-b border-white/10 bg-[#07162f]/95 px-5 py-3 backdrop-blur">
-        <p className="text-xs font-semibold tracking-[0.12em] text-white/65 uppercase">
-          {title}
-        </p>
+    <div
+      className={cn(
+        "fixed inset-x-0 bottom-0 z-50 max-h-[70vh] overflow-auto border-t bg-card lg:hidden",
+        dark && "ov-inspector-dark",
+        "border-border",
+      )}
+    >
+      <div className="sticky top-0 z-10 flex items-center justify-between border-b border-border bg-card/95 px-5 py-3 backdrop-blur">
+        <p className="ov-micro ov-micro-sm text-muted-foreground">{title}</p>
         <button
           type="button"
           onClick={onClose}
           aria-label={`Close ${title}`}
-          className="grid size-9 place-items-center rounded-full text-white/55 transition-colors hover:bg-white/10 hover:text-white"
+          className="grid size-9 place-items-center text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ov-accent)]"
         >
           <CloseCircle size="18" variant="Bold" />
         </button>
@@ -1661,14 +1678,26 @@ function ClaimCanvasContent({ params }: ClaimCanvasPageProps) {
   }
 
   return (
-    <div className="relative flex h-dvh overflow-hidden bg-[#04122b] text-white">
+    <div className="relative flex h-dvh overflow-hidden bg-background text-foreground">
       <CollapsibleRail>
         <LeftRail claim={claim} now={now} replay={replay} />
       </CollapsibleRail>
 
       <main className="relative h-dvh flex-1 overflow-hidden">
         <StageBanner claim={claim} graph={graph} replay={replay} now={now} streamStatus={streamStatus} />
-        <ViewSwitcher view={resolvedView} onChange={setView} />
+        <StageControls
+          view={resolvedView}
+          onChange={setView}
+          replay={{
+            available: replayable,
+            active: replay.active,
+            onReplay: () => {
+              replay.setSpeed(TRANSCRIPT_REPLAY_SPEED);
+              replay.start();
+            },
+            onSkipToEnd: replay.stop,
+          }}
+        />
 
         {resolvedView === "live" ? (
           <LiveTranscript
@@ -1678,18 +1707,8 @@ function ClaimCanvasContent({ params }: ClaimCanvasPageProps) {
             jurors={transcript.jurors}
             // The replay cursor, or the whole record when it is not running.
             t={replay.active ? replay.t : Number.POSITIVE_INFINITY}
-            graph={replay.visible}
-            avatars={JUROR_AVATARS}
             onOpenGraph={() => setView("graph")}
-            replay={{
-              available: replayable,
-              active: replay.active,
-              onReplay: () => {
-                replay.setSpeed(TRANSCRIPT_REPLAY_SPEED);
-                replay.start();
-              },
-              onSkipToEnd: replay.stop,
-            }}
+            replay={{ active: replay.active }}
             proofsByRunId={proofsByRunId}
             onRequestProof={requestProofs}
             loadingRunIds={loadingRunIds}
@@ -1723,7 +1742,7 @@ function ClaimCanvasContent({ params }: ClaimCanvasPageProps) {
             setLeftOpen(true);
             setInspectorOpen(false);
           }}
-          className="absolute bottom-5 left-4 z-20 inline-flex min-h-11 items-center gap-2 rounded-full border border-white/15 bg-[#07162f]/90 px-4 text-xs font-semibold text-white shadow-xl backdrop-blur lg:hidden"
+          className="ov-micro ov-micro-sm absolute bottom-5 left-4 z-20 inline-flex min-h-11 items-center gap-2 border border-border bg-card px-4 text-foreground backdrop-blur lg:hidden"
         >
           <DocumentText size="16" variant="Bold" />
           Claim
@@ -1735,7 +1754,7 @@ function ClaimCanvasContent({ params }: ClaimCanvasPageProps) {
               setInspectorOpen(true);
               setLeftOpen(false);
             }}
-            className="absolute right-4 bottom-5 z-20 inline-flex min-h-11 items-center gap-2 rounded-full border border-white/15 bg-[#07162f]/90 px-4 text-xs font-semibold text-white shadow-xl backdrop-blur lg:hidden"
+            className="ov-micro ov-micro-sm absolute right-4 bottom-5 z-20 inline-flex min-h-11 items-center gap-2 border border-border bg-card px-4 text-foreground backdrop-blur lg:hidden"
           >
             <Judge size="16" variant="Bold" />
             Inspect
@@ -1821,8 +1840,8 @@ function ClaimCanvasContent({ params }: ClaimCanvasPageProps) {
       ) : null}
 
       {inspectorOpen && resolvedView === "graph" ? (
-        <MobileSheet title="Node inspector" onClose={() => setInspectorOpen(false)}>
-          <div className="ov-inspector-dark @container p-5">
+        <MobileSheet title="Node inspector" onClose={() => setInspectorOpen(false)} dark>
+          <div className="@container p-5">
             <CanvasHighlightProvider onHighlight={setTrailHighlightId}>
               <NodeInspector
                 claim={claim}
@@ -1852,7 +1871,7 @@ function CollapsibleRail({ children }: { children: ReactNode }) {
       >
         <aside
           className={cn(
-            "h-dvh w-[320px] overflow-y-auto border-r border-white/10 bg-white/[0.04] transition-transform duration-300 ease-out",
+            "ov-scroll h-dvh w-[320px] overflow-y-auto border-r border-border bg-card transition-transform duration-300 ease-out",
             open ? "translate-x-0" : "-translate-x-full",
           )}
         >
@@ -1866,7 +1885,7 @@ function CollapsibleRail({ children }: { children: ReactNode }) {
         onClick={() => setOpen(!open)}
         aria-label={open ? "Hide the claim panel" : "Show the claim panel"}
         className={cn(
-          "absolute top-1/2 z-40 hidden -translate-y-1/2 rounded-r-lg border border-l-0 border-white/15 bg-[#07162f]/90 py-3 pr-1 pl-0.5 text-white/70 shadow-xl transition-[left] duration-300 ease-out hover:bg-white/10 hover:text-white lg:grid",
+          "absolute top-1/2 z-40 hidden -translate-y-1/2 border border-l-0 border-border bg-card py-3 pr-1 pl-0.5 text-muted-foreground transition-[left] duration-300 ease-out hover:text-foreground lg:grid",
           open ? "left-[320px]" : "left-0",
         )}
       >

@@ -1,41 +1,46 @@
 "use client";
 
-import { JurorAvatar } from "@/components/agents/avatar";
+import { Badge } from "@/components/ui/badge";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import { Progress } from "@/components/ui/progress";
 import { HashChip } from "@/components/viz/hash-chip";
+import { LiveDot } from "@/components/viz/live-dot";
 import { ResearchFeed } from "@/components/viz/research-feed";
 import { modelFamily } from "@/components/viz/model-badge";
 import {
   ArrowDown2,
-  Cpu,
+  ExportSquare,
   Lock,
   Refresh,
   ShieldCross,
-  ShieldTick,
+  TickCircle,
 } from "@/components/icons";
 import { cn } from "@/lib/utils";
 import type { BrowserRunProof } from "@/lib/verify/run-proof";
+import { feedDomain } from "@/lib/viz/research-feed";
 import { modelName, type TranscriptJuror, type TranscriptJurorView } from "@/lib/viz/transcript";
 
-const STATE_CHIP: Record<TranscriptJurorView["state"], string> = {
-  waiting: "border-white/15 bg-white/[0.06] text-white/60",
-  researching: "border-[#0e76ff]/40 bg-[#0e76ff]/15 text-[#72b6ff]",
-  sealed: "border-sealed/40 bg-sealed/15 text-sealed",
-  revealed: "border-yes/40 bg-yes/15 text-yes",
-  failed: "border-no/40 bg-no/15 text-no",
+/** The revealed vote, in its semantic colour. */
+const OUTCOME_BADGE: Record<string, string> = {
+  YES: "border-yes/40 bg-yes/12 text-yes",
+  NO: "border-no/40 bg-no/12 text-no",
+  UNSURE: "border-unsure/40 bg-unsure/12 text-unsure",
 };
 
-const STATE_WORD: Record<TranscriptJurorView["state"], string> = {
-  waiting: "Waiting",
-  researching: "Researching",
-  sealed: "Sealed",
-  revealed: "Revealed",
-  failed: "Failed",
+/** The confidence bar carries the same colour as the vote it belongs to. */
+const OUTCOME_BAR: Record<string, string> = {
+  YES: "[&_[data-slot=progress-indicator]]:bg-yes",
+  NO: "[&_[data-slot=progress-indicator]]:bg-no",
+  UNSURE: "[&_[data-slot=progress-indicator]]:bg-unsure",
 };
 
-const OUTCOME_TEXT: Record<string, string> = {
-  YES: "text-yes",
-  NO: "text-no",
-  UNSURE: "text-unsure",
+const FINDING_TONE: Record<string, string> = {
+  SUPPORTS: "text-yes",
+  CONTRADICTS: "text-no",
 };
 
 type ProofRecord = Record<string, unknown>;
@@ -81,16 +86,40 @@ function receiptWords(proof: BrowserRunProof): string | undefined {
 
 function Finding({ entry }: { entry: ProofRecord }) {
   const assessment = asString(entry.assessment) ?? "INSUFFICIENT";
-  const tone =
-    assessment === "SUPPORTS"
-      ? "text-yes"
-      : assessment === "CONTRADICTS"
-        ? "text-no"
-        : "text-unsure";
   return (
-    <li className="text-[11px] leading-relaxed text-white/70">
-      <span className={cn("font-semibold", tone)}>[{assessment}]</span>{" "}
+    <li className="text-[13px] leading-snug text-muted-foreground">
+      <span className={cn("ov-micro ov-micro-sm mr-1.5", FINDING_TONE[assessment] ?? "text-unsure")}>
+        {assessment}
+      </span>
       {asString(entry.check)}: {asString(entry.finding)}
+    </li>
+  );
+}
+
+/** One cited source: the site as a link, the quote it rests on in italics. */
+function Citation({ citation }: { citation: ProofRecord }) {
+  const url = asString(citation.url);
+  const quote = asString(citation.quote);
+  // Only a real web URL becomes a link; anything else stays inert text.
+  const href = url !== undefined && /^https?:\/\//i.test(url) ? url : undefined;
+  const site = url === undefined ? "a page" : (feedDomain(url) ?? url);
+  return (
+    <li className="text-[13px] leading-snug text-muted-foreground">
+      {href === undefined ? (
+        <span className="text-foreground/70">{site}</span>
+      ) : (
+        <a
+          href={href}
+          target="_blank"
+          rel="noreferrer"
+          title={url}
+          className="inline-flex items-baseline gap-1 font-medium text-chain hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+        >
+          {site}
+          <ExportSquare size="10" variant="Bold" className="shrink-0 self-center" />
+        </a>
+      )}
+      {quote !== undefined && <span className="italic"> &ldquo;{quote}&rdquo;</span>}
     </li>
   );
 }
@@ -102,26 +131,46 @@ function JurorAnswer({ proof }: { proof: BrowserRunProof }) {
   if (output === undefined) return null;
   const outcome = asString(output.outcome) ?? "";
   const confidenceBps = asNumber(output.confidenceBps);
+  const percent = confidenceBps === undefined ? undefined : Math.round(confidenceBps / 100);
   const citations = asRecords(output.citations);
   const findings = asRecords(output.publicReasoningTrace);
+  const reasoning = asString(output.reasoning);
+  const counterEvidence = asString(output.counterEvidenceSummary);
   const receipt = receiptWords(proof);
 
   return (
-    <div className="space-y-3 border-t border-white/10 pt-3">
-      <div className="flex items-center gap-2">
-        <ShieldTick size="14" variant="Bold" className={cn(OUTCOME_TEXT[outcome] ?? "text-white/60")} />
-        <span className={cn("text-sm font-semibold", OUTCOME_TEXT[outcome] ?? "text-white/80")}>
-          {outcome || "No outcome recorded"}
-        </span>
-        {confidenceBps !== undefined && (
-          <span className="font-mono text-[11px] text-white/55">
-            {Math.round(confidenceBps / 100)} percent
+    <div className="space-y-3 border-t border-border/60 pt-3">
+      <div className="flex flex-wrap items-center gap-2">
+        {outcome === "" ? (
+          <span className="text-[13px] text-muted-foreground">No outcome recorded</span>
+        ) : (
+          <Badge
+            variant="outline"
+            className={cn(
+              "ov-micro ov-micro-sm px-2",
+              OUTCOME_BADGE[outcome] ?? "border-border text-muted-foreground",
+            )}
+          >
+            {outcome}
+          </Badge>
+        )}
+        {percent !== undefined && (
+          <span className="font-mono text-[11px] text-muted-foreground tabular-nums">
+            {percent} percent
           </span>
         )}
       </div>
 
-      {asString(output.reasoning) && (
-        <p className="text-[11px] leading-relaxed text-white/75">{asString(output.reasoning)}</p>
+      {percent !== undefined && (
+        <Progress
+          value={percent}
+          aria-label="Confidence"
+          className={cn("h-1 bg-foreground/10", OUTCOME_BAR[outcome])}
+        />
+      )}
+
+      {reasoning && (
+        <p className="text-[13px] leading-relaxed text-foreground/85">{reasoning}</p>
       )}
 
       {findings.length > 0 && (
@@ -135,23 +184,41 @@ function JurorAnswer({ proof }: { proof: BrowserRunProof }) {
       {citations.length > 0 && (
         <ul className="space-y-1.5">
           {citations.map((citation, index) => (
-            <li key={index} className="text-[11px] leading-relaxed text-white/65">
-              <span className="text-white/45">cites {asString(citation.url) ?? "a page"}:</span>{" "}
-              <span className="italic">&ldquo;{asString(citation.quote)}&rdquo;</span>
-            </li>
+            <Citation key={index} citation={citation} />
           ))}
         </ul>
       )}
 
-      {asString(output.counterEvidenceSummary) && (
-        <p className="text-[11px] leading-relaxed text-white/60">
-          <span className="text-white/45">Counter-evidence:</span>{" "}
-          {asString(output.counterEvidenceSummary)}
+      {counterEvidence && (
+        <p className="border-l border-border pl-3 text-[13px] leading-relaxed text-muted-foreground">
+          <span className="ov-micro ov-micro-sm mr-1.5 text-muted-foreground/80">
+            Counter-evidence
+          </span>
+          {counterEvidence}
         </p>
       )}
 
-      {receipt && <p className="font-mono text-[10px] break-all text-white/40">{receipt}</p>}
+      {receipt && (
+        <p className="font-mono text-[11px] break-all text-muted-foreground/70">{receipt}</p>
+      )}
     </div>
+  );
+}
+
+/** The one mark in front of the status line: what this seat is doing now. */
+function StateMark({ state }: { state: TranscriptJurorView["state"] }) {
+  if (state === "researching") return <LiveDot tone="chain" className="mt-1" />;
+  if (state === "sealed") {
+    return <Lock size="13" variant="Bold" className="mt-0.5 shrink-0 text-sealed" />;
+  }
+  if (state === "revealed") {
+    return <TickCircle size="13" variant="Bold" className="mt-0.5 shrink-0 text-yes" />;
+  }
+  if (state === "failed") {
+    return <ShieldCross size="13" variant="Bold" className="mt-0.5 shrink-0 text-no" />;
+  }
+  return (
+    <span aria-hidden className="mt-1.5 size-1.5 shrink-0 rounded-full bg-muted-foreground/50" />
   );
 }
 
@@ -178,104 +245,107 @@ export function JurorCard({
   const family = modelFamily(juror.modelId);
   const revealed = view.state === "revealed";
   const failed = view.state === "failed";
+  const steps = view.steps.length;
 
   return (
-    <div
+    <Collapsible
+      open={expanded}
+      onOpenChange={onToggle}
       className={cn(
-        "rounded-2xl border bg-white/[0.04] p-3 transition-colors",
-        expanded ? "border-white/25" : "border-white/10",
+        "flex h-full flex-col border bg-card p-3 transition-colors",
+        expanded ? "border-foreground/25" : "border-border",
       )}
     >
-      <div className="flex items-start gap-3">
-        <JurorAvatar
-          family={juror.family}
-          ordinal={juror.index - 1}
-          avatarKey={juror.agentProfileId}
-          size={40}
-          className="ring-1 ring-white/15"
-        />
+      <div className="flex items-start gap-2.5">
+        {/* One monochrome initial in a tile tinted by model family. Committee
+            diversity is a protocol guarantee, so the hue earns its cue. */}
+        <span
+          aria-hidden
+          className={cn(
+            "grid size-7 shrink-0 place-items-center border text-[12px] font-semibold",
+            family.chip,
+          )}
+        >
+          {family.key === "other" ? "?" : family.name.charAt(0)}
+        </span>
         <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-            <span className="text-sm font-semibold text-white">Juror {juror.index}</span>
-            <span
-              className={cn("truncate font-mono text-[10px]", juror.modelId ? family.text : "text-white/55")}
-              title={juror.modelId}
-            >
+          <p className="flex flex-wrap items-baseline gap-x-1.5 text-[13px] leading-tight">
+            <span className="font-semibold text-foreground">Juror {juror.index}</span>
+            <span className="min-w-0 truncate text-muted-foreground" title={juror.modelId}>
               {juror.modelId ? modelName(juror.modelId) : "model pending"}
             </span>
-            {juror.role && (
-              <span className="rounded-full border border-white/15 bg-white/[0.06] px-1.5 py-px text-[9px] font-semibold tracking-wide text-white/55 uppercase">
-                {juror.role.replace(/_/g, " ")}
-              </span>
-            )}
-            <span
-              className={cn(
-                "ml-auto shrink-0 rounded-full border px-1.5 py-px text-[9px] font-semibold tracking-wide uppercase",
-                STATE_CHIP[view.state],
-              )}
-            >
-              {STATE_WORD[view.state]}
-            </span>
-          </div>
-          <p className="mt-1 flex items-center gap-1.5 text-[11px] leading-relaxed text-white/70">
-            {view.state === "researching" && (
-              <Cpu size="12" variant="Bold" className="shrink-0 text-[#72b6ff] motion-safe:animate-pulse" />
-            )}
-            {view.state === "sealed" && <Lock size="12" variant="Bold" className="shrink-0 text-sealed" />}
-            {failed && <ShieldCross size="12" variant="Bold" className="shrink-0 text-no" />}
-            <span className="min-w-0">{view.status}</span>
           </p>
+          {juror.role && (
+            <Badge
+              variant="outline"
+              // A long role wraps rather than pushing out of a narrow column.
+              className="ov-micro ov-micro-sm mt-1.5 h-auto max-w-full justify-start border-border px-1.5 py-0.5 text-left whitespace-normal text-muted-foreground"
+            >
+              {juror.role.replace(/_/g, " ")}
+            </Badge>
+          )}
         </div>
       </div>
 
-      <button
-        type="button"
-        onClick={onToggle}
-        aria-expanded={expanded}
-        className="mt-2 inline-flex min-h-8 items-center gap-1.5 rounded-lg px-1.5 text-[11px] font-semibold text-white/60 transition-colors hover:text-white focus-visible:ring-2 focus-visible:ring-white/70 focus-visible:outline-none"
+      <p className="mt-2.5 flex items-start gap-1.5 text-[13px] leading-snug text-muted-foreground">
+        <StateMark state={view.state} />
+        <span className="min-w-0 flex-1">{view.status}</span>
+      </p>
+
+      {/* The trail control closes the card, so a stretched row still reads as
+          one shelf: identity at the top, the same control on every bottom. */}
+      <CollapsibleTrigger
+        className={cn(
+          "mt-auto flex min-h-10 w-full items-center gap-1.5 border-t border-border/60 pt-2.5 text-left",
+          "text-[13px] font-medium text-foreground/70 transition-colors",
+          "hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
+        )}
       >
         <ArrowDown2
           size="12"
           variant="Bold"
-          className={cn("motion-safe:transition-transform", expanded && "rotate-180")}
+          className={cn("shrink-0 transition-transform", expanded && "rotate-180")}
         />
         {expanded ? "Hide the trail" : "Show the trail"}
-        {view.steps.length > 0 && (
-          <span className="font-mono text-[10px] text-white/40">
-            {view.steps.length} step{view.steps.length === 1 ? "" : "s"}
+        {steps > 0 && (
+          <span className="ml-auto font-mono text-[11px] text-muted-foreground tabular-nums">
+            {steps} step{steps === 1 ? "" : "s"}
           </span>
         )}
-      </button>
+      </CollapsibleTrigger>
 
-      {expanded && (
-        <div className="mt-2 space-y-3 border-t border-white/10 pt-3">
-          {view.steps.length > 0 ? (
+      <CollapsibleContent className="overflow-hidden data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:slide-in-from-top-1">
+        <div className="space-y-3 pt-3">
+          {steps > 0 ? (
             <ResearchFeed steps={view.steps} />
           ) : revealed || failed ? null : (
             // A seat still working says what will appear; a finished one whose
             // proof carries no trail (a table vote) says nothing at all.
-            <p className="text-[11px] text-white/45">
+            <p className="text-[13px] text-muted-foreground">
               Research steps appear here as they happen.
             </p>
           )}
 
           {failed && juror.failureStatus && (
-            <p className="rounded-lg border border-no/25 bg-no/8 p-2.5 text-[11px] leading-relaxed text-no">
-              This seat failed before it committed ({juror.failureStatus}). It cast no vote, and
-              the whole attempt is void.
+            <p className="flex items-start gap-1.5 text-[13px] leading-snug text-no">
+              <ShieldCross size="13" variant="Bold" className="mt-0.5 shrink-0" />
+              <span>
+                This seat failed before it committed ({juror.failureStatus}). It cast no vote,
+                and the whole attempt is void.
+              </span>
             </p>
           )}
 
           {!revealed && !failed && (
-            <p className="flex items-center gap-1.5 rounded-lg border border-sealed/25 bg-sealed/8 p-2.5 text-[11px] leading-relaxed text-sealed">
-              <Lock size="12" variant="Bold" className="shrink-0" />
-              The vote and the reasoning stay sealed on chain until the reveal.
+            <p className="flex items-start gap-1.5 text-[13px] leading-snug text-sealed">
+              <Lock size="13" variant="Bold" className="mt-0.5 shrink-0" />
+              <span>The vote and the reasoning stay sealed on chain until the reveal.</span>
             </p>
           )}
 
           {revealed && loadingProof && (
-            <p className="flex items-center gap-1.5 text-[11px] text-white/45">
-              <Refresh size="12" variant="Bold" className="motion-safe:animate-spin" />
+            <p className="flex items-center gap-1.5 text-[13px] text-muted-foreground">
+              <Refresh size="13" variant="Bold" className="motion-safe:animate-spin" />
               Opening the revealed run
             </p>
           )}
@@ -293,7 +363,7 @@ export function JurorCard({
             ))}
           </div>
         </div>
-      )}
-    </div>
+      </CollapsibleContent>
+    </Collapsible>
   );
 }
