@@ -568,8 +568,10 @@ describe("watch command and help", () => {
     expect(helpText("agent")).toContain("usage: ov agent <seat id, id prefix or link>");
     expect(helpText("watch")).toContain("usage: ov watch <claim id or claim link> [--for <duration>] [--since <sequence>] [--verbose]");
     expect(helpText("audit")).toContain("exit codes: 0 every check passed or was unavailable, 1 any FAIL, 2 input or fetch error");
-    expect(helpText("trace")).toContain("usage: ov trace <claim id or link> [--juror <n>] [--round 1|2] [--full]");
+    expect(helpText("trace")).toContain("usage: ov trace [<claim id or link>] [--from <audit.json>] [--juror <n>] [--round 1|2] [--full]");
     expect(helpText("trace")).toContain("--full adds the pinned system prompt once and every message verbatim, page texts included.");
+    expect(helpText("trace")).toContain("A seat that failed closed prints its recorded trail, its attempt log and its failure line.");
+    expect(helpText("trace")).toContain("--from <audit.json> reads the file ov audit --json wrote instead of refetching");
     expect(isCommand("swarm")).toBe(false);
     expect(text).not.toContain("\u2014");
   });

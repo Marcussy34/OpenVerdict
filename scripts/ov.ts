@@ -57,6 +57,8 @@ type CliOptions = {
   round?: 1 | 2;
   full: boolean;
   trace: boolean;
+  /** `ov trace --from <audit.json>`: a saved audit instead of a refetch. */
+  from?: string;
 };
 
 function parseArgs(argv: string[]): CliOptions {
@@ -163,6 +165,9 @@ function parseArgs(argv: string[]): CliOptions {
       case "--trace":
         options.trace = true;
         break;
+      case "--from":
+        options.from = value();
+        break;
       default:
         if (argument.startsWith("--")) throw new OvError(`unknown option ${argument}`);
         if (options.command === undefined) options.command = argument;
@@ -231,13 +236,17 @@ async function run(options: CliOptions, env: CommandEnv): Promise<number> {
             }
           : {}),
       });
-    case "trace":
+    case "trace": {
+      // With --from the claim id is optional: the file already names the claim.
+      const named = options.from === undefined || options.positionals.length > 0;
       return traceCommand(env, {
-        target: one(options, "a claim id or link"),
+        ...(named ? { target: one(options, "a claim id or link") } : {}),
+        ...(options.from === undefined ? {} : { from: options.from }),
         full: options.full,
         ...(options.juror === undefined ? {} : { juror: options.juror }),
         ...(options.round === undefined ? {} : { round: options.round }),
       });
+    }
     default:
       throw new OvError(`unknown command ${options.command}; try ov help`);
   }

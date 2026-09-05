@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -15,6 +15,7 @@ const FINALIZED = fixture<ClaimInspection>("claim-finalized.json");
 const DEBATE = fixture<ClaimInspection>("claim-debate.json");
 const RESEARCH_PROOF = fixture<Record<string, unknown>>("trace-proof-research.json");
 const TABLE_VOTE_PROOF = fixture<Record<string, unknown>>("trace-proof-table-vote.json");
+const FAILED_PROOF = fixture<Record<string, unknown>>("trace-proof-failed.json");
 
 const ROLES: Record<string, string> = {
   "deepseek-ai/DeepSeek-V4-Flash-0731": "SOURCE_AUTHENTICITY",
@@ -62,6 +63,20 @@ function proofFor(
   Object.assign(proof, fields);
   Object.assign(bundle, fields);
   Object.assign(audit, { ...fields, claimObjectId: seat.claimId, ...(seat.modelId ? { modelId: seat.modelId, responseModelId: seat.modelId } : {}) });
+  return proof;
+}
+
+/** A failure fixture, retargeted at the seat that failed closed. */
+function failedProofFor(
+  source: Record<string, unknown>,
+  seat: { claimId: string; jurySeatId: string; agentProfileId: string; phase: 1 | 2 },
+): Record<string, unknown> {
+  const runId = deriveRunId(seat.claimId, seat.jurySeatId, seat.phase);
+  const proof = clone(source) as Record<string, unknown>;
+  const failure = proof.failure as Record<string, unknown>;
+  const transcript = failure.transcript as Record<string, unknown>;
+  Object.assign(proof, { runId, claimId: seat.claimId, jurySeatId: seat.jurySeatId, agentProfileId: seat.agentProfileId, phase: seat.phase });
+  transcript.runId = runId;
   return proof;
 }
 
@@ -451,5 +466,188 @@ describe("ov trace inputs", () => {
     const error = await failure(traceCommand(s.env, { target: `${BASE}/fact-check/queue/${queueId}`, full: false }));
     expect(error.exitCode).toBe(2);
     expect(error.message).toContain("queue links no longer exist");
+  });
+});
+
+describe("ov trace on a seat that failed closed", () => {
+  /** Round one with juror 1 failed closed and the other four seats revealed. */
+  function withFailedSeat(source: Record<string, unknown> = FAILED_PROOF): Record<string, Record<string, unknown>> {
+    const proofs = proofsForRound(FINALIZED, 1, RESEARCH_PROOF);
+    const jurySeatId = FINALIZED.rounds![0]!.expectedJurySeatIds[0]!;
+    const seat = FINALIZED.commitments.find((entry) => entry.jurySeatId === jurySeatId)!;
+    proofs[deriveRunId(FINALIZED.claimId, jurySeatId, 1)] = failedProofFor(source, {
+      claimId: FINALIZED.claimId,
+      jurySeatId,
+      agentProfileId: seat.agentProfileId,
+      phase: 1,
+    });
+    return proofs;
+  }
+
+  it("rebuilds the turns, the attempt log and the failure line from the public record", async () => {
+    const s = setup(FINALIZED, withFailedSeat());
+    expect(await traceCommand(s.env, { target: FINALIZED.claimId, juror: 1, full: false })).toBe(0);
+    const text = s.out.join("\n");
+
+    // The header names the failure, its message and how many calls it took.
+    const header = s.out.find((line) => line.startsWith("juror 1"))!;
+    expect(header).toContain(
+      "round 1  failed closed PROVIDER_ERROR (GonkaRouter provider request failed)  4 provider calls  run 0x",
+    );
+    expect(text).not.toContain("no revealed run");
+
+    // The turns come from the recorded transcript, the two open steps rejoined.
+    expect(text).toContain('  1. search (challenge) "humans use only ten percent of their brains myth false"');
+    expect(text).toContain("       2 results: mcgovern.mit.edu, en.wikipedia.org");
+    expect(text).toContain("  2. open 2 pages");
+    expect(text).toContain("       mcgovern.mit.edu/2024/01/26/do-we-use-only-10-percent-of-our-brain/  evidence 0xd6672357…  4000 of 6575 chars");
+    expect(text).toContain("       en.wikipedia.org/wiki/Ten-percent-of-the-brain_myth  evidence 0x8966af5f…  4000 of 60000 chars, truncated");
+    expect(text).not.toContain("  3. ");
+
+    // One line per provider call, in order, then the failure line.
+    expect(s.out).toContain("  attempt 1 HEDGE · PROVIDER_ERROR · HEDGE_ABANDONED · 22.3 s");
+    expect(s.out).toContain("  attempt 2 PRIMARY · SCHEMA_VALID · devshard 69430 · 47.4 s · 1,899 tokens");
+    // The third call reports no total, so the two halves are added instead.
+    expect(s.out).toContain("  attempt 3 PRIMARY · SCHEMA_VALID · devshard 69430 · 17.1 s · 2,078 tokens");
+    expect(s.out).toContain("  attempt 4 PRIMARY · PROVIDER_ERROR · HTTP 524 · 125.0 s");
+    expect(s.out).toContain(
+      "  failed at 2026-09-02T03:43:35Z  failure record on Walrus  https://aggregator.walrus-testnet.walrus.space/v1/blobs/a9wOjCKZDkAgG8j_gtJxZcsfqupB_vp8QRUuOMOJX6I",
+    );
+    // The raw model text belongs to --full, never to the plain trail.
+    expect(text).not.toContain("raw:");
+  });
+
+  it("--full adds each turn's raw action, every call's payload, the hash-matched prompt and the input hash", async () => {
+    const s = setup(FINALIZED, withFailedSeat());
+    expect(await traceCommand(s.env, { target: FINALIZED.claimId, juror: 1, full: true })).toBe(0);
+    const text = s.out.join("\n");
+
+    // The failure record keeps no prompt text, so it comes from a revealed
+    // seat of the same round whose bundle hashes to the same value.
+    expect(s.out.filter((line) => line.startsWith("pinned prompt"))).toHaveLength(1);
+    expect(s.out[3]).toBe("pinned prompt (hash 0x7257117d…)");
+    expect(text).toContain("Research independently and weigh both sides.");
+    expect(text).toContain(
+      "       the system prompt above is a revealed seat's text for hash 0x7257117d5b4d02b8c8de5e70d62f6856143d7f20225084a111645f3557a40b14, proven identical by that hash",
+    );
+    expect(text).toContain(
+      "       the failure record keeps only the input hash, 0xb835c2c2d8b0780ec781b841329ab00d3a538e8a4a9c039f92d141f0f8a55230, never the claim JSON",
+    );
+    expect(text).not.toContain("input:");
+
+    // Each turn carries the raw action of the call that produced it.
+    expect(text).toContain("       raw:");
+    expect(text).toContain('           "query": "humans use only ten percent of their brains myth false",');
+    expect(text).toContain('           "intent": "challenge"');
+    // A failed call prints its error object under its attempt line.
+    expect(text).toContain('         "httpStatus": 524');
+    expect(text).toContain('         "message": "abandoned: the hedged request answered first"');
+  });
+
+  it("says the seat failed before any step when the record has none, and still logs the calls", async () => {
+    const empty = clone(FAILED_PROOF) as { failure: { transcript: { steps: unknown[] } } };
+    empty.failure.transcript.steps = [];
+    const s = setup(FINALIZED, withFailedSeat(empty as unknown as Record<string, unknown>));
+    expect(await traceCommand(s.env, { target: FINALIZED.claimId, juror: 1, full: false })).toBe(0);
+    const header = s.out.find((line) => line.startsWith("juror 1"))!;
+    expect(header).toContain(
+      "round 1  the seat failed before taking any step (PROVIDER_ERROR, GonkaRouter provider request failed)",
+    );
+    expect(s.out).toContain("  attempt 4 PRIMARY · PROVIDER_ERROR · HTTP 524 · 125.0 s");
+    expect(s.out.join("\n")).toContain("  failed at 2026-09-02T03:43:35Z  failure record on Walrus  ");
+    expect(s.out.some((line) => line.startsWith("  1. "))).toBe(false);
+  });
+
+  it("--json carries the attempts, the failure record and each turn's raw text", async () => {
+    const s = setup(FINALIZED, withFailedSeat(), { json: true });
+    expect(await traceCommand(s.env, { target: FINALIZED.claimId, juror: 1, full: false })).toBe(0);
+    const document = JSON.parse(s.out.join("\n")) as {
+      jurors: Array<{
+        rounds: Array<{
+          missing?: string;
+          turns: Array<{ action: string; raw?: string }>;
+          gateway?: { tokens?: number; attempts?: number };
+          attempts?: Array<{ attempt: number; kind: string; status: string; requestId?: string; error?: { category: string; httpStatus?: number } }>;
+          failure?: { status: string; message?: string; failedAtMs?: number; walrusBlobId?: string };
+        }>;
+      }>;
+    };
+    const round = document.jurors[0]!.rounds[0]!;
+    expect(round.missing).toBeUndefined();
+    expect(round.failure).toEqual({
+      status: "PROVIDER_ERROR",
+      message: "GonkaRouter provider request failed",
+      failedAtMs: 1_788_320_615_910,
+      walrusBlobId: "a9wOjCKZDkAgG8j_gtJxZcsfqupB_vp8QRUuOMOJX6I",
+    });
+    expect(round.attempts).toHaveLength(4);
+    expect(round.attempts![1]).toMatchObject({ attempt: 2, kind: "PRIMARY", status: "SCHEMA_VALID", requestId: "devshard-69430-111", tokens: 1_899 });
+    expect(round.attempts![3]!.error).toEqual({ category: "HTTP_ERROR", httpStatus: 524 });
+    // The turns join the calls by id, so each one carries the model's own text.
+    expect(round.turns.map((turn) => turn.action)).toEqual(["search", "open"]);
+    expect(round.turns[0]!.raw).toContain('"action":"search"');
+    expect(round.turns[1]!.raw).toContain('"action":"open"');
+    expect(round.gateway).toMatchObject({ tokens: 3_977, attempts: 4 });
+  });
+});
+
+describe("ov trace --from a saved audit", () => {
+  it("prints the same trail from the file, without one request", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "ov-trace-from-"));
+    try {
+      const proofs = proofsForRound(FINALIZED, 1, RESEARCH_PROOF);
+      const audited = setup(FINALIZED, proofs);
+      const file = join(directory, "audit.json");
+      await auditCommand(audited.env, {
+        target: FINALIZED.claimId,
+        quiet: true,
+        outPath: join(directory, "audit.md"),
+        jsonPath: file,
+      });
+
+      const fetched = setup(FINALIZED, proofs);
+      expect(await traceCommand(fetched.env, { target: FINALIZED.claimId, juror: 1, full: true })).toBe(0);
+
+      const saved = setup(FINALIZED, {});
+      expect(await traceCommand(saved.env, { from: file, juror: 1, full: true })).toBe(0);
+      expect(saved.out).toEqual(fetched.out);
+      expect(saved.net.calls).toEqual([]);
+
+      // The claim id may still be typed, and then the file must hold it.
+      const named = setup(FINALIZED, {});
+      expect(await traceCommand(named.env, { from: file, target: FINALIZED.claimId, juror: 1, full: false })).toBe(0);
+      expect(named.net.calls).toEqual([]);
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("exits 2 on a claim the file does not hold, and on a file that is not an audit", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "ov-trace-from-"));
+    try {
+      const audited = setup(FINALIZED, proofsForRound(FINALIZED, 1, RESEARCH_PROOF));
+      const file = join(directory, "audit.json");
+      await auditCommand(audited.env, {
+        target: FINALIZED.claimId,
+        quiet: true,
+        outPath: join(directory, "audit.md"),
+        jsonPath: file,
+      });
+
+      const s = setup(FINALIZED, {});
+      const other = `0x${"ab".repeat(32)}`;
+      const mismatch = await failure(traceCommand(s.env, { from: file, target: other, full: false }));
+      expect(mismatch.exitCode).toBe(2);
+      expect(mismatch.message).toBe(`the audit file holds claim ${FINALIZED.claimId}, not ${other}`);
+      expect(s.net.calls).toEqual([]);
+
+      const notAnAudit = join(directory, "board.json");
+      writeFileSync(notAnAudit, JSON.stringify({ claims: [] }));
+      const wrong = await failure(traceCommand(s.env, { from: notAnAudit, full: false }));
+      expect(wrong.exitCode).toBe(2);
+      expect(wrong.message).toBe(`${notAnAudit} is not an audit document; --from expects the file ov audit --json writes`);
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
   });
 });

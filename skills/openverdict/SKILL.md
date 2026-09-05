@@ -25,6 +25,25 @@ Take the first rung you can reach. Each one does more than the one above it.
 
 The two reference documents are `references/reference.md` (the protocol in depth) and `references/faq.md` (the questions people ask). Read them when a question goes past this file.
 
+## Pick the command first
+
+Most questions map to one command. Run it before anything else, read its output, and answer from that output. Each takes about ten seconds, the time to rebuild the public record, and none of them needs a key, a wallet or a database.
+
+| The user asks | Run | Then |
+| --- | --- | --- |
+| Audit this claim, is it legit, verify it | `ov audit <id> --quiet --json <scratch>/audit.json --out <scratch>/audit.md` | Read audit.md, present the verdict card and the eight sentences |
+| What did juror N do, step by step | `ov trace <id> --juror N` | Present the trail in its own words, one turn per line |
+| Show the exact prompt, what the model received, the raw answer, prompt in and out | `ov trace <id> --juror N --full` | Print the system prompt, the input and every raw reply verbatim, in code blocks, without summarizing |
+| The audit and the trail together | `ov audit <id> --trace --juror N --full --quiet --json <scratch>/audit.json --out <scratch>/audit.md` | One fetch, both answers |
+| Why did juror N fail, why is a seat empty | `ov trace <id> --juror N --full` | The failed-closed header, the attempt log and the failure line say it; never invent the vote it would have cast |
+| What happened in the debate, why UNRESOLVED | `ov trace <id>` (the debate turns follow the jurors), then `ov audit <id>` | The cascade, explained from the record |
+| Who is on the jury, is it diverse, who staked seat X | `ov agents`, then `ov agent <seat>` | |
+| Is the jury healthy, can I submit now | `ov weather` | |
+| Verify this statement or this article | `ov extract`, then `ov submit` after an explicit go, then `ov watch` | The section "Verify a new claim end to end" |
+| What is on the board, the newest claims | `ov board` | |
+
+Rules of the road. "Exact", "verbatim", "raw" and "show me the prompt" mean the text unchanged inside a code block, never a paraphrase; summarize only when asked to. A seat that failed closed still has a public record (its failure record), and `ov trace --juror N --full` prints it in full. The JSON dump is 2 to 3 MB per claim, so use the jq recipes below for a single fact and nothing more, and never read the app's source code to answer a judge. When the record does not hold something (the claim JSON of a failed seat, for example, which keeps only its hash), say so in one sentence and move on.
+
 ## What this skill does
 
 This skill navigates the whole OpenVerdict app from public data. It runs the public auditor (`scripts/audit-claim.ts`) on one claim, reads the Markdown dossier it writes, presents the verdict in plain English, and then answers questions from the dossier, the JSON dump and the bundled `references/reference.md` and `references/faq.md`. It also drives the whole journey through the public CLI `ov` (launcher `scripts/ov.sh`): read the claim board and the jury roster, look one seat up with its manifest, check the jury's weather, extract a checkable claim from a page or a paragraph, submit it, watch the jury live from the terminal, then audit the verdict (see "Verify a new claim end to end"). It uses only public sources (the app's public API, Sui JSON-RPC, the Walrus aggregator, GonkaRouter's public receipts) and needs no key, no database and no wallet.
@@ -118,7 +137,7 @@ The commands, all reading the public API:
 | `ov status <id>` | One block: statement, state in plain words, seats committed and revealed, attempt, next deadline, result |
 | `ov watch <claim id> [--for <duration>] [--since <n>]` | Follows a verification live, one dated line per step |
 | `ov audit <id>` | Rebuilds and checks the whole public record (the same auditor as `scripts/run.sh`) |
-| `ov trace <id> [--juror n] [--round 1\|2] [--full]` | The research trail: every juror's searches, opened pages, quotes, answer and gateway receipt |
+| `ov trace [<id>] [--from <audit.json>] [--juror n] [--round 1\|2] [--full]` | The research trail: every juror's searches, opened pages, quotes, answer and gateway receipt, and for a seat that failed closed its recorded trail, its attempt log and its failure line. `--from` reads a saved audit instead of refetching |
 | `ov help [command]` | The usage, the description and an example of every command |
 
 `ov agents` and `ov agent` answer "who is on the jury", "is the jury diverse", "who staked this seat", "what has this seat done" and "what prompt does this seat run under" without opening a page. Read the roster as: the committee draw takes at most two seats per model family, three families per jury, one seat per operational signing key, and a Skeptic and a Source-authenticity seat on every committee, so a family with too few active seats is what makes a submission be refused. Seats marked `operator` carry a bond the operator posted; the others name the staker and the amount. There is no cap per staker: any account may stake on as many seats as it likes, and the draw rule is about diversity, never about identity.
@@ -178,9 +197,10 @@ Triggers: "show me the reasoning", "everything", "explain in full", "what did th
 
 ```bash
 bash "<skill dir>/scripts/ov.sh" trace <id> [--juror N] [--round 1|2]
+bash "<skill dir>/scripts/ov.sh" trace --from "<scratch>/audit.json" [--juror N] [--round 1|2]
 ```
 
-It takes about ten seconds (it rebuilds the same public record as the audit) and exits 0, or 2 with one `error: ...` line on an unknown id. Present it per juror, in seat order, from the command's own output:
+It takes about ten seconds (it rebuilds the same public record as the audit) and exits 0, or 2 with one `error: ...` line on an unknown id. Once an audit has written its JSON, `--from <scratch>/audit.json` reads that file instead of refetching and answers in under a second, with the claim id optional because the file already names the claim. Use it for every follow-up trace question in a session where the audit has run. Present it per juror, in seat order, from the command's own output:
 
 - what it searched: the intent (support or challenge) and the exact query, then the domains it got back;
 - what it opened: the page urls with their evidence ids and how much of each page it read;
@@ -190,7 +210,7 @@ It takes about ten seconds (it rebuilds the same public record as the audit) and
 
 On a two-round claim, continue with the debate turns in ordinal order (who spoke, in which exchange, what they argued, which evidence ids they cited, which turns were skipped) and then each juror's table vote, which has no searches: one answer turn over the frozen record and the transcript.
 
-Never invent a step that is not in the trail. A seat with no revealed run prints why ("no revealed run (the seat failed: TIMEOUT)"); say that plainly instead of guessing what it would have found.
+A seat that failed closed is not a dead end. Its failure record is public, so the trail prints that seat's recorded turns, then its attempt log (one line per provider call with the kind, the status, the devshard, the time and the tokens) and its failure line (when the seat gave up, and the aggregator url of the failure record on Walrus). Its header reads "failed closed <status>" with the message and the number of provider calls, in place of a vote. With `--full` the same command adds the pinned system prompt for that round, hash-matched from a revealed seat, and the raw text of every attempt, so no other command and no JSON digging are needed to answer what the seat did before it fell over. A seat whose record holds no step at all says so in one sentence with the status and the message, and a seat with no record prints why in one line ("no revealed run (the seat failed: TIMEOUT)", "the run is sealed and not revealed yet"). Say that plainly instead of guessing what it would have found, and never invent a step that is not in the trail.
 
 ### Tier 3: the exact input and output
 
@@ -198,9 +218,14 @@ For "show me the prompt", "what exactly did the model receive", "show me the raw
 
 ```bash
 bash "<skill dir>/scripts/ov.sh" trace <id> --juror N --full
+bash "<skill dir>/scripts/ov.sh" trace --from "<scratch>/audit.json" --juror N --full
 ```
 
-`--full` prints the pinned system prompt once (it is identical for every juror of a round, with its hash), then the claim JSON the juror received, then every turn's assistant message and tool result verbatim with the page texts, then the raw completion. Present the system prompt in summary first (its rules: one JSON action per turn, the three actions, the method, the output contract, the budgets), then the input JSON, then the turns, then the raw answer. Say that the prompt hash is what the run hash binds, so the prompt shown is the prompt that was hashed on chain.
+"Exact", "verbatim" and "raw" all mean the same thing here, the text unchanged inside a fenced code block, never a paraphrase and never a tidied version. When the user asks for the exact text, print it verbatim; summarize only when a summary is what they asked for.
+
+`--full` prints the pinned system prompt once (it is identical for every juror of a round, with its hash), then the claim JSON the juror received, then every turn's assistant message and tool result verbatim with the page texts, then the raw completion. Present them in that order. For a summary of the prompt rather than its text, give its rules (one JSON action per turn, the three actions, the method, the output contract, the budgets) and offer the verbatim block after it. Say that the prompt hash is what the run hash binds, so the prompt shown is the prompt that was hashed on chain.
+
+A seat that failed closed answers the same question from its failure record, through the same command. `--full` prints the pinned system prompt of that round, taken from a revealed seat of the same round whose bundle hashes to the same value and proven identical by that hash, then every turn with the raw JSON action behind it, then the attempt log with the raw text or the error object of every provider call, then the failure line. The record keeps no request messages, so the claim JSON is named by its input hash and by nothing else; say that instead of reconstructing it.
 
 Vocabulary, always: juror (an AI model occupying a seat), seat, committee (the five), quorum (four matching reveals of five), cascade (round one, then debate, then table vote), debate (round two cross-examination), table vote (the second sealed ballot, no new research), attempt (one all-or-nothing verification), certificate (the resolution certificate on Sui), truth score. Say "adversarial AI jury protocol". Never say "swarm". Never say "the agents voted" as if they were people; say "the jurors revealed" or "seat 3 voted NO". Never say a vote is "correct" or "right"; say it is proven unchanged and evidence-bound. Say the result "settled" or "finalized", not "won".
 
@@ -236,6 +261,8 @@ The transcript expands one `open` action into one step per page, which is why th
 | What did juror N cite? | `## Juror runs` (key citations, first two) | `.runs[] \| select(.jurorIndex == N)`: `.citations` (first two), then the full list in `.sources.proofs[<runId>].bundle.validatedOutput.citations[]` and `.sources.proofs[<runId>].bundle.transcript.opened[]` |
 | What did juror N search for? | `## Juror runs` | `.sources.proofs[<runId>].bundle.transcript.steps[]` (`.action.action`, `.action.intent` support or challenge) |
 | What did juror N actually do, step by step? | run `ov trace <id> --juror N` (add `--full` for the exact prompt and answer) | `.sources.proofs[<runId>].bundle.request.messages[]` (each assistant message is one turn, the user message after it is its result) and `.transcript.steps[]` |
+| What exactly did juror N receive and answer? | run `ov trace <id> --juror N --full` | a revealed seat: `.sources.proofs[<runId>].bundle.request.messages[]` (system, input, then one assistant message per turn) and `.bundle.rawResponse`; a failed seat: `.sources.proofs[<runId>].failure.attempts[].response.choices[0].message.content`, joined to `.sources.proofs[<runId>].failure.transcript.steps[].modelRequestId` through `.response.id` |
+| Why did juror N fail? | `## Juror runs` (the R1-R18 row says the seat failed closed) | `.runs[] \| select(.jurorIndex == N) \| .failure` (status, message) and `.sources.proofs[<runId>].failure` (status, message, attempts[], failedAtMs, walrusBlobId) |
 | Did the model really run on Gonka? | `## Juror runs` (receipt fields, R17) | `.runs[]`: `.gateway` (requestId, devshardId, model, servedModel), `.receipt` (the raw GonkaRouter receipt), `.receiptUrl`, `.window` |
 | Is the run what was committed? | `## Juror runs` (R13 run hash, R16 run hash on chain) | `.runs[]`: `.hashes` (promptHash, inputHash, outputHash, runHash, toolTranscriptHash, evidenceRoot), `.checks[]` (R1 to R18), `.kind` (research, table-vote, legacy, none) |
 | Are the bytes still on Walrus? | `## Juror runs` (R18), `## Timeline` (S4) | `.runs[].revealedBlobId`, `.runs[].sealedBlobId`, `.runs[].blobUrl`, `.sources.walrus[<blobId>].status` |
@@ -443,3 +470,4 @@ Three judge questions with model answers (adapt the numbers to the dossier):
 - Never submit the same statement twice in a row; never submit without an explicit go; the public rate limit is five submissions per minute.
 - Quote hashes, ids and digests from the dossier or the JSON dump, never from memory; when unsure whether a fact is in the record, say so.
 - Keep every protocol statement traceable to `references/reference.md`, `references/faq.md` or the dossier; do not invent protocol facts.
+- Never read the app's own source code to answer a judge. The dossier, the JSON dump, the commands above and the two references hold everything the record can tell, and when something is not in them, say so plainly.

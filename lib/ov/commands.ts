@@ -16,6 +16,7 @@ import {
   renderJson,
   renderMarkdown,
   renderVerdictCard,
+  type AuditResult,
 } from "../audit/audit-claim";
 import type { WeatherReport } from "../engine/contract";
 import { weatherRefusalMessage } from "../web/weather-copy";
@@ -508,9 +509,24 @@ export async function auditCommand(env: CommandEnv, input: AuditInput): Promise<
 /** The flags `trace` shares with `audit --trace`. */
 export type TraceFlags = { juror?: number; round?: 1 | 2; full: boolean };
 
-export type TraceCommandInput = TraceFlags & { target: string };
+/** `--from` reads a saved audit instead of the record, so `target` is optional. */
+export type TraceCommandInput = TraceFlags & { target?: string; from?: string };
 
 export async function traceCommand(env: CommandEnv, input: TraceCommandInput): Promise<number> {
+  // --from answers from a file the audit already wrote, without a single fetch.
+  if (input.from !== undefined) {
+    const result = readAuditFile(input.from);
+    if (input.target !== undefined) checkSameClaim(result, input.target);
+    return printTrace(result, {
+      full: input.full,
+      json: env.json,
+      ...(input.juror === undefined ? {} : { juror: input.juror }),
+      ...(input.round === undefined ? {} : { round: input.round }),
+      ...(env.width === undefined ? {} : { width: env.width }),
+      out: env.io.out,
+    });
+  }
+  if (input.target === undefined) throw new OvError("trace needs a claim id or link, or --from <audit.json>");
   const target = await resolveTarget(env, input.target);
   return trace({
     base: env.api.base,
@@ -525,6 +541,34 @@ export async function traceCommand(env: CommandEnv, input: TraceCommandInput): P
     out: env.io.out,
     err: env.io.err,
   });
+}
+
+/** The saved audit `ov audit --json <file>` wrote, read back for `ov trace --from`. */
+function readAuditFile(path: string): AuditResult {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(readText(path));
+  } catch {
+    throw new OvError(`${path} is not JSON; --from expects the file ov audit --json writes`);
+  }
+  const document = isRecord(parsed) ? parsed : {};
+  const claim = isRecord(document.claim) ? document.claim : {};
+  const usable =
+    document.version === 1 &&
+    asString(claim.claimId) !== undefined &&
+    Array.isArray(document.jury) &&
+    Array.isArray(document.runs) &&
+    isRecord(document.sources);
+  if (!usable) throw new OvError(`${path} is not an audit document; --from expects the file ov audit --json writes`);
+  return document as unknown as AuditResult;
+}
+
+/** With both a file and a target, the file must hold the claim that was asked for. */
+function checkSameClaim(result: AuditResult, typed: string): void {
+  const trimmed = typed.trim();
+  const wanted = HEX_PREFIX.test(trimmed) ? trimmed.toLowerCase() : watchTargetOf(trimmed).id.toLowerCase();
+  if (result.claim.claimId.toLowerCase().startsWith(wanted)) return;
+  throw new OvError(`the audit file holds claim ${result.claim.claimId}, not ${trimmed}`);
 }
 
 /** --run accepts a bare run id or a run link. */
@@ -600,7 +644,7 @@ const COMMAND_HELP: Record<string, { usage: string; about: string; example: stri
     example: "ov audit 0x273220b56d87edea0a6db35f85c0fc8f36591461ee6be6962e86bb4586ee4ac6 --quiet",
   },
   trace: {
-    usage: "ov trace <claim id or link> [--juror <n>] [--round 1|2] [--full]",
+    usage: "ov trace [<claim id or link>] [--from <audit.json>] [--juror <n>] [--round 1|2] [--full]",
     about: "The research trail: every juror's searches, opened pages, quotes, answer and gateway receipt, turn by turn.",
     example: "ov trace 0x273220b56d87edea0a6db35f85c0fc8f36591461ee6be6962e86bb4586ee4ac6 --juror 1",
   },
@@ -633,6 +677,8 @@ export function helpText(topic?: string): string {
       lines.push(
         "",
         "--full adds the pinned system prompt once and every message verbatim, page texts included.",
+        "A seat that failed closed prints its recorded trail, its attempt log and its failure line.",
+        "--from <audit.json> reads the file ov audit --json wrote instead of refetching, so the trail lands in under a second.",
         "--json prints the same trail as one JSON document. Exit codes: 0 success, 2 unknown claim or fetch error.",
       );
     }

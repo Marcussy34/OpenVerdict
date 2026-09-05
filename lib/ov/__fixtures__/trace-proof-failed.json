@@ -1,0 +1,200 @@
+{
+  "runId": "0xa1af3383c049ae34ec65b466435e61069204ed21cc42ff758de9e42fe4a3df13",
+  "claimId": "0x1d53f02c823ba5ee1c1aa3a22ff862306d2ab22c67247f39746db65f6ea76ff4",
+  "phase": 1,
+  "agentProfileId": "0x0000000000000000000000000000000000000000000000000000000000000001",
+  "jurySeatId": "0x0000000000000000000000000000000000000000000000000000000000000002",
+  "promptHash": "0x7257117d5b4d02b8c8de5e70d62f6856143d7f20225084a111645f3557a40b14",
+  "inputHash": "0xb835c2c2d8b0780ec781b841329ab00d3a538e8a4a9c039f92d141f0f8a55230",
+  "outputHash": null,
+  "gateway": null,
+  "runHash": null,
+  "sealPolicy": null,
+  "sealedBlobId": null,
+  "sealed": false,
+  "revealedBlobId": null,
+  "revealed": false,
+  "bundle": null,
+  "failure": {
+    "status": "PROVIDER_ERROR",
+    "message": "GonkaRouter provider request failed",
+    "version": 1,
+    "failedAtMs": 1788320615910,
+    "walrusBlobId": "a9wOjCKZDkAgG8j_gtJxZcsfqupB_vp8QRUuOMOJX6I",
+    "attempts": [
+      {
+        "kind": "HEDGE",
+        "type": "gonka-attempt",
+        "audit": {
+          "phase": 1,
+          "status": "PROVIDER_ERROR",
+          "attempt": 1,
+          "modelId": "moonshotai/Kimi-K2.6",
+          "latencyMs": 22329,
+          "providerId": "gonkarouter"
+        },
+        "error": { "message": "abandoned: the hedged request answered first", "category": "HEDGE_ABANDONED" },
+        "investigationFlags": []
+      },
+      {
+        "kind": "PRIMARY",
+        "type": "gonka-attempt",
+        "audit": {
+          "phase": 1,
+          "status": "SCHEMA_VALID",
+          "attempt": 2,
+          "modelId": "moonshotai/Kimi-K2.6",
+          "latencyMs": 47400,
+          "devshardId": "69430",
+          "providerId": "gonkarouter"
+        },
+        "response": {
+          "id": "devshard-69430-111",
+          "model": "moonshotai/Kimi-K2.6",
+          "usage": { "total_tokens": 1899, "prompt_tokens": 1361, "completion_tokens": 538 },
+          "choices": [
+            {
+              "message": {
+                "role": "assistant",
+                "content": "{\"action\":\"search\",\"query\":\"humans use only ten percent of their brains myth false\",\"intent\":\"challenge\"}"
+              }
+            }
+          ]
+        },
+        "investigationFlags": []
+      },
+      {
+        "kind": "PRIMARY",
+        "type": "gonka-attempt",
+        "audit": {
+          "phase": 1,
+          "status": "SCHEMA_VALID",
+          "attempt": 3,
+          "modelId": "moonshotai/Kimi-K2.6",
+          "latencyMs": 17090,
+          "devshardId": "69430",
+          "providerId": "gonkarouter"
+        },
+        "response": {
+          "id": "devshard-69430-115",
+          "model": "moonshotai/Kimi-K2.6",
+          "usage": { "prompt_tokens": 1892, "completion_tokens": 186 },
+          "choices": [
+            {
+              "message": {
+                "role": "assistant",
+                "content": "{\"action\":\"open\",\"urls\":[\"https://mcgovern.mit.edu/2024/01/26/do-we-use-only-10-percent-of-our-brain/\",\"https://en.wikipedia.org/wiki/Ten-percent-of-the-brain_myth\"],\"from\":0}"
+              }
+            }
+          ]
+        },
+        "investigationFlags": []
+      },
+      {
+        "kind": "PRIMARY",
+        "type": "gonka-attempt",
+        "audit": {
+          "phase": 1,
+          "status": "PROVIDER_ERROR",
+          "attempt": 4,
+          "modelId": "moonshotai/Kimi-K2.6",
+          "latencyMs": 125038,
+          "providerId": "gonkarouter"
+        },
+        "error": { "category": "HTTP_ERROR", "httpStatus": 524 },
+        "investigationFlags": []
+      }
+    ],
+    "transcript": {
+      "runId": "0xa1af3383c049ae34ec65b466435e61069204ed21cc42ff758de9e42fe4a3df13",
+      "version": 1,
+      "provider": { "mode": "cloud", "name": "firecrawl" },
+      "policyHash": "0x8da9ec666479f784378c079cef16246ff0d29e8b789be66fc64853c1365c2e7c",
+      "counts": { "opens": 2, "turns": 2, "searches": 1, "challengeSearches": 1 },
+      "citations": [],
+      "opened": [],
+      "steps": [
+        {
+          "turn": 1,
+          "index": 0,
+          "modelRequestId": "devshard-69430-111",
+          "action": {
+            "action": "search",
+            "query": "humans use only ten percent of their brains myth false",
+            "intent": "challenge"
+          },
+          "result": {
+            "tool": "search",
+            "cached": false,
+            "results": [
+              {
+                "url": "https://mcgovern.mit.edu/2024/01/26/do-we-use-only-10-percent-of-our-brain/",
+                "rank": 1,
+                "title": "Do we only use 10 percent of our brain? - MIT McGovern Institute"
+              },
+              {
+                "url": "https://en.wikipedia.org/wiki/Ten-percent-of-the-brain_myth",
+                "rank": 2,
+                "title": "Ten percent of the brain myth - Wikipedia"
+              }
+            ]
+          },
+          "startedAtMs": 1788320470000,
+          "completedAtMs": 1788320517400
+        },
+        {
+          "turn": 2,
+          "index": 1,
+          "batch": { "size": 2, "position": 0 },
+          "modelRequestId": "devshard-69430-115",
+          "action": {
+            "action": "open",
+            "from": 0,
+            "urls": [
+              "https://mcgovern.mit.edu/2024/01/26/do-we-use-only-10-percent-of-our-brain/",
+              "https://en.wikipedia.org/wiki/Ten-percent-of-the-brain_myth"
+            ]
+          },
+          "result": {
+            "from": 0,
+            "tool": "open",
+            "chars": 4000,
+            "cached": true,
+            "origin": "SEARCH",
+            "evidenceId": "0xd6672357c46e220b267a647bee11c03351cc1164cdcb0a30ea9587bb9d0015bb",
+            "totalChars": 6575
+          },
+          "startedAtMs": 1788320534500,
+          "completedAtMs": 1788320535100
+        },
+        {
+          "turn": 2,
+          "index": 2,
+          "batch": { "size": 2, "position": 1 },
+          "modelRequestId": "devshard-69430-115",
+          "action": {
+            "action": "open",
+            "from": 0,
+            "urls": [
+              "https://mcgovern.mit.edu/2024/01/26/do-we-use-only-10-percent-of-our-brain/",
+              "https://en.wikipedia.org/wiki/Ten-percent-of-the-brain_myth"
+            ]
+          },
+          "result": {
+            "from": 0,
+            "tool": "open",
+            "chars": 4000,
+            "cached": true,
+            "origin": "SEARCH",
+            "truncated": true,
+            "evidenceId": "0x8966af5f0c0c65d1b1fb9d0c58fbbf6b2f1f7ac57a3f0fa7d2e9d20b1a2e3f4c",
+            "totalChars": 60000
+          },
+          "startedAtMs": 1788320535200,
+          "completedAtMs": 1788320535900
+        }
+      ]
+    }
+  },
+  "sui": {}
+}

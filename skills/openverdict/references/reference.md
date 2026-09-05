@@ -56,7 +56,7 @@ Fixed in the prompt spec (version 5, hash `0xa219ea182db1c8e3c30a86df9d4bb75d18e
 
 ## The research trail
 
-What one juror's run looks like from the inside, as the public run proof records it (`GET <base>/api/claims/<claimId>/runs/<runId>/proof`, field `bundle`). `ov trace <claimId>` prints exactly this; `--full` prints it verbatim.
+What one juror's run looks like from the inside, as the public run proof records it (`GET <base>/api/claims/<claimId>/runs/<runId>/proof`, field `bundle`). `ov trace <claimId>` prints exactly this; `--full` prints it verbatim. A seat that failed closed has no bundle, and the same command prints its trail from the proof's `failure` record instead (see "A seat that failed closed" below).
 
 1. The pinned system prompt (`bundle.promptSpec.systemPrompt`, hashed into `promptHash` and from there into the run hash on Sui). It states the three actions, the method, the output contract and the budgets. It is identical for every juror of a round, so the trail prints it once.
 2. The claim JSON (`bundle.input`): the statement, the resolution criteria, the relevant deadline, the frozen evidence manifest with its root, the submitter's material as context only, the seat's role, and the output contract.
@@ -87,6 +87,17 @@ Budgets, from the pinned tool policy v4 (`DEFAULT_TOOL_POLICY_V4` in `lib/gonka/
 | `provider` | firecrawl |
 
 When a budget is exhausted the tool answers with an error (for example `BUDGET_OPENS`) and the juror must answer with what it has. A round-two table vote (bundle version 6) has no transcript and no budgets of this kind: it is one no-tools call over the frozen record and the debate transcript, under the pinned table-vote prompt.
+
+## A seat that failed closed
+
+A seat whose run never produced a valid answer has no bundle, so nothing above is in its proof. What it does have is a public failure record, `failure` on the same route, and `ov trace <claimId> --juror N` rebuilds the seat's whole trail from it:
+
+- `failure.status` and `failure.message`: how the seat ended (`PROVIDER_ERROR`, `TIMEOUT`, `INVALID_SCHEMA` and so on), `failedAtMs` when it gave up, and `walrusBlobId` where the record itself lives (`https://aggregator.walrus-testnet.walrus.space/v1/blobs/<blobId>`).
+- `failure.transcript`: the same shape as a revealed bundle's transcript, so the searches and the opened pages print as ordinary turns. Each step carries `modelRequestId`, the id of the call that produced it.
+- `failure.attempts[]`: every provider call, in order, each with its `kind` (PRIMARY, HEDGE, REPAIR), its `audit` (status, attempt number, model, latency, devshard), its `response` (the completion, whose `id` matches a step's `modelRequestId` and whose `choices[0].message.content` is the model's own text) or its `error` (category, message, HTTP status). The trail prints one line per call and, with `--full`, the raw text or the error object under it.
+- The record does not keep the request messages themselves. The system prompt and the claim JSON are held only as `promptHash` and `inputHash`. Every juror of a round shares the prompt hash, so `--full` prints the prompt text of a revealed seat of that round whose bundle hashes to the same value, and the hash is the proof that the two are the same text. The input is named by its hash and never reconstructed.
+
+A failure is public and binding. It voids the whole attempt, and no vote is invented for the seat.
 
 ## What each hash binds
 
