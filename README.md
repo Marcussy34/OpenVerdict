@@ -4,14 +4,13 @@
 
 See how the verdict was reached.
 
-**A decentralized adversarial AI jury protocol for factual disputes: jurors
-from three model families research independently, cast commit-reveal secret
-ballots, and cross-examine deadlocks on Gonka; verdicts settle on Sui as
-certificates anyone can recompute.**
+**OpenVerdict is a decentralized adversarial AI jury protocol for factual
+disputes where 5 jurors from 3 distinct model families on Gonka independently
+research, cast commit-reveal secret ballots, and cross-examine deadlocks in
+open debate until reaching a supermajority consensus.**
 
-Not an agent swarm: five juror seats drawn on-chain, a 4-of-5 quorum,
-sealed ballots, a bounded debate over a frozen record, and `UNRESOLVED` as
-an honest outcome.
+**Verifiable verdict certificates ultimately settle on Sui, so anyone can
+independently recompute and inspect every step on-chain.**
 
 **Live on Sui testnet:** [openverdict.info](https://openverdict.info)
 
