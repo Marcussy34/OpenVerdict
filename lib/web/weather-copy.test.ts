@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { WeatherFamily, WeatherReport } from "../engine/contract";
 import {
+  juryDrawRuleSentence,
   juryFamiliesLabel,
   juryRequirementSentence,
   weatherFamilyLabel,
@@ -102,5 +103,27 @@ describe("juryFamiliesLabel", () => {
 
   it("says nothing at all when the committee is unknown", () => {
     expect(juryFamiliesLabel(undefined)).toBe("");
+  });
+});
+
+describe("juryDrawRuleSentence", () => {
+  it("names degraded mode, its numbers and who set them", () => {
+    expect(
+      juryDrawRuleSentence({ familyCount: 2, requiredFamilies: 2, degraded: true }),
+    ).toBe(
+      "Two model families, at most three seats per model: degraded mode, set on chain by the operator while a family is down.",
+    );
+  });
+
+  it("keeps the full rule when three families sat", () => {
+    expect(
+      juryDrawRuleSentence({ familyCount: 3, requiredFamilies: 3, degraded: false }),
+    ).toBe("At most two seats per model family, three families in every jury.");
+  });
+
+  it("reads as the full rule before the draw is known", () => {
+    expect(juryDrawRuleSentence(undefined)).toBe(
+      "At most two seats per model family, three families in every jury.",
+    );
   });
 });

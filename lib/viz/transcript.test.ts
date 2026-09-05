@@ -313,6 +313,23 @@ describe("live transcript", () => {
     expect(debate?.tone).toBe("alert");
     expect(debate?.turn?.status).toBe("SKIPPED");
   });
+
+  it("states the rule the seats were drawn under, degraded mode included", () => {
+    const full = buildTranscript({ claim: inspection(), events: stream() });
+    expect(full.entries.find((entry) => entry.kind === "committee")?.detail).toBe(
+      "At most two seats per model family, three families in every jury.",
+    );
+
+    const degraded = buildTranscript({
+      claim: inspection({
+        jury: { familyCount: 2, requiredFamilies: 2, degraded: true },
+      }),
+      events: stream(),
+    });
+    expect(degraded.entries.find((entry) => entry.kind === "committee")?.detail).toBe(
+      "Two model families, at most three seats per model: degraded mode, set on chain by the operator while a family is down.",
+    );
+  });
 });
 
 /** A bundle shaped like the engine writes one: the conversation as sent. */

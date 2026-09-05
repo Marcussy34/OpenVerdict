@@ -61,3 +61,18 @@ export function juryFamiliesLabel(
   const families = `${jury.familyCount} model ${jury.familyCount === 1 ? "family" : "families"}`;
   return jury.degraded ? `${families} (degraded mode)` : families;
 }
+
+/**
+ * The draw rule a committee actually sat under, for the line under the seat
+ * draw. Degraded mode names itself and says who lowered it. A five-seat jury
+ * spread over two families must let one family hold three seats, so the pair
+ * the operator sets on chain is two families and three seats per model.
+ */
+export function juryDrawRuleSentence(
+  jury: JuryDiversitySummary | undefined,
+): string {
+  if (jury?.degraded !== true) {
+    return "At most two seats per model family, three families in every jury.";
+  }
+  return "Two model families, at most three seats per model: degraded mode, set on chain by the operator while a family is down.";
+}

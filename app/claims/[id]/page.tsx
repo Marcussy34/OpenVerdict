@@ -46,6 +46,7 @@ import { DeliberationCanvas } from "@/components/viz/deliberation-canvas";
 import { DeliberationChat } from "@/components/viz/deliberation-chat";
 import { debateSeatsOf } from "@/components/viz/debate-turn";
 import { HashChip } from "@/components/viz/hash-chip";
+import { LiveDot } from "@/components/viz/live-dot";
 import { LiveTranscript } from "@/components/viz/live-transcript";
 import { ResearchFeed } from "@/components/viz/research-feed";
 import { outcomeLabel } from "@/components/viz/seat-seal";
@@ -338,6 +339,123 @@ function replayStage(
 }
 
 /**
+ * The stage the chrome bar is showing: the replayed moment while a replay
+ * runs, the on-chain state otherwise. One source for the pill and the chip,
+ * so the two never disagree about where the claim is.
+ */
+function chromeStage(
+  claim: ClaimInspection,
+  graph: DeliberationGraph,
+  replay: ReplayControls,
+  now: number | null,
+): StageInfo {
+  if (replay.active && replay.t < replay.endMs) {
+    return replayStage(claim, graph, replay.t);
+  }
+  return liveStage(claim, now !== null && isStrandedDiscussion(claim, now));
+}
+
+/** A stage label as a plain sentence, for the chip beside the switcher. */
+function stageWords(label: string): string {
+  return label.replace(" · ", ": ").replace(" & ", " and ");
+}
+
+/**
+ * What the page is following: a claim still running (live, or syncing while
+ * this tab catches the event stream up), or a replay of a finished one. Null
+ * once the record is closed, stranded or stopped: the state badge says what
+ * happened and nothing on the page should still look alive.
+ */
+type LiveMode = "live" | "syncing" | "replay";
+
+function claimLiveMode({
+  claim,
+  replay,
+  now,
+  streamStatus,
+}: {
+  claim: ClaimInspection;
+  replay: ReplayControls;
+  now: number | null;
+  streamStatus: EventStreamStatus;
+}): LiveMode | null {
+  if (replay.active && replay.t < replay.endMs) return "replay";
+  const stopped = claim.attemptChain?.status === "VOIDED"
+    || claim.attemptChain?.status === "GAVE_UP";
+  const stranded = now !== null && isStrandedDiscussion(claim, now);
+  if (stopped || stranded || claim.state >= 9) return null;
+  return streamStatus === "connected" ? "live" : "syncing";
+}
+
+// LIVE is the one filled block on the bar: white on the accent, the same fill
+// the active segment wears, because a running claim has to be unmistakable. A
+// replay and a tab still catching up stay quiet hairline chips, so which mode
+// the page is in reads at a glance.
+const LIVE_CHIP_SKIN: Record<LiveMode, string> = {
+  live: "border-transparent bg-primary text-white",
+  syncing: "border-border bg-card text-muted-foreground",
+  replay: "border-border bg-card text-muted-foreground",
+};
+
+const LIVE_CHIP_WORD: Record<LiveMode, string> = {
+  live: "LIVE",
+  syncing: "SYNCING",
+  replay: "REPLAY",
+};
+
+/**
+ * The broadcast marker: a claim still running says LIVE in the accent with a
+ * pulsing dot, a replay says REPLAY in muted ink and stands still. Large
+ * beside the view switcher, small in the left rail so the phone shows it too.
+ */
+function LiveChip({
+  mode,
+  stage,
+  size = "lg",
+}: {
+  mode: LiveMode;
+  stage?: string;
+  size?: "sm" | "lg";
+}) {
+  const large = size === "lg";
+  const filled = mode === "live";
+  return (
+    <div className="flex min-w-0 items-center gap-2.5">
+      <span
+        className={cn(
+          "inline-flex shrink-0 items-center gap-2 border",
+          // h-9 is the segmented control's own height, so the two line up.
+          large ? "min-h-9 px-3.5" : "px-2.5 py-1",
+          LIVE_CHIP_SKIN[mode],
+        )}
+      >
+        <LiveDot
+          tone={filled ? "onAccent" : mode === "replay" ? "idle" : "chain"}
+          pulse={mode !== "replay"}
+          size={large ? "lg" : "md"}
+        />
+        <span
+          className={cn(
+            large && filled
+              // The one label that outgrows the micro scale: the micro classes
+              // pin their own size, so this spells the same type out at 15px.
+              ? "font-narrow text-[15px] leading-none font-medium tracking-[1.2px] uppercase"
+              : cn("ov-micro", large ? "" : "ov-micro-sm"),
+          )}
+        >
+          {LIVE_CHIP_WORD[mode]}
+        </span>
+      </span>
+      {stage === undefined ? null : (
+        <span className="truncate text-[13px] leading-snug text-muted-foreground">
+          {stage}
+        </span>
+      )}
+    </div>
+  );
+}
+
+/**
  * Always-visible protocol stage pill at the centre-top of the stage. A live
  * claim shows its on-chain state; an active replay shows the stage at the
  * scrubbed moment. Remounting on stage change replays the entry motion, so
@@ -356,19 +474,18 @@ function StageBanner({
   now: number | null;
   streamStatus: EventStreamStatus;
 }) {
-  const stranded = now !== null && isStrandedDiscussion(claim, now);
-  const replaying = replay.active && replay.t < replay.endMs;
-  const stage = replaying
-    ? replayStage(claim, graph, replay.t)
-    : liveStage(claim, stranded);
+  const mode = claimLiveMode({ claim, replay, now, streamStatus });
+  const replaying = mode === "replay";
+  const stage = chromeStage(claim, graph, replay, now);
   const attemptStopped = claim.attemptChain?.status === "VOIDED"
     || claim.attemptChain?.status === "GAVE_UP";
   const showAttempt = claim.attemptChain !== undefined
     && (claim.attemptChain.attempt > 1 || claim.attemptChain.status !== "ACTIVE");
   const settled = !replaying && (claim.state >= 9 || attemptStopped);
-  // Broadcast-style marker: the claim is still running AND this tab follows
-  // the live event stream (amber SYNCING while the stream catches up).
-  const live = !replaying && !stranded && !attemptStopped && claim.state < 9;
+  // The LIVE chip beside the view switcher already carries the stage and
+  // whether the page is following it, so the pill speaks only when it has
+  // something the chip does not: which attempt this is, or a closed record.
+  if (mode !== null && !showAttempt) return null;
   return (
     // Sits inside the stage's control bar, so it never floats over the record.
     // Only the voided-attempt notice still overlays, hung under the bar.
@@ -387,35 +504,26 @@ function StageBanner({
           <CloseCircle size="14" variant="Bold" />
         ) : settled ? (
           <ShieldTick size="14" variant="Bold" />
-        ) : (
+        ) : mode === null ? (
           <span aria-hidden className="relative flex size-2">
             <span className="absolute inline-flex size-full animate-ping rounded-full bg-current opacity-60" />
             <span className="relative inline-flex size-2 rounded-full bg-current" />
           </span>
-        )}
+        ) : null}
         {showAttempt ? (
-          <span className="ov-micro ov-micro-sm border border-current/25 px-1.5 whitespace-nowrap">
+          <span
+            className={cn(
+              "ov-micro ov-micro-sm whitespace-nowrap",
+              // The inner hairline separates the attempt from the stage label.
+              // Alone in the pill it would only draw a box inside a box.
+              mode === null && "border border-current/25 px-1.5",
+            )}
+          >
             Attempt {claim.attemptChain?.attempt} of {claim.attemptChain?.maxAttempts}
           </span>
         ) : null}
-        <span className="ov-micro ov-micro-sm whitespace-nowrap">
-          {replaying ? `Replay · ${stage.label}` : stage.label}
-        </span>
-        {live ? (
-          <span
-            className={cn(
-              "ov-micro ov-micro-sm flex items-center gap-1.5",
-              streamStatus === "connected" ? "text-chain" : "text-unsure",
-            )}
-          >
-            <span aria-hidden className="relative flex size-1.5">
-              {streamStatus === "connected" ? (
-                <span className="absolute inline-flex size-full animate-ping rounded-full bg-current opacity-70 motion-reduce:hidden" />
-              ) : null}
-              <span className="relative inline-flex size-1.5 rounded-full bg-current" />
-            </span>
-            {streamStatus === "connected" ? "LIVE" : "SYNCING"}
-          </span>
+        {mode === null ? (
+          <span className="ov-micro ov-micro-sm whitespace-nowrap">{stage.label}</span>
         ) : null}
       </motion.div>
       {attemptStopped && claim.attemptChain !== undefined ? (
@@ -477,10 +585,12 @@ function LeftRail({
   claim,
   now,
   replay,
+  liveMode,
 }: {
   claim: ClaimInspection;
   now: number | null;
   replay: ReplayControls;
+  liveMode: LiveMode | null;
 }) {
   const stranded = now !== null && isStrandedDiscussion(claim, now);
   const terminal = claim.state >= 9;
@@ -516,6 +626,9 @@ function LeftRail({
           <Clock size="14" variant="Bold" className="text-[var(--ov-accent)]" />
           {nextDeadlineLine(claim, now)}
         </p>
+        {/* The same broadcast marker as the chrome bar, one size down: the
+            phone opens this rail as a drawer and must say LIVE here too. */}
+        {liveMode === null ? null : <LiveChip mode={liveMode} size="sm" />}
       </div>
 
       <dl className="grid grid-cols-2 gap-3">
@@ -1607,6 +1720,10 @@ function ClaimCanvasContent({ params }: ClaimCanvasPageProps) {
     setSelectedId(node?.id ?? null);
     setTrailHighlightId(null);
   }, []);
+  // One answer for the whole page: LIVE, SYNCING, REPLAY, or nothing at all.
+  const liveMode = claim === null
+    ? null
+    : claimLiveMode({ claim, replay, now, streamStatus });
 
   if (loading) {
     return (
@@ -1660,7 +1777,7 @@ function ClaimCanvasContent({ params }: ClaimCanvasPageProps) {
   return (
     <div className="relative flex h-dvh overflow-hidden bg-background text-foreground">
       <CollapsibleRail>
-        <LeftRail claim={claim} now={now} replay={replay} />
+        <LeftRail claim={claim} now={now} replay={replay} liveMode={liveMode} />
       </CollapsibleRail>
 
       <main className="relative flex h-dvh flex-1 flex-col overflow-hidden">
@@ -1669,7 +1786,15 @@ function ClaimCanvasContent({ params }: ClaimCanvasPageProps) {
             the flow rather than over it, so the record scrolls beneath it
             instead of under a floating pill. */}
         <div className="relative z-40 flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-border bg-card px-4 py-3">
-          <StageControls view={resolvedView} onChange={setView} />
+          <div className="flex min-w-0 flex-wrap items-center gap-3">
+            <StageControls view={resolvedView} onChange={setView} />
+            {liveMode === null ? null : (
+              <LiveChip
+                mode={liveMode}
+                stage={stageWords(chromeStage(claim, graph, replay, now).label)}
+              />
+            )}
+          </div>
           <StageBanner claim={claim} graph={graph} replay={replay} now={now} streamStatus={streamStatus} />
         </div>
 
@@ -1818,7 +1943,7 @@ function ClaimCanvasContent({ params }: ClaimCanvasPageProps) {
 
       {leftOpen ? (
         <MobileSheet title="Claim details" onClose={() => setLeftOpen(false)}>
-          <LeftRail claim={claim} now={now} replay={replay} />
+          <LeftRail claim={claim} now={now} replay={replay} liveMode={liveMode} />
         </MobileSheet>
       ) : null}
 

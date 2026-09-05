@@ -12,9 +12,42 @@ type DragControls = {
   startDrag: (id: string) => void;
   /** Move the pinned node to graph coordinates (already unscaled). */
   dragTo: (id: string, x: number, y: number) => void;
-  /** Cool the simulation; the node stays pinned where it was dropped. */
+  /** Cool the simulation and REMEMBER the drop: the node stays there. */
   endDrag: (id: string) => void;
+  /** Hand a dropped node back to the simulation (a double-click does this). */
+  releaseNode: (id: string) => void;
 };
+
+/**
+ * Where the reader dropped things, per claim, for as long as the tab lives.
+ * This cannot be component state: the Graph view unmounts every time the
+ * reader flips to Chat, and a seat dropped somewhere has to still be there
+ * when they come back (owner, 2026-09-05: "if I move it, it is going to stay
+ * there"). Only the page session: a reload starts clean.
+ */
+const PINNED_BY_CLAIM = new Map<string, Map<string, Position>>();
+const SCOPE_LIMIT = 12;
+
+/** The claim a graph belongs to, so one claim's pins never reach another's. */
+export function claimScopeKey(graph: DeliberationGraph): string {
+  const claimId = graph.nodes.find((node) => node.kind === "claim")
+    ?.detail?.["claimId"];
+  return typeof claimId === "string" ? claimId : "claim";
+}
+
+function pinnedFor(scope: string): Map<string, Position> {
+  const known = PINNED_BY_CLAIM.get(scope);
+  if (known !== undefined) return known;
+  // A long session across many claims keeps only the last few; the oldest
+  // entry goes first.
+  const oldest = PINNED_BY_CLAIM.keys().next().value;
+  if (PINNED_BY_CLAIM.size >= SCOPE_LIMIT && oldest !== undefined) {
+    PINNED_BY_CLAIM.delete(oldest);
+  }
+  const created = new Map<string, Position>();
+  PINNED_BY_CLAIM.set(scope, created);
+  return created;
+}
 
 function nodeSetKey(graph: DeliberationGraph): string {
   return JSON.stringify(graph.nodes.map((node) => node.id).sort());
@@ -30,7 +63,11 @@ function topologyKey(graph: DeliberationGraph): string {
 export function useForceLayout(
   graph: DeliberationGraph,
   size: { width: number; height: number },
-): { positions: Map<string, Position> } & DragControls {
+): {
+  positions: Map<string, Position>;
+  /** Nodes the reader dropped, so the canvas can offer to release them. */
+  pinnedIds: ReadonlySet<string>;
+} & DragControls {
   const [positions, setPositions] = useState<Map<string, Position>>(
     () => new Map(),
   );
@@ -41,6 +78,17 @@ export function useForceLayout(
   const nodesKey = nodeSetKey(graph);
   const graphTopologyKey = topologyKey(graph);
   const { width, height } = size;
+  const scope = claimScopeKey(graph);
+  const scopeRef = useRef(scope);
+  // Restored on mount, then kept in step by the drag controls alone: the
+  // claim page mounts this view per claim, so the scope holds for its life.
+  const [pinnedIds, setPinnedIds] = useState<ReadonlySet<string>>(
+    () => new Set(PINNED_BY_CLAIM.get(scope)?.keys() ?? []),
+  );
+  // Releasing a node has to rebuild the layout, not just unset fx/fy: the
+  // dropped spot was also its research's home, so the trail only goes back
+  // to the pentagon once the homes are recomputed.
+  const [releaseCount, setReleaseCount] = useState(0);
 
   // Refs may not be written during render (React Compiler rule); this effect
   // runs before the layout effect below in the same commit, so the layout
@@ -49,15 +97,23 @@ export function useForceLayout(
     graphRef.current = graph;
   }, [graph]);
 
+  // Pins belong to the claim, and the drag controls below are memoised once,
+  // so they read the live scope through this ref.
+  useEffect(() => {
+    scopeRef.current = scope;
+  }, [scope]);
+
   useEffect(() => {
     const currentGraph = graphRef.current;
-    const layout = createSimulation(currentGraph, { width, height });
+    const pinned = pinnedFor(scope);
+    const layout = createSimulation(currentGraph, { width, height }, { pinned });
     layoutRef.current = layout;
     let frameId: number | null = null;
 
-    // Keep established nodes in place while a changed topology settles.
+    // Keep established nodes in place while a changed topology settles. A
+    // dropped node is already fixed at its own spot and must not be moved.
     for (const node of layout.simulation.nodes()) {
-      if (node.kind === "claim") continue;
+      if (node.kind === "claim" || pinned.has(node.id)) continue;
       const previous = positionsRef.current.get(node.id);
       if (previous === undefined) continue;
       node.x = previous.x;
@@ -121,7 +177,7 @@ export function useForceLayout(
       if (layoutRef.current === layout) layoutRef.current = null;
       if (frameId !== null) cancelAnimationFrame(frameId);
     };
-  }, [graphTopologyKey, height, nodesKey, width]);
+  }, [graphTopologyKey, height, nodesKey, releaseCount, scope, width]);
 
   // Stable controls that always reach the live simulation through the ref.
   const controls = useMemo<DragControls>(() => {
@@ -142,11 +198,29 @@ export function useForceLayout(
         node.fx = x;
         node.fy = y;
       },
-      endDrag: () => {
+      endDrag: (id) => {
         layoutRef.current?.simulation.alphaTarget(0);
+        const node = nodeById(id);
+        if (typeof node?.fx !== "number" || typeof node.fy !== "number") return;
+        // The drop STICKS: fx and fy stay set, and the spot is remembered, so
+        // the next arriving research node cannot shake it loose.
+        const pinned = pinnedFor(scopeRef.current);
+        pinned.set(id, { x: node.fx, y: node.fy });
+        setPinnedIds(new Set(pinned.keys()));
+      },
+      releaseNode: (id) => {
+        const pinned = pinnedFor(scopeRef.current);
+        if (!pinned.delete(id)) return;
+        const node = nodeById(id);
+        if (node !== undefined) {
+          node.fx = null;
+          node.fy = null;
+        }
+        setPinnedIds(new Set(pinned.keys()));
+        setReleaseCount((count) => count + 1);
       },
     };
   }, []);
 
-  return { positions, ...controls };
+  return { positions, pinnedIds, ...controls };
 }

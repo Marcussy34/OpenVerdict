@@ -27,7 +27,7 @@ import type {
   GraphNode,
   JurorFamily,
 } from "@/lib/viz/deliberation-graph";
-import { useForceLayout } from "./use-force-layout";
+import { claimScopeKey, useForceLayout } from "./use-force-layout";
 
 type Position = { x: number; y: number };
 type Viewport = { x: number; y: number; scale: number };
@@ -54,6 +54,23 @@ const OUTCOME_STYLE = {
 } as const;
 const NODE_ENTRY_DURATION_SECONDS = 0.24;
 const NODE_ENTRY_EASE: [number, number, number, number] = [0.33, 1, 0.68, 1];
+
+/**
+ * The framing the reader TOOK, per claim, for as long as the tab lives. Once
+ * a hand has panned, zoomed or moved a node, the auto-fit must never re-frame
+ * over them again, and flipping to Chat and back (which unmounts this view)
+ * must not undo them either. Only the page session: a reload starts clean.
+ */
+const TAKEN_VIEWS = new Map<string, Viewport>();
+const TAKEN_VIEW_LIMIT = 12;
+
+function rememberView(scope: string, view: Viewport): void {
+  const oldest = TAKEN_VIEWS.keys().next().value;
+  if (!TAKEN_VIEWS.has(scope) && TAKEN_VIEWS.size >= TAKEN_VIEW_LIMIT && oldest !== undefined) {
+    TAKEN_VIEWS.delete(oldest);
+  }
+  TAKEN_VIEWS.set(scope, view);
+}
 
 /** Confidence in whole percent, the way the dock and the Live view say it. */
 function confidencePercent(confidenceBps: number | undefined): string | undefined {
@@ -380,6 +397,7 @@ function CanvasNode({
   variant,
   cited,
   jurorVerdict,
+  pinned,
   reduceMotion,
   viewScale,
   onSelect,
@@ -387,6 +405,7 @@ function CanvasNode({
   onDragStart,
   onDrag,
   onDragEnd,
+  onRelease,
 }: {
   node: GraphNode;
   position: Position;
@@ -397,6 +416,8 @@ function CanvasNode({
   variant: number;
   cited: boolean;
   jurorVerdict?: GraphNode;
+  /** Dropped here by the reader: it stays put until they release it. */
+  pinned: boolean;
   reduceMotion: boolean;
   viewScale: number;
   onSelect: (node: GraphNode) => void;
@@ -404,6 +425,7 @@ function CanvasNode({
   onDragStart: (id: string) => void;
   onDrag: (id: string, x: number, y: number) => void;
   onDragEnd: (id: string) => void;
+  onRelease: (id: string) => void;
 }) {
   // A short press selects; moving past 4px hands the node to the simulation.
   const dragRef = useRef<{
@@ -432,6 +454,9 @@ function CanvasNode({
           <motion.button
             type="button"
             aria-label={`Select ${node.kind}: ${node.label}`}
+            // The only thing that says a node is held: the reader put it
+            // there, so the hint is where their pointer already is.
+            {...(pinned ? { title: "Pinned here: double-click to release." } : {})}
             className={cn(
               "relative grid cursor-grab place-items-center focus-visible:outline-none active:cursor-grabbing",
               "focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
@@ -451,6 +476,12 @@ function CanvasNode({
                 return;
               }
               onSelect(node);
+            }}
+            onDoubleClick={(event) => {
+              // The one way back: a held node rejoins the simulation and its
+              // research goes home with it.
+              event.stopPropagation();
+              if (pinned) onRelease(node.id);
             }}
             onPointerDown={(event) => {
               event.stopPropagation();
@@ -547,7 +578,13 @@ export function DeliberationCanvas({
   const shouldReduceMotion = reducedMotion === true || systemReducedMotion === true;
   const [size, setSize] = useState({ width: 0, height: 0 });
   const [dockInset, setDockInset] = useState(0);
-  const [manualView, setManualView] = useState<Viewport | null>(null);
+  const scope = claimScopeKey(graph);
+  // Whatever framing the reader had last time they were on this claim's map.
+  // Restored on mount only: the claim page mounts this view per claim, so
+  // the scope holds for its life.
+  const [manualView, setManualView] = useState<Viewport | null>(
+    () => TAKEN_VIEWS.get(scope) ?? null,
+  );
   const [hoveredJurorId, setHoveredJurorId] = useState<string | null>(null);
 
   // The room the picture is FRAMED into: the stage minus the strip the debate
@@ -560,7 +597,16 @@ export function DeliberationCanvas({
   // holds the jury in a ring around an empty middle. Only the drawing skips it.
   // It is laid out in the framed room, so the ring is shaped for the space it
   // will be read in rather than fitted down into it afterwards.
-  const { positions, startDrag, dragTo, endDrag } = useForceLayout(graph, stage);
+  const { positions, pinnedIds, startDrag, dragTo, endDrag, releaseNode } =
+    useForceLayout(graph, stage);
+
+  // One hand movement takes the view for good: pan, zoom and moving a node
+  // all stop the auto-fit re-framing over the reader, on this update and on
+  // every one after it.
+  const takeView = useCallback((next: Viewport): void => {
+    rememberView(scope, next);
+    setManualView(next);
+  }, [scope]);
 
   // The claim itself is not a place on the map (owner, 2026-09-04): it is not
   // drawn, not labelled, not selectable, and its seat spokes are not drawn.
@@ -757,13 +803,13 @@ export function DeliberationCanvas({
       const deltaX = event.clientX - drag.startX;
       const deltaY = event.clientY - drag.startY;
       if (Math.hypot(deltaX, deltaY) > 3) drag.moved = true;
-      setManualView({
+      takeView({
         x: drag.originX + deltaX,
         y: drag.originY + deltaY,
         scale: view.scale,
       });
     },
-    [view.scale],
+    [takeView, view.scale],
   );
 
   const finishPointer = useCallback(
@@ -794,9 +840,9 @@ export function DeliberationCanvas({
   // Dragging a node freezes the auto-fit at its current framing, otherwise
   // the view would keep re-centring against the user's hand.
   const handleNodeDragStart = useCallback((id: string): void => {
-    setManualView((current) => current ?? view);
+    if (manualView === null) takeView(view);
     startDrag(id);
-  }, [startDrag, view]);
+  }, [manualView, startDrag, takeView, view]);
 
   const handleWheel = useCallback((event: ReactWheelEvent<HTMLDivElement>): void => {
     event.preventDefault();
@@ -808,12 +854,12 @@ export function DeliberationCanvas({
     // Keep the graph coordinate under the pointer fixed while zooming.
     const graphX = (pointerX - view.x) / view.scale;
     const graphY = (pointerY - view.y) / view.scale;
-    setManualView({
+    takeView({
       scale: nextScale,
       x: pointerX - graphX * nextScale,
       y: pointerY - graphY * nextScale,
     });
-  }, [view]);
+  }, [takeView, view]);
 
   // Escape drops the selection and hands the stage back.
   useEffect(() => {
@@ -914,6 +960,7 @@ export function DeliberationCanvas({
               variant={nodeVariants.get(node.id) ?? 0}
               cited={cited}
               {...(jurorVerdict === undefined ? {} : { jurorVerdict })}
+              pinned={pinnedIds.has(node.id)}
               reduceMotion={shouldReduceMotion}
               viewScale={view.scale}
               onSelect={onSelect}
@@ -921,6 +968,7 @@ export function DeliberationCanvas({
               onDragStart={handleNodeDragStart}
               onDrag={dragTo}
               onDragEnd={endDrag}
+              onRelease={releaseNode}
             />
           );
         })}

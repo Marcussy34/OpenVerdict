@@ -13,27 +13,41 @@ const TONE = {
     ring: "bg-muted-foreground",
     text: "text-muted-foreground",
   },
+  // For a dot sitting on the filled accent, where ink would disappear.
+  onAccent: { dot: "bg-white", ring: "bg-white", text: "text-white" },
 } as const;
 
 export type DotTone = keyof typeof TONE;
+
+// Two sizes only: the default everywhere, and one step up for the claim page's
+// broadcast chip, where the dot has to read across the room.
+const DOT_SIZE = {
+  md: { box: "size-2.5", dot: "size-2" },
+  lg: { box: "size-3.5", dot: "size-2.5" },
+} as const;
+
+export type DotSize = keyof typeof DOT_SIZE;
 
 /** A dot with an expanding ping ring — the app's single "this is live" tell. */
 export function LiveDot({
   tone = "live",
   className,
   pulse = true,
+  size = "md",
 }: {
   tone?: DotTone;
   className?: string;
   pulse?: boolean;
+  size?: DotSize;
 }) {
   const t = TONE[tone];
+  const s = DOT_SIZE[size];
   return (
-    <span className={cn("relative grid size-2.5 shrink-0 place-items-center", className)}>
+    <span className={cn("relative grid shrink-0 place-items-center", s.box, className)}>
       {pulse && (
         <span className={cn("ov-ping absolute inset-0 rounded-full", t.ring)} aria-hidden />
       )}
-      <span className={cn("relative size-2 rounded-full", t.dot)} />
+      <span className={cn("relative rounded-full", s.dot, t.dot)} />
     </span>
   );
 }

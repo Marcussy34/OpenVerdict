@@ -19,6 +19,7 @@ import {
   trailTurnTimes,
   type TrailTurn,
 } from "../research/trail";
+import { juryDrawRuleSentence } from "../web/weather-copy";
 import { familyOfModelId, type JurorFamily } from "./deliberation-graph";
 import { feedDomain, researchFeed, type ResearchFeedStep } from "./research-feed";
 
@@ -537,7 +538,8 @@ export function buildTranscript(input: {
         push({
           kind: "committee",
           text: `Sui's own randomness drew ${seatIds.length} seats: ${models.join(", ")}.`,
-          detail: "At most two seats per model family, three families in every jury.",
+          // The rule this committee was drawn under, degraded mode included.
+          detail: juryDrawRuleSentence(claim.jury),
           tone: "chain",
           showJurors: true,
         });
