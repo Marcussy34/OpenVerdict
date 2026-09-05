@@ -3427,3 +3427,83 @@ landing "Set up SKILL.md" line, Full view frame width). Reversal of
 degraded mode when Kimi returns: agents eligibility --active true for
 0xb1131089 and 0x255a8f65, then registry diversity --required 3
 --per-model 2 (from the Railway container).
+
+## 3bb. RESUME MAP 2026-09-05 14:55 (pre-compaction: read 3ay, 3az, 3ba, then THIS; continue as if nothing happened)
+
+OWNER DIRECTION (14:50): land the four batches below, then FINALIZE: no
+more features after them; final verification pass, demo script ready
+(docs/demo/demo-script-3min.md), ship as is for the final demo and the
+recordings.
+
+LIVE NOW: HEAD 3149491 (code 5177f3e), deploy 66bd2e2f. Production is
+on package 0x437443b0 in degraded mode (two families, Kimi out; see 3ay
+for the reversal). The settled live claim 0x7ee9ee79 (EU AI Act, YES
+98.80) is the demo's degraded-mode example. Tree clean apart from owner
+folders and config/release.localnet.json (run artifact, never commit).
+
+IN FLIGHT (four Opus workers, briefs in the scratchpad, none touches
+another's files; all report "ONE final report"):
+1. engine-fixes (opus-engine-fixes.md): weather gate counts only
+   families with an active seat in the current registry; eligibility
+   mirror updates every version row + record_json, plus `pnpm cli
+   registry sync-mirror`; ov submit gets a 90 s timeout and checks the
+   board after a timeout; reveals per seat as soon as each upload lands,
+   uploads start when the reveal phase opens, engine-side post-draw gap
+   trimmed, proven on localnet. Files: lib/engine/engine.ts (gate,
+   reveal), lib/storage/repository.ts, cli/src/operator.ts, lib/ov/**,
+   skills/openverdict/SKILL.md (submit sentence). After landing: run
+   `registry sync-mirror` from the Railway container.
+2. stake-weight (opus-stake-weight.md): any amount from 0.1 SUI, weight
+   = min(10_000 * amount / MIN_STAKE_MIST, 100_000) in
+   register_staked_agent; amountMist through prepare/confirm (contract
+   seam); amount field on the stake card; --amount on scripts/
+   stake-seat.ts; docs and skill; bytecode at scripts/upgrade/
+   bytecode-2026-09-05-stake-weight.json with a dry run. After landing:
+   commit + deploy, then from the Railway container
+   `./node_modules/.bin/tsx scripts/upgrade-openverdict-bytecode.ts
+   scripts/upgrade/bytecode-2026-09-05-stake-weight.json` (the script's
+   read-back may say "Transaction not found" although the tx succeeded:
+   verify the digest on publicnode JSON-RPC, then set packageId in
+   config/release.testnet.json by hand; juryDiversityPackageId stays
+   0x437443b0), commit, deploy again.
+3. prompt-v5 (opus-prompt-v5.md): next research prompt spec version with
+   an explicit example of the evidence arrays, hashed, default, every
+   version's hash pinned in tests, docs. After landing: commit + deploy,
+   then republish seat manifests from the container with
+   scripts/publish-agent-manifests.ts (the worker's report gives the
+   exact command and checks; the engine asserts manifest promptHash ==
+   live hash, so DEPLOY THE CODE AND REPUBLISH IN THE SAME WINDOW, with
+   the seeder paused and no claim active).
+4. cosmetics (opus-cosmetics.md): fluid report title, no double vote
+   pill on the graph, "pre-release" wording on Terms and Risk (no
+   "experimental" left), absolute footer console links on the docs host,
+   "Give this to your agent" command line under the landing hero, Full
+   view at the summary's width. UI only.
+
+LANDING RITUAL (unchanged): review the diff and screenshots, run the
+gates, commit with explicit paths (never `git add .`, never the owner
+folders, never config/release.localnet.json), `git archive HEAD` into
+scratchpad/tree-check + tsc for the committed tree, push, then
+scratchpad/railway-tree: fetch, checkout --detach origin/main, checkout
+HEAD -- ., status must be empty, touch scratchpad/seeder.pause,
+`railway up -s app -d`, confirm the newest deployment id changed,
+scratchpad/unpause-after-deploy.sh in the background, verify on
+production. Deploy only with no claim active (board-watch.log "live:"
+lines; the seeder is paused by the pause file). Operator steps run
+inside the container: `railway ssh -s app -- sh -c 'cd /app &&
+OPENVERDICT_RELEASE_MANIFEST=config/release.testnet.json
+./node_modules/.bin/tsx cli/src/index.ts <cmd>'` (no curl there; this
+Mac cannot reach fullnode.testnet.sui.io). Commit trailer: only
+"Claude-Session: https://claude.ai/code/session_01GEddEYHqe1BZiUwuBSwxTG"
+(never Co-Authored-By, per the owner's global rules).
+
+AFTER THE FOUR LAND: a last end-to-end run if the weather is clear
+(scratchpad/e2e-submit.sh via a persistent Monitor; the claim text is in
+the script; stop the watcher before it can resubmit on a client
+timeout), a production screenshot pass of the demo tabs (landing, docs
+trust-model, fact-check, the settled claims, the report, the audit page),
+checkpoint 3bc, memory, and the closing summary. Then stop: ship as is.
+
+WATCHERS: board watcher b64wjsym0 (board-watch.log). No e2e watcher
+running. Weather at 14:50: DeepSeek ok, MiniMax ok, Kimi down (503),
+gate clear with two families.
