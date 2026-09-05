@@ -37,15 +37,22 @@ const JuryDiversityBcs = bcs.struct("JuryDiversity", {
  */
 const KEY_BCS = new Uint8Array([0]);
 
-/** Object types keep the first-published address across package upgrades. */
-function typePackageId(manifest: ReleaseManifest): string {
-  return manifest.originalPackageId?.length
-    ? manifest.originalPackageId
-    : manifest.packageId;
-}
-
-function keyType(manifest: ReleaseManifest): string {
-  return `${typePackageId(manifest)}::agent_registry::JuryDiversityKey`;
+/**
+ * The addresses the key type may carry, in the order to try them. A struct
+ * introduced by an upgrade is addressed by the package version that introduced
+ * it (on testnet 0x437443b0..., recorded as juryDiversityPackageId), which is
+ * neither the current nor the first-published id once the package moves on;
+ * a fresh publish (localnet) makes all three the same. Trying the recorded
+ * address first, then the current and the original, keeps the read correct
+ * across every deployment without a silent fall back to the defaults.
+ */
+function keyTypes(manifest: ReleaseManifest): string[] {
+  const candidates = [
+    manifest.juryDiversityPackageId,
+    manifest.packageId,
+    manifest.originalPackageId,
+  ].filter((id): id is string => typeof id === "string" && id.length > 0);
+  return [...new Set(candidates)].map((id) => `${id}::agent_registry::JuryDiversityKey`);
 }
 
 /**
@@ -58,21 +65,24 @@ async function readDiversityField(
   manifest: ReleaseManifest,
   parentId: string,
 ): Promise<JuryDiversity | undefined> {
-  try {
-    const { dynamicField } = await client.core.getDynamicField({
-      parentId,
-      name: { type: keyType(manifest), bcs: KEY_BCS },
-    });
-    const value = JuryDiversityBcs.parse(dynamicField.value.bcs);
-    return {
-      requiredModels: value.required_models,
-      maxSeatsPerModel: value.max_seats_per_model,
-    };
-  } catch {
-    // Missing field and unreachable node look the same here; both mean "the
-    // chain did not tell us a pair", and every caller falls back explicitly.
-    return undefined;
+  for (const type of keyTypes(manifest)) {
+    try {
+      const { dynamicField } = await client.core.getDynamicField({
+        parentId,
+        name: { type, bcs: KEY_BCS },
+      });
+      const value = JuryDiversityBcs.parse(dynamicField.value.bcs);
+      return {
+        requiredModels: value.required_models,
+        maxSeatsPerModel: value.max_seats_per_model,
+      };
+    } catch {
+      // A miss under one address is not an answer yet; the next address may
+      // hold the field. Missing field and unreachable node look the same, and
+      // every caller falls back explicitly when nothing answers.
+    }
   }
+  return undefined;
 }
 
 /**

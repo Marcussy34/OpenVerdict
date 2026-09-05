@@ -21,6 +21,13 @@ export const releaseManifestSchema = z
     // every object type keeps the address the package was first published
     // at; that first address lives here. Absent before any upgrade.
     originalPackageId: optionalObjectId.optional(),
+    /**
+     * The package version that introduced agent_registry::JuryDiversityKey. A
+     * struct added in an upgrade is addressed by the version that added it,
+     * neither the current nor the first-published package, so the reader is
+     * told where to look; absent, it tries the current and original ids.
+     */
+    juryDiversityPackageId: optionalObjectId.optional(),
     registryObjectId: optionalObjectId,
     demoPoolObjectId: optionalObjectId.optional().default(""),
     clockObjectId: z.literal("0x6"),

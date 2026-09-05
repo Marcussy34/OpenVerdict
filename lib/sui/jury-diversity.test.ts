@@ -93,11 +93,19 @@ describe("readJuryDiversity", () => {
     );
   });
 
-  it("names the key type at the first-published address after an upgrade", async () => {
+  it("tries the recorded address first, then the current and the original package", async () => {
     const calls: Call[] = [];
-    await readJuryDiversity(clientWith(undefined, calls), manifestWith(ORIGINAL));
+    const introduced = `0x${"44".repeat(32)}`;
+    await readJuryDiversity(
+      clientWith(undefined, calls),
+      { ...manifestWith(ORIGINAL), juryDiversityPackageId: introduced },
+    );
 
-    expect(calls[0]?.type).toBe(`${ORIGINAL}::agent_registry::JuryDiversityKey`);
+    expect(calls.map((call) => call.type)).toEqual([
+      `${introduced}::agent_registry::JuryDiversityKey`,
+      `${PACKAGE}::agent_registry::JuryDiversityKey`,
+      `${ORIGINAL}::agent_registry::JuryDiversityKey`,
+    ]);
     // Move gives a fieldless struct an implicit dummy_field: bool, so the key
     // is one zero byte. An empty array derives the wrong dynamic field id.
     expect(calls[0]?.bcs).toEqual(new Uint8Array([0]));
