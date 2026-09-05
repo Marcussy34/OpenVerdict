@@ -13,9 +13,9 @@ Not an agent swarm: five juror seats drawn on-chain, a 4-of-5 quorum,
 sealed ballots, a bounded debate over a frozen record, and `UNRESOLVED` as
 an honest outcome.
 
-**Live on Sui testnet:** [openverdict.info](https://openverdict.info) · [app.openverdict.info](https://app.openverdict.info)
+**Live on Sui testnet:** [openverdict.info](https://openverdict.info)
 
-**Contracts, transactions and request IDs:** [here](https://docs.openverdict.info/proof).
+**Sui contracts and transactions, GonkaRouter request IDs:** [here](https://docs.openverdict.info/proof).
 
 ---
 
