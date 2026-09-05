@@ -64,7 +64,7 @@ export type AuditOptions = {
   rpcUrls?: string[];
   /** Per network call, default 20 s. */
   timeoutMs?: number;
-  /** Pause before the one retry each RPC endpoint gets on a network failure. */
+  /** Base pause before each retry an RPC endpoint gets; the pause grows with the attempt. */
   rpcRetryDelayMs?: number;
   walrusAggregator?: string;
   receiptsBase?: string;
@@ -315,8 +315,15 @@ const DEFAULT_EVENTS_IDLE_MS = 8_000;
 // Never read a stream for longer than this, whatever arrives.
 const EVENTS_MAX_MS = 90_000;
 const RPC_CONCURRENCY = 4;
-/** Public nodes drop a request now and then; one retry keeps a check from going UNAVAILABLE. */
+/** Public nodes drop a request now and then; retrying keeps a check from going UNAVAILABLE. */
 const DEFAULT_RPC_RETRY_DELAY_MS = 300;
+/**
+ * Retries one endpoint gets on a dropped connection or a 429, spaced
+ * rpcRetryDelayMs * attempt apart (300, 600, 900, 1200 ms by default, so about
+ * three seconds per endpoint). The archival fallback is the only node that
+ * still holds a pruned transaction, so it is worth waiting out its limiter.
+ */
+const RPC_RETRIES = 4;
 const WALRUS_CONCURRENCY = 2;
 const RECEIPT_WINDOW_SLACK_MS = 60_000;
 const QUORUM = 4;
@@ -485,6 +492,15 @@ function createLimiter(size: number) {
   };
 }
 
+/** Host of an RPC endpoint, so a reason line names a node a human recognises. */
+function rpcHost(url: string): string {
+  try {
+    return new URL(url).host;
+  } catch {
+    return url;
+  }
+}
+
 function errorMessage(error: unknown): string {
   if (error instanceof Error) {
     if (error.name === "AbortError" || error.name === "TimeoutError") return "timed out";
@@ -608,6 +624,10 @@ class Net {
   readonly rpcLimit = createLimiter(RPC_CONCURRENCY);
   readonly walrusLimit = createLimiter(WALRUS_CONCURRENCY);
   readonly receiptLimit = createLimiter(RPC_CONCURRENCY);
+  // The last endpoint of the list is the archival fallback, and a burst of
+  // RPC_CONCURRENCY parallel checks is what trips its rate limiter. It gets a
+  // limiter of one so it answers a single request at a time.
+  readonly #archivalLimit = createLimiter(1);
   readonly #rpcCache = new Map<string, Promise<RpcOutcome>>();
   readonly #fetch: typeof fetch;
   readonly #timeoutMs: number;
@@ -685,35 +705,48 @@ class Net {
   async #rpcUncached(method: string, params: unknown[]): Promise<RpcOutcome> {
     const body = JSON.stringify({ jsonrpc: "2.0", id: 1, method, params });
     let notFound: RpcOutcome | undefined;
-    let lastReason = "no RPC endpoint configured";
+    // Endpoints that could not answer the question at all (a dropped
+    // connection, a timeout, a 429 after the retries, an HTTP or RPC error).
+    // Any one of them may be the node that still holds this transaction.
+    const unanswered: Array<{ url: string; phrase: string }> = [];
     let lastUrl = this.#rpcUrls[0] ?? "";
-    for (const url of this.#rpcUrls) {
+    for (const [index, url] of this.#rpcUrls.entries()) {
       lastUrl = url;
       const init = { method: "POST", headers: { "content-type": "application/json" }, body };
-      let outcome = await this.request(url, init);
-      // A dropped connection (no HTTP status) or a rate limit (429) gets up
-      // to two retries on the same endpoint, spaced out, before the next one
-      // is tried: the fallback node may be worse, and a burst of parallel
-      // checks trips the archival endpoint's limiter for a moment.
-      for (let attempt = 1; attempt <= 2 && !outcome.ok && (outcome.status === null || outcome.status === 429); attempt += 1) {
+      // Requests to the archival fallback go through its own limiter of one.
+      const archival = this.#rpcUrls.length > 1 && index === this.#rpcUrls.length - 1;
+      const send = () => (archival ? this.#archivalLimit(() => this.request(url, init)) : this.request(url, init));
+      let outcome = await send();
+      let tries = 1;
+      // A dropped connection (no HTTP status) or a rate limit (429) gets up to
+      // RPC_RETRIES retries on the same endpoint, each pause longer than the
+      // last, before the next endpoint is tried. Other HTTP errors are final.
+      for (let attempt = 1; attempt <= RPC_RETRIES && !outcome.ok && (outcome.status === null || outcome.status === 429); attempt += 1) {
         await new Promise((resolve) => setTimeout(resolve, this.#rpcRetryDelayMs * attempt));
-        outcome = await this.request(url, init);
+        outcome = await send();
+        tries += 1;
       }
       if (!outcome.ok) {
-        lastReason = outcome.reason;
-        this.fail(`sui ${method}`, url, outcome.reason);
+        // Trimmed: a TLS error message can end in a newline, and the suffix
+        // below has to stay on the same line as the reason it counts.
+        const reason = outcome.reason.trim();
+        const attempts = tries > 1 ? ` after ${tries} tries` : "";
+        const phrase = outcome.status === null ? `could not be reached (${reason})` : `answered ${reason}`;
+        unanswered.push({ url, phrase: `${phrase}${attempts}` });
+        this.fail(`sui ${method}`, url, `${reason}${attempts}`);
         continue;
       }
       const payload = isRecord(outcome.body) ? outcome.body : undefined;
       const error = payload && isRecord(payload.error) ? payload.error : undefined;
       if (error) {
         const message = asString(error.message) ?? "RPC error";
-        // A deprecated method or a pruned node: try the next endpoint.
+        // A pruned node: it answered, and it does not have this one.
         if (/not found|could not find|does not exist/i.test(message) && !/method/i.test(message)) {
           notFound = { ok: false, kind: "not_found", reason: message, url };
           continue;
         }
-        lastReason = message;
+        // A deprecated method: this endpoint never got to look. Try the next.
+        unanswered.push({ url, phrase: `answered ${message}` });
         this.fail(`sui ${method}`, url, message);
         continue;
       }
@@ -725,8 +758,21 @@ class Net {
       }
       return { ok: true, result, url };
     }
+    // Precedence. "not found" is the answer only when every endpoint answered
+    // and none of them had it, because that is the one case where the record
+    // is genuinely wrong and the checks downstream are right to FAIL. If even
+    // one endpoint could not be asked, it may be the node still holding the
+    // transaction, so the outcome is unavailable and those checks stay
+    // UNAVAILABLE. The reason names both halves so a reader sees why.
+    if (unanswered.length > 0) {
+      const pruned = method === "sui_getObject" ? "" : " (nodes prune after a few days)";
+      const subject = method === "sui_getObject" ? "the object" : "the transaction";
+      const missing = notFound ? `${rpcHost(notFound.url)} reports ${subject} as not found${pruned} and ` : "";
+      const busy = unanswered.map((entry) => `${rpcHost(entry.url)} ${entry.phrase}`).join(", ");
+      return { ok: false, kind: "unavailable", reason: `${missing}${busy}`, url: notFound?.url ?? lastUrl };
+    }
     if (notFound) return notFound;
-    return { ok: false, kind: "unavailable", reason: lastReason, url: lastUrl };
+    return { ok: false, kind: "unavailable", reason: "no RPC endpoint configured", url: lastUrl };
   }
 
   getTransactionBlock(digest: string): Promise<RpcOutcome> {

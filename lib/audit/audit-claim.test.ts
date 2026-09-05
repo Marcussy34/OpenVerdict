@@ -887,13 +887,18 @@ function target(world: FakeWorld, runId?: string) {
   return { base: BASE, claimId: world.claimId, kind: "claim" as const, ...(runId ? { runId } : {}) };
 }
 
-function runAudit(world: FakeWorld, plan: FetchPlan = {}, extra: { timeoutMs?: number; rpcUrls?: string[] } = {}) {
+function runAudit(
+  world: FakeWorld,
+  plan: FetchPlan = {},
+  extra: { timeoutMs?: number; rpcUrls?: string[]; rpcRetryDelayMs?: number } = {},
+) {
   return auditClaim(target(world), {
     fetch: createFakeFetch(world, plan),
     now: () => T0 + 3_000_000,
     eventsIdleMs: 40,
     timeoutMs: extra.timeoutMs ?? 5_000,
     ...(extra.rpcUrls ? { rpcUrls: extra.rpcUrls } : {}),
+    ...(extra.rpcRetryDelayMs === undefined ? {} : { rpcRetryDelayMs: extra.rpcRetryDelayMs }),
   });
 }
 
@@ -1359,6 +1364,103 @@ describe("auditClaim when a source is down", () => {
     const result = await runAudit(world);
     expect(find(result, "C1", "FAIL")[0]?.detail).toMatch(/not found on Sui/);
     expect(result.exitCode).toBe(1);
+  });
+
+  /** The pruned-node answer one endpoint gives when it no longer holds a transaction. */
+  function prunedTx(digest: string): Response {
+    return json({ jsonrpc: "2.0", id: 1, error: { code: -32602, message: `Could not find the referenced transaction [TransactionDigest(${digest})].` } });
+  }
+
+  it("keeps a reveal UNAVAILABLE when one endpoint pruned it and the others could not be asked", async () => {
+    const world = buildWorld(RESEARCH_CLAIM);
+    const pruned = "https://rpc-pruned.test";
+    const dropped = "https://rpc-dropped.test";
+    const archival = "https://rpc-archival.test";
+    const reveals = new Set(world.seats.map((seat) => seat.revealTx));
+    const result = await runAudit(
+      world,
+      {
+        rpc: (url, _method, params) => {
+          const digest = String(params[0]);
+          if (!reveals.has(digest)) return undefined;
+          if (url === pruned) return prunedTx(digest);
+          // A dropped connection on one node, a busy limiter on the archival one.
+          if (url === dropped) throw new Error("socket hang up");
+          return new Response("slow down", { status: 429 });
+        },
+      },
+      { rpcUrls: [pruned, dropped, archival], rpcRetryDelayMs: 0 },
+    );
+    // Nothing here says the record is wrong, so no check may FAIL.
+    expect(result.summary.failed).toBe(0);
+    expect(result.exitCode).toBe(0);
+    const c2 = find(result, "C2", "UNAVAILABLE");
+    expect(c2).toHaveLength(5);
+    expect(c2[0]?.detail).toContain("rpc-pruned.test reports the transaction as not found (nodes prune after a few days)");
+    expect(c2[0]?.detail).toContain("rpc-dropped.test could not be reached (socket hang up) after 5 tries");
+    expect(c2[0]?.detail).toContain("rpc-archival.test answered HTTP 429 after 5 tries");
+    expect(find(result, "C3", "UNAVAILABLE")).toHaveLength(5);
+    expect(find(result, "R16", "UNAVAILABLE")).toHaveLength(5);
+    // The commit transactions were never pruned, so they still pass.
+    expect(find(result, "C1", "PASS")).toHaveLength(5);
+  });
+
+  it("fails a reveal that every endpoint answered and none of them had", async () => {
+    const world = buildWorld(RESEARCH_CLAIM);
+    const reveals = new Set(world.seats.map((seat) => seat.revealTx));
+    const result = await runAudit(
+      world,
+      { rpc: (_url, _method, params) => (reveals.has(String(params[0])) ? prunedTx(String(params[0])) : undefined) },
+      { rpcUrls: ["https://rpc-one.test", "https://rpc-two.test", "https://rpc-three.test"], rpcRetryDelayMs: 0 },
+    );
+    expect(find(result, "C2", "FAIL")).toHaveLength(5);
+    expect(find(result, "C2", "FAIL")[0]?.detail).toMatch(/the reveal transaction was not found on Sui/);
+    expect(find(result, "C3", "FAIL")).toHaveLength(5);
+    expect(find(result, "R16", "FAIL")).toHaveLength(5);
+    expect(result.exitCode).toBe(1);
+  });
+
+  it("reads the transaction from the next endpoint when the first one pruned it", async () => {
+    const world = buildWorld(RESEARCH_CLAIM);
+    const pruned = "https://rpc-pruned.test";
+    const result = await runAudit(
+      world,
+      { rpc: (url, method, params) => (url === pruned && method === "sui_getTransactionBlock" ? prunedTx(String(params[0])) : undefined) },
+      { rpcUrls: [pruned, "https://rpc-archival.test"], rpcRetryDelayMs: 0 },
+    );
+    expect(result.summary.failed).toBe(0);
+    expect(result.summary.unavailable).toBe(0);
+    expect(find(result, "C1", "PASS")).toHaveLength(5);
+    expect(find(result, "C2", "PASS")).toHaveLength(5);
+  });
+
+  it("retries a 429 four times with a growing pause before giving up on an endpoint", async () => {
+    const world = buildWorld(RESEARCH_CLAIM);
+    const digest = world.seats[0]!.revealTx!;
+    const delayMs = 10;
+    const at: number[] = [];
+    const result = await runAudit(
+      world,
+      {
+        rpc: (_url, _method, params) => {
+          if (String(params[0]) !== digest) return undefined;
+          at.push(Date.now());
+          return new Response("slow down", { status: 429 });
+        },
+      },
+      { rpcUrls: ["https://rpc-busy.test"], rpcRetryDelayMs: delayMs },
+    );
+    // One try plus four retries, each pause rpcRetryDelayMs longer than the
+    // last (10, 20, 30, 40 ms here). setTimeout never fires early, so the
+    // lower bound on every gap is what proves the pause grows.
+    expect(at).toHaveLength(5);
+    const gaps = at.slice(1).map((stamp, index) => stamp - at[index]!);
+    gaps.forEach((gap, index) => expect(gap).toBeGreaterThanOrEqual(delayMs * (index + 1) - 2));
+    // Only this seat's reveal was rate-limited, and it stays UNAVAILABLE.
+    const c2 = find(result, "C2", "UNAVAILABLE");
+    expect(c2).toHaveLength(1);
+    expect(c2[0]?.detail).toContain("rpc-busy.test answered HTTP 429 after 5 tries");
+    expect(result.summary.failed).toBe(0);
   });
 
   it("marks the receipt UNAVAILABLE on a 404 and keeps the direct URL", async () => {
