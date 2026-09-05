@@ -287,7 +287,7 @@ bites only when the discussion window runs out mid-debate.
 
 ## 3. The committee draw
 
-![One jury round: five seats, independent research, sealed ballots, then the tally.](/diagrams/jury-round.png)
+![Jury rounds: research and sealed ballots in round one, then public cross-examination and a sealed table vote in round two on a split.](/diagrams/jury-round.png)
 
 `jury::select_committee<T>` draws the jury. It takes `&Random`, Sui's on-chain
 randomness object, so the Move compiler requires it to be a private `entry fun`
