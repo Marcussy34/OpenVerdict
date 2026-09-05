@@ -24,6 +24,7 @@
     "cli": "tsx cli/src/index.ts",
     "e2e:localnet": "tsx scripts/localnet-e2e.ts",
     "audit:claim": "tsx scripts/audit-claim.ts",
+    "cost:claim": "tsx scripts/claim-cost.ts",
     "sponsor:check": "tsx scripts/shinami-sponsor-check.ts",
     "stake:seat": "tsx scripts/stake-seat.ts",
     "walrus:writers": "tsx scripts/fund-walrus-writers.ts",

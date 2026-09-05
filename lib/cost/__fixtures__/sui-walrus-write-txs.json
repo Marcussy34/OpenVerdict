@@ -1,0 +1,340 @@
+{
+  "note": "Register and certify of the evidence artifact blob of claim 0xd8652651, read from sui-testnet-rpc.publicnode.com on 2026-09-05. The register keeps its programmable block; the WAL it split is 2,518,740 FROST for storage and 503,685 FROST for the write.",
+  "transactions": [
+    {
+      "digest": "MDxx1LorBbeXjasjAX9qy7HW8FYuFHu3uJQPPVd3Wkc",
+      "timestampMs": "1788600648239",
+      "effects": {
+        "gasUsed": {
+          "computationCost": "1510000",
+          "storageCost": "118712000",
+          "storageRebate": "114590520",
+          "nonRefundableStorageFee": "1157480"
+        }
+      },
+      "transaction": {
+        "data": {
+          "sender": "0x977b123334d37887114b7e2ed4d456827beb56f22fd48999c41b59b1aadcab2b",
+          "transaction": {
+            "inputs": [
+              {
+                "type": "pure",
+                "valueType": null,
+                "value": [
+                  135,
+                  13,
+                  144,
+                  216,
+                  249,
+                  240,
+                  178,
+                  44,
+                  163,
+                  141,
+                  82,
+                  97,
+                  89,
+                  140,
+                  112,
+                  7,
+                  31,
+                  34,
+                  212,
+                  113,
+                  102,
+                  143,
+                  245,
+                  110,
+                  184,
+                  209,
+                  202,
+                  87,
+                  132,
+                  90,
+                  133,
+                  166,
+                  160,
+                  178,
+                  112,
+                  223,
+                  237,
+                  104,
+                  173,
+                  249,
+                  206,
+                  163,
+                  58,
+                  14,
+                  216,
+                  186,
+                  15,
+                  220,
+                  131,
+                  13,
+                  112,
+                  227,
+                  229,
+                  212,
+                  168,
+                  245,
+                  58,
+                  227,
+                  41,
+                  137,
+                  97,
+                  47,
+                  23,
+                  81,
+                  53,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0
+                ]
+              },
+              {
+                "type": "pure",
+                "valueType": "address",
+                "value": "0x4b6a7439159cf10533147fc3d678cf10b714f2bc998f6cb1f1b0b9594cdc52b6"
+              },
+              {
+                "type": "object",
+                "objectType": "sharedObject",
+                "objectId": "0x6c2547cbbc38025cf3adac45f63cb0a8d12ecf777cdc75a4971612bf97fdf6af",
+                "initialSharedVersion": "400185623",
+                "mutable": true
+              },
+              {
+                "type": "pure",
+                "valueType": "u64",
+                "value": "66034000"
+              },
+              {
+                "type": "pure",
+                "valueType": "u32",
+                "value": 10
+              },
+              {
+                "type": "pure",
+                "valueType": "u256",
+                "value": "34197466040671174443901100518201470372559326976657302526610654898109153626333"
+              },
+              {
+                "type": "pure",
+                "valueType": "u256",
+                "value": "62296021799223569019223015911029753416495227617448431424829597592960346064470"
+              },
+              {
+                "type": "pure",
+                "valueType": "u64",
+                "value": "53"
+              },
+              {
+                "type": "pure",
+                "valueType": "u8",
+                "value": 1
+              },
+              {
+                "type": "pure",
+                "valueType": "bool",
+                "value": false
+              },
+              {
+                "type": "pure",
+                "valueType": "address",
+                "value": "0x977b123334d37887114b7e2ed4d456827beb56f22fd48999c41b59b1aadcab2b"
+              },
+              {
+                "type": "pure",
+                "valueType": "u64",
+                "value": "105"
+              },
+              {
+                "type": "object",
+                "objectType": "immOrOwnedObject",
+                "objectId": "0xf9afd5fa604d6088e7ec8da69a1d9207d9f915903c4a2dde0c13b026b2ea83bc",
+                "version": "1004145824",
+                "digest": "EN22mKnjqEUncCd1pxxrNN9hamiyKGHWdiEdwDdXzacm"
+              },
+              {
+                "type": "pure",
+                "valueType": "u64",
+                "value": "503685"
+              },
+              {
+                "type": "pure",
+                "valueType": "u64",
+                "value": "2518740"
+              }
+            ],
+            "transactions": [
+              {
+                "SplitCoins": [
+                  "GasCoin",
+                  [
+                    {
+                      "Input": 11
+                    }
+                  ]
+                ]
+              },
+              {
+                "TransferObjects": [
+                  [
+                    {
+                      "NestedResult": [
+                        0,
+                        0
+                      ]
+                    }
+                  ],
+                  {
+                    "Input": 1
+                  }
+                ]
+              },
+              {
+                "SplitCoins": [
+                  {
+                    "Input": 12
+                  },
+                  [
+                    {
+                      "Input": 13
+                    },
+                    {
+                      "Input": 14
+                    }
+                  ]
+                ]
+              },
+              {
+                "MoveCall": {
+                  "package": "0x849e95d2718938d66c37fb91df76d72f78526c1864c339bac415ce8ecda2d8cc",
+                  "module": "system",
+                  "function": "reserve_space",
+                  "arguments": [
+                    {
+                      "Input": 2
+                    },
+                    {
+                      "Input": 3
+                    },
+                    {
+                      "Input": 4
+                    },
+                    {
+                      "NestedResult": [
+                        2,
+                        1
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "MoveCall": {
+                  "package": "0x0000000000000000000000000000000000000000000000000000000000000002",
+                  "module": "coin",
+                  "function": "destroy_zero",
+                  "type_arguments": [
+                    "0x8270feb7375eee355e64fdb69c50abb6b5f9393a722883c1cf45f8e26048810a::wal::WAL"
+                  ],
+                  "arguments": [
+                    {
+                      "NestedResult": [
+                        2,
+                        1
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "MoveCall": {
+                  "package": "0x849e95d2718938d66c37fb91df76d72f78526c1864c339bac415ce8ecda2d8cc",
+                  "module": "system",
+                  "function": "register_blob",
+                  "arguments": [
+                    {
+                      "Input": 2
+                    },
+                    {
+                      "Result": 3
+                    },
+                    {
+                      "Input": 5
+                    },
+                    {
+                      "Input": 6
+                    },
+                    {
+                      "Input": 7
+                    },
+                    {
+                      "Input": 8
+                    },
+                    {
+                      "Input": 9
+                    },
+                    {
+                      "NestedResult": [
+                        2,
+                        0
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "MoveCall": {
+                  "package": "0x0000000000000000000000000000000000000000000000000000000000000002",
+                  "module": "coin",
+                  "function": "destroy_zero",
+                  "type_arguments": [
+                    "0x8270feb7375eee355e64fdb69c50abb6b5f9393a722883c1cf45f8e26048810a::wal::WAL"
+                  ],
+                  "arguments": [
+                    {
+                      "NestedResult": [
+                        2,
+                        0
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "TransferObjects": [
+                  [
+                    {
+                      "Result": 5
+                    }
+                  ],
+                  {
+                    "Input": 10
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "digest": "4n9HM81SUzYvY68k9iBhgFjcPgAETF7VbgwKDyTPLK3F",
+      "timestampMs": "1788600653852",
+      "effects": {
+        "gasUsed": {
+          "computationCost": "1430000",
+          "storageCost": "2994400",
+          "storageRebate": "2934360",
+          "nonRefundableStorageFee": "29640"
+        }
+      }
+    }
+  ]
+}

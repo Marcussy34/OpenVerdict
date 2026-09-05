@@ -1,0 +1,151 @@
+{
+  "note": "Trimmed from the public run proof of run 0xa7cc241b on claim 0xd8652651, read 2026-09-05.",
+  "runId": "0xa7cc241b511548752326bace1ea56708386a506221a4c98e22da107df9f31e74",
+  "bundle": {
+    "attempts": [
+      {
+        "kind": "PRIMARY",
+        "type": "gonka-attempt",
+        "audit": {
+          "attempt": 1,
+          "modelId": "MiniMaxAI/MiniMax-M2.7",
+          "status": "SCHEMA_VALID",
+          "inputTokens": 1065,
+          "outputTokens": 108
+        }
+      },
+      {
+        "kind": "PRIMARY",
+        "type": "gonka-attempt",
+        "audit": {
+          "attempt": 2,
+          "modelId": "MiniMaxAI/MiniMax-M2.7",
+          "status": "SCHEMA_VALID",
+          "inputTokens": 1563,
+          "outputTokens": 73
+        }
+      },
+      {
+        "kind": "PRIMARY",
+        "type": "gonka-attempt",
+        "audit": {
+          "attempt": 3,
+          "modelId": "MiniMaxAI/MiniMax-M2.7",
+          "status": "SCHEMA_VALID",
+          "inputTokens": 1624,
+          "outputTokens": 43
+        }
+      },
+      {
+        "kind": "PRIMARY",
+        "type": "gonka-attempt",
+        "audit": {
+          "attempt": 4,
+          "modelId": "MiniMaxAI/MiniMax-M2.7",
+          "status": "INVALID_SCHEMA",
+          "inputTokens": 2647,
+          "outputTokens": 0
+        }
+      },
+      {
+        "kind": "HEDGE",
+        "type": "gonka-attempt",
+        "audit": {
+          "attempt": 5,
+          "modelId": "MiniMaxAI/MiniMax-M2.7",
+          "status": "PROVIDER_ERROR"
+        }
+      },
+      {
+        "kind": "REPAIR",
+        "type": "gonka-attempt",
+        "audit": {
+          "attempt": 6,
+          "modelId": "MiniMaxAI/MiniMax-M2.7",
+          "status": "CITATION_INVALID",
+          "inputTokens": 2926,
+          "outputTokens": 250
+        }
+      },
+      {
+        "kind": "REPAIR",
+        "type": "gonka-attempt",
+        "audit": {
+          "attempt": 7,
+          "modelId": "MiniMaxAI/MiniMax-M2.7",
+          "status": "SCHEMA_VALID",
+          "inputTokens": 3075,
+          "outputTokens": 262
+        }
+      }
+    ],
+    "transcript": {
+      "counts": {
+        "opens": 1,
+        "searches": 1,
+        "turns": 6
+      },
+      "steps": [
+        {
+          "action": {
+            "action": "search"
+          },
+          "index": 0,
+          "result": {
+            "cached": true
+          }
+        },
+        {
+          "action": {
+            "action": "open"
+          },
+          "index": 1,
+          "result": {
+            "tool": "error",
+            "code": "OPEN_FAILED"
+          }
+        },
+        {
+          "action": {
+            "action": "open"
+          },
+          "index": 2,
+          "result": {
+            "cached": true,
+            "canonicalWalrusBlobId": "b4Crzatw63kT1nNTZIcaugHyALVVNdPlhvh0WaSlID4"
+          }
+        },
+        {
+          "action": {
+            "action": "invalid"
+          },
+          "index": 3,
+          "result": {
+            "tool": "error",
+            "code": "INVALID_ACTION"
+          }
+        },
+        {
+          "action": {
+            "action": "answer"
+          },
+          "index": 4,
+          "result": {}
+        },
+        {
+          "action": {
+            "action": "answer"
+          },
+          "index": 5,
+          "result": {}
+        }
+      ],
+      "opened": [
+        {
+          "canonicalWalrusBlobId": "b4Crzatw63kT1nNTZIcaugHyALVVNdPlhvh0WaSlID4",
+          "url": "https://river.com/learn/can-bitcoins-hard-cap-of-21-million-be-changed"
+        }
+      ]
+    }
+  }
+}
