@@ -38,8 +38,8 @@ export function Hero({
 
       <div className="relative z-30 flex min-h-[100svh] flex-col px-5 pt-[86px] pb-7 md:px-7 md:pb-8 lg:justify-between lg:pt-[104px]">
         {/* Headline — exits left as the shrink begins (data-hero-exit). */}
-        <div data-hero-exit="left" className="max-w-[520px]">
-          <h1 className="ov-display text-[clamp(2.75rem,9vw,5.5rem)]">
+        <div data-hero-exit="left" className="max-w-[820px]">
+          <h1 className="ov-display text-[clamp(3.5rem,11vw,7.5rem)]">
             Jury
             <br />
             Resolution
@@ -47,11 +47,11 @@ export function Hero({
           {/* Stacked and flush: a fit-content grid column sizes to the wider
               button (the one carrying the arrow chip) and the other stretches
               to meet it, so both rows end on the same edge. */}
-          <div className="mt-6 grid w-fit gap-[2px] lg:mt-7">
-            <SplitButton href="/fact-check" stretch>
+          <div className="mt-7 grid w-fit gap-[2px] lg:mt-9">
+            <SplitButton href="/fact-check" stretch className="ov-btn--lg">
               Submit a claim
             </SplitButton>
-            <SplitButton href="/claims" tone="dark" chip={false} stretch>
+            <SplitButton href="/claims" tone="dark" chip={false} stretch className="ov-btn--lg">
               Watch live claims
             </SplitButton>
           </div>
@@ -141,7 +141,7 @@ function LatestVerdictCard({ latest }: { latest: ClaimInspection | null }) {
         <p className="mt-2 text-[15px] leading-snug text-[#F3F3F3]/85">
           {truncate(latest.statement, 84)}
         </p>
-        <p className="ov-micro ov-micro-sm mt-2 text-[var(--ov-accent)]">
+        <p className="ov-micro ov-micro-sm mt-2 text-[#F3F3F3]">
           {outcomeOf(latest)}
           {typeof latest.result?.truthScoreBps === "number" &&
             ` · ${Math.round(latest.result.truthScoreBps / 100)}/100`}
