@@ -3815,3 +3815,30 @@ loss than oranges", UNRESOLVED, 12:25Z): ten records, none live.
 Words that stay "deliberation" on purpose: the In deliberation stat tile
 on /app, the landing copy and the Live view's "The deliberation graph"
 label. They mean the whole jury process; Debate is round two only.
+
+### 3bf-a. ADDENDUM 2026-09-05 15:30Z: RECHARGE BEFORE THE DEMO TAKES
+
+Owner asked whether anything needs a recharge for five demo claims in a
+row. Operator wallet 21.67 SUI / 2.88 WAL. Firecrawl 783 of 1,000 credits
+(billing period to 2026-10-03). GonkaRouter exposes no balance endpoint
+(/v1/balance, /v1/credits, /v1/usage, /v1/me all 404); the probes answer
+200, and a settled claim costs about 60k to 160k tokens. All four Walrus
+writer lanes were BELOW the 0.05 SUI floor (0.0375, 0.0019, 0.0024,
+0.0151 SUI; WAL 0.14 to 0.38), so the last claims' blobs had fallen back
+to the operator lane. Topped up from inside the app container, because
+fullnode.testnet.sui.io refuses TLS from this machine (curl "tlsv1 alert
+protocol version", node ERR_SSL_PACKET_LENGTH_TOO_LONG; DNS is the same
+34.49.79.168 as Google DoH, so it is a path problem, not a production
+one): `railway ssh -s app -- sh -c 'cd /app && node_modules/.bin/tsx
+scripts/fund-walrus-writers.ts --fund --split-gas 3'` (the image carries
+scripts/, tsx and the env). Result: every lane 0.3000 SUI, operator
+20.52 SUI with three gas coins (split digest 89j8Vuyn, fund digest
+Go4VpCrf). lib/walrus/lanes.ts caches a negative startup probe until the
+process restarts, so `railway redeploy -s app -y` followed (deployment
+1f0eac74 SUCCESS 15:27:46Z, status healthy, nothing live). Budget for
+five one-round claims: about 1.2 SUI operator gas, 0.5 SUI and 0.3 WAL
+across the lanes, 55 to 175 Firecrawl credits. The lanes drain about
+0.1 SUI per claim in total, so after roughly ten more claims run the
+funding again (same command, then redeploy in a free window).
+Scratchpad helpers: lane-addresses.ts (derives the four lane addresses
+locally, no network, prints addresses only), balances.sh.
