@@ -3875,3 +3875,44 @@ read 0/5 (round 1), 3/5 sealed, 3/5 revealed, then 0/5 (round 2), 3/5
 and 4/5 sealed while round two revealed, one round at a time. Screenshot
 scratchpad/replay-tiles.jpg. Gates green (tsc, eslint, vitest lib/viz 8
 files, 52 tests). Board unchanged, ten records, none live.
+
+## 3bh. 2026-09-06 00:25Z: TRACE RENDERS FAILED SEATS, --from, SKILL ROUTER (read 3bg then this)
+
+Owner ran the openverdict skill in another session ("audit, exact steps
+for juror 1, exact prompt in and out" on 0x1d53f02c) and it took thirty
+odd tool calls, jq digging through the 2.6 MB audit JSON and reading
+source. Causes: juror 1 failed closed in both rounds and `ov trace`
+printed one "no revealed run" line for a failed seat instead of its
+public failure record; the skill did not map failure records; nothing
+forbade reading source; the skill never mentioned `ov audit --trace`.
+Codex lane is unusable on this machine (ChatGPT auth rejects
+gpt-5.6-sol and the spark alias, see tasks/lessons.md), so the work went
+to an Opus worker (brief scratchpad/opus-trace-failed-seats.md); owner
+confirmed "use opus workers".
+
+Commit 74ffd6c, deployed 2026-09-06 00:23Z (Railway 9853edaf), seeder
+paused for the window and unpaused after. lib/ov/trace.ts rebuilds a
+failed round from proof.failure: turns from failure.transcript.steps
+grouped by modelRequestId and joined to the raw model text of the
+attempt whose response.id matches (TraceTurn.raw), TraceRound.attempts
+(attempt, kind, status, latencyMs, devshardId, requestId, tokens, error,
+raw), TraceRound.failure (status, message, failedAtMs, walrusBlobId),
+the pinned prompt hash-matched from a revealed seat of the same round,
+the input named by inputHash only; header "failed closed STATUS
+(message)  N provider calls  run 0x…", attempt log lines, failure line
+with the aggregator url; --json carries the new fields. lib/ov/commands.ts
+and scripts/ov.ts add `ov trace [--from <audit.json>]` (validates the
+saved AuditResult, claim id optional, mismatch exits 2); 0.37 s against
+11 s for a refetch, output identical to the fetch path. Fixture
+lib/ov/__fixtures__/trace-proof-failed.json, six new tests. SKILL.md:
+new "Pick the command first" router (ten question shapes, one command
+each, three rules), Tier 2 and Tier 3 failed-seat guidance, verbatim
+rule, --from tip, two question rows (exact prompt in and out; why did
+juror N fail) with JSON paths, rule never to read source; reference.md
+gains "A seat that failed closed". Verified: `ov trace 0x1d53f02c…
+--juror 1 --full` prints both failed rounds in full (8 and 12 provider
+calls, two HTTP 524 lines, the INVALID_SCHEMA answer attempt in round
+two, Walrus blobs a9wOjCKZ… and S3a8wG23…, prompt hash 0x7257117d…);
+gates tsc, eslint, vitest 90 files / 1155 tests; the served
+app.openverdict.info/SKILL.md carries the new sections. Juror 1's full
+extraction for the owner is scratchpad/juror1-fasting.md.
