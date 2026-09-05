@@ -3746,3 +3746,40 @@ CLI note: `pnpm` inside scratchpad/tree-check exits 1 with empty output
 under this shell's hook; run ./node_modules/.bin/tsc, eslint and vitest
 directly there (all green on fcc7a66). Commit trailer for this session:
 "Claude-Session: https://claude.ai/code/session_012YizbAC9ubY99LHPpYdy42".
+
+## 3be. 2026-09-05 12:25Z: THE TWO-ROUND CLAIM IS BACK ON THE BOARD (read 3bd then this)
+
+OWNER DIRECTION (11:40Z to 12:10Z): one hard run through round two, then
+stop and record; no wipe. Five contested claims ran on the v5 seats and
+none split: minimum wage 5 UNSURE (UNRESOLVED 50.00), tomato with
+criteria 5 YES (90.00), El Salvador legal tender 5 NO (4.20, attempt 2),
+195 countries 5 YES (83.00), nuclear voided twice on CITATION_INVALID
+(purged), minimum wage with binary criteria voided MISSING_COMMIT
+(purged). Structural reason: the search cache hands all five seats the
+same results and the prompt sends them all to UNSURE on conflict.
+
+RESTORE (12:00Z to 12:10Z): Railway keeps daily Postgres backups. Steps
+that worked: `railway api` mutations volumeInstanceBackupCreate (safety
+snapshot "pre-restore live 2026-09-05"), `railway down -s app -y` (app
+offline), volumeInstanceBackupRestore of backup af5db4b2 (2026-09-04
+19:38Z) which creates a new volume "postgres-2026-09-04 19:38 UTC"
+(05cd6c4f), `railway volume -s <service id> detach/attach` (stages a
+patch), environmentPatchCommitStaged(environmentId 833c95f7, skipDeploys
+false) to apply it (the first commit call returned an error but applied;
+"No patch to apply" on retry), psql inside `railway ssh -s Postgres`
+(json_agg per table) to dump claim 0x1d53f02c823ba5ee1c1aa3a22ff862306d2ab22c67247f39746db65f6ea76ff4
+(the only debate claim in that backup; 0xec68ad81 predates it), swap
+the live volume b121f40f back the same way, stream
+scratchpad/restore-1d53f02c.sql (json_populate_recordset, ON CONFLICT DO
+NOTHING) through `railway ssh` stdin, `railway up` from railway-tree
+(deploy 12:10Z). Volume 05cd6c4f stays in the project unmounted. Board
+now: 0x1d53f02c (Intermittent fasting, UNRESOLVED 21.25, two rounds, six
+debate turns, V1 to V3 transcript style, certificate 0xcd94ea5b), Great
+Wall, Bitcoin (+ voided a1), minimum wage UNRESOLVED, tomato, El Salvador
+(+ voided a1), 195 countries.
+
+AUDITOR: testnet full nodes and publicnode had pruned the 2026-09-02
+transactions (20 to 25 FAIL rows). lib/audit/audit-claim.ts now lists
+https://sui-testnet-endpoint.blockvision.org as the third default RPC and
+retries a 429 twice; the restored claim audits 157 passed, 0 failed, 13
+skipped. Cost page live (b9037707). Everything committed and pushed.

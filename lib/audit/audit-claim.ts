@@ -298,6 +298,9 @@ export const DEFAULT_BASE = "https://app.openverdict.info";
 export const DEFAULT_RPC_URLS = [
   "https://sui-testnet-rpc.publicnode.com",
   "https://fullnode.testnet.sui.io:443",
+  // Testnet full nodes prune transactions after a few days; this archival
+  // endpoint still served a 2026-09-02 commit when both above had dropped it.
+  "https://sui-testnet-endpoint.blockvision.org",
 ];
 export const DEFAULT_WALRUS_AGGREGATOR =
   "https://aggregator.walrus-testnet.walrus.space";
@@ -688,10 +691,12 @@ class Net {
       lastUrl = url;
       const init = { method: "POST", headers: { "content-type": "application/json" }, body };
       let outcome = await this.request(url, init);
-      // A dropped connection (no HTTP status) gets one retry on the same
-      // endpoint before the next one is tried: the fallback node may be worse.
-      if (!outcome.ok && outcome.status === null) {
-        await new Promise((resolve) => setTimeout(resolve, this.#rpcRetryDelayMs));
+      // A dropped connection (no HTTP status) or a rate limit (429) gets up
+      // to two retries on the same endpoint, spaced out, before the next one
+      // is tried: the fallback node may be worse, and a burst of parallel
+      // checks trips the archival endpoint's limiter for a moment.
+      for (let attempt = 1; attempt <= 2 && !outcome.ok && (outcome.status === null || outcome.status === 429); attempt += 1) {
+        await new Promise((resolve) => setTimeout(resolve, this.#rpcRetryDelayMs * attempt));
         outcome = await this.request(url, init);
       }
       if (!outcome.ok) {
