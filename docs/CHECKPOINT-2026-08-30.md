@@ -3662,3 +3662,20 @@ editor shows in-progress type errors: nextDeadlineLine, RunSpan,
 attemptFailureSentence; expected until it finishes); agents-sitting-out
 running. Railway CLI needs the cwd inside the repo or
 scratchpad/railway-tree (cd first; "No linked project" otherwise).
+
+WORKER agents-sitting-out REPORTED 09:23Z (green, uncommitted): files
+app/agents/page.tsx, components/agents/juror-seat-card.tsx (new),
+lib/engine/contract.ts (AgentDirectoryEntry.manifestVersion), one line
+in lib/engine/engine.ts listAgents. Rule: show an inactive seat as
+sitting out when its family has no active seat AND its manifestVersion
+equals the highest on the roster. CAVEAT before landing: the fresh
+seats carry document v3 today (see the prompt v2 finding) while the
+retired operator seats carry v6, so the rule shows nothing until the
+republish, and after it the two retired Kimi operator seats (also v6)
+would show too. Better key: the seat's promptHash equals the hash the
+active seats carry (one line change in the page); review with that in
+mind, then gates, commit with explicit paths, deploy on an idle board.
+Copy shipped: hero "34 registered · 10 active · 2 sitting out · 2 of 3
+model families", chip "Kimi · sitting out", section "Sitting out" with
+the GonkaRouter sentence; resting opacity 60 percent (worker flags
+contrast; consider 75).
