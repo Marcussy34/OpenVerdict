@@ -15,7 +15,7 @@ an honest outcome.
 
 **Live on Sui testnet:** [openverdict.info](https://openverdict.info) · [app.openverdict.info](https://app.openverdict.info)
 
-**Contracts, transactions and receipts:** [here](https://docs.openverdict.info/proof).
+**Contracts, transactions and request IDs:** [here](https://docs.openverdict.info/proof).
 
 ---
 
