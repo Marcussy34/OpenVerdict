@@ -15,7 +15,7 @@ an honest outcome.
 
 **Live on Sui testnet:** [openverdict.info](https://openverdict.info) · [app.openverdict.info](https://app.openverdict.info)
 
-**See for yourself:** [one settled claim, walked link by link from the Move package to the Gonka receipts](https://docs.openverdict.info/proof).
+**Verify on the explorers:** [the deployed Move packages, every transaction and object of one settled claim on Sui, its files on Walrus, and each juror's GonkaRouter inference receipt](https://docs.openverdict.info/proof).
 
 ---
 
