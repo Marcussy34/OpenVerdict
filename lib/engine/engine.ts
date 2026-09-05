@@ -193,6 +193,7 @@ import {
   canonicalCoreBytes,
   sealRunBundle,
 } from "./runBundle";
+import { CURRENT_SEAT_GENERATION } from "./seatGeneration";
 import {
   buildZkLoginBackingMessage,
   ZKLOGIN_AGENT_ROLES,
@@ -1630,7 +1631,7 @@ class OpenVerdictEngine implements Engine {
           const document = await this.agentManifestDocument(seat.agentProfileId);
           if (document === null) {
             throw new EngineValidationError(
-              `agent ${seat.agentProfileId} table vote manifest document is missing; run pnpm tsx scripts/publish-agent-manifests.ts`,
+              `agent ${seat.agentProfileId} table vote manifest document is missing; run pnpm cli agents republish --active`,
             );
           }
           this.assertTableVoteManifestHashes(agent.manifest, document);
@@ -1688,12 +1689,12 @@ class OpenVerdictEngine implements Engine {
         const liveToolPolicyHash = toolPolicyHash(policy);
         if (agent.manifest.promptHash !== liveHash) {
           throw new EngineValidationError(
-            `agent ${seat.agentProfileId} manifest prompt hash ${agent.manifest.promptHash} does not match the engine prompt spec ${liveHash}; run pnpm tsx scripts/publish-agent-manifests.ts`,
+            `agent ${seat.agentProfileId} manifest prompt hash ${agent.manifest.promptHash} does not match the engine prompt spec ${liveHash}; run pnpm cli agents republish --active`,
           );
         }
         if (agent.manifest.toolPolicyHash !== liveToolPolicyHash) {
           throw new EngineValidationError(
-            `agent ${seat.agentProfileId} manifest tool policy hash ${agent.manifest.toolPolicyHash} does not match the engine tool policy ${liveToolPolicyHash}; run pnpm tsx scripts/publish-agent-manifests.ts`,
+            `agent ${seat.agentProfileId} manifest tool policy hash ${agent.manifest.toolPolicyHash} does not match the engine tool policy ${liveToolPolicyHash}; run pnpm cli agents republish --active`,
           );
         }
         researchConfigs.set(seat.agentProfileId, {
@@ -2738,6 +2739,8 @@ class OpenVerdictEngine implements Engine {
         modelId: record.manifest.modelId,
         role: record.role,
         manifestHash: record.manifest.manifestHash,
+        // The research prompt the seat registered under: its generation marker.
+        promptHash: record.manifest.promptHash,
         active: record.active,
         reputation: record.reputation,
         backing: agentBackingStatus(record.manifest.humanVerificationProvider),
@@ -3502,7 +3505,7 @@ class OpenVerdictEngine implements Engine {
     const tableVotePromptHash = agent.manifest.tableVotePromptHash;
     if (tableVotePromptHash === undefined) {
       throw new EngineValidationError(
-        `agent ${seat.agentProfileId} has no table vote prompt hash; run pnpm tsx scripts/publish-agent-manifests.ts`,
+        `agent ${seat.agentProfileId} has no table vote prompt hash; run pnpm cli agents republish --active`,
       );
     }
     const baseRunId = deterministicId(
@@ -4445,8 +4448,9 @@ class OpenVerdictEngine implements Engine {
       operationalOwner: slot.address as `0x${string}`,
       role,
       modelId: req.modelId,
-      promptSpec: this.#gonka.promptSpec(),
-      toolPolicy: this.#gonka.toolPolicy(),
+      // One shared generation, so a new seat is never published on a prompt
+      // older than the one the engine runs.
+      ...CURRENT_SEAT_GENERATION,
       // The document carries the human-readable label; verifiers hash it.
       evidencePolicyId: EVIDENCE_POLICY_V1_LABEL,
     });
@@ -4482,6 +4486,10 @@ class OpenVerdictEngine implements Engine {
       manifestBlobId: manifestUpload.blobId,
       manifestHash: built.manifestHash,
       promptHash: built.promptHash,
+      // Round two refuses a seat with no table vote prompt hash on the row.
+      ...(built.tableVotePromptHash === undefined
+        ? {}
+        : { tableVotePromptHash: built.tableVotePromptHash }),
       modelId: req.modelId,
       providerId: "gonkarouter",
       toolPolicyHash: built.toolPolicyHash,
@@ -4627,8 +4635,9 @@ class OpenVerdictEngine implements Engine {
         operationalOwner: slot.address as `0x${string}`,
         role,
         modelId: req.modelId,
-        promptSpec: this.#gonka.promptSpec(),
-        toolPolicy: this.#gonka.toolPolicy(),
+        // The same shared generation the signed-message path publishes, so a
+        // seat staked from the web app runs the prompt the engine expects.
+        ...CURRENT_SEAT_GENERATION,
         // The document carries the human-readable label; verifiers hash it.
         evidencePolicyId: EVIDENCE_POLICY_V1_LABEL,
       });
@@ -4874,7 +4883,7 @@ class OpenVerdictEngine implements Engine {
       manifest.promptHash.toLowerCase() !== computedPromptHash.toLowerCase()
     ) {
       throw new EngineValidationError(
-        `agent ${manifest.agentProfileId} manifest prompt hash does not match its prompt document; run pnpm tsx scripts/publish-agent-manifests.ts`,
+        `agent ${manifest.agentProfileId} manifest prompt hash does not match its prompt document; run pnpm cli agents republish --active`,
       );
     }
     const computedToolPolicyHash = toolPolicyHash(document.toolPolicy);
@@ -4885,7 +4894,7 @@ class OpenVerdictEngine implements Engine {
         computedToolPolicyHash.toLowerCase()
     ) {
       throw new EngineValidationError(
-        `agent ${manifest.agentProfileId} manifest tool policy hash does not match its policy document; run pnpm tsx scripts/publish-agent-manifests.ts`,
+        `agent ${manifest.agentProfileId} manifest tool policy hash does not match its policy document; run pnpm cli agents republish --active`,
       );
     }
   }
@@ -4906,7 +4915,7 @@ class OpenVerdictEngine implements Engine {
       manifest.tableVotePromptHash?.toLowerCase() !== expectedHash.toLowerCase()
     ) {
       throw new EngineValidationError(
-        `agent ${manifest.agentProfileId} table vote manifest is not a matching v6 document; run pnpm tsx scripts/publish-agent-manifests.ts`,
+        `agent ${manifest.agentProfileId} table vote manifest is not a matching v6 document; run pnpm cli agents republish --active`,
       );
     }
   }
@@ -4950,8 +4959,9 @@ class OpenVerdictEngine implements Engine {
       operationalOwner: owner as `0x${string}`,
       role,
       modelId,
-      promptSpec: this.#gonka.promptSpec(),
-      toolPolicy: this.#gonka.toolPolicy(),
+      // Demo seats publish the same generation as staked ones, so a fake-mode
+      // roster can still sit round two.
+      ...CURRENT_SEAT_GENERATION,
       evidencePolicyId: EVIDENCE_POLICY_V1_LABEL,
     });
     const manifestUpload = await this.#walrus.put(built.bytes, {
@@ -4967,6 +4977,10 @@ class OpenVerdictEngine implements Engine {
       manifestBlobId: manifestUpload.blobId,
       manifestHash: built.manifestHash,
       promptHash: built.promptHash,
+      // Round two refuses a seat with no table vote prompt hash on the row.
+      ...(built.tableVotePromptHash === undefined
+        ? {}
+        : { tableVotePromptHash: built.tableVotePromptHash }),
       modelId,
       providerId: "gonkarouter",
       toolPolicyHash: built.toolPolicyHash,

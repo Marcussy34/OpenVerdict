@@ -30,8 +30,13 @@ export async function discoverAgents(
   signers: SignerRegistry,
 ): Promise<DiscoveredAgent[]> {
   assert.ok(manifest.packageId, "release manifest has no packageId");
-  const capType = `${manifest.packageId}::agent_registry::AgentCap`;
-  const profileType = `${manifest.packageId}::agent_registry::AgentProfile`;
+  // Object types keep the first-published address across package upgrades, so
+  // filtering by the current packageId found nothing after an upgrade.
+  const typePackageId = manifest.originalPackageId?.length
+    ? manifest.originalPackageId
+    : manifest.packageId;
+  const capType = `${typePackageId}::agent_registry::AgentCap`;
+  const profileType = `${typePackageId}::agent_registry::AgentProfile`;
   const found: DiscoveredAgent[] = [];
 
   for (let index = 0; index < AGENT_COUNT; index += 1) {

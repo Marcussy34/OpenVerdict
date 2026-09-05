@@ -5,10 +5,13 @@
  * the research prompt and tool policy, so the engine can verify a juror's
  * table-vote runs the same way it verifies research runs.
  *
- * The research prompt is DEFAULT_PROMPT_SPEC_V5 (v5 adds the ids-only rule and
- * the worked answer example to v4) on the unchanged v4 tool policy. Republish
- * after any prompt bump: the engine refuses a seat whose stored manifest hash
- * differs from the spec it runs.
+ * The prompts come from CURRENT_SEAT_GENERATION (lib/engine/seatGeneration.ts),
+ * the same generation the engine pins on a newly staked seat. Republish after
+ * any prompt bump: the engine refuses a seat whose stored manifest hash differs
+ * from the spec it runs.
+ *
+ * This script only knows the seven original operator seats. For the whole
+ * roster, including staked seats, use `pnpm cli agents republish --active`.
  *
  * Dry run:
  *   SUI_OPERATOR_SECRET_KEY=<secret> OPENVERDICT_AGENT_SEED=<seed> DATABASE_URL=<url> OPENVERDICT_SUI_GRPC_URL=<url> pnpm tsx scripts/publish-agent-manifests.ts --dry-run
@@ -20,12 +23,10 @@ import assert from "node:assert/strict";
 
 import { SuiGrpcClient } from "@mysten/sui/grpc";
 
-import { buildAgentManifestDocument } from "../lib/engine";
 import {
-  DEFAULT_PROMPT_SPEC_V5,
-  DEFAULT_TOOL_POLICY_V4,
-  TABLE_VOTE_PROMPT_SPEC_V1,
-} from "../lib/gonka";
+  CURRENT_SEAT_GENERATION,
+  buildAgentManifestDocument,
+} from "../lib/engine";
 import {
   blake2b256,
   fromHex,
@@ -128,12 +129,12 @@ async function main(): Promise<void> {
         operationalOwner: agent.owner,
         role,
         modelId,
-        promptSpec: DEFAULT_PROMPT_SPEC_V5,
-        toolPolicy: DEFAULT_TOOL_POLICY_V4,
-        tableVotePromptSpec: TABLE_VOTE_PROMPT_SPEC_V1,
+        // The engine's own generation, so this script cannot drift from what
+        // a freshly staked seat publishes.
+        ...CURRENT_SEAT_GENERATION,
         evidencePolicyId: EVIDENCE_POLICY_ID,
       });
-      // v6 always pins a table-vote hash because tableVotePromptSpec is always passed above.
+      // v6 always pins a table-vote hash because the shared generation carries one.
       assert.ok(built.tableVotePromptHash, "manifest v6 requires a table vote prompt hash");
       const tableVotePromptHash = built.tableVotePromptHash;
       const row = {

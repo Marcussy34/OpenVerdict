@@ -386,6 +386,13 @@ export type AgentDirectoryEntry = {
   modelId: string;
   role: string;
   manifestHash: `0x${string}`;
+  /**
+   * Hash of the research prompt spec this seat registered under. Seats staked
+   * in one roster generation share it, and a republished prompt gives the next
+   * generation a new one, so the hash the active seats carry is how a consumer
+   * tells a current seat from a retired one.
+   */
+  promptHash: `0x${string}`;
   active: boolean;
   reputation: Record<string, number>;
   /** Engine-recorded off-chain backing signal. See AgentBackingStatus. */

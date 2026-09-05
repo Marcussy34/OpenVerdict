@@ -318,6 +318,81 @@ describe("operator registry commands", () => {
     expect(JSON.parse(output[0] ?? "{}")).toMatchObject({ weight: 10_000 });
   });
 
+  it("dry-runs a republish of every active seat and leaves the mirror alone", async () => {
+    const calls: unknown[] = [];
+    const output: string[] = [];
+
+    const code = await runCli(["agents", "republish", "--active", "--dry-run"], {
+      engine: fakeEngine(),
+      operator: fakeOperator(calls),
+      stdout: (value) => output.push(value),
+      stderr: () => undefined,
+    });
+
+    expect(code).toBe(0);
+    expect(calls).toEqual([{ republish: { active: true, dryRun: true } }]);
+    const printed = output.join("\n");
+    expect(printed).toContain(
+      "Republish only while no claim is live",
+    );
+    expect(printed).toContain("mode       dry run");
+    expect(printed).toContain("seats      2 selected, 0 republished, 1 already current");
+    expect(printed).toContain("slot 3 deepseek-ai/DeepSeek-V4-Flash-0731 SOURCE_AUTHENTICITY v3");
+    expect(printed).toContain("to v6");
+    // Nothing moved, so the mirror is not reconciled behind the operator's back.
+    expect(printed).not.toContain("registry   0xregistry");
+  });
+
+  it("republishes named seats and reconciles the mirror afterwards", async () => {
+    const calls: unknown[] = [];
+    const output: string[] = [];
+
+    const code = await runCli(["agents", "republish", "0xseat1", "0xseat2"], {
+      engine: fakeEngine(),
+      operator: fakeOperator(calls),
+      stdout: (value) => output.push(value),
+      stderr: () => undefined,
+    });
+
+    expect(code).toBe(0);
+    expect(calls).toEqual([
+      { republish: { agentProfileIds: ["0xseat1", "0xseat2"] } },
+      { syncMirror: true },
+    ]);
+    const printed = output.join("\n");
+    expect(printed).toContain("mode       live");
+    expect(printed).toContain("republish-digest");
+    expect(printed).toContain("registry   0xregistry (2 seats)");
+  });
+
+  it("refuses a republish that names neither seats nor --active", async () => {
+    const errors: string[] = [];
+
+    const code = await runCli(["agents", "republish"], {
+      engine: fakeEngine(),
+      operator: fakeOperator([]),
+      stdout: () => undefined,
+      stderr: (value) => errors.push(value),
+    });
+
+    expect(code).toBe(2);
+    expect(errors.join("\n")).toContain("CLI_USAGE");
+  });
+
+  it("refuses a republish that mixes --active with named seats", async () => {
+    const errors: string[] = [];
+
+    const code = await runCli(["agents", "republish", "0xseat1", "--active"], {
+      engine: fakeEngine(),
+      operator: fakeOperator([]),
+      stdout: () => undefined,
+      stderr: (value) => errors.push(value),
+    });
+
+    expect(code).toBe(2);
+    expect(errors.join("\n")).toContain("CLI_USAGE");
+  });
+
   it("refuses an --active value that is neither true nor false", async () => {
     const errors: string[] = [];
 
@@ -354,6 +429,41 @@ function fakeOperator(calls: unknown[]): OperatorClient {
       calls.push(input);
       // The real client reads the seat's recorded weight and passes it back.
       return { ...result, weight: 10_000, rosterMirror: "updated" as const };
+    },
+    async republishManifests(selection) {
+      calls.push({ republish: selection });
+      return {
+        dryRun: selection.dryRun === true,
+        republished: selection.dryRun === true ? 0 : 1,
+        upToDate: 1,
+        seats: [
+          {
+            agentProfileId: "0xseat1",
+            modelId: "deepseek-ai/DeepSeek-V4-Flash-0731",
+            role: "SOURCE_AUTHENTICITY",
+            slotIndex: 3,
+            oldVersion: "3",
+            oldPromptHash: `0x${"c6".repeat(32)}`,
+            newVersion: "6",
+            newPromptHash: `0x${"a2".repeat(32)}`,
+            manifestBlobId: "blob-new",
+            status: selection.dryRun === true ? "dry run" : "republished",
+            ...(selection.dryRun === true ? {} : { digest: "republish-digest" }),
+          },
+          {
+            agentProfileId: "0xseat2",
+            modelId: "deepseek-ai/DeepSeek-V4-Flash-0731",
+            role: "SKEPTIC",
+            slotIndex: 4,
+            oldVersion: "6",
+            oldPromptHash: `0x${"a2".repeat(32)}`,
+            newVersion: "6",
+            newPromptHash: `0x${"a2".repeat(32)}`,
+            manifestBlobId: "blob-current",
+            status: "up to date",
+          },
+        ],
+      };
     },
     async syncMirror() {
       calls.push({ syncMirror: true });

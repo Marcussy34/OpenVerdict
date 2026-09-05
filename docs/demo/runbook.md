@@ -61,15 +61,32 @@ Operator address (generated 2026-08-27, key held in local .env only):
 4. Publish the real juror manifests. Each agent's on-chain `manifest_hash`
    must be the blake2b256 of the manifest document on Walrus that embeds
    the exact prompt spec and tool policy, otherwise `juryRun` fails closed
-   ("does not match the engine prompt spec"). The script publishes the
-   current document version (v5 = prompt spec v4 + tool policy v4 since
-   2026-08-30 21:33; v2 on 2026-08-29, v3 and v4 on 2026-08-30 before it):
+   ("does not match the engine prompt spec"). The current generation lives
+   in one place, `CURRENT_SEAT_GENERATION` in `lib/engine/seatGeneration.ts`
+   (document v6 = prompt spec v5 + tool policy v4 + the table-vote prompt);
+   every newly staked seat pins it, and bumping it means republishing every
+   existing seat. `pnpm cli agents republish --active --dry-run` covers the
+   whole roster, including staked seats, and each seat's own operational key
+   signs its `update_agent_manifest`. The older
    `pnpm tsx scripts/publish-agent-manifests.ts --dry-run`, then without the
-   flag (7 `update_agent_manifest` txs signed by the agent keys, 7 Walrus
-   blobs paid by the operator's WAL). Re-running is idempotent: profiles
-   whose hash already matches are skipped. On the hosted stack run it inside
-   the container: `railway ssh -s app -- sh -c 'cd /app && node
-   node_modules/tsx/dist/cli.mjs scripts/publish-agent-manifests.ts --dry-run'`.
+   flag, still works but knows only the seven original operator seats. Both
+   are idempotent: profiles whose hash already matches are skipped.
+
+   Republish an existing roster in an idle window only, because the engine
+   refuses a seat whose stored hashes move mid-run. In the container:
+
+   ```
+   railway ssh -s app -- sh -c 'cd /app && OPENVERDICT_RELEASE_MANIFEST=config/release.testnet.json ./node_modules/.bin/tsx cli/src/index.ts agents republish --active --dry-run'
+   ```
+
+   Read the printed table (one line per seat, old version and prompt hash on
+   the left of `to`, new on the right), then run it again without
+   `--dry-run`. Inactive seats are not selected by `--active`, so name them
+   instead: `... agents republish <profileId> <profileId>`. A live run
+   reconciles the engine's agent mirror with the registry when it finishes,
+   the same work `registry sync-mirror` does. Confirm with
+   `GET /api/agents/<id>/manifest`, which should return a version 6 document
+   on prompt spec v5 and tool policy v4, carrying a `tableVotePromptHash`.
 5. Bind the hosted engine: `pnpm tsx scripts/seed-testnet-agents.ts`
    (with the production `DATABASE_URL`) rebuilds the agent rows from the
    chain + Walrus documents and refuses placeholder manifests.
@@ -298,11 +315,11 @@ against the recorded model, or opened through Seal after the deadline.
    contract has no mid-flight cancel once a claim leaves the CREATED
    state, so the void is an engine fact only, not a chain state. Republish
    agent manifests to v6 before a live demo (manifest v6 pins the
-   table-vote prompt): in the container run `pnpm tsx
-   scripts/publish-agent-manifests.ts --dry-run`, check the seven printed
-   hashes (manifest hash and table vote hash) match what you expect, then
-   run it again without `--dry-run` to publish live, then confirm
-   `GET /api/agents` shows `tableVotePromptHash` for all seven.
+   table-vote prompt): in the container run `agents republish --active
+   --dry-run` as step 4 above, check the printed table, then run it again
+   without `--dry-run`, then confirm `GET /api/agents/<id>/manifest`
+   returns a version 6 document with a `tableVotePromptHash` for every seat
+   `GET /api/agents` lists.
 
 ## 4c. Emergency: a model family is down and no claim can launch
 

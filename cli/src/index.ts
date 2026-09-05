@@ -26,6 +26,7 @@ import {
   type OperatorClient,
   type RegistryRosterReport,
 } from "./operator";
+import type { RepublishReport } from "./republish";
 
 export interface CliDependencies {
   engine?: Engine;
@@ -417,9 +418,8 @@ export function createCliProgram(dependencies: CliDependencies = {}): Command {
       );
     });
 
-  program
-    .command("agents")
-    .description("operator agent controls")
+  const agents = program.command("agents").description("operator agent controls");
+  agents
     .command("eligibility")
     .description("take a seat out of the committee draw, or put it back")
     .argument("<profileId>", "agent profile object ID")
@@ -432,6 +432,47 @@ export function createCliProgram(dependencies: CliDependencies = {}): Command {
         }),
         jsonMode(command),
       );
+    });
+  agents
+    .command("republish")
+    .description("move seats onto the engine's current prompt generation")
+    .argument("[profileIds...]", "agent profile object IDs")
+    .option("--active", "every seat the engine's mirror still counts as active")
+    .option("--dry-run", "rebuild and compare, but upload, sign and save nothing")
+    .action(async (
+      profileIds: string[],
+      options: { active?: boolean; dryRun?: boolean },
+      command: Command,
+    ) => {
+      const ids = profileIds ?? [];
+      if (ids.length === 0 && options.active !== true) {
+        throw new InvalidArgumentError(
+          "name at least one agent profile id, or pass --active",
+        );
+      }
+      if (ids.length > 0 && options.active === true) {
+        throw new InvalidArgumentError("pass --active or profile ids, not both");
+      }
+      const json = jsonMode(command);
+      // A run in flight reads each seat's stored hashes, so a republish under
+      // one fails those seats closed. This is an idle-window job.
+      if (!json) {
+        writer.raw(
+          "Republish only while no claim is live. The engine refuses a seat whose manifest hash moves mid-run.",
+        );
+      }
+      const client = operator();
+      const report = await client.republishManifests({
+        ...(ids.length === 0 ? {} : { agentProfileIds: ids }),
+        ...(options.active === true ? { active: true } : {}),
+        ...(options.dryRun === true ? { dryRun: true } : {}),
+      });
+      writer.value(json ? report : formatRepublish(report), json);
+      // New rows moved; the weather gate reads the mirror, so reconcile it
+      // with the registry before handing the operator back the prompt.
+      if (report.republished === 0) return;
+      const mirror = await client.syncMirror();
+      writer.value(json ? mirror : formatMirrorSync(mirror), json);
     });
 
   program
@@ -600,6 +641,34 @@ function formatMirrorSync(report: MirrorSyncReport): string {
     lines.push(`${label} ${ids.length}: ${ids.join(", ")}`);
   }
   if (lines.length === 2) lines.push("mirror     already matched the registry, nothing changed");
+  return lines.join("\n");
+}
+
+/**
+ * One line per selected seat, the old generation to the left of "to" and the
+ * new one to its right, so an operator can read a dry run before signing it.
+ */
+function formatRepublish(report: RepublishReport): string {
+  const lines = [
+    `mode       ${report.dryRun ? "dry run (nothing uploaded, signed or saved)" : "live"}`,
+    `seats      ${report.seats.length} selected, ${report.republished} republished, ${report.upToDate} already current`,
+  ];
+  for (const seat of report.seats) {
+    lines.push(
+      [
+        "seat      ",
+        seat.agentProfileId,
+        `slot ${seat.slotIndex}`,
+        seat.modelId,
+        seat.role,
+        `v${seat.oldVersion} ${seat.oldPromptHash.slice(0, 10)}`,
+        "to",
+        `v${seat.newVersion} ${seat.newPromptHash.slice(0, 10)}`,
+        `blob ${seat.manifestBlobId}`,
+        seat.digest ?? seat.status,
+      ].join(" "),
+    );
+  }
   return lines.join("\n");
 }
 

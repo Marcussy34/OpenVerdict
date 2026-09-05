@@ -1,20 +1,31 @@
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
+import type { Signer } from "@mysten/sui/cryptography";
 import type { Transaction } from "@mysten/sui/transactions";
+import { readAgentSlots, readEnv } from "../../lib/engine/server";
 import {
   SignerRegistry,
   buildSetAgentEligibilityTransaction,
   buildSetJuryDiversityTransaction,
   createSuiClients,
+  createSuiGateway,
   executeAndWait,
   loadReleaseManifest,
   readJuryDiversity,
   readRegistryRoster,
+  type BoundWriter,
   type OpenVerdictSuiClient,
   type RegistryRosterSeat,
   type ReleaseManifest,
 } from "../../lib/sui";
 import { closeDb, createDb, createRepository, type Repository } from "../../lib/storage";
+import { createLocalWalrusStore } from "../../lib/walrus/local";
+import type { WalrusStore } from "../../lib/walrus/store";
+import {
+  republishAgentManifests,
+  type RepublishReport,
+  type RepublishSelection,
+} from "./republish";
 
 /**
  * Operator-only registry transactions.
@@ -36,6 +47,8 @@ export interface OperatorClient {
   registryRoster(): Promise<RegistryRosterReport>;
   /** Bring the engine's agent mirror back in line with the current registry. */
   syncMirror(): Promise<MirrorSyncReport>;
+  /** Move seats onto the prompt generation the engine publishes today. */
+  republishManifests(selection: RepublishSelection): Promise<RepublishReport>;
 }
 
 /** What `registry sync-mirror` changed in the engine's own agent mirror. */
@@ -123,20 +136,129 @@ async function readAdminCapId(path: string): Promise<string> {
   return adminCapId;
 }
 
-async function loadOperatorManifest(
+/** The release manifest alone; only AdminCap-gated commands need the cap id. */
+async function loadConfiguredManifest(
   env: Record<string, string | undefined>,
-): Promise<{ path: string; manifest: ReleaseManifest; adminCapId: string }> {
+): Promise<{ path: string; manifest: ReleaseManifest }> {
   const path = manifestPath(env);
   if (!existsSync(path)) {
     throw Object.assign(new Error(`release manifest is missing: ${path}`), {
       code: "RELEASE_MANIFEST_MISSING",
     });
   }
-  return {
-    path,
-    manifest: await loadReleaseManifest(path),
-    adminCapId: await readAdminCapId(path),
-  };
+  return { path, manifest: await loadReleaseManifest(path) };
+}
+
+async function loadOperatorManifest(
+  env: Record<string, string | undefined>,
+): Promise<{ path: string; manifest: ReleaseManifest; adminCapId: string }> {
+  const { path, manifest } = await loadConfiguredManifest(env);
+  return { path, manifest, adminCapId: await readAdminCapId(path) };
+}
+
+/** Object types keep the first-published address across package upgrades. */
+function typePackageId(manifest: ReleaseManifest): string {
+  return manifest.originalPackageId?.length
+    ? manifest.originalPackageId
+    : manifest.packageId;
+}
+
+/**
+ * The AgentCap that authorizes update_agent_manifest for one seat. A staked
+ * seat's cap belongs to its operational owner, so the mirror's recorded id is
+ * used only once the chain confirms it names this seat, and the owner's own
+ * objects are scanned otherwise.
+ */
+async function findAgentCapId(
+  client: OpenVerdictSuiClient,
+  manifest: ReleaseManifest,
+  input: { owner: string; agentProfileId: string; agentCapId?: string },
+): Promise<string> {
+  const wanted = input.agentProfileId.toLowerCase();
+  if (input.agentCapId !== undefined) {
+    try {
+      const { object } = await client.core.getObject({
+        objectId: input.agentCapId,
+        include: { json: true },
+      });
+      if (capProfileId(object.json) === wanted) return input.agentCapId;
+    } catch {
+      // A cap id the chain no longer holds falls through to the scan.
+    }
+  }
+  const type = `${typePackageId(manifest)}::agent_registry::AgentCap`;
+  let cursor: string | null = null;
+  do {
+    const page: {
+      objects: Array<{ objectId: string; json?: Record<string, unknown> | null }>;
+      cursor: string | null;
+      hasNextPage: boolean;
+    } = await client.core.listOwnedObjects({
+      owner: input.owner,
+      type,
+      cursor,
+      limit: 50,
+      include: { json: true },
+    });
+    const cap = page.objects.find((object) => capProfileId(object.json) === wanted);
+    if (cap) return cap.objectId;
+    cursor = page.cursor;
+    if (!page.hasNextPage) break;
+  } while (cursor !== null);
+  throw Object.assign(
+    new Error(
+      `no ${type} naming seat ${input.agentProfileId} is owned by ${input.owner}`,
+    ),
+    { code: "AGENT_CAP_NOT_FOUND" },
+  );
+}
+
+function capProfileId(json: Record<string, unknown> | null | undefined): string | undefined {
+  const value = json?.agent_profile_id ?? json?.agentProfileId;
+  return typeof value === "string" ? value.toLowerCase() : undefined;
+}
+
+/**
+ * The store the republish uploads through. Same shape the engine builds in
+ * lib/engine/server.ts, so a document written here is retrievable there; the
+ * Walrus WASM stays behind a dynamic import, as it does in the engine.
+ */
+async function createOperatorWalrusStore(
+  env: Record<string, string | undefined>,
+  manifest: ReleaseManifest,
+  signer: Signer,
+  writers: readonly BoundWriter[],
+): Promise<WalrusStore> {
+  if (manifest.walrus.mode === "local") {
+    return createLocalWalrusStore(manifest.walrus.localDir ?? ".localnet/walrus-local");
+  }
+  const { createRealWalrusStore } = await import("../../lib/walrus/real");
+  return createRealWalrusStore({
+    network: manifest.walrus.mode,
+    baseUrl: readEnv(env.OPENVERDICT_SUI_GRPC_URL, manifest.suiRpcUrl),
+    signer,
+    writers,
+    epochs: manifest.walrus.epochs ?? 10,
+    ...(env.WALRUS_UPLOAD_RELAY_URL?.trim()
+      ? {
+          uploadRelay: {
+            host: env.WALRUS_UPLOAD_RELAY_URL.trim(),
+            sendTip: { max: relayMaxTipMist(env) },
+          },
+        }
+      : {}),
+  });
+}
+
+/** The relay tip ceiling the engine uses, read from the same variable. */
+function relayMaxTipMist(env: Record<string, string | undefined>): number {
+  const raw = env.WALRUS_UPLOAD_RELAY_MAX_TIP_MIST?.trim();
+  if (!raw) return 1_000;
+  const value = Number(raw);
+  if (!Number.isFinite(value)) {
+    throw new Error("WALRUS_UPLOAD_RELAY_MAX_TIP_MIST must be numeric");
+  }
+  return value;
 }
 
 /**
@@ -348,6 +470,40 @@ export function createOperatorClient(
         families,
         seats,
       };
+    },
+    async republishManifests(selection) {
+      if (!env.DATABASE_URL?.trim()) {
+        throw Object.assign(
+          new Error("DATABASE_URL is not set; the agent mirror lives in the engine's database"),
+          { code: "DATABASE_URL_NOT_CONFIGURED" },
+        );
+      }
+      // No AdminCap here: each seat's own operational key signs its update,
+      // exactly as register_staked_agent left the cap with that key.
+      const { manifest } = await loadConfiguredManifest(env);
+      const client = createSuiClients(manifest);
+      const signers = SignerRegistry.fromEnv(env, readAgentSlots(env));
+      const walrus = await createOperatorWalrusStore(
+        env,
+        manifest,
+        signers.getOperator(),
+        signers.listWalrusWriters(),
+      );
+      const db = createDb({ url: env.DATABASE_URL });
+      try {
+        return await republishAgentManifests(
+          {
+            repository: createRepository(db),
+            walrus,
+            gateway: createSuiGateway({ client, manifest, signers }),
+            slotAddresses: signers.listAgentAddresses(),
+            resolveAgentCapId: (seat) => findAgentCapId(client, manifest, seat),
+          },
+          selection,
+        );
+      } finally {
+        await closeDb(db);
+      }
     },
     async syncMirror() {
       if (!env.DATABASE_URL?.trim()) {

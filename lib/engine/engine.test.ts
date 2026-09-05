@@ -1263,8 +1263,49 @@ describe("headless engine", () => {
 
     expect(thrown).toBeInstanceOf(EngineValidationError);
     expect((thrown as Error).message).toContain("prompt hash");
-    expect((thrown as Error).message).toContain("publish-agent-manifests");
+    expect((thrown as Error).message).toContain("agents republish");
     expect(setup.gonkaComplete).not.toHaveBeenCalled();
+  });
+
+  it("pins the current prompt generation on a demo seat the draw synthesizes", async () => {
+    // No seeded mirror, so selectCommittee has to publish each seat itself.
+    // The plan answers UNSURE with no tool actions, which is the one answer
+    // shape a seat may return without a page it found itself.
+    const setup = await engineSetup(
+      new FakeSuiGateway(),
+      [Array.from({ length: 5 }, () => "UNSURE" as const)],
+      { seedAgents: false, actions: [], decisiveEvidence: [] },
+    );
+    const { claimId } = await setup.engine.factCheckStart({
+      claim: "A synthesized demo seat must pin the current generation.",
+      text: "Local evidence.",
+      urls: [],
+    });
+
+    await setup.engine.selectCommittee(claimId);
+
+    const agents = await createRepository(setup.db).listAgentManifests();
+    expect(agents).toHaveLength(5);
+    for (const agent of agents) {
+      expect(agent.manifest).toMatchObject({
+        version: "6",
+        promptHash: promptSpecHash(DEFAULT_PROMPT_SPEC_V5),
+        toolPolicyHash: toolPolicyHash(DEFAULT_TOOL_POLICY_V4),
+        tableVotePromptHash: tableVotePromptSpecHash(),
+      });
+      expect(
+        parseAgentManifestDocument(
+          await setup.walrus.get(agent.manifest.manifestBlobId),
+        ),
+      ).toMatchObject({ version: "6", backingKind: "TESTNET_DEMO_ALLOWLIST" });
+    }
+
+    // The seats it published must also be runnable. The preflight asserts
+    // every hash it just wrote, and prompt v5 research has to answer.
+    await setup.engine.evidenceFreeze(claimId, 1);
+    const jury = await setup.engine.juryRun(claimId, 1);
+    expect(jury.runs).toHaveLength(5);
+    expect(jury.runs.every((run) => run.status === "SCHEMA_VALID")).toBe(true);
   });
 
   it("fails closed before provider calls when a v4 document prompt hash differs", async () => {
@@ -2412,7 +2453,7 @@ describe("headless engine", () => {
     const callsBeforeTableVote = setup.gonkaComplete.mock.calls.length;
 
     await expect(setup.engine.juryRun(setup.claimId, 2)).rejects.toThrow(
-      /run pnpm tsx scripts\/publish-agent-manifests\.ts/,
+      /run pnpm cli agents republish --active/,
     );
     expect(setup.gonkaComplete).toHaveBeenCalledTimes(callsBeforeTableVote);
   });
@@ -3592,9 +3633,12 @@ describe("wallet-signed seat staking", () => {
         owner: setup.gateway.agents[1]!.owner,
         humanAttestationHash: expectedBackingHash,
         humanVerificationProvider: "zklogin:enoki",
-        version: "3",
-        promptHash: promptSpecHash(DEFAULT_PROMPT_SPEC_V2),
-        toolPolicyHash: toolPolicyHash(DEFAULT_TOOL_POLICY_V2),
+        // Every new seat pins the engine's current generation, so round two
+        // can seat it without a republish.
+        version: "6",
+        promptHash: promptSpecHash(DEFAULT_PROMPT_SPEC_V5),
+        toolPolicyHash: toolPolicyHash(DEFAULT_TOOL_POLICY_V4),
+        tableVotePromptHash: tableVotePromptSpecHash(),
         modelId: "model-b",
         providerId: "gonkarouter",
       },
@@ -3604,10 +3648,11 @@ describe("wallet-signed seat staking", () => {
       await setup.walrus.get(saved.manifest.manifestBlobId),
     );
     expect(document).toMatchObject({
-      version: "3",
+      version: "6",
       backingKind: "ZKLOGIN_BACKED",
-      promptHash: promptSpecHash(DEFAULT_PROMPT_SPEC_V2),
-      toolPolicyHash: toolPolicyHash(DEFAULT_TOOL_POLICY_V2),
+      promptHash: promptSpecHash(DEFAULT_PROMPT_SPEC_V5),
+      toolPolicyHash: toolPolicyHash(DEFAULT_TOOL_POLICY_V4),
+      tableVotePromptHash: tableVotePromptSpecHash(),
     });
     // The document carries the policy label; its hash is the policy id the
     // engine records at evidence freeze, and the saved manifest must agree.
@@ -3929,6 +3974,47 @@ describe("real stake on a juror seat", () => {
     });
     // Preparing puts nothing on chain: only the staker's own wallet can.
     expect(setup.gateway.registrations).toHaveLength(0);
+  });
+
+  it("pins the engine's current prompt generation from prepare through confirm", async () => {
+    const setup = await registrationSetup({ verifierResult: true });
+
+    const preparation = await setup.engine.prepareStake({
+      stakerAddress,
+      modelId: "model-b",
+      role: "INVESTIGATOR",
+    });
+
+    // The published document is the seat's source of truth at run time, so it
+    // has to carry v6 with prompt v5, policy v4 and the table-vote prompt.
+    const document = parseAgentManifestDocument(
+      await setup.walrus.get(preparation.args.manifestBlobId),
+    );
+    expect(document).toMatchObject({
+      version: "6",
+      promptHash: promptSpecHash(DEFAULT_PROMPT_SPEC_V5),
+      toolPolicyHash: toolPolicyHash(DEFAULT_TOOL_POLICY_V4),
+      tableVotePromptHash: tableVotePromptSpecHash(),
+    });
+
+    const registration = chainRegistration(preparation);
+    setup.gateway.stakeRegistrations.set(digest, registration);
+    await setup.engine.confirmStake({
+      reservationId: preparation.reservationId,
+      digest,
+    });
+
+    // The mirror row the draw and both rounds read has to say the same thing.
+    const saved = await createRepository(setup.db).getAgentManifest(
+      registration.agentProfileId,
+    );
+    expect(saved?.manifest).toMatchObject({
+      version: "6",
+      manifestHash: preparation.args.manifestHash,
+      promptHash: promptSpecHash(DEFAULT_PROMPT_SPEC_V5),
+      toolPolicyHash: toolPolicyHash(DEFAULT_TOOL_POLICY_V4),
+      tableVotePromptHash: tableVotePromptSpecHash(),
+    });
   });
 
   it("holds a reserved slot against the next preparation", async () => {
@@ -4565,6 +4651,8 @@ async function engineSetup(
     sealEscrow?: SealEscrowService;
     /** Only relaunch tests move time beyond the shared fixed fixture clock. */
     nowMs?: number;
+    /** false leaves the mirror empty so the draw has to synthesize demo seats. */
+    seedAgents?: boolean;
   } = {},
 ) {
   const directory = await mkdtemp(join(tmpdir(), "openverdict-engine-"));
@@ -4577,9 +4665,10 @@ async function engineSetup(
   const db = createDb({ dataDir: "memory://" });
   if (!(db instanceof PGlite)) throw new Error("expected pglite");
   databases.push(db);
-  const initialAgents = gateway.agents.map((agent, index) =>
-    toEngineAgent(agent, index, options),
-  );
+  const initialAgents =
+    options.seedAgents === false
+      ? []
+      : gateway.agents.map((agent, index) => toEngineAgent(agent, index, options));
   const fixtures =
     typeof runPlan === "number"
       ? gateway.agents.map((agent, index) => ({
