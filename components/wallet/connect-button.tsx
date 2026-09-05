@@ -37,9 +37,9 @@ const ConnectModal = dynamic(
 
 /** "0x67a4…227a": six characters, an ellipsis, four. One helper, so the header
  *  chip and the menu's address row always show the same shape. */
-function truncateAddress(address: string) {
-  return address.length > 11
-    ? `${address.slice(0, 6)}…${address.slice(-4)}`
+function truncateAddress(address: string, lead = 6, tail = 4) {
+  return address.length > lead + tail + 1
+    ? `${address.slice(0, lead)}…${address.slice(-tail)}`
     : address;
 }
 
@@ -280,10 +280,12 @@ export function WalletAddressRow({
         onClick={onCopy}
         title={address}
         aria-label={label}
-        className="-ml-1.5 mt-0.5 inline-flex min-h-[44px] items-center gap-1.5 rounded-md px-1.5 transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+        // Full width of the menu, so the copy control sits on the same right
+        // edge as the balance below it; the hover pad hangs past both edges.
+        className="-mx-1.5 mt-0.5 flex min-h-[44px] w-[calc(100%+0.75rem)] items-center justify-between gap-1.5 rounded-md px-1.5 transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
       >
         <span className="font-mono text-xs text-muted-foreground">
-          {truncateAddress(address)}
+          {truncateAddress(address, 12, 8)}
         </span>
         {copyState === "copied" ? (
           // The accent, not the yes green: green is reserved for protocol

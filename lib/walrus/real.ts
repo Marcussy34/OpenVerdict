@@ -297,8 +297,13 @@ type WalrusWriteFlow = {
 // Stale object versions from the shared gas coin, plus transient publisher
 // and network failures (a Walrus 5xx or a dropped connection) that a fresh
 // attempt a few seconds later normally clears.
+// "Transaction resolution failed ... destroy_zero" is the SDK sizing the WAL
+// payment from a cached system state (prices, epoch, coins) that the chain
+// has moved past, so the split leaves a remainder it then tries to destroy;
+// the reset before the retry drops that cache and the rebuilt payment fits
+// (seen 2026-09-05 in every long-lived process, never in a fresh one).
 const STALE_WALRUS_WRITE_PATTERN =
-  /unavailable for consumption|needs to be rebuilt|ObjectVersionUnavailableForConsumption|provided version doesn't match|already locked by a different transaction|reserved for another transaction|internal client error|internal server error|\b50[234]\b|bad gateway|service unavailable|gateway timeout|ECONNRESET|fetch failed|socket hang up/i;
+  /unavailable for consumption|needs to be rebuilt|ObjectVersionUnavailableForConsumption|provided version doesn't match|already locked by a different transaction|reserved for another transaction|Transaction resolution failed|destroy_zero|internal client error|internal server error|\b50[234]\b|bad gateway|service unavailable|gateway timeout|ECONNRESET|fetch failed|socket hang up/i;
 // Five seats finishing together write five sealed bundles and approve five
 // runs on one gas coin; the budget below rides out such a burst.
 const WALRUS_WRITE_ATTEMPTS = 8;
