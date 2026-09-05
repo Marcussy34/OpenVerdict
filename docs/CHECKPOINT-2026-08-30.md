@@ -3679,3 +3679,70 @@ Copy shipped: hero "34 registered · 10 active · 2 sitting out · 2 of 3
 model families", chip "Kimi · sitting out", section "Sitting out" with
 the GonkaRouter sentence; resting opacity 60 percent (worker flags
 contrast; consider 75).
+
+## 3bd. 2026-09-05 10:30Z: PROMPT V5 ON EVERY SEAT, CONSOLE BATCH LIVE, HARD CLAIM RUNNING (read 3bc and 3bc-a, then this)
+
+OWNER DIRECTION (09:40Z to 10:20Z): fix the status page and show the
+model probes first (done, live); a Cost page on the docs site with the
+full breakdown and the break-even price per claim (worker cost-page in
+flight, files docs/site/cost.md, scripts/claim-cost.ts, lib/cost/,
+package.json "cost:claim"); then, because time is short, ONE hard run
+that reaches round two and a conclusion, after which we stop and the
+owner records the demo video. A void or two on the board is acceptable.
+
+ROOT CAUSE FIXED (7475664): every new seat manifest took its prompt from
+the adapter fallback (v2). lib/engine/seatGeneration.ts is now the one
+generation (prompt v5, policy v4, table-vote spec, document v6), used by
+the stake flow, the signed-message path, the demo seat and the publish
+script. New operator command `pnpm cli agents republish --active |
+<ids> [--dry-run]` (cli/src/republish.ts) rebuilds each seat from its own
+document, uploads, signs update_agent_manifest with the seat's slot key,
+saves a new mirror row, reconciles the mirror. Gates green (1122 tests,
+localnet e2e 11 sections).
+
+CONSOLE BATCH (fcc7a66): live page duration timer and phase deadline
+line ("Running for 4m 12s", "Sealed votes close in"), LIVE chip filled
+red, void alert as two sentences with a Details disclosure; status page
+"Model probes" first section with a jury weather pill; agents page
+"sitting out" keyed on the research prompt hash (promptHash now on
+AgentDirectoryEntry and served by /api/agents).
+
+DEPLOYS: 9816c1e8 (fcc7a66, live 10:16Z), restart 85bc86ed (10:29Z after
+the gas split). The owner's own landing commits (3f199d9..c8d2b13) were
+already on origin/main and on production (c101e695).
+
+REPUBLISH DONE 10:24Z to 10:26Z from the container: ten active seats and
+the two fresh Kimi seats moved from document v3 / prompt 0xc62311da to
+document v6 / prompt 0xa219ea18 with a table-vote hash (digests in the
+session log; verify with scratchpad/verify-manifests.sh: 16 rows, every
+active seat "6 5 4 tv:0x0fde6e"). Writer lanes 0 and 1 were below the
+floor: fund-walrus-writers --fund --split-gas 3 (operator 22.74 SUI, 3
+gas coins, writers 0.30 / 0.30 / 0.22 / 0.26 SUI), then the restart.
+
+BOARD: the three Sui mainnet attempts (0x408a7311, 0xdb74fd87,
+0xea501fa8) were purged from every claim table (DB only; the objects
+stay on chain). Board now: Great Wall 0x7842b5da (NO 3.20, audit 86/86),
+Bitcoin 0xd8652651 (YES 96.60, attempt 2, audit 86/86) and its voided
+attempt 0x0ff2b919. Audits in scratchpad/audit-greatwall.md and
+audit-bitcoin.md (JSON audit-bitcoin.json).
+
+RUNNING: scratchpad/run-hard-claim.sh (Monitor bg2lheo25) submitted or
+is submitting "Raising the minimum wage reduces overall employment." on
+the first clear probe; it follows relaunches and exits at settlement.
+Board watcher bs46nrfj2 (board-watch2.sh). If the hard claim settles in
+round one, try "Moderate red wine consumption benefits heart health.",
+then "Remote work increases productivity.", then "Nuclear power is the
+safest source of electricity." until one reaches round two. The 4
+simple claims and the second reset are dropped for time.
+
+AFTER THE HARD CLAIM: audit it, land the cost page (docs only; a deploy
+restarts the engine, so deploy only with no claim live), refresh the
+cost page numbers on the final board if time allows, rewrite
+docs/demo/demo-script-3min.md around the board (tab 4 = a settled
+claim, the two-round claim for the replay segment), final screenshots,
+memory, closing summary, stop the monitors.
+
+CLI note: `pnpm` inside scratchpad/tree-check exits 1 with empty output
+under this shell's hook; run ./node_modules/.bin/tsc, eslint and vitest
+directly there (all green on fcc7a66). Commit trailer for this session:
+"Claude-Session: https://claude.ai/code/session_012YizbAC9ubY99LHPpYdy42".
