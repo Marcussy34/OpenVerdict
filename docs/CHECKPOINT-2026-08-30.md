@@ -3842,3 +3842,36 @@ across the lanes, 55 to 175 Firecrawl credits. The lanes drain about
 funding again (same command, then redeploy in a free window).
 Scratchpad helpers: lane-addresses.ts (derives the four lane addresses
 locally, no network, prints addresses only), balances.sh.
+
+## 3bg. 2026-09-05 15:45Z: RAIL TILES FOLLOW THE REPLAY, COPY ICON FOR THE CLAIM ID (read 3bf and 3bf-a, then this)
+
+Owner is not doing a live demo any more (watching the replay instead), so
+the weather gate no longer matters for the recording. Two rail fixes,
+commit 2b2f3f0, deployed 15:40Z (Railway e8cb92e3), seeder paused for
+the window and unpaused after. (1) The Sealed and Revealed tiles added
+both rounds together against a fixed five (7/5 on the two-round claim:
+round one 3 of 5, round two 4 of 5) and ignored the replay.
+lib/viz/vote-tally.ts (voteTally(claim, events, atMs?)) counts one round
+at a time: at rest the record's flags for the round in view (round two
+once its sealed ballot opened, state COMMIT_2 and later; round one before
+that, so the debate window still shows the completed first round);
+during a replay only the vote_committed / vote_revealed events at or
+before the cursor, with round two coming into view at its first seat
+event, the same moment the graph shows the table-vote seats; a record
+with no vote events keeps the flag counts. eventTime and eventSeatId are
+now exported from lib/viz/deliberation-graph.ts. LeftRail takes the
+events and memoises the tally; a two-round claim's tiles carry a "Round
+n of 2" caption. Five tests in lib/viz/vote-tally.test.ts. (2)
+components/claim/copy-claim-id.tsx: an icon button beside the "Claim
+assertion" label copies the claim id (the handle the auditor and the
+verify page take); a tick and "Copied" show for 1.4 s.
+
+VERIFIED on production with scratchpad/shot-replay-tiles.mjs (CDP:
+reads the tiles at rest, clicks the copy button and reads the clipboard,
+sets 30x, presses Play, samples the tiles every 1.5 s). At rest "4/5 ·
+Round 2 of 2" on both tiles; copy button flips to "Claim id copied /
+Copied" and the clipboard holds 0x1d53f02c…; during the replay the tiles
+read 0/5 (round 1), 3/5 sealed, 3/5 revealed, then 0/5 (round 2), 3/5
+and 4/5 sealed while round two revealed, one round at a time. Screenshot
+scratchpad/replay-tiles.jpg. Gates green (tsc, eslint, vitest lib/viz 8
+files, 52 tests). Board unchanged, ten records, none live.
