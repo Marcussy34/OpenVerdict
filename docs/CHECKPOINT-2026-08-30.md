@@ -3368,3 +3368,32 @@ fixed at the 0.1 SUI minimum by the app while the chain accepts any
 amount (owner asked; proposal: free amount with draw weight proportional
 to the stake, capped, after the run); the demo script is at
 docs/demo/demo-script-3min.md.
+
+## 3az. 2026-09-05 13:45: END-TO-END RUN SETTLED IN DEGRADED MODE (read 3ay then this)
+
+Claim 0x7ee9ee7998a54561d0042230a2be11bc9b9d3941f93d4f2533d41148dc02b411
+"The EU AI Act entered into force on 1 August 2024." submitted 13:37:55
+(the ov CLI's client timeout fired before the server answered, the claim
+had launched; the watcher was stopped before it could resubmit and a
+fresh `ov watch` attached). Committee drawn in 1.8 s on two families
+(MiniMax x3, DeepSeek x2); all five sealed, all five revealed YES (99,
+95, 100, 100, 100 percent); FINALIZED_REVIEWED YES, truth score 98.80,
+certificate 0xf48b3ae86820739bcb7775fe1a16a491115fbb0a3c10f3d560c6d403f72eb0d7,
+269 s from created to certificate. Audit from the container: 73 checks
+passed, 0 failed, 1 unavailable; row S5 "families drawn: 2 (registry
+required 2 at the draw)"; the verdict card says "2 model families
+(degraded mode)". Logs: scratchpad/e2e-run.log, e2e-audit-card.txt.
+
+IN FLIGHT: live-indicator (a large LIVE chip on the claim page while a
+claim runs, REPLAY when the replay is on; the draw note states the rule
+the claim was drawn under) and graph-live (jurors start on a compact
+pentagon with trails fanning outward; dragged nodes stay pinned across
+updates; double-click releases). Both then commit + deploy.
+
+OPEN (code, next worker window): activeFamilies() should consider only
+seats in the current registry; the eligibility mirror must update every
+manifest version row and the record_json copy (the engine reads
+record_json via DISTINCT ON agent_profile_id); the ov submit client
+timeout must cover a full launch (freeze + draw) or treat a timeout as
+"check the board before resubmitting"; the stake amount question (owner:
+free amount, proposal: draw weight proportional to stake, capped).
