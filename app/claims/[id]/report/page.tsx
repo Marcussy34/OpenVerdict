@@ -286,7 +286,8 @@ function ReportTitle({ claim }: { claim: ClaimInspection }) {
         href="/claims"
         className="ov-micro ov-micro-sm inline-flex items-center gap-1.5 text-muted-foreground transition-colors hover:text-primary focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
       >
-        <ArrowLeft2 size="13" variant="Bold" />
+        {/* Nudged up one pixel so the chevron centres on the text. */}
+        <ArrowLeft2 size="13" variant="Bold" className="relative -top-px shrink-0" />
         All claims
       </Link>
 

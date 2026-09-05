@@ -606,7 +606,8 @@ function LeftRail({
           href="/claims"
           className="-ml-1 inline-flex min-h-8 w-fit items-center gap-1.5 px-1 text-[13px] font-medium text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ov-accent)]"
         >
-          <ArrowLeft2 size="13" />
+          {/* Nudged up one pixel: the glyph sits low in its box next to 13px text. */}
+          <ArrowLeft2 size="13" className="relative -top-px shrink-0" />
           All claims
         </Link>
         <p className="ov-micro ov-micro-sm text-muted-foreground">Claim assertion</p>
