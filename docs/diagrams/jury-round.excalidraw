@@ -1023,7 +1023,7 @@
    "type": "text",
    "x": 150,
    "y": 455,
-   "width": 1023,
+   "width": 1268,
    "height": 15,
    "angle": 0,
    "strokeColor": "#1e1e1e",
@@ -1046,11 +1046,11 @@
    "locked": false,
    "fontSize": 12,
    "fontFamily": 3,
-   "text": "no peer visibility - strict JSON output - citations must be frozen evidence ids - a failed seat voids the whole attempt; relaunch, up to three",
+   "text": "no peer visibility - strict JSON output - citations are evidence ids from the frozen bundle or pages the juror opened - a failed seat voids the whole attempt; relaunch, up to three",
    "textAlign": "left",
    "verticalAlign": "top",
    "containerId": null,
-   "originalText": "no peer visibility - strict JSON output - citations must be frozen evidence ids - a failed seat voids the whole attempt; relaunch, up to three",
+   "originalText": "no peer visibility - strict JSON output - citations are evidence ids from the frozen bundle or pages the juror opened - a failed seat voids the whole attempt; relaunch, up to three",
    "lineHeight": 1.25,
    "baseline": 12
   }

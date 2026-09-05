@@ -165,8 +165,11 @@ process); the five seats form the **committee**, and **4 of 5** is the
 </picture>
 
 The engine is headless-first: the complete lifecycle runs through the CLI with
-the dashboard offline, and a restarted dashboard reconstructs the same public
-timeline from Sui objects, Walrus artifacts, and the resolution event stream.
+the dashboard offline. The dashboard is a read-only projection of the
+append-only resolution event log and holds no signer, and anyone can recompute
+a verdict from Sui objects, Walrus artifacts and the public API without it,
+with `pnpm ov audit <link>` or the agent skill served at
+[`/SKILL.md`](https://app.openverdict.info/SKILL.md).
 
 ### Claim lifecycle
 
