@@ -3916,3 +3916,42 @@ two, Walrus blobs a9wOjCKZ… and S3a8wG23…, prompt hash 0x7257117d…);
 gates tsc, eslint, vitest 90 files / 1155 tests; the served
 app.openverdict.info/SKILL.md carries the new sections. Juror 1's full
 extraction for the owner is scratchpad/juror1-fasting.md.
+
+### 3bh-a. ADDENDUM 2026-09-06 01:10Z: --out FOR LONG TRAILS, AUDITOR NOT-FOUND PRECEDENCE (read 3bh then this)
+
+Owner reran the skill in a fresh Gemini session after 3bh: two commands
+then the answer, but still two `help` calls and five Python parses of
+the audit JSON. Its transcript
+(~/.gemini/antigravity-cli/brain/35af8a93…/.system_generated/logs/)
+showed why. That harness keeps only the last ~8 KB of a tool result and
+drops the head, and the 25 KB `trace --full` lost its pinned prompt, so
+the agent went to the JSON for it. Fixes, all Opus workers (owner: "use
+opus workers"; Codex lane blocked under ChatGPT auth):
+
+1. ffd08f7 `ov trace --out <file>` writes the trail (or the --json
+   document) to a file and prints one confirmation line, `--from`
+   honoured; three tests. SKILL.md router and Tier 3 send every
+   exact-text question to `--out <scratch>/trace-jN.md` and a read of the
+   file, explain the ~8 KB cap, and say the flags in the table are
+   complete so no `help` call is needed.
+2. 6a4d737 lib/audit/audit-claim.ts. The worker's live audit had shown 3
+   FAIL rows (C2, C3, R16 on reveal 4jy9yZPK…) that passed a minute
+   later: publicnode had pruned the transaction ("Could not find the
+   referenced transaction"), blockvision answered 429 after two quick
+   retries, and `#rpcUncached` let the remembered not_found win. Now
+   not_found only when every endpoint answered and none had it; any
+   endpoint that could not be asked makes the outcome unavailable with a
+   reason naming both halves ("publicnode reports the transaction as not
+   found (nodes prune after a few days) and sui-testnet-endpoint.
+   blockvision.org answered HTTP 429 after 5 tries"), so C1/C2/C3/R16
+   say UNAVAILABLE. RPC_RETRIES 4 with pauses 300/600/900/1200 ms, and
+   the last endpoint of the list (the archival fallback) runs through a
+   limiter of one. Four new tests (38 in lib/audit). Two live audits after
+   the fix: 157/0 in 12.5 s and 21.3 s (the slow one waited out
+   fullnode.testnet.sui.io, which this machine cannot reach at the TLS
+   layer; other machines will not see that).
+
+Deployed together 2026-09-06 01:0xZ (Railway 3279735c), seeder paused
+for the window and unpaused after; served SKILL.md carries the new
+text. Full suite 90 files, 1162 tests; tsc and eslint clean. Lessons
+added to tasks/lessons.md (not_found must never outrank unavailable).
