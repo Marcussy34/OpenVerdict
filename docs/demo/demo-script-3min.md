@@ -52,3 +52,17 @@ If a claim of the day split and went to a debate, use it instead of tab 4 for th
 - Why three attempts on the settled claim: a seat failed closed twice (a provider error, then an invalid citation), the attempt was voided and relaunched on the next clear weather probe, and all three attempts are on the report.
 - Why a jury needs every family: the diversity rule is enforced by the Move draw, not by the app; degraded mode is an on-chain switch the operator can flip when a provider is down, and every certificate drawn under it says so.
 - What the truth score is: the mean of juror probabilities from the final valid round, recomputable from the revealed votes.
+
+## The identifiers, spoken (about ninety seconds)
+
+Three kinds of identifiers. "Everything on this page is one of three things: an object on Sui, a blob on Walrus, or a hash. An object id is a live record on the chain: the claim, the committee, each juror's seat, each revealed vote, the certificate. Click one and it opens on SuiVision. A transaction digest is the event that changed one of them, on Suiscan. A blob id is a file on Walrus, content-addressed, so the id is the file. A hash is a fingerprint: it cannot be opened, only recomputed; change the bytes and the hash changes."
+
+How a run is pinned. "Before a juror reasons, the evidence bundle is frozen: every submitted page is fetched, canonicalized, stored on Walrus, and its Merkle root is written on chain. That is the evidence root. Five hashes then describe the run: the prompt hash (the exact system prompt), the tool policy hash (the search and open budget), the input hash (the claim, the criteria, the manifest), the output hash (the vote and its citations), the transcript hash (every search, page and quote). With the evidence root they are serialized and hashed into the run hash, which the engine writes on chain, approve run, before the vote exists."
+
+How the vote is sealed and opened. "The preimage is the claim id, the agent profile id, the seat id, the phase, the outcome, the confidence, the evidence root, the output hash, the run hash and a random salt. Its blake2b hash is the commitment, and only the commitment goes on chain, so nobody, not even the operator, can read a vote early. At the reveal the juror hands the preimage back and Sui recomputes the hash itself; a mismatch aborts the transaction; a match is frozen as a revealed vote object."
+
+Where the AI call is proven. "Every model call goes through GonkaRouter and returns a request id. That id sits inside the run bundle the run hash covers, and GonkaRouter publishes a receipt for it, so an auditor can confirm the call happened and which model served it."
+
+How it closes. "Pages become the evidence root; the five hashes plus the root become the run hash; the run hash plus the vote plus a salt become the commitment; the reveal reopens it; four matching reveals become the certificate, with the truth score computed from the revealed votes. Every arrow is a formula, and the audit recomputes every one of them from public data."
+
+If asked about Seal. "The full run bundle is encrypted on Walrus at commit time and its key is escrowed under an on-chain Seal policy with a time lock, so it opens after the deadline without the operator. That is insurance; the proof is the hash chain."
