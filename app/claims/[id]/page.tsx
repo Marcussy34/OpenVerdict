@@ -10,6 +10,7 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
   type ReactNode,
 } from "react";
 
@@ -21,6 +22,7 @@ import { StateBadge } from "@/components/claim/state-badge";
 import { WeatherStrip } from "@/components/weather/weather-strip";
 import {
   Clock,
+  ArrowDown2,
   ArrowLeft2,
   ArrowRight2,
   CloseCircle,
@@ -34,6 +36,7 @@ import {
   Radar,
   Refresh,
   ShieldTick,
+  Timer1,
   Warning2,
 } from "@/components/icons";
 import { Button } from "@/components/ui/button";
@@ -57,7 +60,7 @@ import type {
   ResolutionEvent,
 } from "@/lib/engine/contract";
 import { isStrandedDiscussion } from "@/lib/engine/claim-lifecycle";
-import { CLAIM_MODE, CLAIM_STATE } from "@/lib/protocol/constants";
+import { CLAIM_MODE, CLAIM_STATE, type ClaimState } from "@/lib/protocol/constants";
 import { suiObjectUrl, suiTransactionUrl } from "@/lib/web/explorer";
 import { juryFamiliesLabel } from "@/lib/web/weather-copy";
 import { cn } from "@/lib/utils";
@@ -90,19 +93,64 @@ type AgentDirectory = ReadonlyMap<string, { modelId?: string; role?: string }>;
 
 const EMPTY_GRAPH: DeliberationGraph = { nodes: [], edges: [] };
 
-const DEADLINE_LABELS: Array<{
+/**
+ * The one deadline a claim is actually waiting on at each state, in the words
+ * the rail says it. Keyed by state, so the pathway takes care of itself: the
+ * proposal and challenge windows belong to the optimistic states alone and a
+ * direct-review claim never counts down to a deadline it will never use.
+ */
+const PHASE_DEADLINE: Partial<Record<ClaimState, {
   key: keyof ClaimInspection["deadlines"];
-  label: string;
-}> = [
-  { key: "evidenceCutoffMs", label: "evidence" },
-  { key: "proposalDeadlineMs", label: "proposal" },
-  { key: "challengeDeadlineMs", label: "challenge" },
-  { key: "firstCommitDeadlineMs", label: "phase 1 commit" },
-  { key: "firstRevealDeadlineMs", label: "phase 1 reveal" },
-  { key: "discussionDeadlineMs", label: "discussion" },
-  { key: "secondCommitDeadlineMs", label: "phase 2 commit" },
-  { key: "secondRevealDeadlineMs", label: "phase 2 reveal" },
-];
+  /** Said while the window is still open, then said once it has passed. */
+  open: string;
+  closed: string;
+}>> = {
+  [CLAIM_STATE.CREATED]: {
+    key: "evidenceCutoffMs",
+    open: "Evidence cutoff in",
+    closed: "Evidence cutoff passed",
+  },
+  [CLAIM_STATE.REVIEW_REQUESTED]: {
+    key: "evidenceCutoffMs",
+    open: "Evidence cutoff in",
+    closed: "Evidence cutoff passed",
+  },
+  [CLAIM_STATE.PROPOSED]: {
+    key: "proposalDeadlineMs",
+    open: "Proposal window closes in",
+    closed: "Proposal window closed",
+  },
+  [CLAIM_STATE.CHALLENGED]: {
+    key: "challengeDeadlineMs",
+    open: "Challenge window closes in",
+    closed: "Challenge window closed",
+  },
+  [CLAIM_STATE.COMMIT_1]: {
+    key: "firstCommitDeadlineMs",
+    open: "Sealed votes close in",
+    closed: "Sealed votes closed",
+  },
+  [CLAIM_STATE.REVEAL_1]: {
+    key: "firstRevealDeadlineMs",
+    open: "Reveals close in",
+    closed: "Reveals closed",
+  },
+  [CLAIM_STATE.DISCUSSION]: {
+    key: "discussionDeadlineMs",
+    open: "Debate closes in",
+    closed: "Debate closed",
+  },
+  [CLAIM_STATE.COMMIT_2]: {
+    key: "secondCommitDeadlineMs",
+    open: "Sealed votes close in",
+    closed: "Sealed votes closed",
+  },
+  [CLAIM_STATE.REVEAL_2]: {
+    key: "secondRevealDeadlineMs",
+    open: "Reveals close in",
+    closed: "Reveals closed",
+  },
+};
 
 function asRecord(value: unknown): UnknownRecord | undefined {
   return typeof value === "object" && value !== null && !Array.isArray(value)
@@ -130,23 +178,122 @@ function failureTranscript(proof: BrowserRunProof): unknown {
   return failure?.transcript ?? undefined;
 }
 
-function formatRemaining(milliseconds: number): string {
-  const totalSeconds = Math.max(0, Math.ceil(milliseconds / 1_000));
-  const hours = Math.floor(totalSeconds / 3_600);
-  const minutes = Math.floor((totalSeconds % 3_600) / 60);
-  const seconds = totalSeconds % 60;
+/**
+ * One shape for every span this page counts, with the unit always spelled out:
+ * "38s", "4m 12s", "1h 04m", and "3d 04h" once a stuck claim outlives a day.
+ * A bare "0:04" never says whether it means minutes or seconds.
+ */
+function formatSpan(totalSeconds: number): string {
+  const total = Math.max(0, totalSeconds);
+  const days = Math.floor(total / 86_400);
+  const hours = Math.floor((total % 86_400) / 3_600);
+  const minutes = Math.floor((total % 3_600) / 60);
+  const seconds = total % 60;
 
-  if (hours > 0) {
-    return `${hours}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
-  }
-  return `${minutes}:${String(seconds).padStart(2, "0")}`;
+  if (days > 0) return `${days}d ${String(hours).padStart(2, "0")}h`;
+  if (hours > 0) return `${hours}h ${String(minutes).padStart(2, "0")}m`;
+  if (minutes > 0) return `${minutes}m ${String(seconds).padStart(2, "0")}s`;
+  return `${seconds}s`;
 }
 
-function nextDeadlineLine(claim: ClaimInspection, now: number | null): string {
-  if (now === null) return "Next milestone loading";
-  const next = DEADLINE_LABELS.find(({ key }) => claim.deadlines[key] > now);
-  if (next === undefined) return "All protocol deadlines passed";
-  return `Next: ${next.label} closes in ${formatRemaining(claim.deadlines[next.key] - now)}`;
+/** Time left, rounded up: a countdown reads 1s until the moment it lands. */
+function formatRemaining(milliseconds: number): string {
+  return formatSpan(Math.ceil(Math.max(0, milliseconds) / 1_000));
+}
+
+/** Time gone, rounded down: an elapsed clock never reads ahead of itself. */
+function formatElapsed(milliseconds: number): string {
+  return formatSpan(Math.floor(Math.max(0, milliseconds) / 1_000));
+}
+
+/**
+ * What the current phase is waiting on, in plain words. Null when nothing is
+ * due: a closed record, a stopped attempt, or a state with no deadline of its
+ * own. A deadline that has already passed still speaks, because the phase
+ * only moves when the chain call lands.
+ */
+function phaseDeadlineLine(claim: ClaimInspection, now: number): string | null {
+  const stopped = claim.attemptChain?.status === "VOIDED"
+    || claim.attemptChain?.status === "GAVE_UP";
+  if (stopped) return null;
+  const phase = PHASE_DEADLINE[claim.state];
+  if (phase === undefined) return null;
+  const atMs = claim.deadlines[phase.key];
+  if (!Number.isFinite(atMs)) return null;
+  if (atMs > now) return `${phase.open} ${formatRemaining(atMs - now)}`;
+  // A stranded discussion is waiting for nothing: round two never opened.
+  const tail = isStrandedDiscussion(claim, now) ? "" : ", waiting for the chain";
+  return `${phase.closed} ${formatElapsed(now - atMs)} ago${tail}`;
+}
+
+/** The verification's own clock: when it opened, and when it stopped. */
+type RunSpan = {
+  startMs: number | null;
+  /** Null while the verification is still running. */
+  endMs: number | null;
+  /** The engine's recorded wall clock, when the finalize event carried one. */
+  totalMs: number | null;
+};
+
+const EMPTY_RUN_SPAN: RunSpan = { startMs: null, endMs: null, totalMs: null };
+
+function eventAtMs(event: ResolutionEvent | undefined): number | undefined {
+  if (event === undefined) return undefined;
+  const parsed = Date.parse(event.occurredAt);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function firstEventAtMs(events: ResolutionEvent[], kind: string): number | undefined {
+  return eventAtMs(events.find((event) => event.kind === kind));
+}
+
+/**
+ * How long this verification has been running. The inspection carries no
+ * created timestamp, so the opening moment comes from the claim_created event
+ * (the first thing the timeline records) and falls back to the earliest event
+ * the stream replayed. The finalize event also carries the engine's own wall
+ * clock from the claim row, which is the exact number once it exists.
+ */
+function claimRunSpan(claim: ClaimInspection, events: ResolutionEvent[]): RunSpan {
+  const startMs = firstEventAtMs(events, "claim_created")
+    ?? eventAtMs(events[0])
+    ?? null;
+  const status = claim.attemptChain?.status;
+  let endMs: number | null = null;
+  if (status === "VOIDED") {
+    endMs = claim.attemptChain?.void?.atMs
+      ?? firstEventAtMs(events, "verification_voided")
+      ?? null;
+  } else if (status === "GAVE_UP") {
+    endMs = firstEventAtMs(events, "verification_gave_up")
+      ?? claim.attemptChain?.void?.atMs
+      ?? null;
+  } else if (claim.state >= CLAIM_STATE.FINALIZED_UNCHALLENGED) {
+    // A cancelled record has no finalize event: it freezes at its last moment.
+    endMs = firstEventAtMs(events, "claim_finalized")
+      ?? eventAtMs(events[events.length - 1])
+      ?? null;
+  }
+  const finalized = events.find((event) => event.kind === "claim_finalized");
+  const timing = asRecord(asRecord(finalized?.payload)?.timing_ms);
+  const recorded = timing?.total_from_created;
+  return {
+    startMs,
+    endMs,
+    totalMs: typeof recorded === "number" && recorded > 0 ? recorded : null,
+  };
+}
+
+/** "Running for 4m 12s" while it runs, "Ran for 5m 31s" once it stopped. */
+function runDurationLine(span: RunSpan, now: number): string | null {
+  const stopped = span.endMs !== null || span.totalMs !== null;
+  if (stopped) {
+    const elapsed = span.totalMs
+      ?? (span.startMs === null || span.endMs === null ? null : span.endMs - span.startMs);
+    return elapsed === null ? null : `Ran for ${formatElapsed(elapsed)}`;
+  }
+  if (span.startMs === null) return null;
+  return `Running for ${formatElapsed(now - span.startMs)}`;
 }
 
 function truthScoreLabel(scoreBps: number | null | undefined): string {
@@ -232,24 +379,46 @@ function finalStage(claim: ClaimInspection): StageInfo {
   };
 }
 
-function formatLocalHourMinute(ms: number): string {
-  try {
-    const d = new Date(ms);
-    if (Number.isNaN(d.getTime())) return "";
-    return d.toLocaleTimeString(undefined, {
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  } catch {
-    return "";
-  }
+/** The page's clock, from the live transcript's stamps: UTC, to the second. */
+function formatClock(ms: number): string {
+  if (!Number.isFinite(ms) || ms <= 0) return "--:--:--Z";
+  return `${new Date(ms).toISOString().slice(11, 19)}Z`;
 }
 
+/**
+ * A recorded failure message said in one plain clause. The raw text is a
+ * transaction dump or a provider trace, so the card reads the cause out loud
+ * and keeps the dump itself in the Details disclosure underneath.
+ */
+function failureCause(message: string | undefined, reason: string | undefined): string {
+  const text = `${message ?? ""} ${reason ?? ""}`.toLowerCase();
+  if (text.includes("moveabort")
+    || text.includes("transaction resolution")
+    || text.includes("dry run")) {
+    return "failed on a transaction that could not be built";
+  }
+  if (text.includes("timeout") || text.includes("timed out")) {
+    return "failed after its model stopped answering";
+  }
+  if (text.includes("schema") || text.includes("malformed")) {
+    return "failed on a reply that never matched the verdict schema";
+  }
+  if (text.includes("citation")) {
+    return "failed on a citation the engine could not verify";
+  }
+  return "failed before it could commit a valid vote";
+}
+
+/** The card's headline, and the raw recorded text it keeps out of the way. */
+type AttemptFailure = { sentence: string; detail?: string };
+
 /** Attempt failures use short public copy while preserving the recorded reason. */
-function attemptFailureSentence(claim: ClaimInspection): string {
+function attemptFailure(claim: ClaimInspection): AttemptFailure {
   const chain = claim.attemptChain;
   const reason = chain?.gaveUpReason ?? chain?.void?.reason;
   let base = "Verification could not continue";
+  // The recorded message is never dropped: it moves to the disclosure.
+  let detail: string | undefined;
   if (reason === "MISSING_COMMIT") {
     base = "A seat missed the commit deadline";
   } else if (reason === "MISSING_REVEAL") {
@@ -264,18 +433,21 @@ function attemptFailureSentence(claim: ClaimInspection): string {
     );
     const seatLabel = seatIndex >= 0 ? `Seat ${(seatIndex % 5) + 1}` : "A seat";
     const modelLabel = chain.void.modelId ?? "model unavailable";
-    base = `${seatLabel} (${modelLabel}) failed: ${chain.void.message ?? chain.void.reason}`;
-  } else if (chain?.void?.message) {
-    base = chain.void.message;
+    base = `${seatLabel} (${modelLabel}) ${failureCause(chain.void.message, chain.void.reason)}`;
+    detail = chain.void.message ?? chain.void.reason;
+  } else if (chain?.void?.message !== undefined) {
+    base = `Verification ${failureCause(chain.void.message, chain.void.reason)}`;
+    detail = chain.void.message;
   } else if (chain?.void?.reason !== undefined) {
-    base = `Verification stopped: ${chain.void.reason}`;
+    base = `Verification stopped (${chain.void.reason})`;
   }
 
-  if (!chain) return base;
-  if (chain.status === "GAVE_UP") {
-    return `Attempt ${chain.attempt} of ${chain.maxAttempts}: ${base}`;
-  }
-  return `Attempt ${chain.attempt} of ${chain.maxAttempts} voided: ${base}`;
+  if (!chain) return { sentence: `${base}.` };
+  // Two sentences, never a colon mid-sentence (owner copy rule).
+  const prefix = chain.status === "GAVE_UP"
+    ? `Attempt ${chain.attempt} of ${chain.maxAttempts}.`
+    : `Attempt ${chain.attempt} of ${chain.maxAttempts} voided.`;
+  return { sentence: `${prefix} ${base}.`, detail };
 }
 
 /** The live protocol stage, from the on-chain claim state. */
@@ -387,12 +559,14 @@ function claimLiveMode({
   return streamStatus === "connected" ? "live" : "syncing";
 }
 
-// LIVE is the one filled block on the bar: white on the accent, the same fill
-// the active segment wears, because a running claim has to be unmistakable. A
-// replay and a tab still catching up stay quiet hairline chips, so which mode
-// the page is in reads at a glance.
+// LIVE is the one filled block on the bar, and it is red: the owner's one
+// exception to the rule that reserves red for the NO verdict and for failures
+// (2026-09-05), because a running claim has to be unmistakable. It uses the
+// palette's own NO red, so the app still holds one set of colours. A replay
+// and a tab still catching up stay quiet hairline chips, so which mode the
+// page is in reads at a glance.
 const LIVE_CHIP_SKIN: Record<LiveMode, string> = {
-  live: "border-transparent bg-primary text-white",
+  live: "border-transparent bg-no text-white",
   syncing: "border-border bg-card text-muted-foreground",
   replay: "border-border bg-card text-muted-foreground",
 };
@@ -404,8 +578,8 @@ const LIVE_CHIP_WORD: Record<LiveMode, string> = {
 };
 
 /**
- * The broadcast marker: a claim still running says LIVE in the accent with a
- * pulsing dot, a replay says REPLAY in muted ink and stands still. Large
+ * The broadcast marker: a claim still running says LIVE in filled red with a
+ * pulsing white dot, a replay says REPLAY in muted ink and stands still. Large
  * beside the view switcher, small in the left rail so the phone shows it too.
  */
 function LiveChip({
@@ -482,6 +656,8 @@ function StageBanner({
   const showAttempt = claim.attemptChain !== undefined
     && (claim.attemptChain.attempt > 1 || claim.attemptChain.status !== "ACTIVE");
   const settled = !replaying && (claim.state >= 9 || attemptStopped);
+  // The headline the card says, and the raw record it keeps in Details.
+  const failure = attemptFailure(claim);
   // The LIVE chip beside the view switcher already carries the stage and
   // whether the page is following it, so the pill speaks only when it has
   // something the chip does not: which attempt this is, or a closed record.
@@ -527,11 +703,13 @@ function StageBanner({
         ) : null}
       </motion.div>
       {attemptStopped && claim.attemptChain !== undefined ? (
-        <div className="absolute top-full right-0 z-30 mt-3 flex w-max max-w-[min(42rem,80vw)] flex-col items-center gap-3 border border-no/30 bg-card px-5 py-4 text-[13px] text-muted-foreground shadow-lg">
-          <div className="flex w-full flex-col gap-1 text-center">
-            <span className="flex items-center justify-center gap-2 font-medium text-foreground">
-              <CloseCircle size="16" variant="Bold" className="shrink-0 text-no" />
-              <span className="break-words">{attemptFailureSentence(claim)}</span>
+        <div className="absolute top-full right-0 z-30 mt-3 flex w-max max-w-[min(42rem,80vw)] flex-col items-center gap-3 overflow-hidden border border-no/30 bg-card px-5 py-4 text-[13px] text-muted-foreground shadow-lg">
+          <div className="flex w-full min-w-0 flex-col gap-1 text-center">
+            <span className="flex items-start justify-center gap-2 font-medium text-foreground">
+              <CloseCircle size="16" variant="Bold" className="mt-px shrink-0 text-no" />
+              {/* min-w-0 lets the sentence wrap instead of pushing the icon
+                  onto the card's border, whatever the recorded reason says. */}
+              <span className="min-w-0 break-words">{failure.sentence}</span>
             </span>
             <p className="text-[13px] leading-[1.5] text-muted-foreground">
               {claim.attemptChain.status === "GAVE_UP"
@@ -540,12 +718,31 @@ function StageBanner({
             </p>
           </div>
 
+          {/* The raw record, one click away: the Proof section's disclosure,
+              squared to match this card. A transaction dump is one unbroken
+              token, so it breaks anywhere rather than widening the card. */}
+          {failure.detail === undefined ? null : (
+            <details className="group w-full min-w-0 border border-border bg-surface text-left">
+              <summary className="flex min-h-10 cursor-pointer list-none items-center gap-2 px-3 py-2 text-xs font-medium text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset focus-visible:outline-none">
+                <ArrowDown2
+                  size="13"
+                  variant="Bold"
+                  className="shrink-0 text-muted-foreground motion-safe:transition-transform group-open:rotate-180"
+                />
+                Details
+              </summary>
+              <pre className="ov-scroll max-h-48 max-w-full overflow-auto border-t border-border p-3 font-mono text-[11px] leading-relaxed [overflow-wrap:anywhere] whitespace-pre-wrap text-foreground/85">
+                {failure.detail}
+              </pre>
+            </details>
+          )}
+
           {/* The weather only matters while a relaunch is still possible. */}
           {claim.attemptChain.status === "VOIDED" ? <WeatherStrip compact /> : null}
 
           {claim.attemptChain.status === "VOIDED" && !claim.attemptChain.relaunchedAs && claim.attemptChain.void?.atMs ? (
-            <p className="font-mono text-[11px] text-muted-foreground/80">
-              gives up at {formatLocalHourMinute(claim.attemptChain.void.atMs + 6 * 60 * 60 * 1000)}
+            <p className="font-mono text-[11px] whitespace-nowrap text-muted-foreground/80">
+              gives up at {formatClock(claim.attemptChain.void.atMs + 6 * 60 * 60 * 1000)}
             </p>
           ) : null}
 
@@ -581,16 +778,111 @@ function StageBanner({
   );
 }
 
+// A one-second clock for the rail's two counters. The page's shared useNow
+// ticks once a minute on purpose (a whole-page redraw every second would drag
+// the canvas), and the React Compiler purity rule forbids reading Date.now()
+// during render, so the fast tick lives in its own tiny store, exactly the way
+// use-now.tsx holds the coarse one. It runs only while someone is counting.
+let fastNowMs = Date.now();
+const fastListeners = new Set<() => void>();
+let fastTimer: ReturnType<typeof setInterval> | undefined;
+
+function subscribeFastNow(listener: () => void): () => void {
+  fastListeners.add(listener);
+  if (fastTimer === undefined) {
+    // Fresh on start: the stored value is as old as the last subscriber.
+    fastNowMs = Date.now();
+    fastTimer = setInterval(() => {
+      fastNowMs = Date.now();
+      fastListeners.forEach((notify) => notify());
+    }, 1_000);
+  }
+  return () => {
+    fastListeners.delete(listener);
+    if (fastListeners.size === 0 && fastTimer !== undefined) {
+      clearInterval(fastTimer);
+      fastTimer = undefined;
+    }
+  };
+}
+
+/** No ticking for a stopped claim: its numbers never change again. */
+const NEVER_TICKS = () => () => {};
+
+/** The one-second clock while `ticking`; null during SSR and hydration. */
+function useFastNow(ticking: boolean): number | null {
+  return useSyncExternalStore(
+    ticking ? subscribeFastNow : NEVER_TICKS,
+    () => fastNowMs,
+    () => null,
+  );
+}
+
+/**
+ * The rail's two counters, in one subtree with its own one-second clock: how
+ * long this verification has been running, and what its phase is waiting on.
+ * Only these two lines repaint each second; the rest of the page keeps the
+ * coarse clock.
+ */
+function RailClocks({
+  claim,
+  span,
+  now,
+}: {
+  claim: ClaimInspection;
+  span: RunSpan;
+  now: number | null;
+}) {
+  const running = span.endMs === null && span.totalMs === null;
+  const fastNow = useFastNow(running);
+
+  // The fast clock while it runs, the page's coarse clock otherwise: the fast
+  // store stops updating the moment nobody is counting, and the coarse one
+  // also covers the frame before the first tick.
+  const tick = (running ? fastNow : null) ?? now;
+  if (tick === null) return null;
+  const duration = runDurationLine(span, tick);
+  const deadline = phaseDeadlineLine(claim, tick);
+  if (duration === null && deadline === null) return null;
+  const line = "flex items-start gap-2 text-[13px] text-muted-foreground tabular-nums";
+  return (
+    // Tighter than the rail's own rhythm: the two counters read as one block.
+    <div className="space-y-1.5">
+      {duration === null ? null : (
+        <p className={line}>
+          <Timer1
+            size="14"
+            variant="Bold"
+            className={cn(
+              "mt-px shrink-0",
+              running ? "text-[var(--ov-accent)]" : "text-muted-foreground",
+            )}
+          />
+          {duration}
+        </p>
+      )}
+      {deadline === null ? null : (
+        <p className={line}>
+          <Clock size="14" variant="Bold" className="mt-px shrink-0 text-[var(--ov-accent)]" />
+          {deadline}
+        </p>
+      )}
+    </div>
+  );
+}
+
 function LeftRail({
   claim,
   now,
   replay,
   liveMode,
+  span,
 }: {
   claim: ClaimInspection;
   now: number | null;
   replay: ReplayControls;
   liveMode: LiveMode | null;
+  span: RunSpan;
 }) {
   const stranded = now !== null && isStrandedDiscussion(claim, now);
   const terminal = claim.state >= 9;
@@ -623,10 +915,7 @@ function LeftRail({
           stranded={stranded}
           attemptStatus={claim.attemptChain?.status}
         />
-        <p className="flex items-center gap-2 text-[13px] text-muted-foreground tabular-nums">
-          <Clock size="14" variant="Bold" className="text-[var(--ov-accent)]" />
-          {nextDeadlineLine(claim, now)}
-        </p>
+        <RailClocks claim={claim} span={span} now={now} />
         {/* The same broadcast marker as the chrome bar, one size down: the
             phone opens this rail as a drawer and must say LIVE here too. */}
         {liveMode === null ? null : <LiveChip mode={liveMode} size="sm" />}
@@ -1725,6 +2014,11 @@ function ClaimCanvasContent({ params }: ClaimCanvasPageProps) {
   const liveMode = claim === null
     ? null
     : claimLiveMode({ claim, replay, now, streamStatus });
+  // When this verification opened and, once it stopped, when it stopped.
+  const runSpan = useMemo(
+    () => claim === null ? EMPTY_RUN_SPAN : claimRunSpan(claim, events),
+    [claim, events],
+  );
 
   if (loading) {
     return (
@@ -1778,7 +2072,7 @@ function ClaimCanvasContent({ params }: ClaimCanvasPageProps) {
   return (
     <div className="relative flex h-dvh overflow-hidden bg-background text-foreground">
       <CollapsibleRail>
-        <LeftRail claim={claim} now={now} replay={replay} liveMode={liveMode} />
+        <LeftRail claim={claim} now={now} replay={replay} liveMode={liveMode} span={runSpan} />
       </CollapsibleRail>
 
       <main className="relative flex h-dvh flex-1 flex-col overflow-hidden">
@@ -1944,7 +2238,7 @@ function ClaimCanvasContent({ params }: ClaimCanvasPageProps) {
 
       {leftOpen ? (
         <MobileSheet title="Claim details" onClose={() => setLeftOpen(false)}>
-          <LeftRail claim={claim} now={now} replay={replay} liveMode={liveMode} />
+          <LeftRail claim={claim} now={now} replay={replay} liveMode={liveMode} span={runSpan} />
         </MobileSheet>
       ) : null}
 

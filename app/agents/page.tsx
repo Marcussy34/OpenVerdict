@@ -1,27 +1,75 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
-import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { ModelLogo, modelVariantFor } from "@/components/viz/model-logo";
+import { modelVariantFor } from "@/components/viz/model-logo";
 import { StakeSeatCard } from "@/components/agents/stake-seat-card";
-import {
-  stakeSentence,
-  type StakedAgentEntry,
-} from "@/components/agents/stake-line";
+import { JurorSeatCard } from "@/components/agents/juror-seat-card";
+import { type StakedAgentEntry } from "@/components/agents/stake-line";
 import { modelFamily } from "@/components/viz/model-badge";
 import { cn } from "@/lib/utils";
-import { Warning2, Refresh, ArrowRight2 } from "@/components/icons";
+import { Warning2, Refresh } from "@/components/icons";
 
-function shortId(id: string): string {
-  return id.length <= 14 ? id : `${id.slice(0, 8)}…${id.slice(-4)}`;
+/**
+ * The research prompt hash the active seats carry, which is the roster's
+ * current generation. Seats staked together share one hash and a republished
+ * prompt starts the next generation, so a retired seat never matches. The most
+ * common hash wins if the active seats ever straddle two generations, and an
+ * API that sends none at all yields nothing to compare.
+ */
+function currentPromptHash(agents: readonly StakedAgentEntry[]): string | undefined {
+  const counts = new Map<string, number>();
+  for (const agent of agents) {
+    if (!agent.active || !agent.promptHash) continue;
+    counts.set(agent.promptHash, (counts.get(agent.promptHash) ?? 0) + 1);
+  }
+  let current: string | undefined;
+  let best = 0;
+  for (const [hash, count] of counts) {
+    if (count > best) {
+      current = hash;
+      best = count;
+    }
+  }
+  return current;
 }
 
-/** " · earned 0.42 SUI" when any jury rewards exist, empty otherwise. */
-function earnedSui(earnedMist: string | undefined): string {
-  if (!earnedMist || earnedMist === "0") return "";
-  const sui = Number(BigInt(earnedMist)) / 1_000_000_000;
-  return ` · earned ${sui.toFixed(sui >= 1 ? 2 : 3)} SUI`;
+/** "moonshotai/Kimi-K2.6" reads as "Kimi K2.6": the family, then the revision. */
+function modelWords(modelId: string): string {
+  return modelFamily(modelId).short.replace(/^([A-Za-z]+)-/, "$1 ");
+}
+
+/** "DeepSeek", or "DeepSeek and Kimi" once more than one family is out. */
+function joinNames(names: readonly string[]): string {
+  if (names.length <= 1) return names[0] ?? "";
+  return `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+}
+
+/**
+ * Why a whole family is off the draw, in one line: the router is what is
+ * missing, not the protocol, and the seats come back with one on-chain flag.
+ */
+function sittingOutSentence(models: readonly string[]): string {
+  const seats = models.length > 1 ? "their seats" : "its seats";
+  return `GonkaRouter does not serve ${joinNames(models)} right now, so the operator holds ${seats} out of the draw. They return with one on-chain switch.`;
+}
+
+/** "34 registered · 10 active · 2 sitting out · 2 of 3 model families". */
+function rosterLine(counts: {
+  registered: number;
+  active: number;
+  sittingOut: number;
+  activeFamilies: number;
+  sittingOutFamilies: number;
+}): string {
+  const parts = [`${counts.registered} registered`, `${counts.active} active`];
+  if (counts.sittingOut > 0) parts.push(`${counts.sittingOut} sitting out`);
+  parts.push(
+    counts.sittingOutFamilies > 0
+      ? `${counts.activeFamilies} of ${counts.activeFamilies + counts.sittingOutFamilies} model families`
+      : `${counts.activeFamilies} model families`,
+  );
+  return parts.join(" · ");
 }
 
 export default function AgentsPage() {
@@ -91,6 +139,37 @@ export default function AgentsPage() {
   // in the API for history but out of the directory.
   const activeAgents = useMemo(() => agents.filter((a) => a.active), [agents]);
 
+  /**
+   * Seats the operator holds out of the draw, rather than seats it retired: a
+   * model family with no active seat at all, staked under the same research
+   * prompt as the seats that are sitting. Retired generations carry an older
+   * prompt hash, so they stay hidden, and a roster with no current hash to
+   * compare against shows nothing.
+   */
+  const sittingOutAgents = useMemo(() => {
+    const generation = currentPromptHash(agents);
+    if (generation === undefined) return [];
+    const activeFamilies = new Set(
+      agents.filter((a) => a.active).map((a) => modelFamily(a.modelId).key),
+    );
+    return agents.filter(
+      (agent) =>
+        !agent.active &&
+        !activeFamilies.has(modelFamily(agent.modelId).key) &&
+        agent.promptHash === generation,
+    );
+  }, [agents]);
+
+  /** One entry per family sitting out, for the chip and the one-line copy. */
+  const sittingOutFamilies = useMemo(() => {
+    const map = new Map<string, { name: string; modelId: string }>();
+    for (const agent of sittingOutAgents) {
+      const fam = modelFamily(agent.modelId);
+      if (!map.has(fam.key)) map.set(fam.key, { name: fam.name, modelId: agent.modelId });
+    }
+    return map;
+  }, [sittingOutAgents]);
+
   const filteredAgents = useMemo(
     () =>
       activeAgents.filter(
@@ -99,11 +178,25 @@ export default function AgentsPage() {
     [activeAgents, familyFilter],
   );
 
+  // The sitting-out group answers to the same chip filter as the active grid.
+  const filteredSittingOut = useMemo(
+    () =>
+      sittingOutAgents.filter(
+        (agent) => familyFilter === "ALL" || modelFamily(agent.modelId).key === familyFilter,
+      ),
+    [sittingOutAgents, familyFilter],
+  );
+
   // Tints run over the whole registry, not the filtered view, so an agent
-  // keeps its tone when the family filter changes.
+  // keeps its tone when the family filter changes. The sitting-out seats ride
+  // at the end, so an active seat's tone never shifts either.
   const agentSeats = useMemo(
-    () => activeAgents.map((agent) => ({ id: agent.agentProfileId, modelId: agent.modelId })),
-    [activeAgents],
+    () =>
+      [...activeAgents, ...sittingOutAgents].map((agent) => ({
+        id: agent.agentProfileId,
+        modelId: agent.modelId,
+      })),
+    [activeAgents, sittingOutAgents],
   );
 
   const activeCount = activeAgents.length;
@@ -117,7 +210,13 @@ export default function AgentsPage() {
         <h1 className="ov-display text-4xl text-ocean md:text-5xl">Agents</h1>
         {!loading && !engineOffline && agents.length > 0 && (
           <p className="ov-micro ov-micro-sm text-muted-foreground">
-            {agents.length} registered · {activeCount} active · {familyGroups.size} model families
+            {rosterLine({
+              registered: agents.length,
+              active: activeCount,
+              sittingOut: sittingOutAgents.length,
+              activeFamilies: familyGroups.size,
+              sittingOutFamilies: sittingOutFamilies.size,
+            })}
           </p>
         )}
       </div>
@@ -140,6 +239,16 @@ export default function AgentsPage() {
               active={familyFilter === key}
               onClick={() => setFamilyFilter(key)}
             />
+          ))}
+          {/* Not a control: a family with no active seat has nothing to filter
+              to, so it states the fact and stays out of the tab order. */}
+          {[...sittingOutFamilies.entries()].map(([key, fam]) => (
+            <span
+              key={key}
+              className="flex items-center border border-dashed border-border bg-surface px-3 py-1.5 text-xs font-medium text-muted-foreground"
+            >
+              {fam.name} · sitting out
+            </span>
           ))}
         </div>
       )}
@@ -172,51 +281,41 @@ export default function AgentsPage() {
             {/* Three seats per row so the whole registry is in view at once
                 (owner). Tints are keyed on registry order, so a model's seats
                 differ. */}
-            {filteredAgents.map((agent) => {
-              const fam = modelFamily(agent.modelId);
-              const staked = stakeSentence(agent);
-              return (
-                <li key={agent.agentProfileId} className="ov-edge rounded-2xl border border-border bg-card">
-                  <Link
-                    href={`/agents/${agent.agentProfileId}`}
-                    className="flex h-full items-center gap-3 rounded-2xl px-4 py-3 transition-colors hover:bg-surface focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset focus-visible:outline-none"
-                  >
-                    <ModelLogo
-                      modelId={agent.modelId}
-                      variant={modelVariantFor(agentSeats, agent.agentProfileId)}
-                      size={36}
-                    />
-                    <div className="min-w-0 flex-1">
-                      <p className="flex items-center gap-1.5 text-sm font-medium text-ocean">
-                        <span aria-hidden className={cn("size-1.5 shrink-0 rounded-full", fam.dot)} />
-                        <span className="truncate">{fam.name}</span>
-                      </p>
-                      <p className="mt-0.5 font-mono text-[11px] leading-snug break-all text-muted-foreground">
-                        {shortId(agent.agentProfileId)}
-                      </p>
-                      {agent.trackRecord && (
-                        <p className="mt-0.5 text-[11px] leading-snug text-muted-foreground">
-                          {agent.trackRecord.seatsServed} seats ·{" "}
-                          {agent.trackRecord.revealed} revealed ·{" "}
-                          {agent.trackRecord.agreedWithCertificate} agreed
-                          {earnedSui(agent.earnedMist)}
-                        </p>
-                      )}
-                      {/* Real stake, so who posted it and how much is the headline. */}
-                      {staked && (
-                        <p className="mt-0.5 font-mono text-[11px] leading-snug break-all text-muted-foreground">
-                          {staked}
-                        </p>
-                      )}
-                    </div>
-                    <ArrowRight2 size="14" className="shrink-0 text-muted-foreground" />
-                  </Link>
-                </li>
-              );
-            })}
+            {filteredAgents.map((agent) => (
+              <JurorSeatCard
+                key={agent.agentProfileId}
+                agent={agent}
+                variant={modelVariantFor(agentSeats, agent.agentProfileId)}
+              />
+            ))}
           </ul>
         )}
       </section>
+
+      {/* Staked seats the operator holds out of the draw. Quiet by design: the
+          seats are healthy, their model is the thing that is unavailable. */}
+      {!loading && !engineOffline && filteredSittingOut.length > 0 && (
+        <section className="mx-auto w-full space-y-4">
+          <div className="space-y-1.5 text-center">
+            <p className="ov-micro ov-micro-sm text-muted-foreground">Sitting out</p>
+            <p className="mx-auto max-w-2xl text-sm leading-relaxed text-muted-foreground">
+              {sittingOutSentence(
+                [...sittingOutFamilies.values()].map((fam) => modelWords(fam.modelId)),
+              )}
+            </p>
+          </div>
+          <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {filteredSittingOut.map((agent) => (
+              <JurorSeatCard
+                key={agent.agentProfileId}
+                agent={agent}
+                variant={modelVariantFor(agentSeats, agent.agentProfileId)}
+                sittingOut
+              />
+            ))}
+          </ul>
+        </section>
+      )}
 
       {/* Operator onboarding stays: it is the one action this page offers. */}
       <div className="mx-auto w-full max-w-3xl">

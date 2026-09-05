@@ -76,3 +76,41 @@ export function juryDrawRuleSentence(
   }
   return "Two model families, at most three seats per model: degraded mode, set on chain by the operator while a family is down.";
 }
+
+/**
+ * Probe latency in the unit a reader can feel: whole milliseconds under a
+ * second, one decimal of a second above it.
+ */
+export function weatherLatencyLabel(latencyMs: number): string {
+  const ms = Math.max(0, Math.round(latencyMs));
+  if (ms < 1_000) return `${ms} ms`;
+  return `${(ms / 1_000).toFixed(1)} s`;
+}
+
+/**
+ * How old the newest probe is. Without a probe time the page has to say so
+ * rather than print an age it cannot know.
+ */
+export function weatherProbedAgoLabel(
+  probedAtMs: number | null | undefined,
+  nowMs: number,
+): string {
+  if (probedAtMs === null || probedAtMs === undefined) return "no recent probe";
+  const seconds = Math.max(0, Math.round((nowMs - probedAtMs) / 1_000));
+  if (seconds < 60) return `probed ${seconds} s ago`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `probed ${minutes} min ago`;
+  return `probed ${Math.floor(minutes / 60)} h ago`;
+}
+
+/**
+ * The families that failed their probe, as a sentence. Empty when every probe
+ * answered, so the caller falls back to the reason the draw rule gives.
+ */
+export function weatherDownSentence(weather: WeatherReport): string {
+  const down = weather.families
+    .filter((family) => !family.ok)
+    .map((family) => weatherFamilyLabel(family.family, family.modelId));
+  if (down.length === 0) return "";
+  return `${joinNames(down)} ${down.length === 1 ? "is" : "are"} down.`;
+}

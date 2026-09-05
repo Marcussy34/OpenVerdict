@@ -5,7 +5,10 @@ import {
   juryDrawRuleSentence,
   juryFamiliesLabel,
   juryRequirementSentence,
+  weatherDownSentence,
   weatherFamilyLabel,
+  weatherLatencyLabel,
+  weatherProbedAgoLabel,
   weatherRefusalMessage,
 } from "./weather-copy";
 
@@ -125,5 +128,53 @@ describe("juryDrawRuleSentence", () => {
     expect(juryDrawRuleSentence(undefined)).toBe(
       "At most two seats per model family, three families in every jury.",
     );
+  });
+});
+
+describe("weatherLatencyLabel", () => {
+  it("keeps a sub-second probe in milliseconds", () => {
+    expect(weatherLatencyLabel(287)).toBe("287 ms");
+  });
+
+  it("switches to one decimal of a second above a second", () => {
+    expect(weatherLatencyLabel(14_692)).toBe("14.7 s");
+    expect(weatherLatencyLabel(27_192)).toBe("27.2 s");
+  });
+
+  it("never prints a negative latency", () => {
+    expect(weatherLatencyLabel(-5)).toBe("0 ms");
+  });
+});
+
+describe("weatherProbedAgoLabel", () => {
+  it("counts seconds for a fresh probe", () => {
+    expect(weatherProbedAgoLabel(1_000, 41_000)).toBe("probed 40 s ago");
+  });
+
+  it("counts minutes and hours for an older one", () => {
+    expect(weatherProbedAgoLabel(0, 3 * 60_000)).toBe("probed 3 min ago");
+    expect(weatherProbedAgoLabel(0, 2 * 3_600_000)).toBe("probed 2 h ago");
+  });
+
+  it("says there is no probe when the report carries no time", () => {
+    expect(weatherProbedAgoLabel(null, 1_000)).toBe("no recent probe");
+  });
+});
+
+describe("weatherDownSentence", () => {
+  it("names one down family", () => {
+    expect(weatherDownSentence(report([family("deepseek", true), family("kimi", false)]))).toBe(
+      "Kimi is down.",
+    );
+  });
+
+  it("joins several down families", () => {
+    expect(
+      weatherDownSentence(report([family("minimax", false), family("kimi", false)])),
+    ).toBe("MiniMax and Kimi are down.");
+  });
+
+  it("says nothing when every probe answered", () => {
+    expect(weatherDownSentence(report([family("deepseek", true)]))).toBe("");
   });
 });
