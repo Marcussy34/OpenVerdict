@@ -3310,3 +3310,61 @@ the graph; the "experimental" legal prose on Terms and Risk; the footer's
 relative "Agents" link on the docs host; the landing page does not carry
 the "Set up SKILL.md" line; the Full view widens the frame to max-w-7xl
 (the title block shifts left when switching views).
+
+## 3ay. 2026-09-05 13:05: DEGRADED MODE LIVE ON TESTNET, KIMI OUT OF THE DRAW (read 3ax then this)
+
+WHY: GonkaRouter stopped serving moonshotai/Kimi-K2.6 at 01:39 ("unsupported
+model"; 503 by 10:00) while still listing it. Owner approved a transparent
+degraded mode (10:50).
+
+CODE (all committed, HEAD bf48c8f + docs): e143201 degraded mode across
+Move, engine, storage, CLI, console, auditor, docs, skill, runbook (1056
+tests, 99 Move tests, localnet e2e settled a claim on two families and
+reversed); e3aff7d upgrade bytecode; 514391f manifest packageId ->
+0x437443b02507fd895a374d810ca216bacca3cedfe277772b6233772950e8500b;
+bf48c8f reader fix (a struct introduced by an upgrade is addressed by the
+version that introduced it: manifest.juryDiversityPackageId = 0x437443b0,
+tried first, then packageId, then originalPackageId). Deploys cfac8e5a,
+e226ccd7, 4d6f66b5 (live).
+
+ON CHAIN TODAY (operator 0xff3538d7, AdminCap 0x30d19869, UpgradeCap
+0x2f72f0b4): upgrade tx CEH1M5Jc9JNTrNdpRsBjnd5cJpv9K44mJt5Nd67n7rsd (the
+script errored on the read-back "Transaction not found"; the tx had
+succeeded; packageId set by hand). set_jury_diversity(2, 3) tx
+ADxcQvrUAwKx2wTVPtoaBZQZeCtpZk9btNL6PEkptwHV (field object 0x17456d6e).
+Five seats staked from the container with scripts/stake-seat.ts
+(throwaway keys funded 0.2 SUI each by the operator): DeepSeek SKEPTIC
+0x4ba2620d, DeepSeek INVESTIGATOR 0xd92b8006, MiniMax INVESTIGATOR
+0x8c215e0a, MiniMax SOURCE_AUTHENTICITY 0x7c646abe, MiniMax SKEPTIC
+0x68c80467; two confirms hit the 5/min rate limit and were completed by
+POST /api/agents/stake/confirm with the reservation ids read from the
+stake_reservations table (15 min TTL). Kimi seats 0xb1131089 and
+0x255a8f65 set inactive (weight 10000 preserved; txs DnVhGqHB, EF92kRpC).
+Roster: 12 active on 2 families. Two stale Kimi rows from the previous
+registry (0x19e6bda3, 0x6ef1974f) were active in agent_manifests and kept
+the weather gate listing kimi as an active family: set inactive by a
+direct UPDATE (the gate reads the engine's mirror, the draw reads chain).
+
+HOW (this machine cannot reach fullnode.testnet.sui.io: TLS intercepted;
+production can): every operator step ran inside the Railway container,
+`railway ssh -s app -- sh -c 'cd /app && OPENVERDICT_RELEASE_MANIFEST=
+config/release.testnet.json ./node_modules/.bin/tsx cli/src/index.ts ...'`
+(no curl in the image; use node). Logs in the scratchpad:
+upgrade-2026-09-05.log, stake-seats-2026-09-05.log,
+kimi-deactivate-2026-09-05.log, roster-before.txt.
+
+REVERSAL (when Kimi is back): agents eligibility <the two Kimi ids>
+--active true, then registry diversity --required 3 --per-model 2; leave
+the five added seats and the unstaking DeepSeek skeptic 0x81a73726 alone;
+the two stale rows stay inactive.
+
+RUNNING: Monitor bl2eh3kup runs scratchpad/e2e-submit.sh (submits "The EU
+AI Act entered into force on 1 August 2024." on the first clear probe,
+then ov watch --verbose into e2e-run.log). Board watcher b64wjsym0.
+
+OPEN: activeFamilies() should consider only seats present in the current
+registry (code fix, next worker window at 14:10); the stake amount is
+fixed at the 0.1 SUI minimum by the app while the chain accepts any
+amount (owner asked; proposal: free amount with draw weight proportional
+to the stake, capped, after the run); the demo script is at
+docs/demo/demo-script-3min.md.
