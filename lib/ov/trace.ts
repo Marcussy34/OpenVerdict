@@ -273,6 +273,14 @@ export function buildTrace(result: AuditResult, filter: TraceFilter = {}): Trace
     };
   });
   if (filter.round === 2 && !phases.has(2)) notes.push("this claim settled in one round; there is no round two");
+  // A jury of fewer than three model families is a real verdict from a smaller
+  // and more correlated panel, and the reader is told so before the trail.
+  const jury = result.sources.inspection.jury;
+  if (jury?.degraded) {
+    notes.push(
+      `this jury sat on ${jury.familyCount} model families (degraded mode): the operator lowered the requirement to ${jury.requiredFamilies} on chain while a provider was down`,
+    );
+  }
   // Claims recorded before the pinned table vote researched again in round two.
   const researchedTwice = jurors.some((juror) =>
     juror.rounds.some((round) => round.phase === 2 && round.kind === "research"),

@@ -254,6 +254,8 @@ export type ClaimInspection = {
   deliberation?: DeliberationTurnPublic[];
   attemptChain?: AttemptChain;
   debateConvergedAfterExchange?: 1 | 2 | 3;
+  /** Model-family diversity of this claim's committee; absent before the draw. */
+  jury?: JuryDiversitySummary;
   result?: FinalizeReport;
   /** Populated when inspect() is called with { verify: true }. */
   verification?: {
@@ -334,6 +336,8 @@ export type FactCheckReport = {
     contentHash: `0x${string}`;
   }[];
   evidenceRoot?: `0x${string}`;
+  /** Model-family diversity of the committee that judged this claim. */
+  jury?: JuryDiversitySummary;
   sui: {
     claimObjectId: string;
     committeeId?: string;
@@ -512,14 +516,42 @@ export type WeatherFamily = {
   status: string;
 };
 
-/** The three families' latest probes plus the web search provider. A jury needs all of them ok. */
+/**
+ * The model families' latest probes plus the web search provider. A jury needs
+ * every family that still holds an active seat, enough of them to satisfy the
+ * registry's draw rule, and web search.
+ */
 export type WeatherReport = {
   probedAtMs: number | null;
   /** No probe, or the newest probe is older than WEATHER_STALE_MS. */
   stale: boolean;
-  /** Not stale and every family ok. Unknown weather is never "clear". */
+  /**
+   * Not stale, every active family ok, at least `requiredFamilies` of them,
+   * and web search ok. Unknown weather is never "clear".
+   */
   clear: boolean;
   families: WeatherFamily[];
+  /**
+   * Distinct model families the committee draw needs, read from the registry
+   * on chain. Three normally; two while the operator runs degraded mode.
+   */
+  requiredFamilies: number;
+  /** Families holding at least one active eligible seat on the registry. */
+  activeFamilies: string[];
+};
+
+/**
+ * How many model families actually sat on a committee, and how many the
+ * registry demanded when it was drawn. `degraded` is the public flag: fewer
+ * than three families judged this claim, and the chain records that.
+ */
+export type JuryDiversitySummary = {
+  /** Distinct model families among the committee's seats. */
+  familyCount: number;
+  /** What the registry required at the moment of the draw. */
+  requiredFamilies: number;
+  /** familyCount < 3: the jury sat in degraded mode. */
+  degraded: boolean;
 };
 
 /**

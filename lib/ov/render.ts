@@ -7,12 +7,14 @@ import type {
   AgentDirectoryEntry,
   AttemptChain,
   ClaimInspection,
+  JuryDiversitySummary,
   WeatherReport,
 } from "../engine/contract";
 import type { AgentManifestDocument } from "../protocol/types";
 import { shortHex } from "../audit/audit-claim";
 import { CLAIM_STATE, OUTCOME } from "../protocol/constants";
 import { formatSui } from "../web/format-sui";
+import { juryFamiliesLabel } from "../web/weather-copy";
 import { OvError, asArray, asNumber, asString, isRecord, type Json, type StreamEvent } from "./api";
 
 const SUIVISION = "https://testnet.suivision.xyz";
@@ -270,6 +272,23 @@ export function weatherSummary(report: WeatherReport, nowMs: number): string {
   return `${report.clear ? "clear" : "not clear"}, ${probed}`;
 }
 
+/**
+ * The draw rule behind the gate: how many model families a jury needs and how
+ * many still hold an active seat. It reads two while the operator runs
+ * degraded mode, so never say three from memory.
+ */
+export function weatherRuleLine(report: WeatherReport): string {
+  const active = report.activeFamilies ?? [];
+  const names = active.length === 0 ? "none" : active.map(familyLabel).join(", ");
+  const degraded = report.requiredFamilies < 3 ? " (degraded mode)" : "";
+  return `rule        ${report.requiredFamilies} model families required${degraded}, ${active.length} active: ${names}`;
+}
+
+/** Display name for a family label with no probe row to draw a model id from. */
+function familyLabel(family: string): string {
+  return familyName(family, family);
+}
+
 /** Compact one-liner for watch lines: "DeepSeek 429, MiniMax ok, Kimi TIMEOUT, Web search ok". */
 export function weatherInline(report: WeatherReport): string {
   const families = [...(report.families ?? [])].sort(
@@ -282,7 +301,7 @@ export function weatherInline(report: WeatherReport): string {
 }
 
 export const NOT_CLEAR_NOTE =
-  "not clear means new submissions are refused until all four families answer a probe";
+  "not clear means new submissions are refused until every active model family and web search answer a probe";
 
 // ---------------------------------------------------------------------------
 // Claim status block
@@ -312,6 +331,17 @@ function nextDeadline(
     default:
       return undefined;
   }
+}
+
+/**
+ * "3 model families" normally, or "2 model families (degraded mode), registry
+ * required 2 at the draw" when fewer than three sat. The phrase itself comes
+ * from the shared copy helper, so the terminal and the pages never drift.
+ */
+export function juryWords(jury: JuryDiversitySummary): string {
+  const families = juryFamiliesLabel(jury);
+  if (!jury.degraded) return families;
+  return `${families}, registry required ${jury.requiredFamilies} at the draw`;
 }
 
 /** "attempt 2 of 3, active" from the chain, or "single attempt". */
@@ -366,6 +396,10 @@ export function renderStatus(inspection: ClaimInspection, base: string, nowMs: n
   const failed = commitments.filter((seat) => seat.failureStatus);
   if (failed.length > 0) {
     lines.push(`failed     ${failed.map((seat) => `${modelName(seat.modelId)} ${seat.failureStatus}`).join(", ")}`);
+  }
+  // Degraded mode is never silent: say it wherever the claim is described.
+  if (inspection.jury !== undefined) {
+    lines.push(`jury       ${juryWords(inspection.jury)}`);
   }
   lines.push(`attempt    ${attemptWords(inspection.attemptChain)}`);
   const chain = inspection.attemptChain;

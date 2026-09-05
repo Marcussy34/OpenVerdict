@@ -30,6 +30,8 @@ module openverdict::agent_registry {
     const E_UNSTAKE_EXISTS: u64 = 17;
     const E_UNSTAKE_MISSING: u64 = 18;
     const E_UNSTAKE_NOT_READY: u64 = 19;
+    const E_INVALID_DIVERSITY: u64 = 20;
+    const E_UNDRAWABLE_DIVERSITY: u64 = 21;
 
     const PROTOCOL_VERSION: u64 = 1;
     const DEFAULT_PROTOCOL_FEE_BPS: u64 = 500;
@@ -38,6 +40,11 @@ module openverdict::agent_registry {
     /// Real money on a seat: 0.1 SUI is the smallest stake that buys one.
     const MIN_STAKE_MIST: u64 = 100_000_000;
     const MAX_ELIGIBLE_AGENTS: u64 = 32;
+    /// The draw rule every jury uses unless the operator lowers it on chain.
+    const DEFAULT_REQUIRED_MODELS: u8 = 3;
+    const DEFAULT_MAX_SEATS_PER_MODEL: u8 = 2;
+    /// Mirrors jury::COMMITTEE_SIZE: a lowered rule must still seat five.
+    const COMMITTEE_SEATS: u8 = 5;
     const MAX_SELECTION_WEIGHT: u64 = 1_000_000;
     const WITHDRAWAL_DELAY_MS: u64 = 86_400_000;
     const HASH_LENGTH: u64 = 32;
@@ -133,6 +140,14 @@ module openverdict::agent_registry {
     public struct UnstakeKey has copy, drop, store {}
     public struct UnstakeRequest has store { amount: u64, available_at_ms: u64 }
 
+    /// Dynamic field on Registry: the draw rule in force. Absent means the
+    /// defaults, so a registry published before degraded mode draws as before.
+    public struct JuryDiversityKey has copy, drop, store {}
+    public struct JuryDiversity has store, copy, drop {
+        required_models: u8,
+        max_seats_per_model: u8,
+    }
+
     /// Discovery event for a seat that was bought with a real stake.
     public struct AgentStaked has copy, drop {
         agent_profile_id: ID,
@@ -152,6 +167,14 @@ module openverdict::agent_registry {
         agent_profile_id: ID,
         staker: address,
         amount: u64,
+    }
+
+    /// The operator lowered or restored the jury's model-family requirement.
+    /// Degraded mode is never silent: this event is its on-chain record.
+    public struct JuryDiversityChanged has copy, drop {
+        required_models: u8,
+        max_seats_per_model: u8,
+        at_ms: u64,
     }
 
     /// Package initialization creates operational caps and the shared registry.
@@ -441,6 +464,35 @@ module openverdict::agent_registry {
         record.active = active && profile.active;
     }
 
+    /// Lower or restore how many model families a jury needs. Used when a
+    /// provider stops serving a family: with the family's seats deactivated,
+    /// two families can still seat a jury, and every draw records the pair.
+    public entry fun set_jury_diversity(
+        registry: &mut Registry,
+        _admin_cap: &AdminCap,
+        required_models: u8,
+        max_seats_per_model: u8,
+        clock: &Clock,
+    ) {
+        assert!(
+            (required_models == 2 || required_models == 3) &&
+                (max_seats_per_model == 2 || max_seats_per_model == 3),
+            E_INVALID_DIVERSITY,
+        );
+        // Five seats still have to fit: the required families times the
+        // per-family cap is all a minimal roster can seat. (2, 2) buys four.
+        assert!(
+            required_models * max_seats_per_model >= COMMITTEE_SEATS,
+            E_UNDRAWABLE_DIVERSITY,
+        );
+        record_jury_diversity(&mut registry.id, required_models, max_seats_per_model);
+        event::emit(JuryDiversityChanged {
+            required_models,
+            max_seats_per_model,
+            at_ms: clock::timestamp_ms(clock),
+        });
+    }
+
     /// Update the treasury recipient and bounded jury reward fee.
     public entry fun set_treasury_policy(
         registry: &mut Registry,
@@ -543,6 +595,12 @@ module openverdict::agent_registry {
     public fun stake_position_staker(position: &StakePosition): address { position.staker }
     public fun stake_position_amount(position: &StakePosition): u64 { position.amount }
 
+    /// The draw rule in force: the operator's pair, or the protocol defaults
+    /// when the field was never written.
+    public fun jury_diversity(registry: &Registry): (u8, u8) {
+        stored_jury_diversity(&registry.id)
+    }
+
     public fun has_unstake_request(profile: &AgentProfile): bool {
         df::exists_<UnstakeKey>(&profile.id, UnstakeKey {})
     }
@@ -606,6 +664,42 @@ module openverdict::agent_registry {
 
     public(package) fun eligibility_weight(record: &EligibilityRecord): u64 { record.weight }
     public(package) fun eligibility_active(record: &EligibilityRecord): bool { record.active }
+
+    /// The full requirement a degraded jury is measured against.
+    public(package) fun default_jury_diversity(): (u8, u8) {
+        (DEFAULT_REQUIRED_MODELS, DEFAULT_MAX_SEATS_PER_MODEL)
+    }
+
+    /// The pair stored on any object, or the defaults when the field is
+    /// absent. The Registry carries the rule in force; each Committee carries
+    /// the rule its own draw ran under.
+    public(package) fun stored_jury_diversity(id: &UID): (u8, u8) {
+        if (df::exists_<JuryDiversityKey>(id, JuryDiversityKey {})) {
+            let stored = df::borrow<JuryDiversityKey, JuryDiversity>(id, JuryDiversityKey {});
+            (stored.required_models, stored.max_seats_per_model)
+        } else {
+            (DEFAULT_REQUIRED_MODELS, DEFAULT_MAX_SEATS_PER_MODEL)
+        }
+    }
+
+    /// Write the pair, adding the field or overwriting what is there.
+    public(package) fun record_jury_diversity(
+        id: &mut UID,
+        required_models: u8,
+        max_seats_per_model: u8,
+    ) {
+        if (df::exists_<JuryDiversityKey>(id, JuryDiversityKey {})) {
+            let stored = df::borrow_mut<JuryDiversityKey, JuryDiversity>(id, JuryDiversityKey {});
+            stored.required_models = required_models;
+            stored.max_seats_per_model = max_seats_per_model;
+        } else {
+            df::add(
+                id,
+                JuryDiversityKey {},
+                JuryDiversity { required_models, max_seats_per_model },
+            );
+        };
+    }
 
     fun initial_reputation(): Reputation {
         Reputation {
@@ -698,7 +792,15 @@ module openverdict::agent_registry {
     }
 
     #[test_only]
+    /// Detach the recorded draw rule before a test object is deleted.
+    public(package) fun remove_jury_diversity_for_testing(id: &mut UID) {
+        let _ = df::remove_if_exists<JuryDiversityKey, JuryDiversity>(id, JuryDiversityKey {});
+    }
+
+    #[test_only]
     public(package) fun destroy_registry_for_testing(registry: Registry) {
+        let mut registry = registry;
+        remove_jury_diversity_for_testing(&mut registry.id);
         let Registry {
             id,
             version: _,
@@ -728,6 +830,25 @@ module openverdict::agent_registry {
     #[test_only]
     public(package) fun new_pause_cap_for_testing(ctx: &mut TxContext): PauseCap {
         PauseCap { id: object::new(ctx) }
+    }
+
+    #[test_only]
+    public(package) fun new_admin_cap_for_testing(ctx: &mut TxContext): AdminCap {
+        AdminCap { id: object::new(ctx) }
+    }
+
+    #[test_only]
+    public(package) fun destroy_admin_cap_for_testing(cap: AdminCap) {
+        let AdminCap { id } = cap;
+        id.delete();
+    }
+
+    #[test_only]
+    /// Event fields are module private; tests read them through this.
+    public(package) fun diversity_changed_values(
+        changed: &JuryDiversityChanged,
+    ): (u8, u8, u64) {
+        (changed.required_models, changed.max_seats_per_model, changed.at_ms)
     }
 
     #[test_only]

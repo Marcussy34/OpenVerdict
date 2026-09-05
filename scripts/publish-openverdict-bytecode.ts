@@ -3,7 +3,7 @@
  * Publish move/openverdict from prebuilt base64 bytecode through the SDK's
  * JSON-RPC fallback client, for machines whose network path cannot serve the
  * CLI's gRPC publish (docs/demo/runbook.md section 2). Build the input with:
- *   sui move build --dump-bytecode-as-base64 --ignore-chain --path move/openverdict > bytecode.json
+ *   sui move build --dump-bytecode-as-base64 --no-tree-shaking --path move/openverdict > bytecode.json
  * Run: pnpm tsx scripts/publish-openverdict-bytecode.ts <bytecode.json>
  */
 

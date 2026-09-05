@@ -36,6 +36,8 @@ const NOT_CLEAR: WeatherReport = {
   probedAtMs: NOW - 42_000,
   stale: false,
   clear: false,
+  requiredFamilies: 3,
+  activeFamilies: ["deepseek", "minimax", "kimi"],
   families: [
     { modelId: "deepseek-ai/DeepSeek-V4-Flash-0731", family: "deepseek", ok: false, latencyMs: 60_005, status: "429" },
     { modelId: "MiniMaxAI/MiniMax-M2.7", family: "minimax", ok: true, latencyMs: 682, status: "200" },
@@ -88,18 +90,44 @@ describe("weather", () => {
       "MiniMax     ok 0.7 s",
       "Kimi        TIMEOUT",
       "Web search  ok 0.3 s",
+      "rule        3 model families required, 3 active: DeepSeek, MiniMax, Kimi",
       "not clear, probed 42 s ago",
-      "not clear means new submissions are refused until all four families answer a probe",
+      "not clear means new submissions are refused until every active model family and web search answer a probe",
     ]);
   });
 
   it("prints clear weather without the note, and the raw report with --json", async () => {
     const s = setup({ "GET /api/weather": () => json(CLEAR) });
     expect(await weatherCommand(s.env)).toBe(0);
-    expect(s.out).toEqual(["DeepSeek    ok 0.9 s", "MiniMax     ok 0.9 s", "Kimi        ok 0.9 s", "Web search  ok 0.9 s", "clear, probed 42 s ago"]);
+    expect(s.out).toEqual([
+      "DeepSeek    ok 0.9 s",
+      "MiniMax     ok 0.9 s",
+      "Kimi        ok 0.9 s",
+      "Web search  ok 0.9 s",
+      "rule        3 model families required, 3 active: DeepSeek, MiniMax, Kimi",
+      "clear, probed 42 s ago",
+    ]);
     const j = setup({ "GET /api/weather": () => json(CLEAR) }, { json: true });
     expect(await weatherCommand(j.env)).toBe(0);
     expect(JSON.parse(j.out.join("\n"))).toEqual(CLEAR);
+  });
+
+  it("names the lowered rule and the two active families in degraded mode", async () => {
+    const degraded = {
+      ...NOT_CLEAR,
+      clear: true,
+      requiredFamilies: 2,
+      activeFamilies: ["deepseek", "minimax"],
+      families: NOT_CLEAR.families.map((family) =>
+        family.family === "kimi" ? family : { ...family, ok: true, status: "200" },
+      ),
+    };
+    const s = setup({ "GET /api/weather": () => json(degraded) });
+
+    expect(await weatherCommand(s.env)).toBe(0);
+    expect(s.out).toContain(
+      "rule        2 model families required (degraded mode), 2 active: DeepSeek, MiniMax",
+    );
   });
 
   it("fails with exit 2 when the engine is not wired", async () => {

@@ -842,6 +842,209 @@ module openverdict::jury_tests {
     }
 
     #[test]
+    fun degraded_committee_replacement_uses_the_pair_its_draw_recorded() {
+        let mut scenario = test_scenario::begin(OWNER);
+        let registry = agent_registry::new_registry_for_testing(scenario.ctx());
+        let clock = clock::create_for_testing(scenario.ctx());
+        let params = claim::new_claim_params(
+            claim::claim_mode_direct_review(),
+            10,
+            20,
+            30,
+            40,
+            50,
+            60,
+            70,
+            10,
+            80,
+            10,
+        );
+        let mut claim = claim::new_claim_for_testing(
+            &registry,
+            coin::mint_for_testing<jury::JuryTestCoin>(100, scenario.ctx()),
+            params,
+            &clock,
+            scenario.ctx(),
+        );
+        claim::start_direct_review(&registry, &mut claim, &clock);
+        let profiles = vector[
+            object::id_from_address(@0x101),
+            object::id_from_address(@0x102),
+            object::id_from_address(@0x103),
+            object::id_from_address(@0x104),
+            object::id_from_address(@0x105),
+        ];
+        let owners = vector[OWNER, @0xA2, @0xA3, @0xA4, @0xA5];
+        let mut committee = jury::new_committee_for_testing(
+            claim::claim_id(&claim),
+            profiles,
+            owners,
+            false,
+            scenario.ctx(),
+        );
+        // A two-family committee: three seats on 31, two on 32, and both
+        // reserves on 32. Replacing seat zero puts a third seat on 32.
+        jury::set_committee_models_for_testing(
+            &mut committee,
+            vector[hash(31), hash(31), hash(31), hash(32), hash(32)],
+            vector[hash(32), hash(32)],
+        );
+        jury::set_committee_diversity_for_testing(&mut committee, 2, 3);
+        let (required_models, max_seats_per_model) = jury::committee_diversity(&committee);
+        assert!(required_models == 2 && max_seats_per_model == 3);
+        let seat = jury::new_seat_for_testing(
+            claim::claim_id(&claim),
+            jury::committee_id(&committee),
+            profiles[0],
+            OWNER,
+            1,
+            vector[],
+            false,
+            30,
+            40,
+            scenario.ctx(),
+        );
+        let declined_id = jury::jury_seat_id(&seat);
+        let mut tally = jury::new_tally_for_testing(
+            claim::claim_id(&claim),
+            jury::committee_id(&committee),
+            1,
+            vector[],
+            vector[
+                declined_id,
+                object::id_from_address(@0x202),
+                object::id_from_address(@0x203),
+                object::id_from_address(@0x204),
+                object::id_from_address(@0x205),
+            ],
+            scenario.ctx(),
+        );
+        claim::link_committee(&mut claim, jury::committee_id(&committee), jury::tally_id(&tally));
+        let cap = agent_registry::new_agent_cap_for_testing(profiles[0], scenario.ctx());
+        jury::decline_jury_seat(seat, &cap, &clock);
+        agent_registry::destroy_agent_cap_for_testing(cap);
+
+        test_scenario::next_tx(&mut scenario, OWNER);
+        let declined = test_scenario::take_from_sender<jury::JurySeat>(&scenario);
+        jury::replace_declined_seat(
+            &claim,
+            &mut committee,
+            &mut tally,
+            declined,
+            0,
+            &clock,
+            scenario.ctx(),
+        );
+        assert!(jury::committee_reserve_count(&committee) == 1);
+        assert!(jury::expected_seat_ids(&tally)[0] != declined_id);
+        assert!(jury::committee_profiles(&committee)[0] == object::id_from_address(@0x9001));
+        assert!(claim::destroy_claim_for_testing(claim) == 100);
+        jury::destroy_tally_for_testing(tally);
+        jury::destroy_committee_for_testing(committee);
+        agent_registry::destroy_registry_for_testing(registry);
+        clock::destroy_for_testing(clock);
+        scenario.end();
+    }
+
+    #[test, expected_failure(abort_code = openverdict::jury::E_INVALID_RESERVE)]
+    fun the_same_replacement_is_refused_on_a_committee_drawn_in_full() {
+        let mut scenario = test_scenario::begin(OWNER);
+        let registry = agent_registry::new_registry_for_testing(scenario.ctx());
+        let clock = clock::create_for_testing(scenario.ctx());
+        let params = claim::new_claim_params(
+            claim::claim_mode_direct_review(),
+            10,
+            20,
+            30,
+            40,
+            50,
+            60,
+            70,
+            10,
+            80,
+            10,
+        );
+        let mut claim = claim::new_claim_for_testing(
+            &registry,
+            coin::mint_for_testing<jury::JuryTestCoin>(100, scenario.ctx()),
+            params,
+            &clock,
+            scenario.ctx(),
+        );
+        claim::start_direct_review(&registry, &mut claim, &clock);
+        let profiles = vector[
+            object::id_from_address(@0x101),
+            object::id_from_address(@0x102),
+            object::id_from_address(@0x103),
+            object::id_from_address(@0x104),
+            object::id_from_address(@0x105),
+        ];
+        let owners = vector[OWNER, @0xA2, @0xA3, @0xA4, @0xA5];
+        let mut committee = jury::new_committee_for_testing(
+            claim::claim_id(&claim),
+            profiles,
+            owners,
+            false,
+            scenario.ctx(),
+        );
+        // A two-family committee: three seats on 31, two on 32, and both
+        // reserves on 32. Replacing seat zero puts a third seat on 32.
+        jury::set_committee_models_for_testing(
+            &mut committee,
+            vector[hash(31), hash(31), hash(31), hash(32), hash(32)],
+            vector[hash(32), hash(32)],
+        );
+        // No recorded pair, so the committee keeps the full requirement and
+        // a third seat on one family is out of bounds.
+        let (required_models, max_seats_per_model) = jury::committee_diversity(&committee);
+        assert!(required_models == 3 && max_seats_per_model == 2);
+        let seat = jury::new_seat_for_testing(
+            claim::claim_id(&claim),
+            jury::committee_id(&committee),
+            profiles[0],
+            OWNER,
+            1,
+            vector[],
+            false,
+            30,
+            40,
+            scenario.ctx(),
+        );
+        let declined_id = jury::jury_seat_id(&seat);
+        let mut tally = jury::new_tally_for_testing(
+            claim::claim_id(&claim),
+            jury::committee_id(&committee),
+            1,
+            vector[],
+            vector[
+                declined_id,
+                object::id_from_address(@0x202),
+                object::id_from_address(@0x203),
+                object::id_from_address(@0x204),
+                object::id_from_address(@0x205),
+            ],
+            scenario.ctx(),
+        );
+        claim::link_committee(&mut claim, jury::committee_id(&committee), jury::tally_id(&tally));
+        let cap = agent_registry::new_agent_cap_for_testing(profiles[0], scenario.ctx());
+        jury::decline_jury_seat(seat, &cap, &clock);
+        agent_registry::destroy_agent_cap_for_testing(cap);
+
+        test_scenario::next_tx(&mut scenario, OWNER);
+        let declined = test_scenario::take_from_sender<jury::JurySeat>(&scenario);
+        jury::replace_declined_seat(
+            &claim,
+            &mut committee,
+            &mut tally,
+            declined,
+            0,
+            &clock,
+            scenario.ctx(),
+        );
+        abort E_UNEXPECTED_SUCCESS
+    }
+
+    #[test]
     fun reserve_replacement_carries_its_payout_recipient_into_the_seat() {
         let mut scenario = test_scenario::begin(OWNER);
         let registry = agent_registry::new_registry_for_testing(scenario.ctx());

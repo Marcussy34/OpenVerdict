@@ -25,6 +25,8 @@ function badWeather(): WeatherReport {
     probedAtMs: 1_757_000_000_000,
     stale: false,
     clear: false,
+    requiredFamilies: 3,
+    activeFamilies: ["deepseek", "minimax", "kimi"],
     families: [
       {
         modelId: "provider/DeepSeek-R1",

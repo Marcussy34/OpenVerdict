@@ -58,6 +58,7 @@ import type {
 import { isStrandedDiscussion } from "@/lib/engine/claim-lifecycle";
 import { CLAIM_MODE, CLAIM_STATE } from "@/lib/protocol/constants";
 import { suiObjectUrl, suiTransactionUrl } from "@/lib/web/explorer";
+import { juryFamiliesLabel } from "@/lib/web/weather-copy";
 import { cn } from "@/lib/utils";
 import {
   buildDeliberationGraph,
@@ -1023,6 +1024,11 @@ function NodeInspector({
           && candidate.family !== undefined && candidate.family !== "unknown")
         .map((candidate) => candidate.family),
     ).size;
+    // The engine's own count wins when it is there: it comes from the
+    // committee's seats and carries the on-chain degraded flag.
+    const familiesLabel =
+      juryFamiliesLabel(claim.jury) ||
+      (familyCount > 0 ? `${familyCount} model families` : "");
     const tone = outcome === "YES"
       ? { frame: "border-yes/40 ring-yes/15", text: "text-yes", badge: "bg-yes/10 text-yes" }
       : outcome === "NO"
@@ -1061,7 +1067,7 @@ function NodeInspector({
             </p>
             <p className="text-[10px] text-muted-foreground">
               {revealedCount}/{claim.commitments.length} jurors revealed
-              {familyCount > 0 ? ` · ${familyCount} model families` : ""} · equal weight
+              {familiesLabel ? ` · ${familiesLabel}` : ""} · equal weight
             </p>
             <p className="text-[10px] text-muted-foreground tabular-nums">
               Finalized {new Date(node.atMs).toLocaleString()} · Sui testnet
@@ -1196,7 +1202,7 @@ function NodeInspector({
               {claim.mode === CLAIM_MODE.DIRECT_REVIEW ? "Direct review" : "Optimistic"}
             </dd>
             <dd className="mt-0.5 text-[11px] text-muted-foreground">
-              3 model families, equal weight
+              {juryFamiliesLabel(claim.jury) || "3 model families"}, equal weight
             </dd>
           </div>
         </dl>

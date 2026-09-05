@@ -302,6 +302,131 @@ against the recorded model, or opened through Seal after the deadline.
    run it again without `--dry-run` to publish live, then confirm
    `GET /api/agents` shows `tableVotePromptHash` for all seven.
 
+## 4c. Emergency: a model family is down and no claim can launch
+
+The draw needs three model families, so one family going away stops every
+submission (GonkaRouter stopped serving Kimi K2.6 on 2026-09-05 at 01:39).
+Degraded mode lowers the requirement to two families for as long as that
+lasts, and every certificate, report and audit drawn under it says so. Run it
+in this order, and reverse it in the opposite order when the family returns.
+
+1. Confirm it is the provider and not us: `pnpm cli fact-check start` is not
+   the test. Read `GET https://app.openverdict.info/api/weather` and check the
+   family's row says `down`, then call the model directly through
+   GonkaRouter. A row that says `slow` is not a reason to degrade anything.
+
+2. Upgrade the package, once, if degraded mode is not deployed yet. Build the
+   bytecode with `sui move build --dump-bytecode-as-base64 --no-tree-shaking
+   --path move/openverdict > bytecode.json` (sui 1.78.1 no longer accepts
+   `--ignore-chain`; `--no-tree-shaking` is the offline equivalent), then run
+   `pnpm tsx
+   scripts/upgrade-openverdict-bytecode.ts bytecode.json` with
+   `SUI_OPERATOR_SECRET_KEY` in `.env`. It prints the operator, the current
+   and original package ids, the UpgradeCap, the new package id and the
+   digest, and rewrites `packageId` and `originalPackageId` in
+   `config/release.testnet.json`. Redeploy the app so it targets the new
+   package id, and only between claims.
+
+3. Lower the rule, one transaction:
+   `OPENVERDICT_RELEASE_MANIFEST=config/release.testnet.json pnpm cli registry
+   diversity --required 2 --per-model 3`. It signs with the operator key and
+   the `adminCapObjectId` in `config/release.testnet.json`, and emits
+   `JuryDiversityChanged`. Two families are only accepted with three seats per
+   family: five seats cannot be filled otherwise, and the CLI and the Move
+   entry both refuse `--per-model 2`.
+
+4. Add the seats degraded mode needs, before touching eligibility. This is
+   the step that is easy to get wrong. The draw takes five seats AND two
+   reserves, all of them active, and the two reserves must carry different
+   roles, one SKEPTIC and one SOURCE_AUTHENTICITY, with owners outside the
+   five. Today three families and a cap of two seats per model force the
+   committee's role split; at three seats per model that constraint is gone,
+   so a committee can take three seats of one role and leave no reserve of it.
+   Anything under seven active seats aborts every draw with
+   `E_INSUFFICIENT_DIVERSE_AGENTS`, and seven with a thin role mix strands the
+   reserve pair on most draws.
+
+   Read the registry, not the app's agent list:
+   `OPENVERDICT_RELEASE_MANIFEST=config/release.testnet.json pnpm cli registry
+   roster`. It prints the draw rule, the active count against the seven a draw
+   needs, one line per model family with its active roles, and one line per
+   seat with its profile id, role, active flag and weight. The app's
+   `/api/agents` is wider: it keeps rows from earlier package versions, and
+   those registries are not the one `select_committee` reads. Only the roster
+   command's list can be trusted for this step and for step 5's profile ids.
+
+   As of 2026-09-05 the registry holds 10 records, 9 active: DeepSeek 4 active
+   (3 SOURCE_AUTHENTICITY, 1 INVESTIGATOR) plus 1 inactive SKEPTIC, MiniMax 3
+   active (2 SKEPTIC, 1 SOURCE_AUTHENTICITY), Kimi 2 active SKEPTIC. Taking
+   Kimi out leaves exactly 7 with a fragile reserve pair, so add four seats
+   first: a SKEPTIC and an INVESTIGATOR on DeepSeek, an INVESTIGATOR and a
+   SOURCE_AUTHENTICITY on MiniMax. That leaves 11 active seats with both
+   reserve roles present on both families.
+
+   The seven original operator seats were registered by
+   `scripts/testnet-canary.ts`, which calls `agent_registry::register_agent`
+   once per agent slot with an operator-paid bond; it rebuilds the whole
+   roster and is not a per-seat tool. The supported way to add one seat today
+   is the stake path, which is the same prepare-and-confirm flow the browser
+   card runs and which also writes the engine's roster row:
+
+   ```bash
+   pnpm stake:seat --base https://app.openverdict.info \
+     --model deepseek-ai/DeepSeek-V4-Flash-0731 --role SKEPTIC
+   pnpm stake:seat --base https://app.openverdict.info \
+     --model deepseek-ai/DeepSeek-V4-Flash-0731 --role INVESTIGATOR
+   pnpm stake:seat --base https://app.openverdict.info \
+     --model MiniMaxAI/MiniMax-M2.7 --role INVESTIGATOR
+   pnpm stake:seat --base https://app.openverdict.info \
+     --model MiniMaxAI/MiniMax-M2.7 --role SOURCE_AUTHENTICITY
+   ```
+
+   Without `--key` on testnet the script derives a throwaway staking key and
+   funds it with 0.2 SUI from the operator, so the operator pays either way.
+   Run this after step 3: the stake endpoint checks the seat against the
+   registry's current rule, and under the old pair it would refuse the third
+   seat on a model. Then run `pnpm cli registry roster` again and check the
+   two healthy families hold at least seven active seats between them with a
+   spare SKEPTIC and a spare SOURCE_AUTHENTICITY outside any five that could
+   be drawn.
+
+5. Take the down family's seats out of the draw, one transaction per seat.
+   Take the profile ids from `pnpm cli registry roster` (the two active Kimi
+   seats), then for each id run
+   `OPENVERDICT_RELEASE_MANIFEST=config/release.testnet.json
+   DATABASE_URL=<production url> pnpm cli agents eligibility <profileId>
+   --active false`. `DATABASE_URL` matters: the command flips the seat on
+   chain and in the engine's own roster, and the weather gate reads the
+   roster. The result line says `rosterMirror: updated` when both moved, and
+   `weight` with the value it preserved. `set_agent_eligibility` overwrites
+   the stored weight, so the command reads the seat's current weight and
+   passes it back unchanged; live seats carry 10000, and a seat rewritten to
+   weight 1 would almost never be drawn again.
+
+   Do not touch the inactive DeepSeek skeptic
+   `0x81a73726...`: it went inactive through an unstake request and its bond
+   is leaving. Leave it inactive through the reversal too.
+
+6. Confirm the gate opened: `pnpm ov weather` prints a rule line reading
+   "2 model families required (degraded mode), 2 active: DeepSeek, MiniMax"
+   and must say clear. `pnpm cli registry roster` must show at least seven
+   active seats across those two families. Then submit one
+   real claim and watch it settle. Its report and its audit row `S5 Model
+   families drawn` will read `families drawn: 2 (registry required 2 at the
+   draw)`, and the certificate card will say "2 model families (degraded
+   mode)". That is correct and must not be hidden.
+
+Reversal, when the family answers again, in this order: put the Kimi seats
+back with `pnpm cli agents eligibility <profileId> --active true` (same
+`DATABASE_URL`, and it preserves the weight the same way), then raise the rule
+with `pnpm cli registry diversity --required 3 --per-model 2`, then confirm
+`pnpm ov weather` reads clear with three model families required and three
+active. Leave the four seats added in step 4 in place: they are staked seats
+like any other, and a wider roster is what made the draw robust. Leave the
+unstaking DeepSeek skeptic inactive. Claims that already settled
+keep their degraded record exactly as it is: the committee carries the pair it
+was drawn under, so nothing about them changes.
+
 ## 5. Human end-to-end walkthrough (the user's test)
 
 1. Open the live URL → submit a claim (no wallet needed).

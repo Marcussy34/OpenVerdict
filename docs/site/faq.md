@@ -167,6 +167,20 @@ Relaunches are spaced: at most one engine-relaunched jury every ten minutes.
 That limit exists because three concurrent juries drew a rate-limit storm from
 the shared gateway on 2026-09-03.
 
+### What if a model family is down for days?
+
+The operator can lower the requirement to two families for as long as the third
+is unavailable, and every claim judged under it says so. This is degraded mode.
+It takes one AdminCap transaction that sets the pair to two families and three
+seats per family, plus one transaction per seat of the down family to take it
+out of the draw. The change emits an event, the draw records the pair on the
+committee it produced and emits another, and the claim page, the report and the
+audit all read "2 model families (degraded mode)". Nothing else moves: five
+seats, one per signing key, a Skeptic seat, a Source-authenticity seat, Sui's
+randomness. When the family comes back the operator sets three families again
+and reactivates the seats, and the record of the degraded claims stays exactly
+as it was.
+
 ### What does UNRESOLVED mean?
 
 That the jury did not reach four matching votes, or that four of them agreed on

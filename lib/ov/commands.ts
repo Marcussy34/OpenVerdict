@@ -28,6 +28,7 @@ import {
   renderExtract,
   renderStatus,
   weatherLines,
+  weatherRuleLine,
   weatherSummary,
 } from "./render";
 import { printTrace, trace } from "./trace";
@@ -85,6 +86,7 @@ export async function weatherCommand(env: CommandEnv): Promise<number> {
     return 0;
   }
   for (const line of weatherLines(report)) env.io.out(line);
+  env.io.out(weatherRuleLine(report));
   env.io.out(weatherSummary(report, env.now()));
   if (!report.clear) env.io.out(NOT_CLEAR_NOTE);
   return 0;
@@ -280,6 +282,7 @@ export async function submitCommand(env: CommandEnv, input: SubmitInput): Promis
     if (env.json) printJson(env, body);
     else if (weather) {
       for (const line of weatherLines(weather)) env.io.out(line);
+      env.io.out(weatherRuleLine(weather));
       env.io.out(weatherSummary(weather, env.now()));
     }
     // The same sentence the route and the console use, rebuilt only if it is missing.

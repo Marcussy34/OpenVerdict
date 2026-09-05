@@ -4,7 +4,7 @@
  * fact-check form all read from here so a family is never called two things.
  */
 
-import type { WeatherReport } from "../engine/contract";
+import type { JuryDiversitySummary, WeatherReport } from "../engine/contract";
 
 /** Canonical display name for a family; anything unknown keeps its model id. */
 export function weatherFamilyLabel(family: string, modelId: string): string {
@@ -37,4 +37,27 @@ export function weatherRefusalMessage(weather: WeatherReport): string {
   return `The jury cannot sit right now: ${joinNames(down)} ${
     down.length === 1 ? "is" : "are"
   } down.`;
+}
+
+/**
+ * What a jury needs today, in one sentence. The count is the families that
+ * still hold an active seat, so it says two while the operator runs degraded
+ * mode and three the rest of the time.
+ */
+export function juryRequirementSentence(weather: WeatherReport | null | undefined): string {
+  const active = weather?.activeFamilies.length ?? 0;
+  if (active === 0) return "A jury needs every active model family and web search.";
+  return `A jury needs every active model family (${active} today) and web search.`;
+}
+
+/**
+ * How many model families judged a claim, and whether that was degraded mode.
+ * Empty when the committee is unknown, so a caller can print nothing at all.
+ */
+export function juryFamiliesLabel(
+  jury: JuryDiversitySummary | undefined,
+): string {
+  if (jury === undefined || jury.familyCount === 0) return "";
+  const families = `${jury.familyCount} model ${jury.familyCount === 1 ? "family" : "families"}`;
+  return jury.degraded ? `${families} (degraded mode)` : families;
 }

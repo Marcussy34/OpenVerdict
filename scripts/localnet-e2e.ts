@@ -16,6 +16,7 @@ import {
   type EngineAgentConfig,
   type FinalizeReport,
 } from "../lib/engine";
+import { DEFAULT_DRAW_RULE, type DrawRule } from "../lib/engine/draw-feasibility";
 import {
   DEFAULT_PROMPT_SPEC_V4,
   DEFAULT_TOOL_POLICY_V4,
@@ -43,16 +44,22 @@ import {
   type OracleInferenceOutput,
 } from "../lib/protocol";
 import type { ResearchProvider } from "../lib/research";
-import { closeDb, createDb, type DbHandle } from "../lib/storage";
+import { closeDb, createDb, createRepository, type DbHandle } from "../lib/storage";
+import { juryFamiliesLabel } from "../lib/web/weather-copy";
 import {
   SignerRegistry,
   buildCreateDemoPoolTransaction,
   buildRedeemDemoPoolTransaction,
   buildRegisterStakedAgentTransaction,
+  buildSetAgentEligibilityTransaction,
+  buildSetJuryDiversityTransaction,
   buildSettleDemoPoolTransaction,
   createSuiGateway,
   executeAndWait,
   loadReleaseManifest,
+  readCommitteeDiversity,
+  readJuryDiversity,
+  readRegistryRoster,
   sponsorAndExecute,
   type OpenVerdictSuiClient,
   type ReleaseManifest,
@@ -76,9 +83,20 @@ const localnetSuiConfigDir = join(localnetDir, "sui-config");
 const runtimeManifestPath = join(localnetDir, "release.runtime.json");
 const localnetPorts = [9000, 9123] as const;
 const agentCount = 7;
-// Slot seven runs the sponsored staked seat; slots zero to six run the demo agents.
-const signerSlotCount = agentCount + 1;
+/**
+ * Spare seats on the two surviving families, registered only for the degraded
+ * run. The draw takes five seats AND two reserves and all of them must be
+ * active, and the two reserves must carry different roles. With three seats
+ * per model allowed, a committee can take three of one role, so each role
+ * needs four active seats for a reserve of that role to survive. Three spares
+ * bring the roster to eight active seats, four per role and four per model.
+ */
+const degradedSpareCount = 3;
+// Slot seven runs the sponsored staked seat; slots zero to six run the demo
+// agents; slots eight and nine run the degraded run's two spare seats.
+const signerSlotCount = agentCount + 1 + degradedSpareCount;
 const stakedSeatSlot = agentCount;
+const degradedSpareFirstSlot = agentCount + 1;
 const minStakeMist = 100_000_000n;
 const poolStake = 100_000_000n;
 const evidencePolicyId = "OPENVERDICT_EVIDENCE_POLICY_V1";
@@ -86,6 +104,7 @@ const evidencePolicyId = "OPENVERDICT_EVIDENCE_POLICY_V1";
 const directStatement = "OpenVerdict localnet direct-review proof is operational.";
 const splitStatement = "OpenVerdict localnet split-vote proof reaches discussion.";
 const unresolvedStatement = "OpenVerdict localnet unresolved proof has no threshold.";
+const degradedStatement = "OpenVerdict localnet degraded proof settles on two model families.";
 
 interface RunningLocalnet {
   child?: ChildProcess;
@@ -129,6 +148,15 @@ interface StakedSeatProof {
   staker: string;
   stakeDigest: string;
   unstakeDigest: string;
+}
+
+/** What the degraded run proves, for the summary table. */
+interface DegradedProof {
+  claimId: string;
+  loweredDigest: string;
+  restoredDigest: string;
+  deactivatedProfileIds: string[];
+  spareProfileIds: string[];
 }
 
 interface VoteInstruction {
@@ -331,6 +359,19 @@ async function main(): Promise<void> {
       });
     });
 
+    const degraded = await step("5c. degraded mode on two families", 300_000, async () => {
+      return runDegradedLifecycle({
+        context,
+        client,
+        manifest,
+        operator,
+        signers: signerRegistry,
+        walrus,
+        adminCapId: deployment.adminCapObjectId,
+        db: required(db, "engine database"),
+      });
+    });
+
     const completedPoolSetup = required(
       poolSetup,
       "claim #1 demo pool created before the challenge deadline",
@@ -361,7 +402,7 @@ async function main(): Promise<void> {
     assert.equal(cliInspection.result?.truthScoreBps, direct.truthScoreBps);
 
     timings.totalMs = Date.now() - totalStartedAt;
-    printSummary({ direct, split, unresolved, pool, staked, timings });
+    printSummary({ direct, split, unresolved, degraded, pool, staked, timings });
   } finally {
     if (db && !dbClosed) await closeDb(db).catch(() => undefined);
     if (localnet) await stopLocalnet(localnet);
@@ -434,16 +475,42 @@ async function registerAgents(
   signers: SignerRegistry,
   walrus: WalrusStore,
 ): Promise<RegisteredAgent[]> {
-  const gateway = createSuiGateway({ client, manifest, signers });
-  const models = manifest.gonka.models;
-  const encoder = new TextEncoder();
   const registered: RegisteredAgent[] = [];
-
   for (let index = 0; index < agentCount; index += 1) {
     // Three source-authenticity profiles share model A; skeptic profiles split B/C.
     const sourceRole = index < 3;
-    const role = sourceRole ? "SOURCE_AUTHENTICITY" : "SKEPTIC";
-    const modelIndex = sourceRole ? 0 : index < 5 ? 1 : 2;
+    registered.push(
+      await registerOneAgent({
+        client,
+        manifest,
+        signers,
+        walrus,
+        index,
+        role: sourceRole ? "SOURCE_AUTHENTICITY" : "SKEPTIC",
+        modelIndex: sourceRole ? 0 : index < 5 ? 1 : 2,
+      }),
+    );
+    logDetail(`agent ${index + 1}/${agentCount}: ${registered[index]?.profileId}`);
+  }
+  return registered;
+}
+
+/** One registered seat, on the slot, model and role the caller names. */
+async function registerOneAgent(input: {
+  client: OpenVerdictSuiClient;
+  manifest: ReleaseManifest;
+  signers: SignerRegistry;
+  walrus: WalrusStore;
+  index: number;
+  role: string;
+  modelIndex: number;
+}): Promise<RegisteredAgent> {
+  const { client, manifest, signers, walrus, index, role, modelIndex } = input;
+  const gateway = createSuiGateway({ client, manifest, signers });
+  const models = manifest.gonka.models;
+  const encoder = new TextEncoder();
+  {
+    const sourceRole = role === "SOURCE_AUTHENTICITY";
     const modelId = models[modelIndex];
     assert.ok(modelId, `release manifest is missing model ${modelIndex}`);
     const roleLabel = sourceRole
@@ -480,7 +547,7 @@ async function registerAgents(
     });
     assert.ok(result.agentCapId, `agent ${index} registration omitted AgentCap`);
     const profileId = result.agentProfileId;
-    registered.push({
+    return {
       profileId,
       owner,
       modelId,
@@ -504,10 +571,8 @@ async function registerAgents(
         registeredAtMs: Date.now(),
         registeredCheckpoint: result.checkpoint ?? 0,
       },
-    });
-    logDetail(`agent ${index + 1}/${agentCount}: ${profileId}`);
+    };
   }
-  return registered;
 }
 
 async function runLifecycle(
@@ -519,6 +584,8 @@ async function runLifecycle(
     phaseTwo?: OracleInferenceOutput["outcome"][];
     expectedState: number;
     expectedResult: FinalizeReport["result"];
+    /** The registry's draw rule for this claim; defaults to three families. */
+    rule?: DrawRule;
     onCreated?: (claimId: string, inspection: ClaimInspection) => Promise<void>;
   },
 ): Promise<LifecycleResult> {
@@ -554,7 +621,24 @@ async function runLifecycle(
   const profileIds = inspection.commitments.map((seat) => seat.agentProfileId);
   assert.equal(profileIds.length, 5, `${options.label} must select five jurors`);
   assert.equal(new Set(profileIds).size, 5, `${options.label} jurors must be distinct`);
-  assertCommitteeDiversity(profileIds, context.agents);
+  const rule = options.rule ?? DEFAULT_DRAW_RULE;
+  assertCommitteeDiversity(profileIds, context.agents, rule);
+  // Every claim carries its committee's family count, and the degraded flag
+  // whenever fewer than three families sat.
+  const drawnFamilies = new Set(
+    profileIds.map(
+      (id) => context.agents.find((agent) => agent.profileId === id)?.modelId,
+    ),
+  ).size;
+  assert.deepEqual(
+    inspection.jury,
+    {
+      familyCount: drawnFamilies,
+      requiredFamilies: rule.requiredModels,
+      degraded: drawnFamilies < 3,
+    },
+    `${options.label} must publish the committee's model families`,
+  );
   context.controller.configure(
     options.statement,
     profileIds,
@@ -1510,17 +1594,281 @@ function createFakeController(): FakeController {
   };
 }
 
+/**
+ * Degraded mode end to end, exactly as an operator would run it.
+ *
+ * Stake two spare seats on the two surviving families (the draw takes five
+ * seats AND two reserves, and all seven must be active), lower the registry to
+ * two families with three seats each, take the third family's seats out of the
+ * draw on chain and in the engine's own roster, settle one claim on two
+ * families, then put everything back.
+ */
+async function runDegradedLifecycle(input: {
+  context: E2eContext;
+  client: OpenVerdictSuiClient;
+  manifest: ReleaseManifest;
+  operator: Ed25519Keypair;
+  signers: SignerRegistry;
+  walrus: WalrusStore;
+  adminCapId: string;
+  db: DbHandle;
+}): Promise<DegradedProof> {
+  const { context, client, manifest, operator, adminCapId } = input;
+  assert.ok(adminCapId, "degraded mode needs the AdminCap from the deployment");
+  const repository = createRepository(input.db);
+  const models = manifest.gonka.models;
+  const downModel = required(models[2], "release manifest model 2");
+
+  // 1. The spare seats, chosen so the roster ends at four seats per role and
+  // four per model: whichever five the draw takes, one SKEPTIC and one
+  // SOURCE_AUTHENTICITY are always left for the reserves.
+  const spares: RegisteredAgent[] = [];
+  for (const [offset, spare] of [
+    { role: "SKEPTIC", modelIndex: 0 },
+    { role: "SOURCE_AUTHENTICITY", modelIndex: 1 },
+    { role: "SKEPTIC", modelIndex: 1 },
+  ].entries()) {
+    const agent = await registerOneAgent({
+      client,
+      manifest,
+      signers: input.signers,
+      walrus: input.walrus,
+      index: degradedSpareFirstSlot + offset,
+      role: spare.role,
+      modelIndex: spare.modelIndex,
+    });
+    spares.push(agent);
+    const timestamp = new Date().toISOString();
+    await repository.saveAgentManifest({
+      manifest: agent.manifest,
+      role: agent.role,
+      agentCapId: agent.agentCapId,
+      active: true,
+      reputation: {},
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    });
+  }
+  context.agents.push(...spares);
+  logDetail(
+    `degraded: staked ${degradedSpareCount} spare seats on ${models[0]} and ${models[1]}`,
+  );
+
+  // An untouched registry carries no field at all, which must read as the
+  // protocol defaults rather than as an error.
+  assert.deepEqual(
+    await readJuryDiversity(client, manifest),
+    { requiredModels: 3, maxSeatsPerModel: 2 },
+    "an untouched registry must read as the default pair",
+  );
+
+  // 2. Lower the rule to two families with three seats each.
+  const lowered = await executeAndWait(
+    client,
+    operator,
+    buildSetJuryDiversityTransaction(manifest, {
+      adminCapId,
+      requiredModels: 2,
+      maxSeatsPerModel: 3,
+    }),
+  );
+  // Read it straight back from chain before anything caches it: a reader that
+  // silently fell back to the defaults would look exactly like a working one.
+  assert.deepEqual(
+    await readJuryDiversity(client, manifest),
+    { requiredModels: 2, maxSeatsPerModel: 3 },
+    "the registry must report the lowered pair",
+  );
+  logDetail(`degraded: registry set to 2 families, 3 per model (${lowered.digest})`);
+
+  // 3. Take the down family out of the draw, on chain and in the engine's
+  // roster: the draw reads the chain, the weather gate reads the roster.
+  const downSeats = context.agents.filter((agent) => agent.modelId === downModel);
+  assert.ok(downSeats.length > 0, "the down family must hold seats to deactivate");
+  // set_agent_eligibility overwrites the stored weight, so each seat's own
+  // weight is read first and passed back unchanged, exactly as the operator
+  // CLI does. A default would silently reweight the draw.
+  const weightBefore = new Map(
+    (await readRegistryRoster(client, manifest)).map((seat) => [
+      seat.agentProfileId,
+      seat.weight,
+    ]),
+  );
+  for (const agent of downSeats) {
+    const weight = required(
+      weightBefore.get(agent.profileId.toLowerCase()),
+      `registry weight for ${agent.profileId}`,
+    );
+    await executeAndWait(
+      client,
+      operator,
+      buildSetAgentEligibilityTransaction(manifest, {
+        adminCapId,
+        agentProfileId: agent.profileId,
+        active: false,
+        weight,
+      }),
+    );
+  }
+  for (const seat of await readRegistryRoster(client, manifest)) {
+    assert.equal(
+      seat.weight,
+      weightBefore.get(seat.agentProfileId),
+      `deactivating must not change the weight of ${seat.agentProfileId}`,
+    );
+  }
+  // The roster is a local database that keeps rows from earlier runs, and the
+  // gate counts families, not this run's seats, so every seat on the down
+  // family goes inactive. Only this run's seats exist on this chain.
+  const rosterDown = await setRosterModelActive(repository, downModel, false);
+  logDetail(
+    `degraded: ${downSeats.length} ${downModel} seats deactivated on chain, ${rosterDown.length} in the roster`,
+  );
+
+  // The weather gate must now read clear on two families alone.
+  const weather = await context.engine.weather();
+  assert.equal(weather.requiredFamilies, 2, "the gate must read the lowered rule");
+  assert.equal(
+    weather.activeFamilies.length,
+    2,
+    "only the two surviving families may hold active seats",
+  );
+
+  // 4. One whole claim, judged by two families.
+  const rule: DrawRule = { requiredModels: 2, maxSeatsPerModel: 3 };
+  const lifecycle = await runLifecycle(context, {
+    label: "claim #4 degraded",
+    statement: degradedStatement,
+    phaseOne: ["YES", "YES", "YES", "YES", "YES"],
+    expectedState: CLAIM_STATE.FINALIZED_REVIEWED,
+    expectedResult: "YES",
+    rule,
+  });
+
+  const inspection = await context.engine.inspect(lifecycle.claimId);
+  const report = await context.engine.report(lifecycle.claimId);
+  // The pair the draw ran under, kept on the committee itself.
+  assert.deepEqual(
+    await readCommitteeDiversity(
+      client,
+      manifest,
+      required(inspection.committeeId, "committee id"),
+    ),
+    { requiredModels: 2, maxSeatsPerModel: 3 },
+    "the committee must record the pair its draw ran under",
+  );
+  const expected = { familyCount: 2, requiredFamilies: 2, degraded: true };
+  assert.deepEqual(inspection.jury, expected, "the claim record must say degraded");
+  assert.deepEqual(report.jury, expected, "the report must say degraded");
+  assert.equal(
+    juryFamiliesLabel(report.jury),
+    "2 model families (degraded mode)",
+    "the public copy must name degraded mode",
+  );
+  logDetail(
+    `degraded: ${lifecycle.claimId} settled on 2 model families (registry required 2)`,
+  );
+
+  // 5. Reversal, in the operator's order: seats back, then the rule back.
+  for (const agent of downSeats) {
+    await executeAndWait(
+      client,
+      operator,
+      buildSetAgentEligibilityTransaction(manifest, {
+        adminCapId,
+        agentProfileId: agent.profileId,
+        active: true,
+        weight: required(
+          weightBefore.get(agent.profileId.toLowerCase()),
+          `registry weight for ${agent.profileId}`,
+        ),
+      }),
+    );
+  }
+  // Exactly the rows this run turned off, so the local roster is left as found.
+  for (const agentProfileId of rosterDown) {
+    await setRosterActive(repository, agentProfileId, true);
+  }
+  const restored = await executeAndWait(
+    client,
+    operator,
+    buildSetJuryDiversityTransaction(manifest, {
+      adminCapId,
+      requiredModels: 3,
+      maxSeatsPerModel: 2,
+    }),
+  );
+  // The registry is the source of truth for the reversal. The engine caches
+  // the pair for one probe interval by design, so asking it here would race
+  // that cache rather than test anything; its roster is not cached, so the
+  // family count still comes from the engine.
+  assert.deepEqual(
+    await readJuryDiversity(client, manifest),
+    { requiredModels: 3, maxSeatsPerModel: 2 },
+    "the reversal must restore three families on chain",
+  );
+  const back = await context.engine.weather();
+  assert.equal(back.activeFamilies.length, 3, "every family must hold seats again");
+  logDetail(`degraded: reversed to 3 families, 2 per model (${restored.digest})`);
+
+  return {
+    claimId: lifecycle.claimId,
+    loweredDigest: lowered.digest,
+    restoredDigest: restored.digest,
+    deactivatedProfileIds: downSeats.map((agent) => agent.profileId),
+    spareProfileIds: spares.map((agent) => agent.profileId),
+  };
+}
+
+/**
+ * Turn every roster seat on one model active or inactive, and answer with the
+ * ids that actually moved so the reversal restores exactly those.
+ */
+async function setRosterModelActive(
+  repository: ReturnType<typeof createRepository>,
+  modelId: string,
+  active: boolean,
+): Promise<string[]> {
+  const moved: string[] = [];
+  for (const record of await repository.listAgentManifests()) {
+    if (record.manifest.modelId !== modelId || record.active === active) continue;
+    await repository.saveAgentManifest({
+      ...record,
+      active,
+      updatedAt: new Date().toISOString(),
+    });
+    moved.push(record.manifest.agentProfileId);
+  }
+  return moved;
+}
+
+/** The engine's own copy of a seat's eligibility, which the weather gate reads. */
+async function setRosterActive(
+  repository: ReturnType<typeof createRepository>,
+  agentProfileId: string,
+  active: boolean,
+): Promise<void> {
+  const record = await repository.getAgentManifest(agentProfileId);
+  assert.ok(record, `roster has no record for ${agentProfileId}`);
+  await repository.saveAgentManifest({
+    ...record,
+    active,
+    updatedAt: new Date().toISOString(),
+  });
+}
+
 function assertCommitteeDiversity(
   profileIds: string[],
   agents: RegisteredAgent[],
+  rule: DrawRule = DEFAULT_DRAW_RULE,
 ): void {
   const byProfile = new Map(agents.map((agent) => [agent.profileId, agent]));
   const selected = profileIds.map((id) => required(byProfile.get(id), `registered agent ${id}`));
   assert.equal(new Set(selected.map((agent) => agent.owner)).size, 5);
   assert.equal(new Set(selected.map((agent) => agent.manifest.humanAttestationHash)).size, 5);
-  assert.ok(new Set(selected.map((agent) => agent.modelId)).size >= 3);
+  assert.ok(new Set(selected.map((agent) => agent.modelId)).size >= rule.requiredModels);
   for (const model of new Set(selected.map((agent) => agent.modelId))) {
-    assert.ok(selected.filter((agent) => agent.modelId === model).length <= 2);
+    assert.ok(selected.filter((agent) => agent.modelId === model).length <= rule.maxSeatsPerModel);
   }
 }
 
@@ -1974,16 +2322,20 @@ function printSummary(input: {
   direct: LifecycleResult;
   split: LifecycleResult;
   unresolved: LifecycleResult;
+  degraded: DegradedProof;
   pool: PoolProof;
   staked: StakedSeatProof;
   timings: StepTimings;
 }): void {
   process.stdout.write("\n[8. operational proof summary]\n");
   const rows: Array<readonly [string, string]> = [
-    ["Claims created", "3"],
+    ["Claims created", "4"],
     ["Claim #1", `${input.direct.claimId} (FINALIZED_REVIEWED/YES)`],
     ["Claim #2", `${input.split.claimId} (DISCUSSION -> FINALIZED_REVIEWED/YES)`],
     ["Claim #3", `${input.unresolved.claimId} (DISCUSSION -> UNRESOLVED)`],
+    ["Claim #4", `${input.degraded.claimId} (FINALIZED_REVIEWED/YES on 2 model families)`],
+    ["Degraded tx digests", `${input.degraded.loweredDigest} (2,3), ${input.degraded.restoredDigest} (3,2)`],
+    ["Seats deactivated", input.degraded.deactivatedProfileIds.join(", ")],
     ["Claim create digests", [input.direct.createDigest, input.split.createDigest, input.unresolved.createDigest].join(", ")],
     ["Finalization digests", [input.direct.finalize.digest, input.split.finalize.digest, input.unresolved.finalize.digest].join(", ")],
     ["Truth Score #1", `${input.direct.truthScoreBps} bps (on-chain ${input.direct.onChainTruthScoreBps})`],

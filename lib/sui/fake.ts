@@ -28,6 +28,7 @@ import type {
   RegisterAgentTransactionInput,
   UpdateAgentManifestTransactionInput,
 } from "./builders";
+import { DEFAULT_JURY_DIVERSITY, type JuryDiversity } from "./jury-diversity";
 import type { TxResult } from "../engine/contract";
 
 export interface FakeSuiAgent extends SuiAgentIdentity {
@@ -274,6 +275,17 @@ export class FakeSuiGateway implements SuiGateway {
 
   async epochInfo(): Promise<ChainEpochInfo> {
     return { ...this.epoch };
+  }
+
+  /** Tests set this to model a registry the operator lowered to two families. */
+  diversity: JuryDiversity = { ...DEFAULT_JURY_DIVERSITY };
+
+  async juryDiversity(): Promise<JuryDiversity> {
+    return { ...this.diversity };
+  }
+
+  async committeeDiversity(): Promise<JuryDiversity> {
+    return { ...this.diversity };
   }
 
   private selection(

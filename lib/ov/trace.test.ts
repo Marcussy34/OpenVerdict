@@ -169,6 +169,25 @@ describe("ov trace on a settled one-round claim", () => {
     for (const line of prose) expect(line.length).toBeLessThanOrEqual(100);
   });
 
+  it("says a degraded jury sat before the trail, and nothing when three families did", async () => {
+    const degraded: ClaimInspection = {
+      ...FINALIZED,
+      jury: { familyCount: 2, requiredFamilies: 2, degraded: true },
+    };
+    const s = setup(degraded, proofsForRound(FINALIZED, 1, RESEARCH_PROOF));
+    expect(await traceCommand(s.env, { target: degraded.claimId, full: false })).toBe(0);
+    expect(s.out.join("\n")).toContain(
+      "this jury sat on 2 model families (degraded mode): the operator lowered the requirement to 2 on chain while a provider was down",
+    );
+
+    const full = setup(
+      { ...FINALIZED, jury: { familyCount: 3, requiredFamilies: 3, degraded: false } },
+      proofsForRound(FINALIZED, 1, RESEARCH_PROOF),
+    );
+    expect(await traceCommand(full.env, { target: FINALIZED.claimId, full: false })).toBe(0);
+    expect(full.out.join("\n")).not.toContain("degraded mode");
+  });
+
   it("--juror keeps one seat, --full adds the pinned prompt once and the verbatim messages", async () => {
     const s = setup(FINALIZED, proofsForRound(FINALIZED, 1, RESEARCH_PROOF));
     expect(await traceCommand(s.env, { target: FINALIZED.claimId, juror: 3, full: true })).toBe(0);

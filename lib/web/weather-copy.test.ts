@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
 
 import type { WeatherFamily, WeatherReport } from "../engine/contract";
-import { weatherFamilyLabel, weatherRefusalMessage } from "./weather-copy";
+import {
+  juryFamiliesLabel,
+  juryRequirementSentence,
+  weatherFamilyLabel,
+  weatherRefusalMessage,
+} from "./weather-copy";
 
 function family(
   name: string,
@@ -17,6 +22,10 @@ function report(families: WeatherFamily[]): WeatherReport {
     stale: false,
     clear: families.every((entry) => entry.ok),
     families,
+    requiredFamilies: 3,
+    activeFamilies: families
+      .filter((entry) => entry.family !== "research")
+      .map((entry) => entry.family),
   };
 }
 
@@ -60,5 +69,38 @@ describe("weatherRefusalMessage", () => {
     expect(weatherRefusalMessage(report([]))).toBe(
       "The jury cannot sit right now: the model families are not all healthy.",
     );
+  });
+});
+
+describe("juryRequirementSentence", () => {
+  it("counts the families that still hold an active seat", () => {
+    const weather = report([family("deepseek", true), family("minimax", true)]);
+    expect(juryRequirementSentence(weather)).toBe(
+      "A jury needs every active model family (2 today) and web search.",
+    );
+  });
+
+  it("drops the count when no report has arrived yet", () => {
+    expect(juryRequirementSentence(null)).toBe(
+      "A jury needs every active model family and web search.",
+    );
+  });
+});
+
+describe("juryFamiliesLabel", () => {
+  it("names degraded mode when fewer than three families sat", () => {
+    expect(
+      juryFamiliesLabel({ familyCount: 2, requiredFamilies: 2, degraded: true }),
+    ).toBe("2 model families (degraded mode)");
+  });
+
+  it("adds nothing when three families sat", () => {
+    expect(
+      juryFamiliesLabel({ familyCount: 3, requiredFamilies: 3, degraded: false }),
+    ).toBe("3 model families");
+  });
+
+  it("says nothing at all when the committee is unknown", () => {
+    expect(juryFamiliesLabel(undefined)).toBe("");
   });
 });

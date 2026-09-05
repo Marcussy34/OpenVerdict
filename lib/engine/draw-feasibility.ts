@@ -2,10 +2,11 @@
  * Does the active roster admit a committee the Move draw could seat?
  *
  * This mirrors `select_committee` in move/openverdict/sources/jury.move:
- * `can_add_selected` ("One seat per operational key, two per model. Stakers are
- * uncapped", `count_model(selected, ...) < 2 && count_role(selected, ...) < 3`),
- * `selected_diversity_valid` (`models.length() >= 3 && has_skeptic &&
- * has_source`) and `can_add_reserve` (a reserve shares no profile or owner with
+ * `can_add_selected` ("One seat per operational key, the registry's cap per
+ * model. Stakers are uncapped", `count_model(selected, ...) < max_seats_per_model
+ * && count_role(selected, ...) < 3`), `selected_diversity_valid`
+ * (`models.length() >= required_models && has_skeptic && has_source`) and
+ * `can_add_reserve` (a reserve shares no profile or owner with
  * the seats or the other reserve, its role must be SKEPTIC or
  * SOURCE_AUTHENTICITY, and `count_role(reserves, role) > 0` rules out two
  * reserves in the same role). The chain enforces these caps; this file exists so
@@ -22,12 +23,26 @@
 const COMMITTEE_SIZE = 5;
 /** jury.move RESERVE_COUNT. */
 const RESERVE_COUNT = 2;
-/** can_add_selected: count_model(selected, model) < 2. */
-const MAX_SEATS_PER_MODEL = 2;
 /** can_add_selected: count_role(selected, role) < 3. */
 const MAX_SEATS_PER_ROLE = 3;
-/** selected_diversity_valid: models.length() >= 3. */
-const MIN_MODEL_FAMILIES = 3;
+
+/**
+ * The two numbers `select_committee` now reads from the registry instead of
+ * holding as constants: `selected_diversity_valid(selected, required_models)`
+ * and `can_add_selected(..., max_seats_per_model)`. The operator lowers them
+ * in degraded mode, and this mirror has to move with them or it refuses the
+ * very stakes degraded mode needs.
+ */
+export type DrawRule = {
+  requiredModels: number;
+  maxSeatsPerModel: number;
+};
+
+/** agent_registry::jury_diversity with no field set. */
+export const DEFAULT_DRAW_RULE: DrawRule = {
+  requiredModels: 3,
+  maxSeatsPerModel: 2,
+};
 
 const SKEPTIC = "SKEPTIC";
 const SOURCE_AUTHENTICITY = "SOURCE_AUTHENTICITY";
@@ -47,7 +62,10 @@ export type DrawFeasibility = { ok: true } | { ok: false; reason: string };
  * every draw rule. This is an existence test, not the greedy draw: the chain
  * restarts a stalled draw, so a roster that admits a committee gets one.
  */
-export function rosterAdmitsDraw(records: DrawSeat[]): DrawFeasibility {
+export function rosterAdmitsDraw(
+  records: DrawSeat[],
+  rule: DrawRule = DEFAULT_DRAW_RULE,
+): DrawFeasibility {
   const seats = activeSeats(records);
   if (seats.length < COMMITTEE_SIZE + RESERVE_COUNT) {
     return {
@@ -55,8 +73,8 @@ export function rosterAdmitsDraw(records: DrawSeat[]): DrawFeasibility {
       reason: `fewer than seven active seats (${seats.length} active)`,
     };
   }
-  if (search(seats, [])) return { ok: true };
-  return { ok: false, reason: `no valid committee: ${shortfall(seats)}` };
+  if (search(seats, [], rule)) return { ok: true };
+  return { ok: false, reason: `no valid committee: ${shortfall(seats, rule)}` };
 }
 
 /**
@@ -69,14 +87,15 @@ export function rosterAdmitsDraw(records: DrawSeat[]): DrawFeasibility {
 export function rosterCanSeat(
   records: DrawSeat[],
   candidate: DrawSeat,
+  rule: DrawRule = DEFAULT_DRAW_RULE,
 ): DrawFeasibility {
   const seat = normalize(candidate);
   if (!seat.active) return { ok: false, reason: "the seat is not active" };
   const seats = [seat, ...activeSeats(records).filter((s) => s.owner !== seat.owner)];
-  if (search(seats, [seat], 1)) return { ok: true };
+  if (search(seats, [seat], rule, 1)) return { ok: true };
   return {
     ok: false,
-    reason: `a ${candidate.modelId} ${candidate.role} seat cannot be seated on any valid committee: ${seatShortfall(seats, seat)}${alternatives(seats, seat)}`,
+    reason: `a ${candidate.modelId} ${candidate.role} seat cannot be seated on any valid committee: ${seatShortfall(seats, seat, rule)}${alternatives(seats, seat, rule)}`,
   };
 }
 
@@ -95,34 +114,39 @@ function activeSeats(records: DrawSeat[]): Seat[] {
  * Depth-first over the roster in index order: every committee is tried once,
  * and the caps prune most of the tree long before five seats are chosen.
  */
-function search(seats: Seat[], chosen: Seat[], start = 0): boolean {
+function search(
+  seats: Seat[],
+  chosen: Seat[],
+  rule: DrawRule,
+  start = 0,
+): boolean {
   if (chosen.length === COMMITTEE_SIZE) {
-    return isDiverse(chosen) && reservesExist(seats, chosen);
+    return isDiverse(chosen, rule) && reservesExist(seats, chosen);
   }
   if (seats.length - start < COMMITTEE_SIZE - chosen.length) return false;
   for (let i = start; i < seats.length; i += 1) {
     const seat = seats[i]!;
-    if (!canAddSeat(chosen, seat)) continue;
+    if (!canAddSeat(chosen, seat, rule)) continue;
     chosen.push(seat);
-    if (search(seats, chosen, i + 1)) return true;
+    if (search(seats, chosen, rule, i + 1)) return true;
     chosen.pop();
   }
   return false;
 }
 
 /** can_add_selected, minus the profile check: one owner is one seat here. */
-function canAddSeat(chosen: Seat[], seat: Seat): boolean {
+function canAddSeat(chosen: Seat[], seat: Seat, rule: DrawRule): boolean {
   return (
     !chosen.some((held) => held.owner === seat.owner) &&
-    count(chosen, (held) => held.modelId === seat.modelId) < MAX_SEATS_PER_MODEL &&
+    count(chosen, (held) => held.modelId === seat.modelId) < rule.maxSeatsPerModel &&
     count(chosen, (held) => held.role === seat.role) < MAX_SEATS_PER_ROLE
   );
 }
 
 /** selected_diversity_valid. */
-function isDiverse(chosen: Seat[]): boolean {
+function isDiverse(chosen: Seat[], rule: DrawRule): boolean {
   return (
-    distinct(chosen.map((seat) => seat.modelId)).length >= MIN_MODEL_FAMILIES &&
+    distinct(chosen.map((seat) => seat.modelId)).length >= rule.requiredModels &&
     chosen.some((seat) => seat.role === SKEPTIC) &&
     chosen.some((seat) => seat.role === SOURCE_AUTHENTICITY)
   );
@@ -143,9 +167,9 @@ function reservesExist(seats: Seat[], chosen: Seat[]): boolean {
 }
 
 /** Why no committee at all, in plain words. */
-function shortfall(seats: Seat[]): string {
+function shortfall(seats: Seat[], rule: DrawRule): string {
   const families = distinct(seats.map((seat) => seat.modelId)).length;
-  if (families < MIN_MODEL_FAMILIES) {
+  if (families < rule.requiredModels) {
     return `only ${families === 1 ? "one model family" : `${families} model families`} among active seats`;
   }
   if (!seats.some((seat) => seat.role === SKEPTIC)) {
@@ -154,11 +178,11 @@ function shortfall(seats: Seat[]): string {
   if (!seats.some((seat) => seat.role === SOURCE_AUTHENTICITY)) {
     return "no active seat holds the SOURCE_AUTHENTICITY role";
   }
-  return capsSentence();
+  return capsSentence(rule);
 }
 
 /** Why this one seat can never be drawn, in plain words. */
-function seatShortfall(seats: Seat[], seat: Seat): string {
+function seatShortfall(seats: Seat[], seat: Seat, rule: DrawRule): string {
   if (seats.length < COMMITTEE_SIZE + RESERVE_COUNT) {
     return `fewer than seven active seats (${seats.length} active)`;
   }
@@ -170,25 +194,25 @@ function seatShortfall(seats: Seat[], seat: Seat): string {
     partners.length > 0 &&
     partners.every((other) => other.modelId === seat.modelId)
   ) {
-    return `every ${partnerRole} seat runs ${seat.modelId} and the draw seats at most ${MAX_SEATS_PER_MODEL} ${seat.modelId} jurors`;
+    return `every ${partnerRole} seat runs ${seat.modelId} and the draw seats at most ${rule.maxSeatsPerModel} ${seat.modelId} jurors`;
   }
-  return capsSentence();
+  return capsSentence(rule);
 }
 
-function capsSentence(): string {
+function capsSentence(rule: DrawRule): string {
   return (
-    "the draw caps (one seat per signing key, two seats per model family, " +
-    "three seats per role, three model families, one SKEPTIC and one " +
+    `the draw caps (one seat per signing key, ${rule.maxSeatsPerModel} seats per model family, ` +
+    `three seats per role, ${rule.requiredModels} model families, one SKEPTIC and one ` +
     "SOURCE_AUTHENTICITY, plus two reserves in different roles) admit none"
   );
 }
 
 /** What the staker could stake on instead, tested rather than guessed. */
-function alternatives(seats: Seat[], seat: Seat): string {
+function alternatives(seats: Seat[], seat: Seat, rule: DrawRule): string {
   const rest = seats.filter((other) => other.owner !== seat.owner);
   const seatable = (swap: Partial<Seat>): boolean => {
     const probe = { ...seat, ...swap };
-    return search([probe, ...rest], [probe], 1);
+    return search([probe, ...rest], [probe], rule, 1);
   };
   const partnerRole = seat.role === SKEPTIC ? SOURCE_AUTHENTICITY : SKEPTIC;
   const roleWorks = seatable({ role: partnerRole });

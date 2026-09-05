@@ -354,6 +354,20 @@ and holds fewer than three seats for its role:
 - A candidate whose owner is the claim creator, the proposer or the challenger
   is never drawn (`agent_conflicts_with_claim`, `jury.move:1188-1196`).
 
+The two model-family numbers are not constants any more. `select_committee`
+reads them from the registry, where the AdminCap holder can set them to
+`(2, 3)` while a provider is down: two families, three seats each. That is
+degraded mode, and it is never silent. The draw records the pair on the
+committee it produced, so a replacement seat is judged by the same numbers the
+draw used; it emits `jury::CommitteeDiversity` with the distinct model count,
+the pair and a `degraded` flag; the operator's own change emits
+`agent_registry::JuryDiversityChanged`; and the claim page, the report and
+audit row S5 all say "2 model families (degraded mode)" from then on. Everything
+else about the draw holds: five seats, one per signing key, a Skeptic and a
+Source-authenticity seat, drawn by Sui's randomness. With the field never set,
+`jury_diversity` answers the defaults `(3, 2)`, so a registry that has never
+heard of degraded mode behaves exactly as this page describes.
+
 Role hashes are fixed strings: `blake2b256(b"OPENVERDICT_ROLE_SKEPTIC")` and
 `blake2b256(b"OPENVERDICT_ROLE_SOURCE_AUTHENTICITY")`
 (`agent_registry.move:522-529`).
@@ -909,10 +923,14 @@ provider together. A report is marked stale after five minutes, and it is clear
 only when it is fresh and every family answered. A submission arriving under
 clear or stale weather launches immediately; under fresh bad weather it is
 refused outright, with a 503 carrying the weather report and a `Retry-After`
-header, and nothing is stored. There is no queue: the submitter decides when to
-send it again. Relaunches of voided attempts are spaced at one every ten
-minutes, because three concurrent juries drew a rate-limit storm from the
-shared gateway on 2026-09-03.
+header, and nothing is stored. "Every family" means every family that still
+holds an active seat on the registry, and there have to be at least as many of
+them as the draw requires: in degraded mode two active families that both
+answer are enough, and a family with no active seat left cannot hold a jury
+up. There is no queue: the submitter decides when to send it again.
+Relaunches of voided attempts are spaced at one every ten minutes, because
+three concurrent juries drew a rate-limit storm from the shared gateway on
+2026-09-03.
 
 ## 11. Every timing constant
 

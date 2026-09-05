@@ -21,7 +21,7 @@ import {
 import { useNow } from "@/components/use-now";
 import { WeatherStrip } from "@/components/weather/weather-strip";
 import { cn } from "@/lib/utils";
-import { weatherRefusalMessage } from "@/lib/web/weather-copy";
+import { juryRequirementSentence, weatherRefusalMessage } from "@/lib/web/weather-copy";
 import type { ClaimInspection, WeatherReport } from "@/lib/engine/contract";
 import {
   ArrowDown2,
@@ -567,6 +567,11 @@ function FactCheckContent() {
           >
             <p className="text-xs font-medium text-destructive">
               {refusal.message} Try again in a few minutes.
+            </p>
+            {/* The rule itself, with today's count: it says two while the
+                operator runs degraded mode and three the rest of the time. */}
+            <p className="text-[11px] text-muted-foreground">
+              {juryRequirementSentence(refusal.weather)}
             </p>
             <div className="flex flex-wrap items-center justify-between gap-3">
               {/* The family health the queue page used to show, in one row. */}

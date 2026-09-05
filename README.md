@@ -442,7 +442,10 @@ assigns the seat's debate role, taking the least represented role among the
 active seats on that model. The draw stays diverse on its own terms: at most
 two seats per model family, three families per jury, a skeptic seat and a
 source-authenticity seat on every committee, and at most one seat per
-operational signing key, with no cap per staker. Two guards keep that
+operational signing key, with no cap per staker. The families number is the one
+part an operator can move: while a provider is down it can be lowered to two on
+chain (degraded mode), and every certificate, report and audit drawn under it
+then says "2 model families (degraded mode)". Two guards keep that
 draw honest in practice: the on-chain sample restarts when a partial
 pick can no longer be completed (so a valid roster is always drawn), and
 the stake endpoint refuses a seat that no valid committee could ever seat,

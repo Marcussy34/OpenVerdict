@@ -229,7 +229,7 @@ The receipt window allows sixty seconds of slack after the run completes
 (`RECEIPT_WINDOW_SLACK_MS = 60_000`), and a 404 or 429 from the gateway is
 `UNAVAILABLE`, never `FAIL`.
 
-### S1 to S4: the claim
+### S1 to S5: the claim
 
 | Id | Group | Label | Expected | Actual |
 | --- | --- | --- | --- | --- |
@@ -238,6 +238,12 @@ The receipt window allows sixty seconds of slack after the run completes
 | S3 | score | `Quorum rule` | `<expected result> from YES n, NO n, UNSURE n of <count> valid reveals in round <phase>` | `<recorded result> recorded` |
 | S4.root | chain | `Evidence root agreed, phase <n>` | the frozen root | `<root> (<n> sources agree: ...)`, or the disagreeing sources listed |
 | S4.manifest | walrus | `Evidence manifest on Walrus, phase <n>` | `HTTP 200` or the phase root | `<recomputed root> recomputed from <n> items` |
+| S5 | chain | `Model families drawn` | (none) | `families drawn: <n> (registry required <m> at the draw)` |
+
+S5 is informational and never fails: a committee the chain accepted is a valid
+committee, degraded or not. It counts the distinct models among the committee's
+seats and prints the pair the registry demanded when the draw ran, so a jury
+that sat on two families is visible in every dossier. See Degraded mode below.
 
 S4 is two rows per phase, so a two-round claim carries four of them. The root
 sources it cross-checks are the claim record, the report, the
@@ -344,7 +350,51 @@ The operator **can**, and this is disclosed rather than defended:
   and evidence freezer capabilities are single and team-held;
 - decide when claims launch, through the weather gate, and pause, deploy or
   simply fail to run;
-- hold Seal keys and salts in plaintext in the testnet database.
+- hold Seal keys and salts in plaintext in the testnet database;
+- lower the number of model families a jury must span, in degraded mode below,
+  which every certificate then shows.
+
+## Degraded mode
+
+The protocol needs three model families on every jury. When a provider stops
+serving one of them, no claim can launch at all: the draw asserts the rule and
+the weather gate refuses the submission before any money moves. Degraded mode
+is the disclosed way out. The operator lowers the requirement to two families
+for as long as the third is down, and the record says so from then on.
+
+Only the AdminCap holder can set it, and only within bounds the Move entry
+asserts: `required_models` and `max_seats_per_model` are each 2 or 3, and two
+families are accepted only with three seats per family, because five seats
+cannot otherwise be filled. Nothing else about the draw moves: five seats, one
+seat per operational signing key, a Skeptic seat and a Source-authenticity seat
+on every committee, and Sui's own randomness still picks the jurors.
+
+Degraded mode does not shrink the jury: five seats and two reserves are still
+drawn, and all of them must be active. The two reserves carry different roles,
+so with three seats per model allowed a committee can take three seats of one
+role and leave none of it spare. Two families therefore need eight active
+seats, four per role, and the operator stakes the missing ones on the
+surviving families before taking the third out of the draw.
+
+The trace is on chain, in four places:
+
+| Where | What it says |
+| --- | --- |
+| `agent_registry::JuryDiversityChanged` | the pair the operator set, and when: `required_models`, `max_seats_per_model`, `at_ms` |
+| `agent_registry::JuryDiversityKey` on the registry | the pair in force now, absent when it has never been set, which reads as the default `(3, 2)` |
+| `jury::CommitteeDiversity` | one event per draw: `distinct_models`, `required_models`, `max_seats_per_model` and `degraded` |
+| `JuryDiversityKey` on the committee | the pair that committee was drawn under, so a replacement seat uses the draw's numbers and never the registry's current ones |
+
+The certificate itself is unchanged: Sui's compatible upgrade policy forbids new
+fields on an existing struct, so the pair lives in dynamic fields and events.
+The committee the certificate names is the object that carries it, so a reader
+who has the certificate can always reach the pair its jury sat under.
+
+Off chain, the same fact reaches every surface: the claim page's certificate
+card and the report say "2 model families (degraded mode)", the weather says how
+many families a jury needs today, and audit row S5 prints the count against the
+requirement. A claim judged by two families is a real verdict with a smaller
+jury, and it is never presented as anything else.
 
 ## The Seal escrow
 

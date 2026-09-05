@@ -112,6 +112,7 @@ import {
   loadReleaseManifest,
   outcomeLabel,
   toChainRetentionEpoch,
+  type JuryDiversity,
   type ReleaseManifest,
   type StakeRegistrationRead,
   type SuiGateway,
@@ -137,6 +138,7 @@ import type {
   FactCheckRequest,
   FactCheckSubmission,
   FinalizeReport,
+  JuryDiversitySummary,
   JuryRunReport,
   ResolutionEvent,
   ResolutionEventSource,
@@ -176,7 +178,12 @@ import {
   type DebateTurnPlan,
 } from "./debateOrder";
 import { rankDebateRoles } from "./debate-role";
-import { rosterAdmitsDraw, rosterCanSeat } from "./draw-feasibility";
+import {
+  DEFAULT_DRAW_RULE,
+  rosterAdmitsDraw,
+  rosterCanSeat,
+  type DrawRule,
+} from "./draw-feasibility";
 import { researchStepEvent } from "./research-feed";
 import {
   buildRunBundleCore,
@@ -241,6 +248,13 @@ export const WEATHER_PROBE_INTERVAL_MS = 120_000;
 export const WEATHER_STALE_MS = 300_000;
 /** The research provider's row in the weather table (not a Gonka model). */
 export const RESEARCH_WEATHER_ID = "research:firecrawl";
+/**
+ * Families a committee must span while the chain has not been read. The Move
+ * default, so a registry that never set the field gates exactly as before.
+ */
+export const DEFAULT_REQUIRED_FAMILIES = DEFAULT_DRAW_RULE.requiredModels;
+/** Below three families the jury sat in degraded mode, and every record says so. */
+export const FULL_MODEL_FAMILIES = 3;
 /** The credit check is a single small GET; it never waits on a model. */
 export const RESEARCH_PROBE_TIMEOUT_MS = 15_000;
 /**
@@ -588,6 +602,10 @@ class OpenVerdictEngine implements Engine {
     probedAtMs: number;
     results: GonkaWeatherProbe[];
   } | null = null;
+  /** The registry's draw rule, read once per weather probe and cached with it. */
+  #juryDiversityCache: { diversity: JuryDiversity; readAtMs: number } | null = null;
+  /** A committee's recorded pair never changes once drawn, so it is cached for good. */
+  readonly #committeeDiversityCache = new Map<string, number>();
   readonly #retrieve: NonNullable<EngineConfig["retrieve"]>;
   readonly #retrievalPolicy: RetrievalPolicy;
   readonly #eventPollIntervalMs: number;
@@ -678,6 +696,50 @@ class OpenVerdictEngine implements Engine {
     );
     // Relaunches share this probe so the three families are never called twice.
     this.#weatherProbeCache = { probedAtMs, results };
+    // The draw rule is read with the probe: the gate and the probe age together.
+    await this.juryDiversity();
+  }
+
+  /**
+   * The draw rule the registry demands of the next committee: how many model
+   * families it must span and how many seats one family may hold. Read from
+   * chain at most once per probe interval; a read failure keeps the last known
+   * answer, and the Move defaults until one is read, so a flaky node never
+   * loosens the gate.
+   */
+  private async juryDiversity(): Promise<JuryDiversity> {
+    const now = this.#now();
+    if (
+      this.#juryDiversityCache !== null &&
+      now - this.#juryDiversityCache.readAtMs < WEATHER_PROBE_INTERVAL_MS
+    ) {
+      return this.#juryDiversityCache.diversity;
+    }
+    try {
+      const diversity = await this.#gateway.juryDiversity();
+      this.#juryDiversityCache = { diversity, readAtMs: now };
+      return diversity;
+    } catch {
+      return this.#juryDiversityCache?.diversity ?? DEFAULT_DRAW_RULE;
+    }
+  }
+
+  /** The draw rule in the shape lib/engine/draw-feasibility mirrors. */
+  private async drawRule(): Promise<DrawRule> {
+    const { requiredModels, maxSeatsPerModel } = await this.juryDiversity();
+    return { requiredModels, maxSeatsPerModel };
+  }
+
+  /** Families with at least one active eligible seat, in the roster's order. */
+  private async activeFamilies(): Promise<string[]> {
+    const records = await this.#repository.listAgentManifests();
+    const families: string[] = [];
+    for (const record of records) {
+      if (!record.active) continue;
+      const family = weatherFamily(record.manifest.modelId);
+      if (!families.includes(family)) families.push(family);
+    }
+    return families;
   }
 
   async weather(): Promise<WeatherReport> {
@@ -692,13 +754,24 @@ class OpenVerdictEngine implements Engine {
       latencyMs: row.latencyMs,
       status: row.status,
     }));
-    return {
-      probedAtMs,
-      stale,
-      // A jury needs every stored model family, while stale weather stays unknown.
-      clear: !stale && families.every((family) => family.ok),
-      families,
-    };
+    const [{ requiredModels: requiredFamilies }, activeFamilies] = await Promise.all([
+      this.juryDiversity(),
+      this.activeFamilies(),
+    ]);
+    // A family with no active seat cannot be drawn, so its outage does not
+    // stop a jury; a family that still holds seats must answer. Web search is
+    // not a model family and is required either way. Stale weather is unknown,
+    // never clear.
+    const healthy = new Set(
+      families.filter((family) => family.ok).map((family) => family.family),
+    );
+    const research = families.find((family) => family.family === "research");
+    const clear =
+      !stale &&
+      activeFamilies.length >= requiredFamilies &&
+      activeFamilies.every((family) => healthy.has(family)) &&
+      (research === undefined || research.ok);
+    return { probedAtMs, stale, clear, families, requiredFamilies, activeFamilies };
   }
 
   async factCheckSubmit(req: FactCheckRequest): Promise<FactCheckSubmission> {
@@ -875,7 +948,21 @@ class OpenVerdictEngine implements Engine {
           );
           this.#weatherProbeCache = { probedAtMs: nowMs, results };
         }
-        if (!this.#weatherProbeCache.results.every((result) => result.ok)) {
+        // The same rule the submission gate uses: a model family with no
+        // active seat cannot be drawn, so its outage must not strand a voided
+        // attempt while the operator runs degraded mode. Web search is always
+        // required, and there still have to be enough families to draw a jury.
+        const active = new Set(await this.activeFamilies());
+        const { requiredModels } = await this.juryDiversity();
+        const relaunchable =
+          active.size >= requiredModels &&
+          this.#weatherProbeCache.results.every(
+            (result) =>
+              result.ok ||
+              (result.modelId !== RESEARCH_WEATHER_ID &&
+                !active.has(weatherFamily(result.modelId))),
+          );
+        if (!relaunchable) {
           continue;
         }
         // One relaunch per window; the rest wait for a later tick.
@@ -2093,6 +2180,41 @@ class OpenVerdictEngine implements Engine {
     );
   }
 
+  /**
+   * How many model families the registry demanded when this committee was
+   * drawn. The chain records the pair on the committee itself, so it never
+   * moves with the registry's current setting. A committee drawn before
+   * degraded mode existed carries none, which is exactly the default.
+   */
+  private async committeeRequiredFamilies(committeeId: string): Promise<number> {
+    const cached = this.#committeeDiversityCache.get(committeeId);
+    if (cached !== undefined) return cached;
+    try {
+      const { requiredModels } = await this.#gateway.committeeDiversity(committeeId);
+      this.#committeeDiversityCache.set(committeeId, requiredModels);
+      return requiredModels;
+    } catch {
+      return DEFAULT_REQUIRED_FAMILIES;
+    }
+  }
+
+  /** The public degraded flag: fewer than three families judged this claim. */
+  private async juryDiversitySummary(
+    committeeId: string | undefined,
+    modelIds: Iterable<string | undefined>,
+  ): Promise<JuryDiversitySummary | undefined> {
+    const families = new Set<string>();
+    for (const modelId of modelIds) {
+      if (modelId !== undefined) families.add(weatherFamily(modelId));
+    }
+    if (committeeId === undefined || families.size === 0) return undefined;
+    return {
+      familyCount: families.size,
+      requiredFamilies: await this.committeeRequiredFamilies(committeeId),
+      degraded: families.size < FULL_MODEL_FAMILIES,
+    };
+  }
+
   async inspect(claimId: string, opts: { verify?: boolean } = {}): Promise<ClaimInspection> {
     const claim = await this.claim(claimId);
     const committee = await this.#repository.getCommitteeForClaim(claimId);
@@ -2222,6 +2344,10 @@ class OpenVerdictEngine implements Engine {
       deliberation,
       roundOneStances,
     );
+    const jury = await this.juryDiversitySummary(
+      committee?.committeeId,
+      commitments.map((commitment) => commitment.modelId),
+    );
     const inspection: ClaimInspection = {
       claimId,
       mode: claim.mode,
@@ -2245,6 +2371,7 @@ class OpenVerdictEngine implements Engine {
       ...(convergedAfterExchange === null
         ? {}
         : { debateConvergedAfterExchange: convergedAfterExchange }),
+      ...(jury === undefined ? {} : { jury }),
       ...(result === undefined ? {} : { result: certificateToFinalizeReport(result) }),
     };
     if (opts.verify) inspection.verification = await this.verifyClaim(claim, manifests, packages, result);
@@ -2279,6 +2406,14 @@ class OpenVerdictEngine implements Engine {
       ...(await this.#repository.listVotePackages(claimId, 2)),
     ];
     const truthScoreBps = certificate?.truthScoreBps ?? null;
+    // The committee's own seats decide the family count, so a seat that failed
+    // before any inference still counts towards the diversity the draw gave.
+    const jury = await this.juryDiversitySummary(
+      committee?.committeeId,
+      (committee?.agentProfileIds ?? []).map(
+        (agentProfileId) => agentsById.get(agentProfileId)?.manifest.modelId,
+      ),
+    );
     return {
       claimId,
       statement: claim.statement,
@@ -2303,6 +2438,7 @@ class OpenVerdictEngine implements Engine {
         contentHash: artifact.contentHash,
       })),
       ...(evidence === undefined ? {} : { evidenceRoot: evidence.root }),
+      ...(jury === undefined ? {} : { jury }),
       sui: {
         claimObjectId: claimId,
         ...(committee === undefined ? {} : { committeeId: committee.committeeId }),
@@ -4267,8 +4403,11 @@ class OpenVerdictEngine implements Engine {
         role: agent.role,
         active: true,
       }));
-    if (!rosterAdmitsDraw(roster).ok) return;
-    const seat = rosterCanSeat(roster, { owner, modelId, role, active: true });
+    // The registry's own rule, so a stake that degraded mode needs (a third
+    // seat on one model) is not refused by a mirror still holding the default.
+    const rule = await this.drawRule();
+    if (!rosterAdmitsDraw(roster, rule).ok) return;
+    const seat = rosterCanSeat(roster, { owner, modelId, role, active: true }, rule);
     if (!seat.ok) throw new EngineValidationError(seat.reason);
   }
 
@@ -4291,10 +4430,11 @@ class OpenVerdictEngine implements Engine {
       active: agent.active,
     }));
     const ranked = rankDebateRoles(roster, modelId);
+    const rule = await this.drawRule();
     // A roster that cannot draw a jury yet refuses nothing, so balance decides.
-    if (!rosterAdmitsDraw(roster).ok) return ranked[0]!;
+    if (!rosterAdmitsDraw(roster, rule).ok) return ranked[0]!;
     const drawable = ranked.find(
-      (role) => rosterCanSeat(roster, { owner, modelId, role, active: true }).ok,
+      (role) => rosterCanSeat(roster, { owner, modelId, role, active: true }, rule).ok,
     );
     return drawable ?? ranked[0]!;
   }

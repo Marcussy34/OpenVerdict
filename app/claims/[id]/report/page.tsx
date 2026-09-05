@@ -35,6 +35,7 @@ import { cn } from "@/lib/utils";
 import { deriveRunId, type BrowserRunProof } from "@/lib/verify/run-proof";
 import { debateStanding } from "@/lib/viz/debate-standing";
 import { buildTranscript, jurorAt, type TranscriptJuror } from "@/lib/viz/transcript";
+import { juryFamiliesLabel } from "@/lib/web/weather-copy";
 import type {
   ClaimInspection,
   DeliberationTurnPublic,
@@ -653,6 +654,15 @@ function ClaimReportContent({ params }: ClaimReportPageProps) {
           </div>
 
           <p className="text-[15px] leading-[1.55] text-muted-foreground">{juryLine}</p>
+
+          {/* Degraded mode is never silent: fewer than three families judged
+              this claim, and the committee on chain records the pair it drew
+              under. Nothing is added when three families sat. */}
+          {claim.jury?.degraded && (
+            <p className="text-[13px] leading-[1.55] text-muted-foreground">
+              {juryFamiliesLabel(claim.jury)}.
+            </p>
+          )}
 
           {hasRoundTwo && (
             <p className="text-[13px] leading-[1.55] text-muted-foreground">

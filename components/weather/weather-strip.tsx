@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import type { WeatherFamily, WeatherReport } from "@/lib/engine/contract";
-import { weatherFamilyLabel } from "@/lib/web/weather-copy";
+import { juryRequirementSentence, weatherFamilyLabel } from "@/lib/web/weather-copy";
 import { cn } from "@/lib/utils";
 
 export interface WeatherStripProps {
@@ -272,7 +272,7 @@ export function WeatherStrip({
             isDark ? "text-white/60" : "text-muted-foreground",
           )}
         >
-          A jury needs all three model families and web search.
+          {juryRequirementSentence(report)}
         </p>
       ) : null}
     </div>

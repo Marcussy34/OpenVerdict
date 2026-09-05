@@ -3,6 +3,7 @@ module openverdict::agent_registry_tests {
     use openverdict::agent_registry;
     use sui::clock;
     use sui::coin::{Self, Coin};
+    use sui::event;
     use sui::sui::SUI;
     use sui::test_scenario;
 
@@ -385,6 +386,75 @@ module openverdict::agent_registry_tests {
         let clock = clock::create_for_testing(scenario.ctx());
         agent_registry::pause(&mut registry, &pause_cap);
         stake_seat(&mut registry, &clock, MIN_STAKE, OPERATOR, &mut scenario);
+        abort E_UNEXPECTED_SUCCESS
+    }
+
+    #[test]
+    fun jury_diversity_defaults_to_three_families_and_two_seats() {
+        let mut scenario = test_scenario::begin(OWNER);
+        let registry = agent_registry::new_registry_for_testing(scenario.ctx());
+        let (required_models, max_seats_per_model) = agent_registry::jury_diversity(&registry);
+        assert!(required_models == 3 && max_seats_per_model == 2);
+        agent_registry::destroy_registry_for_testing(registry);
+        scenario.end();
+    }
+
+    #[test]
+    fun set_jury_diversity_stores_the_pair_and_records_every_change() {
+        let mut scenario = test_scenario::begin(OWNER);
+        let mut registry = agent_registry::new_registry_for_testing(scenario.ctx());
+        let admin_cap = agent_registry::new_admin_cap_for_testing(scenario.ctx());
+        let mut clock = clock::create_for_testing(scenario.ctx());
+        clock::set_for_testing(&mut clock, 1_757_000_000_000);
+
+        agent_registry::set_jury_diversity(&mut registry, &admin_cap, 2, 3, &clock);
+        let (required_models, max_seats_per_model) = agent_registry::jury_diversity(&registry);
+        assert!(required_models == 2 && max_seats_per_model == 3);
+        let changes = event::events_by_type<agent_registry::JuryDiversityChanged>();
+        assert!(changes.length() == 1);
+        let (required, per_model, at_ms) = agent_registry::diversity_changed_values(&changes[0]);
+        assert!(required == 2 && per_model == 3 && at_ms == 1_757_000_000_000);
+
+        // Restoring the full requirement overwrites the same field.
+        agent_registry::set_jury_diversity(&mut registry, &admin_cap, 3, 2, &clock);
+        let (restored, restored_per_model) = agent_registry::jury_diversity(&registry);
+        assert!(restored == 3 && restored_per_model == 2);
+        assert!(event::events_by_type<agent_registry::JuryDiversityChanged>().length() == 2);
+
+        agent_registry::destroy_admin_cap_for_testing(admin_cap);
+        agent_registry::destroy_registry_for_testing(registry);
+        clock::destroy_for_testing(clock);
+        scenario.end();
+    }
+
+    #[test, expected_failure(abort_code = openverdict::agent_registry::E_UNDRAWABLE_DIVERSITY)]
+    fun jury_diversity_rejects_two_families_of_two_seats() {
+        let mut scenario = test_scenario::begin(OWNER);
+        let mut registry = agent_registry::new_registry_for_testing(scenario.ctx());
+        let admin_cap = agent_registry::new_admin_cap_for_testing(scenario.ctx());
+        let clock = clock::create_for_testing(scenario.ctx());
+        // Two families at two seats each seat four jurors, never five.
+        agent_registry::set_jury_diversity(&mut registry, &admin_cap, 2, 2, &clock);
+        abort E_UNEXPECTED_SUCCESS
+    }
+
+    #[test, expected_failure(abort_code = openverdict::agent_registry::E_INVALID_DIVERSITY)]
+    fun jury_diversity_rejects_a_single_family() {
+        let mut scenario = test_scenario::begin(OWNER);
+        let mut registry = agent_registry::new_registry_for_testing(scenario.ctx());
+        let admin_cap = agent_registry::new_admin_cap_for_testing(scenario.ctx());
+        let clock = clock::create_for_testing(scenario.ctx());
+        agent_registry::set_jury_diversity(&mut registry, &admin_cap, 1, 3, &clock);
+        abort E_UNEXPECTED_SUCCESS
+    }
+
+    #[test, expected_failure(abort_code = openverdict::agent_registry::E_INVALID_DIVERSITY)]
+    fun jury_diversity_rejects_four_seats_on_one_family() {
+        let mut scenario = test_scenario::begin(OWNER);
+        let mut registry = agent_registry::new_registry_for_testing(scenario.ctx());
+        let admin_cap = agent_registry::new_admin_cap_for_testing(scenario.ctx());
+        let clock = clock::create_for_testing(scenario.ctx());
+        agent_registry::set_jury_diversity(&mut registry, &admin_cap, 3, 4, &clock);
         abort E_UNEXPECTED_SUCCESS
     }
 

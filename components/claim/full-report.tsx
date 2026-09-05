@@ -18,6 +18,7 @@ import { RunProof } from "@/components/claim/run-proof";
 import { cn } from "@/lib/utils";
 import { deriveRunId } from "@/lib/verify/run-proof";
 import { researchFeed } from "@/lib/viz/research-feed";
+import { juryFamiliesLabel } from "@/lib/web/weather-copy";
 import { computeTruthScoreBps, agentProbabilityBps } from "@/lib/protocol/truthScore";
 import { OUTCOME } from "@/lib/protocol/constants";
 import type {
@@ -333,6 +334,16 @@ export function FullReport({
                   {revealedCount} revealed · {sealedCount} sealed / {claim.commitments?.length ?? 0}
                 </p>
               </div>
+              {/* Only a degraded jury adds a field here: three families is the
+                  rule, and the record says so only when it was lowered. */}
+              {claim.jury?.degraded && (
+                <div className="space-y-1">
+                  <FieldLabel>Model families</FieldLabel>
+                  <p className="text-sm font-semibold text-muted-foreground">
+                    {juryFamiliesLabel(claim.jury)}
+                  </p>
+                </div>
+              )}
             </div>
 
             {/* Independent recomputation report (verify=1) */}

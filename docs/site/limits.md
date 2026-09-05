@@ -78,6 +78,10 @@ or `docs/STATUS.md` and reproduced rather than softened.
 - The draw needs at least seven active records and gives up after 160 attempts.
 - The gateway serves exactly three model families, so a fourth is not available
   yet.
+- When one of the three is down for long enough to matter, the operator can
+  lower the draw to two families in degraded mode. A jury of two families is a
+  smaller jury, with more correlated failure than three, and every certificate
+  and report drawn under it says so.
 - Round two has not been exercised live under the current fixed window.
 - The deliberation prompt is engine-only and sits outside the manifest hash
   chain, unlike the research and table-vote prompts.

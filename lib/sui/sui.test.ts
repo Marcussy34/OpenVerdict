@@ -24,6 +24,8 @@ import {
   buildRegisterAgentTransaction,
   buildRevealVoteTransaction,
   buildSelectCommitteeTransaction,
+  buildSetAgentEligibilityTransaction,
+  buildSetJuryDiversityTransaction,
   buildSettleDemoPoolTransaction,
   buildStartDirectReviewTransaction,
   buildUpdateAgentManifestTransaction,
@@ -343,6 +345,27 @@ function transactionCases(): Array<{
         modelHash: hash,
         roleHash: hash,
         humanBackingHash: hash,
+      }),
+    },
+    {
+      // registry, admin cap, required_models, max_seats_per_model, clock
+      functionName: "set_jury_diversity",
+      argumentCount: 5,
+      transaction: buildSetJuryDiversityTransaction(manifest, {
+        adminCapId: id("7"),
+        requiredModels: 2,
+        maxSeatsPerModel: 3,
+      }),
+    },
+    {
+      // registry, admin cap, profile, active, weight
+      functionName: "set_agent_eligibility",
+      argumentCount: 5,
+      transaction: buildSetAgentEligibilityTransaction(manifest, {
+        adminCapId: id("7"),
+        agentProfileId: id("3"),
+        active: false,
+        weight: 10_000,
       }),
     },
     {

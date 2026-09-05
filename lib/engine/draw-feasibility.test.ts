@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { rosterAdmitsDraw, rosterCanSeat, type DrawSeat } from "./draw-feasibility";
+import {
+  rosterAdmitsDraw,
+  rosterCanSeat,
+  type DrawRule,
+  type DrawSeat,
+} from "./draw-feasibility";
 
 /** One seat; owners are distinct because each seat holds its own signing key. */
 function seat(
@@ -151,5 +156,65 @@ describe("rosterCanSeat", () => {
         "every SOURCE_AUTHENTICITY seat runs deepseek and the draw seats at " +
         "most 2 deepseek jurors; stake on a SOURCE_AUTHENTICITY seat instead",
     });
+  });
+});
+
+/** What the operator sets while a family is down: two families, three seats each. */
+const DEGRADED: DrawRule = { requiredModels: 2, maxSeatsPerModel: 3 };
+
+describe("degraded mode", () => {
+  it("refuses the demo seven with the kimi seats deactivated, five seats cannot seat reserves", () => {
+    const roster = demoSeven().map((record) =>
+      record.modelId === "kimi" ? { ...record, active: false } : record,
+    );
+
+    expect(rosterAdmitsDraw(roster, DEGRADED)).toEqual({
+      ok: false,
+      reason: "fewer than seven active seats (5 active)",
+    });
+  });
+
+  it("draws on two families once eight seats are active, four per role", () => {
+    // Eight seats, four per role, is the shape the runbook stakes for. This
+    // existence test is satisfied by seven, but the chain's greedy draw picks
+    // its five before it looks for reserves and never re-picks them, so a
+    // committee that took three seats of one role strands the reserve loop.
+    // Four per role means one of each role always survives the pick.
+    const roster = [
+      ...demoSeven().map((record) =>
+        record.modelId === "kimi" ? { ...record, active: false } : record,
+      ),
+      seat("d1", "deepseek", "SKEPTIC"),
+      seat("d2", "minimax", "SOURCE_AUTHENTICITY"),
+      seat("d3", "minimax", "SKEPTIC"),
+    ];
+
+    expect(rosterAdmitsDraw(roster, DEGRADED)).toEqual({ ok: true });
+    const active = roster.filter((record) => record.active);
+    expect(active).toHaveLength(8);
+    expect(active.filter((record) => record.role === "SKEPTIC")).toHaveLength(4);
+    expect(
+      active.filter((record) => record.role === "SOURCE_AUTHENTICITY"),
+    ).toHaveLength(4);
+    // The same roster is still not enough while three families are required.
+    expect(rosterAdmitsDraw(roster)).toEqual({
+      ok: false,
+      reason: "no valid committee: only 2 model families among active seats",
+    });
+  });
+
+  it("accepts a third seat on one model, which the default rule refuses", () => {
+    const roster = [
+      seat("a1", "deepseek", "SOURCE_AUTHENTICITY"),
+      seat("a2", "deepseek", "SOURCE_AUTHENTICITY"),
+      seat("b1", "minimax", "SKEPTIC"),
+      seat("b2", "minimax", "SKEPTIC"),
+      seat("b3", "minimax", "SOURCE_AUTHENTICITY"),
+      seat("a3", "deepseek", "SKEPTIC"),
+    ];
+    const third = seat("a4", "deepseek", "SKEPTIC");
+
+    expect(rosterCanSeat(roster, third, DEGRADED)).toEqual({ ok: true });
+    expect(rosterCanSeat(roster, third).ok).toBe(false);
   });
 });

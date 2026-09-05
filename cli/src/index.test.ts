@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Engine } from "../../lib/engine/contract";
 import { runCli } from "./index";
+import type { OperatorClient } from "./operator";
 
 const temporaryDirectories: string[] = [];
 
@@ -138,6 +139,8 @@ describe("OpenVerdict CLI", () => {
         probedAtMs: 1,
         stale: false,
         clear: false,
+        requiredFamilies: 3,
+        activeFamilies: ["deepseek", "minimax", "kimi"],
         families: [
           {
             modelId: "deepseek-r1",
@@ -183,6 +186,197 @@ describe("OpenVerdict CLI", () => {
   });
 });
 
+describe("operator registry commands", () => {
+  it("parses the diversity pair and signs one set_jury_diversity call", async () => {
+    const calls: unknown[] = [];
+    const output: string[] = [];
+
+    const code = await runCli(
+      ["--json", "registry", "diversity", "--required", "2", "--per-model", "3"],
+      {
+        engine: fakeEngine(),
+        operator: fakeOperator(calls),
+        stdout: (value) => output.push(value),
+        stderr: () => undefined,
+      },
+    );
+
+    expect(code).toBe(0);
+    expect(calls).toEqual([{ requiredModels: 2, maxSeatsPerModel: 3 }]);
+    expect(JSON.parse(output[0] ?? "{}")).toMatchObject({ digest: "operator-digest" });
+  });
+
+  it("refuses two families with two seats per model, which cannot fill five seats", async () => {
+    const errors: string[] = [];
+
+    const code = await runCli(
+      ["registry", "diversity", "--required", "2", "--per-model", "2"],
+      {
+        engine: fakeEngine(),
+        operator: fakeOperator([]),
+        stdout: () => undefined,
+        stderr: (value) => errors.push(value),
+      },
+    );
+
+    expect(code).toBe(2);
+    expect(errors.join("\n")).toContain("CLI_USAGE");
+  });
+
+  it("rejects a diversity count the Move entry would abort on", async () => {
+    const errors: string[] = [];
+
+    const code = await runCli(
+      ["registry", "diversity", "--required", "4", "--per-model", "3"],
+      {
+        engine: fakeEngine(),
+        operator: fakeOperator([]),
+        stdout: () => undefined,
+        stderr: (value) => errors.push(value),
+      },
+    );
+
+    expect(code).toBe(2);
+    expect(errors.join("\n")).toContain("CLI_USAGE");
+  });
+
+  it("takes one seat out of the draw by profile id", async () => {
+    const calls: unknown[] = [];
+
+    const code = await runCli(
+      ["--json", "agents", "eligibility", "0xprofile", "--active", "false"],
+      {
+        engine: fakeEngine(),
+        operator: fakeOperator(calls),
+        stdout: () => undefined,
+        stderr: () => undefined,
+      },
+    );
+
+    expect(code).toBe(0);
+    expect(calls).toEqual([{ agentProfileId: "0xprofile", active: false }]);
+  });
+
+  it("prints the registry roster with the draw rule and the active count", async () => {
+    const output: string[] = [];
+
+    const code = await runCli(["registry", "roster"], {
+      engine: fakeEngine(),
+      operator: fakeOperator([]),
+      stdout: (value) => output.push(value),
+      stderr: () => undefined,
+    });
+
+    expect(code).toBe(0);
+    const printed = output.join("\n");
+    expect(printed).toContain("rule       3 model families, 2 seats per model");
+    expect(printed).toContain("seats      1 active of 2");
+    expect(printed).toContain("1 active, 1 inactive (1 SOURCE_AUTHENTICITY)");
+    expect(printed).toContain("0xseat1 active   deepseek-ai/DeepSeek-V4-Flash-0731 SOURCE_AUTHENTICITY weight 10000");
+    // The line the procedure reads before it deactivates a family.
+    expect(printed).toContain(
+      "summary    1 active seats, 1 families; spare SKEPTIC: 0, spare SOURCE_AUTHENTICITY: 0",
+    );
+  });
+
+  it("reports the weight the eligibility change preserved", async () => {
+    const output: string[] = [];
+
+    const code = await runCli(
+      ["--json", "agents", "eligibility", "0xprofile", "--active", "false"],
+      {
+        engine: fakeEngine(),
+        operator: fakeOperator([]),
+        stdout: (value) => output.push(value),
+        stderr: () => undefined,
+      },
+    );
+
+    expect(code).toBe(0);
+    expect(JSON.parse(output[0] ?? "{}")).toMatchObject({ weight: 10_000 });
+  });
+
+  it("refuses an --active value that is neither true nor false", async () => {
+    const errors: string[] = [];
+
+    const code = await runCli(
+      ["agents", "eligibility", "0xprofile", "--active", "off"],
+      {
+        engine: fakeEngine(),
+        operator: fakeOperator([]),
+        stdout: () => undefined,
+        stderr: (value) => errors.push(value),
+      },
+    );
+
+    expect(code).toBe(2);
+    expect(errors.join("\n")).toContain("CLI_USAGE");
+  });
+});
+
+/** Records what the CLI asked for instead of signing anything. */
+function fakeOperator(calls: unknown[]): OperatorClient {
+  const result = {
+    digest: "operator-digest",
+    network: "localnet",
+    packageId: "0xpackage",
+    registryObjectId: "0xregistry",
+    adminCapObjectId: "0xadmincap",
+  };
+  return {
+    async setJuryDiversity(input) {
+      calls.push(input);
+      return result;
+    },
+    async setAgentEligibility(input) {
+      calls.push(input);
+      // The real client reads the seat's recorded weight and passes it back.
+      return { ...result, weight: 10_000, rosterMirror: "updated" as const };
+    },
+    async registryRoster() {
+      calls.push({ registryRoster: true });
+      return {
+        network: "testnet",
+        packageId: "0xpackage",
+        registryObjectId: "0xregistry",
+        requiredFamilies: 3,
+        maxSeatsPerModel: 2,
+        totalSeats: 2,
+        activeSeats: 1,
+        activeFamilies: 1,
+        spareSkeptics: 0,
+        spareSourceAuthenticity: 0,
+        families: [
+          {
+            modelId: "deepseek-ai/DeepSeek-V4-Flash-0731",
+            active: 1,
+            inactive: 1,
+            activeRoles: { SOURCE_AUTHENTICITY: 1 },
+          },
+        ],
+        seats: [
+          {
+            agentProfileId: "0xseat1",
+            owner: "0xowner1",
+            modelId: "deepseek-ai/DeepSeek-V4-Flash-0731",
+            role: "SOURCE_AUTHENTICITY",
+            active: true,
+            weight: 10_000,
+          },
+          {
+            agentProfileId: "0xseat2",
+            owner: "0xowner2",
+            modelId: "deepseek-ai/DeepSeek-V4-Flash-0731",
+            role: "SKEPTIC",
+            active: false,
+            weight: 10_000,
+          },
+        ],
+      };
+    },
+  };
+}
+
 function fakeEngine(): Engine {
   return {
     factCheckSubmit: async () => ({ kind: "claim", claimId: "0xclaim" }),
@@ -192,6 +386,8 @@ function fakeEngine(): Engine {
       stale: true,
       clear: false,
       families: [],
+      requiredFamilies: 3,
+      activeFamilies: [],
     }),
     factCheckStart: async () => ({ claimId: "0xclaim" }),
     registerZkBackedAgent: async () => ({

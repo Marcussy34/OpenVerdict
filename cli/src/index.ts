@@ -20,6 +20,11 @@ import {
 import { weatherRefusalMessage } from "../../lib/web/weather-copy";
 import { OUTCOME, type VoteOutcome } from "../../lib/protocol";
 import { SignerRegistry } from "../../lib/sui";
+import {
+  createOperatorClient,
+  type OperatorClient,
+  type RegistryRosterReport,
+} from "./operator";
 
 export interface CliDependencies {
   engine?: Engine;
@@ -28,6 +33,8 @@ export interface CliDependencies {
   stdout?: (value: string) => void;
   stderr?: (value: string) => void;
   env?: Record<string, string | undefined>;
+  /** Operator-signed registry transactions; tests inject a fake. */
+  operator?: OperatorClient;
 }
 
 interface Preflight {
@@ -363,6 +370,62 @@ export function createCliProgram(dependencies: CliDependencies = {}): Command {
       );
     });
 
+  // Operator-only registry controls. Degraded mode is one transaction, and
+  // every certificate drawn under it says how many families sat. These two
+  // print no preflight: they never touch the engine, so there is no
+  // engine.status() to read, and the result names the network, the package,
+  // the registry and the AdminCap they signed against.
+  const operator = (): OperatorClient =>
+    dependencies.operator ?? createOperatorClient(environment);
+
+  const registry = program.command("registry").description("operator registry controls");
+  registry
+    .command("roster")
+    .description("list the seats the committee draw can see")
+    .action(async (_options, command) => {
+      const report = await operator().registryRoster();
+      writer.value(jsonMode(command) ? report : formatRoster(report), jsonMode(command));
+    });
+  registry
+    .command("diversity")
+    .description("set the model families a jury must span")
+    .requiredOption("--required <count>", "distinct model families, 2 or 3", parseDiversityCount)
+    .requiredOption("--per-model <count>", "seats one family may hold, 2 or 3", parseDiversityCount)
+    .action(async (options, command) => {
+      const required = options.required as number;
+      const perModel = options.perModel as number;
+      // The same rule the Move entry asserts, refused here before any gas.
+      if (required === 2 && perModel !== 3) {
+        throw new InvalidArgumentError(
+          "two model families need three seats per model to fill five seats",
+        );
+      }
+      writer.value(
+        await operator().setJuryDiversity({
+          requiredModels: required,
+          maxSeatsPerModel: perModel,
+        }),
+        jsonMode(command),
+      );
+    });
+
+  program
+    .command("agents")
+    .description("operator agent controls")
+    .command("eligibility")
+    .description("take a seat out of the committee draw, or put it back")
+    .argument("<profileId>", "agent profile object ID")
+    .requiredOption("--active <bool>", "true or false", parseBoolean)
+    .action(async (profileId: string, options: { active: boolean }, command: Command) => {
+      writer.value(
+        await operator().setAgentEligibility({
+          agentProfileId: profileId,
+          active: options.active,
+        }),
+        jsonMode(command),
+      );
+    });
+
   program
     .command("events")
     .description("resolution event stream")
@@ -474,6 +537,52 @@ function parsePhase(value: string): 1 | 2 {
   if (value === "1") return 1;
   if (value === "2") return 2;
   throw new InvalidArgumentError("phase must be 1 or 2");
+}
+
+/**
+ * The roster as an operator reads it before degraded mode: the draw rule, the
+ * active count against the seven the draw needs, then one line per family with
+ * its active roles, then one line per seat.
+ */
+function formatRoster(report: RegistryRosterReport): string {
+  const lines = [
+    `network    ${report.network}`,
+    `registry   ${report.registryObjectId}`,
+    `rule       ${report.requiredFamilies} model families, ${report.maxSeatsPerModel} seats per model`,
+    `seats      ${report.activeSeats} active of ${report.totalSeats} (a draw needs 7 active: 5 seats and 2 reserves)`,
+    // A committee takes at most three seats of one role, so a role with only
+    // three active seats can be taken whole and leave its reserve unfillable.
+    `summary    ${report.activeSeats} active seats, ${report.activeFamilies} families; spare SKEPTIC: ${report.spareSkeptics}, spare SOURCE_AUTHENTICITY: ${report.spareSourceAuthenticity}`,
+  ];
+  for (const family of report.families) {
+    const roles = Object.entries(family.activeRoles)
+      .map(([role, count]) => `${count} ${role}`)
+      .join(", ");
+    lines.push(
+      `family     ${family.modelId}: ${family.active} active${
+        family.inactive > 0 ? `, ${family.inactive} inactive` : ""
+      }${roles ? ` (${roles})` : ""}`,
+    );
+  }
+  for (const seat of report.seats) {
+    lines.push(
+      `seat       ${seat.agentProfileId} ${seat.active ? "active  " : "inactive"} ${seat.modelId} ${seat.role} weight ${seat.weight}`,
+    );
+  }
+  return lines.join("\n");
+}
+
+/** agent_registry::set_jury_diversity accepts 2 or 3 on both counts. */
+function parseDiversityCount(value: string): number {
+  if (value === "2") return 2;
+  if (value === "3") return 3;
+  throw new InvalidArgumentError("count must be 2 or 3");
+}
+
+function parseBoolean(value: string): boolean {
+  if (value === "true") return true;
+  if (value === "false") return false;
+  throw new InvalidArgumentError("value must be true or false");
 }
 
 function parseOutcome(value: string): VoteOutcome {

@@ -58,7 +58,9 @@ characters keeps operator writes closed.
 ### GET /api/weather
 
 The latest public probe of the three model families and the web search
-provider. A jury needs all four. Sent with `Cache-Control: no-store`.
+provider, plus the draw rule in force. A jury needs every family that still
+holds an active seat, at least as many of them as the draw requires, and web
+search. Sent with `Cache-Control: no-store`.
 
 ```bash
 curl -s https://app.openverdict.info/api/weather
@@ -72,14 +74,21 @@ curl -s https://app.openverdict.info/api/weather
   "families": [
     { "modelId": "deepseek-ai/DeepSeek-V4-Flash-0731", "family": "deepseek", "ok": false, "latencyMs": 60004, "status": "TIMEOUT" },
     { "modelId": "research:firecrawl", "family": "research", "ok": true, "latencyMs": 297, "status": "200 1189 credits" }
-  ]
+  ],
+  "requiredFamilies": 3,
+  "activeFamilies": ["deepseek", "minimax", "kimi"]
 }
 ```
 
-`clear` is true only when the probe is fresh and every family is `ok`; unknown
-weather is never clear. `stale` is true when there is no probe or the newest
-one is older than the staleness window. `status` is the HTTP status as text,
-or `TIMEOUT` or `ERROR`.
+`clear` is true only when the probe is fresh, every family in `activeFamilies`
+is `ok`, `activeFamilies` holds at least `requiredFamilies` entries, and web
+search is `ok`; unknown weather is never clear. `stale` is true when there is
+no probe or the newest one is older than the staleness window. `status` is the
+HTTP status as text, or `TIMEOUT` or `ERROR`. `requiredFamilies` is the number
+of distinct model families the committee draw demands, read from the registry
+on chain: three normally, two while the operator runs degraded mode.
+`activeFamilies` is every family that still holds an active eligible seat, so a
+family taken out of the draw cannot hold a submission up.
 
 | Status | Body | Meaning |
 | --- | --- | --- |

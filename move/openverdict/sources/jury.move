@@ -203,6 +203,17 @@ module openverdict::jury {
         jury_seat_ids: vector<ID>,
     }
 
+    /// How many model families actually sat, against the rule the draw used.
+    /// `degraded` is true whenever fewer than the protocol's full three sat.
+    public struct CommitteeDiversity has copy, drop {
+        claim_id: ID,
+        committee_id: ID,
+        distinct_models: u8,
+        required_models: u8,
+        max_seats_per_model: u8,
+        degraded: bool,
+    }
+
     public struct RunApproved has copy, drop {
         claim_id: ID,
         jury_seat_id: ID,
@@ -239,6 +250,9 @@ module openverdict::jury {
     ) {
         agent_registry::assert_not_paused(registry);
         assert!(claim::state(claim) == claim::state_review_requested(), E_INVALID_CLAIM_STATE);
+        // The rule in force, read once: the committee is drawn under it and
+        // keeps it, so a later replacement is judged by the same numbers.
+        let (required_models, max_seats_per_model) = agent_registry::jury_diversity(registry);
         let records = agent_registry::eligibility_records(registry);
         let record_count = records.length();
         assert!(
@@ -270,7 +284,8 @@ module openverdict::jury {
             let ticket = random::generate_u64_in_range(&mut generator, 0, total_weight - 1);
             let index = weighted_record_index(records, ticket);
             let candidate = records[index];
-            if (!agent_conflicts_with_claim(claim, &candidate) && can_add_selected(&selected, &candidate)) {
+            if (!agent_conflicts_with_claim(claim, &candidate) &&
+                can_add_selected(&selected, &candidate, max_seats_per_model)) {
                 selected.push_back(candidate);
                 stalls = 0;
             } else {
@@ -283,7 +298,7 @@ module openverdict::jury {
             attempts = attempts + 1;
         };
         assert!(selected.length() == COMMITTEE_SIZE, E_INSUFFICIENT_DIVERSE_AGENTS);
-        assert!(selected_diversity_valid(&selected), E_INSUFFICIENT_DIVERSE_AGENTS);
+        assert!(selected_diversity_valid(&selected, required_models), E_INSUFFICIENT_DIVERSE_AGENTS);
 
         // Reserves stall the same way (both must carry different roles), so
         // the same restart applies; the committee above is already fixed.
@@ -307,7 +322,16 @@ module openverdict::jury {
         };
         assert!(reserves.length() == RESERVE_COUNT, E_INSUFFICIENT_DIVERSE_AGENTS);
 
-        create_first_round(registry, claim, selected, reserves, clock, ctx);
+        create_first_round(
+            registry,
+            claim,
+            selected,
+            reserves,
+            required_models,
+            max_seats_per_model,
+            clock,
+            ctx,
+        );
     }
 
     /// Accept one offered seat before its commit deadline.
@@ -360,11 +384,21 @@ module openverdict::jury {
         assert!(found, E_UNEXPECTED_SEAT);
         assert!(!vector::contains(&tally.revealed_jury_seat_ids, &declined_seat_id), E_DUPLICATE_REVEAL);
 
+        let (required_models, max_seats_per_model) = committee_diversity(committee);
         let policy = df::borrow_mut<CommitteePolicyKey, CommitteePolicy>(
             &mut committee.id,
             CommitteePolicyKey {},
         );
-        assert!(replacement_preserves_diversity(policy, seat_index, reserve_index), E_INVALID_RESERVE);
+        assert!(
+            replacement_preserves_diversity(
+                policy,
+                seat_index,
+                reserve_index,
+                required_models,
+                max_seats_per_model,
+            ),
+            E_INVALID_RESERVE,
+        );
 
         let profile_id = committee.reserve_profile_ids[reserve_index];
         let owner = committee.reserve_owners[reserve_index];
@@ -784,6 +818,12 @@ module openverdict::jury {
     public fun committee_profiles(committee: &Committee): &vector<ID> { &committee.agent_profile_ids }
     public fun committee_owners(committee: &Committee): &vector<address> { &committee.agent_owners }
     public fun committee_reserve_count(committee: &Committee): u64 { committee.reserve_profile_ids.length() }
+
+    /// The draw rule this committee was selected under. Committees drawn
+    /// before degraded mode carry no such field and keep the original numbers.
+    public fun committee_diversity(committee: &Committee): (u8, u8) {
+        agent_registry::stored_jury_diversity(&committee.id)
+    }
     public fun jury_seat_id(seat: &JurySeat): ID { object::id(seat) }
     public fun jury_seat_profile_id(seat: &JurySeat): ID { seat.agent_profile_id }
     public fun jury_seat_phase(seat: &JurySeat): u8 { seat.phase }
@@ -912,6 +952,8 @@ module openverdict::jury {
         claim: &mut Claim<T>,
         selected: vector<EligibilityRecord>,
         reserves: vector<EligibilityRecord>,
+        required_models: u8,
+        max_seats_per_model: u8,
         clock: &Clock,
         ctx: &mut TxContext,
     ) {
@@ -1013,6 +1055,7 @@ module openverdict::jury {
             CommitteePayoutsKey {},
             CommitteePayouts { selected: selected_payouts, reserves: reserve_payouts },
         );
+        let distinct_models = distinct_hash_count(&selected_model_hashes) as u8;
         df::add(
             &mut committee.id,
             CommitteePolicyKey {},
@@ -1026,6 +1069,13 @@ module openverdict::jury {
                 acceptance_deadline_ms,
             },
         );
+        // The rule this committee was drawn under, kept beside it so a
+        // replacement never borrows the registry's later numbers.
+        agent_registry::record_jury_diversity(
+            &mut committee.id,
+            required_models,
+            max_seats_per_model,
+        );
 
         claim::link_committee(claim, committee_id, tally_id);
         event::emit(CommitteeSelected {
@@ -1034,6 +1084,17 @@ module openverdict::jury {
             first_round_tally_id: tally_id,
             agent_profile_ids: committee.agent_profile_ids,
             jury_seat_ids: tally.expected_jury_seat_ids,
+        });
+        // Degraded means fewer than the protocol's full requirement sat,
+        // whatever the operator lowered the draw rule to.
+        let (full_requirement, _) = agent_registry::default_jury_diversity();
+        event::emit(CommitteeDiversity {
+            claim_id: claim::claim_id(claim),
+            committee_id,
+            distinct_models,
+            required_models,
+            max_seats_per_model,
+            degraded: distinct_models < full_requirement,
         });
         transfer::share_object(committee);
         transfer::share_object(tally);
@@ -1173,15 +1234,21 @@ module openverdict::jury {
         assert!(outcome == OUTCOME_YES || outcome == OUTCOME_NO || outcome == OUTCOME_UNSURE, E_INVALID_OUTCOME);
     }
 
-    fun can_add_selected(selected: &vector<EligibilityRecord>, candidate: &EligibilityRecord): bool {
+    fun can_add_selected(
+        selected: &vector<EligibilityRecord>,
+        candidate: &EligibilityRecord,
+        max_seats_per_model: u8,
+    ): bool {
         if (!agent_registry::eligibility_active(candidate) || agent_registry::eligibility_weight(candidate) == 0) {
             return false
         };
         if (contains_profile(selected, agent_registry::eligibility_profile_id(candidate))) return false;
-        // One seat per operational key, two per model. Stakers are uncapped:
-        // an address is free and a staker cannot influence a vote.
+        // One seat per operational key, and the registry's cap per model.
+        // Stakers are uncapped: an address is free and a staker cannot
+        // influence a vote.
         if (contains_owner(selected, agent_registry::eligibility_owner(candidate))) return false;
-        count_model(selected, agent_registry::eligibility_model_hash(candidate)) < 2 &&
+        count_model(selected, agent_registry::eligibility_model_hash(candidate)) <
+            max_seats_per_model as u64 &&
             count_role(selected, agent_registry::eligibility_role_hash(candidate)) < 3
     }
 
@@ -1215,7 +1282,10 @@ module openverdict::jury {
         true
     }
 
-    fun selected_diversity_valid(selected: &vector<EligibilityRecord>): bool {
+    fun selected_diversity_valid(
+        selected: &vector<EligibilityRecord>,
+        required_models: u8,
+    ): bool {
         if (selected.length() != COMMITTEE_SIZE) return false;
         let mut models: vector<vector<u8>> = vector[];
         let mut has_skeptic = false;
@@ -1232,21 +1302,23 @@ module openverdict::jury {
             if (role == &source) has_source = true;
             i = i + 1;
         };
-        models.length() >= 3 && has_skeptic && has_source
+        models.length() >= required_models as u64 && has_skeptic && has_source
     }
 
     fun replacement_preserves_diversity(
         policy: &CommitteePolicy,
         seat_index: u64,
         reserve_index: u64,
+        required_models: u8,
+        max_seats_per_model: u8,
     ): bool {
         let mut models = policy.selected_model_hashes;
         let mut roles = policy.selected_role_hashes;
         *vector::borrow_mut(&mut models, seat_index) = policy.reserve_model_hashes[reserve_index];
         *vector::borrow_mut(&mut roles, seat_index) = policy.reserve_role_hashes[reserve_index];
         // Staker hashes are no longer a constraint, only models and roles are.
-        model_caps_valid(&models) &&
-            distinct_hash_count(&models) >= 3 &&
+        model_caps_valid(&models, max_seats_per_model) &&
+            distinct_hash_count(&models) >= required_models as u64 &&
             vector::contains(&roles, &agent_registry::skeptic_role_hash()) &&
             vector::contains(&roles, &agent_registry::source_authenticity_role_hash())
     }
@@ -1303,7 +1375,7 @@ module openverdict::jury {
         abort E_INSUFFICIENT_DIVERSE_AGENTS
     }
 
-    fun model_caps_valid(models: &vector<vector<u8>>): bool {
+    fun model_caps_valid(models: &vector<vector<u8>>, max_seats_per_model: u8): bool {
         let mut i = 0;
         while (i < models.length()) {
             let mut count = 0;
@@ -1312,7 +1384,7 @@ module openverdict::jury {
                 if (models[i] == models[j]) count = count + 1;
                 j = j + 1;
             };
-            if (count > 2) return false;
+            if (count > max_seats_per_model as u64) return false;
             i = i + 1;
         };
         true
@@ -1514,6 +1586,35 @@ module openverdict::jury {
     }
 
     #[test_only]
+    /// Give one committee the model hashes a two-family draw would record.
+    public(package) fun set_committee_models_for_testing(
+        committee: &mut Committee,
+        selected_models: vector<vector<u8>>,
+        reserve_models: vector<vector<u8>>,
+    ) {
+        let policy = df::borrow_mut<CommitteePolicyKey, CommitteePolicy>(
+            &mut committee.id,
+            CommitteePolicyKey {},
+        );
+        policy.selected_model_hashes = selected_models;
+        policy.reserve_model_hashes = reserve_models;
+    }
+
+    #[test_only]
+    /// Record the draw rule a committee ran under.
+    public(package) fun set_committee_diversity_for_testing(
+        committee: &mut Committee,
+        required_models: u8,
+        max_seats_per_model: u8,
+    ) {
+        agent_registry::record_jury_diversity(
+            &mut committee.id,
+            required_models,
+            max_seats_per_model,
+        );
+    }
+
+    #[test_only]
     /// Route the given seats and reserves to explicit payout recipients.
     public(package) fun set_committee_payouts_for_testing(
         committee: &mut Committee,
@@ -1539,6 +1640,7 @@ module openverdict::jury {
         } else {
             payouts.destroy_none();
         };
+        agent_registry::remove_jury_diversity_for_testing(&mut committee.id);
         let CommitteePolicy {
             selected_human_hashes: _,
             selected_model_hashes: _,
@@ -1631,6 +1733,50 @@ module openverdict::jury {
                 vector::tabulate!(32, |_| staker_byte),
                 vector::tabulate!(32, |_| model_byte),
                 if (i < 3) source else skeptic,
+            );
+            i = i + 1;
+        };
+    }
+
+    #[test_only]
+    /// Two model families over eight seats, four skeptics and four sources:
+    /// the roster degraded mode exists to seat when a third family is down.
+    fun add_two_family_selection_records(registry: &mut Registry) {
+        let profiles = vector[@0x401, @0x402, @0x403, @0x404, @0x405, @0x406, @0x407, @0x408];
+        let owners = vector[@0xD1, @0xD2, @0xD3, @0xD4, @0xD5, @0xD6, @0xD7, @0xD8];
+        let models = vector[31u8, 31, 31, 31, 32, 32, 32, 32];
+        add_family_records(registry, profiles, owners, models);
+    }
+
+    #[test_only]
+    /// One model family: never a jury, whatever the operator lowers the rule to.
+    fun add_single_family_selection_records(registry: &mut Registry) {
+        let profiles = vector[@0x501, @0x502, @0x503, @0x504, @0x505, @0x506, @0x507, @0x508];
+        let owners = vector[@0xE1, @0xE2, @0xE3, @0xE4, @0xE5, @0xE6, @0xE7, @0xE8];
+        let models = vector[41u8, 41, 41, 41, 41, 41, 41, 41];
+        add_family_records(registry, profiles, owners, models);
+    }
+
+    #[test_only]
+    /// Seat the given roster with alternating skeptic and source roles.
+    fun add_family_records(
+        registry: &mut Registry,
+        profiles: vector<address>,
+        owners: vector<address>,
+        models: vector<u8>,
+    ) {
+        let skeptic = agent_registry::skeptic_role_hash();
+        let source = agent_registry::source_authenticity_role_hash();
+        let mut i = 0;
+        while (i < profiles.length()) {
+            let model_byte = models[i];
+            agent_registry::add_eligibility_for_testing(
+                registry,
+                object::id_from_address(profiles[i]),
+                owners[i],
+                vector::tabulate!(32, |_| (i + 1) as u8),
+                vector::tabulate!(32, |_| model_byte),
+                if (i % 2 == 0) skeptic else source,
             );
             i = i + 1;
         };
@@ -1799,6 +1945,153 @@ module openverdict::jury {
     }
 
     #[test]
+    fun degraded_mode_draws_a_committee_from_two_model_families() {
+        use sui::coin;
+        use sui::test_scenario;
+
+        let mut scenario = test_scenario::begin(@0x0);
+        random::create_for_testing(scenario.ctx());
+        test_scenario::next_tx(&mut scenario, @0x0);
+        let mut randomness = test_scenario::take_shared<Random>(&scenario);
+        random::update_randomness_state_for_testing(
+            &mut randomness,
+            0,
+            vector::tabulate!(32, |i| i as u8),
+            scenario.ctx(),
+        );
+        test_scenario::return_shared(randomness);
+
+        test_scenario::next_tx(&mut scenario, @0xCAFE);
+        let mut registry = agent_registry::new_registry_for_testing(scenario.ctx());
+        add_two_family_selection_records(&mut registry);
+        let admin_cap = agent_registry::new_admin_cap_for_testing(scenario.ctx());
+        let clock = clock::create_for_testing(scenario.ctx());
+        agent_registry::set_jury_diversity(&mut registry, &admin_cap, 2, 3, &clock);
+        let budget = coin::mint_for_testing<JuryTestCoin>(100, scenario.ctx());
+        let mut claim = claim::new_claim_for_testing(
+            &registry,
+            budget,
+            selection_params(),
+            &clock,
+            scenario.ctx(),
+        );
+        claim::start_direct_review(&registry, &mut claim, &clock);
+        let randomness = test_scenario::take_shared<Random>(&scenario);
+        select_committee(&registry, &mut claim, &randomness, &clock, scenario.ctx());
+        test_scenario::return_shared(randomness);
+        assert!(claim::state(&claim) == claim::state_commit_1());
+
+        // The draw says on the record how many families actually sat.
+        let drawn = event::events_by_type<CommitteeDiversity>();
+        assert!(drawn.length() == 1);
+        assert!(drawn[0].distinct_models == 2);
+        assert!(drawn[0].required_models == 2);
+        assert!(drawn[0].max_seats_per_model == 3);
+        assert!(drawn[0].degraded);
+
+        test_scenario::next_tx(&mut scenario, @0xCAFE);
+        let committee = test_scenario::take_shared<Committee>(&scenario);
+        assert!(committee.agent_profile_ids.length() == COMMITTEE_SIZE);
+        assert!(committee.reserve_profile_ids.length() == RESERVE_COUNT);
+        let policy = df::borrow<CommitteePolicyKey, CommitteePolicy>(
+            &committee.id,
+            CommitteePolicyKey {},
+        );
+        assert!(distinct_hash_count(&policy.selected_model_hashes) == 2);
+        assert!(model_caps_valid(&policy.selected_model_hashes, 3));
+        assert!(vector::contains(
+            &policy.selected_role_hashes,
+            &agent_registry::skeptic_role_hash(),
+        ));
+        assert!(vector::contains(
+            &policy.selected_role_hashes,
+            &agent_registry::source_authenticity_role_hash(),
+        ));
+        // The committee keeps the rule it was drawn under.
+        let (required_models, max_seats_per_model) = committee_diversity(&committee);
+        assert!(required_models == 2 && max_seats_per_model == 3);
+        test_scenario::return_shared(committee);
+
+        claim::destroy_claim_for_testing(claim);
+        agent_registry::destroy_admin_cap_for_testing(admin_cap);
+        agent_registry::destroy_registry_for_testing(registry);
+        clock::destroy_for_testing(clock);
+        scenario.end();
+    }
+
+    #[test, expected_failure(abort_code = E_INSUFFICIENT_DIVERSE_AGENTS)]
+    fun degraded_mode_still_refuses_a_single_model_family() {
+        use sui::coin;
+        use sui::test_scenario;
+
+        let mut scenario = test_scenario::begin(@0x0);
+        random::create_for_testing(scenario.ctx());
+        test_scenario::next_tx(&mut scenario, @0x0);
+        let mut randomness = test_scenario::take_shared<Random>(&scenario);
+        random::update_randomness_state_for_testing(
+            &mut randomness,
+            0,
+            vector::tabulate!(32, |i| i as u8),
+            scenario.ctx(),
+        );
+        test_scenario::return_shared(randomness);
+
+        test_scenario::next_tx(&mut scenario, @0xCAFE);
+        let mut registry = agent_registry::new_registry_for_testing(scenario.ctx());
+        add_single_family_selection_records(&mut registry);
+        let admin_cap = agent_registry::new_admin_cap_for_testing(scenario.ctx());
+        let clock = clock::create_for_testing(scenario.ctx());
+        agent_registry::set_jury_diversity(&mut registry, &admin_cap, 2, 3, &clock);
+        let budget = coin::mint_for_testing<JuryTestCoin>(100, scenario.ctx());
+        let mut claim = claim::new_claim_for_testing(
+            &registry,
+            budget,
+            selection_params(),
+            &clock,
+            scenario.ctx(),
+        );
+        claim::start_direct_review(&registry, &mut claim, &clock);
+        let randomness = test_scenario::take_shared<Random>(&scenario);
+        select_committee(&registry, &mut claim, &randomness, &clock, scenario.ctx());
+        abort E_UNEXPECTED_SUCCESS
+    }
+
+    #[test, expected_failure(abort_code = E_INSUFFICIENT_DIVERSE_AGENTS)]
+    fun two_model_families_are_not_a_jury_under_the_default_rule() {
+        use sui::coin;
+        use sui::test_scenario;
+
+        let mut scenario = test_scenario::begin(@0x0);
+        random::create_for_testing(scenario.ctx());
+        test_scenario::next_tx(&mut scenario, @0x0);
+        let mut randomness = test_scenario::take_shared<Random>(&scenario);
+        random::update_randomness_state_for_testing(
+            &mut randomness,
+            0,
+            vector::tabulate!(32, |i| i as u8),
+            scenario.ctx(),
+        );
+        test_scenario::return_shared(randomness);
+
+        test_scenario::next_tx(&mut scenario, @0xCAFE);
+        let mut registry = agent_registry::new_registry_for_testing(scenario.ctx());
+        add_two_family_selection_records(&mut registry);
+        let clock = clock::create_for_testing(scenario.ctx());
+        let budget = coin::mint_for_testing<JuryTestCoin>(100, scenario.ctx());
+        let mut claim = claim::new_claim_for_testing(
+            &registry,
+            budget,
+            selection_params(),
+            &clock,
+            scenario.ctx(),
+        );
+        claim::start_direct_review(&registry, &mut claim, &clock);
+        let randomness = test_scenario::take_shared<Random>(&scenario);
+        select_committee(&registry, &mut claim, &randomness, &clock, scenario.ctx());
+        abort E_UNEXPECTED_SUCCESS
+    }
+
+    #[test]
     fun stalled_selection_restarts_and_seats_the_incident_roster() {
         use sui::coin;
         use sui::test_scenario;
@@ -1859,8 +2152,11 @@ module openverdict::jury {
                 &committee.id,
                 CommitteePolicyKey {},
             );
-            assert!(model_caps_valid(&policy.selected_model_hashes));
+            assert!(model_caps_valid(&policy.selected_model_hashes, 2));
             assert!(distinct_hash_count(&policy.selected_model_hashes) >= 3);
+            // A default draw records the default rule on the committee.
+            let (required_models, max_seats_per_model) = committee_diversity(&committee);
+            assert!(required_models == 3 && max_seats_per_model == 2);
             assert!(vector::contains(
                 &policy.selected_role_hashes,
                 &agent_registry::skeptic_role_hash(),

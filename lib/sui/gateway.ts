@@ -54,6 +54,11 @@ import type {
   ChainEpochInfo,
 } from "./gateway-types";
 import type { OpenVerdictSuiClient } from "./client";
+import {
+  readCommitteeDiversity,
+  readJuryDiversity,
+  type JuryDiversity,
+} from "./jury-diversity";
 import { runOnOperatorLane } from "./operator-lane";
 import type { ReleaseManifest } from "./manifest";
 import { SignerRegistry, SignerRegistryError } from "./signers";
@@ -498,6 +503,14 @@ export class RealSuiGateway implements SuiGateway {
     } catch {
       return { healthy: false, paused: false };
     }
+  }
+
+  async juryDiversity(): Promise<JuryDiversity> {
+    return readJuryDiversity(this.#client, this.#manifest);
+  }
+
+  async committeeDiversity(committeeId: string): Promise<JuryDiversity> {
+    return readCommitteeDiversity(this.#client, this.#manifest, committeeId);
   }
 
   private async executeOperator(transaction: Parameters<typeof executeAndWait>[2]): Promise<TxResult> {

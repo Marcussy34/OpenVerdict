@@ -30,6 +30,7 @@ import {
   stateWords,
   voidWords,
   weatherInline,
+  weatherRuleLine,
   weatherLines,
   weatherSummary,
   wrapText,
@@ -49,6 +50,8 @@ const WEATHER: WeatherReport = {
   probedAtMs: NOW - 42_000,
   stale: false,
   clear: false,
+  requiredFamilies: 3,
+  activeFamilies: ["deepseek", "minimax", "kimi"],
   families: [
     { modelId: "research:firecrawl", family: "research", ok: true, latencyMs: 286, status: "200 1189 credits" },
     { modelId: "moonshotai/Kimi-K2.6", family: "kimi", ok: false, latencyMs: 60_005, status: "TIMEOUT" },
@@ -161,7 +164,20 @@ describe("weather", () => {
     expect(weatherSummary(WEATHER, NOW)).toBe("not clear, probed 42 s ago");
     expect(weatherSummary({ ...WEATHER, clear: true, stale: true, probedAtMs: null }, NOW)).toBe("clear, no recent probe");
     expect(weatherInline(WEATHER)).toBe("DeepSeek 429, MiniMax ok, Kimi TIMEOUT, Web search ok");
-    expect(NOT_CLEAR_NOTE).toContain("refused until all four");
+    expect(NOT_CLEAR_NOTE).toContain("every active model family and web search");
+  });
+
+  it("states the draw rule and the families that still hold a seat", () => {
+    expect(weatherRuleLine(WEATHER)).toBe(
+      "rule        3 model families required, 3 active: DeepSeek, MiniMax, Kimi",
+    );
+    expect(
+      weatherRuleLine({
+        ...WEATHER,
+        requiredFamilies: 2,
+        activeFamilies: ["deepseek", "minimax"],
+      }),
+    ).toBe("rule        2 model families required (degraded mode), 2 active: DeepSeek, MiniMax");
   });
 });
 
@@ -180,6 +196,27 @@ describe("status block", () => {
     expect(lines).toContain("attempt    attempt 3 of 3, active");
     expect(lines.some((line) => line.startsWith("next       reveal window opens in 3 min ("))).toBe(true);
     expect(lines.some((line) => line.startsWith("result"))).toBe(false);
+  });
+
+  it("says nothing about the jury when the claim carries no committee", () => {
+    const claim = clone(FINALIZED);
+    delete claim.jury;
+
+    expect(renderStatus(claim, BASE, NOW).some((line) => line.startsWith("jury  "))).toBe(
+      false,
+    );
+  });
+
+  it("names the families that sat, and degraded mode when fewer than three did", () => {
+    const full = clone(FINALIZED);
+    full.jury = { familyCount: 3, requiredFamilies: 3, degraded: false };
+    expect(renderStatus(full, BASE, NOW)).toContain("jury       3 model families");
+
+    const degraded = clone(FINALIZED);
+    degraded.jury = { familyCount: 2, requiredFamilies: 2, degraded: true };
+    expect(renderStatus(degraded, BASE, NOW)).toContain(
+      "jury       2 model families (degraded mode), registry required 2 at the draw",
+    );
   });
 
   it("shows a voided claim with its relaunch link", () => {

@@ -2,7 +2,7 @@
 /**
  * Upgrade move/openverdict on testnet from prebuilt base64 bytecode with the
  * operator's UpgradeCap (the publish transferred it to the operator). Build:
- *   sui move build --dump-bytecode-as-base64 --ignore-chain --path move/openverdict > bytecode.json
+ *   sui move build --dump-bytecode-as-base64 --no-tree-shaking --path move/openverdict > bytecode.json
  * Run: pnpm tsx scripts/upgrade-openverdict-bytecode.ts <bytecode.json>
  *
  * Sui keeps every object type at the address the package was first

@@ -33,6 +33,29 @@ export interface UpdateAgentManifestTransactionInput {
   roleHash: Uint8Array;
 }
 
+/** Operator-only: lower or restore the draw's model-family rule. */
+export interface SetJuryDiversityTransactionInput {
+  adminCapId: string;
+  /** Distinct model families a committee must span: 2 or 3. */
+  requiredModels: number;
+  /** Seats one family may hold: 2 or 3. */
+  maxSeatsPerModel: number;
+}
+
+/** Operator-only: take one seat out of the draw, or put it back. */
+export interface SetAgentEligibilityTransactionInput {
+  adminCapId: string;
+  agentProfileId: string;
+  active: boolean;
+  /**
+   * The seat's selection weight. `set_agent_eligibility` overwrites the stored
+   * weight with whatever is passed, so this is required and callers read the
+   * record's current weight and pass it back unchanged. Live seats carry
+   * 10000, not 1, and a default here would quietly reweight the draw.
+   */
+  weight: number;
+}
+
 export interface CreateClaimTransactionInput extends ClaimCreateRequest {
   creationBudget?: string;
   contentHash: Uint8Array;
@@ -238,6 +261,48 @@ export function buildUpdateAgentManifestTransaction(
       bytes(tx, input.modelHash),
       bytes(tx, input.roleHash),
       tx.object(manifest.clockObjectId),
+    ],
+  });
+  return tx;
+}
+
+/**
+ * Degraded mode, on: lowers the families a committee must span and raises the
+ * seats one family may hold, in one AdminCap-gated transaction. The Move side
+ * refuses any pair that cannot seat five jurors.
+ */
+export function buildSetJuryDiversityTransaction(
+  manifest: ReleaseManifest,
+  input: SetJuryDiversityTransactionInput,
+): Transaction {
+  const tx = transactionFor(manifest);
+  tx.moveCall({
+    target: target(manifest, "agent_registry", "set_jury_diversity"),
+    arguments: [
+      tx.object(manifest.registryObjectId),
+      tx.object(input.adminCapId),
+      tx.pure.u8(input.requiredModels),
+      tx.pure.u8(input.maxSeatsPerModel),
+      tx.object(manifest.clockObjectId),
+    ],
+  });
+  return tx;
+}
+
+/** How the operator takes a down family's seats out of the draw, and back in. */
+export function buildSetAgentEligibilityTransaction(
+  manifest: ReleaseManifest,
+  input: SetAgentEligibilityTransactionInput,
+): Transaction {
+  const tx = transactionFor(manifest);
+  tx.moveCall({
+    target: target(manifest, "agent_registry", "set_agent_eligibility"),
+    arguments: [
+      tx.object(manifest.registryObjectId),
+      tx.object(input.adminCapId),
+      tx.object(input.agentProfileId),
+      tx.pure.bool(input.active),
+      tx.pure.u64(input.weight),
     ],
   });
   return tx;

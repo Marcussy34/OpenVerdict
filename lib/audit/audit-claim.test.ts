@@ -94,6 +94,8 @@ type WorldSpec = {
   /** Which deliberation contract the debate turns ran on. Defaults to V3. */
   debateSpec?: "3" | "4";
   result?: "YES" | "NO" | "UNRESOLVED";
+  /** What the registry demanded when this committee was drawn. Three normally. */
+  requiredFamilies?: number;
   attemptChain?: AttemptChain;
   tamper?: { recordCommitment?: boolean; certificateScore?: boolean };
 };
@@ -682,6 +684,13 @@ export function buildWorld(spec: WorldSpec): FakeWorld {
             .map((entry) => entry.payload as ClaimInspection["deliberation"] extends Array<infer Turn> | undefined ? Turn : never),
         }
       : {}),
+    // The engine publishes the committee's family count and the pair the draw
+    // ran under; the auditor recomputes the count from the seats themselves.
+    jury: {
+      familyCount: new Set(seats.map((seat) => seat.spec.model)).size,
+      requiredFamilies: spec.requiredFamilies ?? 3,
+      degraded: new Set(seats.map((seat) => seat.spec.model)).size < 3,
+    },
     ...(spec.attemptChain ? { attemptChain: spec.attemptChain } : {}),
     ...(spec.result && certificateId ? { result: { claimId, result: spec.result, truthScoreBps: scoreBps, certificateId, digest: certificateTx } } : {}),
   };
@@ -831,6 +840,15 @@ const FIVE_NO: SeatSpec[] = [
   { model: "MiniMaxAI/MiniMax-M2.7", role: "SKEPTIC", vote: { outcome: "NO", confidenceBps: 10_000 } },
   { model: "MiniMaxAI/MiniMax-M2.7", role: "SKEPTIC", vote: { outcome: "NO", confidenceBps: 10_000 } },
   { model: "moonshotai/Kimi-K2.6", role: "SKEPTIC", vote: { outcome: "NO", confidenceBps: 10_000 } },
+];
+
+/** Degraded mode: two families over five seats, three of them on one model. */
+const TWO_FAMILY_NO: SeatSpec[] = [
+  { model: "deepseek-ai/DeepSeek-V4-Flash-0731", role: "SOURCE_AUTHENTICITY", vote: { outcome: "NO", confidenceBps: 9_500 } },
+  { model: "deepseek-ai/DeepSeek-V4-Flash-0731", role: "SOURCE_AUTHENTICITY", vote: { outcome: "NO", confidenceBps: 9_500 } },
+  { model: "deepseek-ai/DeepSeek-V4-Flash-0731", role: "SKEPTIC", vote: { outcome: "NO", confidenceBps: 10_000 } },
+  { model: "MiniMaxAI/MiniMax-M2.7", role: "SKEPTIC", vote: { outcome: "NO", confidenceBps: 10_000 } },
+  { model: "MiniMaxAI/MiniMax-M2.7", role: "SKEPTIC", vote: { outcome: "NO", confidenceBps: 10_000 } },
 ];
 
 const RESEARCH_CLAIM: WorldSpec = {
@@ -1015,8 +1033,8 @@ describe("auditClaim on a finalized research claim", () => {
     expect(result.summary.byGroup.receipts).toMatchObject({ passed: 5 });
     expect(result.summary.byGroup.walrus).toMatchObject({ passed: 6 });
     expect(result.summary.byGroup.score).toMatchObject({ passed: 2 });
-    // R16 per run, S2 and S4.root at claim level.
-    expect(result.summary.byGroup.chain).toMatchObject({ passed: 7 });
+    // R16 per run, S2, S4.root and the S5 diversity row at claim level.
+    expect(result.summary.byGroup.chain).toMatchObject({ passed: 8 });
     expect(result.verdict).toMatchObject({ result: "NO", truthScoreBps: 200, certificateId: world.certificateId, finalPhase: 1 });
     expect(result.jury).toHaveLength(5);
     expect(result.runs.every((run) => run.revealed && run.kind === "legacy")).toBe(true);
@@ -1087,6 +1105,43 @@ describe("auditClaim on a finalized research claim", () => {
     expect(find(result, "S2", "FAIL")[0]?.detail).toMatch(/truth_score_bps 201 is not 200/);
     expect(result.exitCode).toBe(1);
     expect(renderVerdictCard(result)).toContain("2 check(s) FAILED");
+  });
+});
+
+describe("auditClaim on a degraded jury", () => {
+  it("records the families drawn as an informational row and never fails", async () => {
+    const world = buildWorld({
+      ...RESEARCH_CLAIM,
+      seats: TWO_FAMILY_NO,
+      requiredFamilies: 2,
+    });
+
+    const result = await runAudit(world);
+
+    const row = result.claimChecks.find((entry) => entry.id === "S5");
+    expect(row).toMatchObject({ group: "chain", status: "PASS" });
+    expect(row?.actual).toBe("families drawn: 2 (registry required 2 at the draw)");
+    expect(row?.detail).toContain("degraded mode");
+    expect(result.summary.failed).toBe(0);
+    expect(result.exitCode).toBe(0);
+
+    // The dossier a reader actually sees carries the same line, and the
+    // verdict card names it beside the result rather than only in the table.
+    const markdown = renderMarkdown(result, { jsonPath: "/tmp/audit.json" });
+    expect(markdown).toContain("families drawn: 2 (registry required 2 at the draw)");
+    expect(renderVerdictCard(result)).toContain(
+      "- Jury: 2 model families (degraded mode), registry required 2 at the draw",
+    );
+  });
+
+  it("says three families sat when the draw was not degraded", async () => {
+    const result = await runAudit(buildWorld(RESEARCH_CLAIM));
+
+    const row = result.claimChecks.find((entry) => entry.id === "S5");
+    expect(row?.actual).toBe("families drawn: 3 (registry required 3 at the draw)");
+    expect(row?.detail).not.toContain("degraded");
+    // A full jury adds nothing to the card.
+    expect(renderVerdictCard(result)).not.toContain("- Jury:");
   });
 });
 

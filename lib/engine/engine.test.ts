@@ -56,6 +56,7 @@ import {
 import {
   FakeSuiGateway,
   SignerRegistry,
+  defaultFakeAgents,
   fakeId,
   type BoundAgentSigner,
   type GatewayAcceptSeatInput,
@@ -305,7 +306,17 @@ describe("weather-aware submissions", () => {
   });
 
   it("derives family labels and marks down or old probes unclear", async () => {
-    const setup = await engineSetup(new FakeSuiGateway(), 5);
+    // The gate now asks whether every family that still holds an active seat
+    // answered, so the roster has to run the models the probe rows describe.
+    const setup = await engineSetup(
+      new FakeSuiGateway(
+        defaultFakeAgents().map((agent, index) => ({
+          ...agent,
+          modelId: ["provider/DeepSeek-R1", "MiniMax-M2", "kimi-k2"][index % 3]!,
+        })),
+      ),
+      5,
+    );
     const repository = createRepository(setup.db);
     const probedAt = new Date(setup.now()).toISOString();
     await repository.saveGonkaWeather([
@@ -358,6 +369,52 @@ describe("weather-aware submissions", () => {
     await expect(setup.engine.weather()).resolves.toMatchObject({
       stale: true,
       clear: false,
+    });
+  });
+
+  it("clears on two families when the registry runs degraded mode", async () => {
+    // Degraded mode, exactly: the operator lowered the registry to two
+    // families and took the down family's seats out of the draw.
+    const gateway = degradedWeatherGateway();
+    gateway.diversity = { requiredModels: 2, maxSeatsPerModel: 3 };
+    const setup = await engineSetup(gateway, 5);
+    const repository = createRepository(setup.db);
+    await deactivateFamily(repository, "kimi-k2");
+    await saveProbes(repository, setup.now(), { "kimi-k2": false });
+
+    const weather = await setup.engine.weather();
+
+    expect(weather.requiredFamilies).toBe(2);
+    expect(weather.activeFamilies.sort()).toEqual(["deepseek", "minimax"]);
+    expect(weather.clear).toBe(true);
+  });
+
+  it("keeps the gate shut on two families while the registry still requires three", async () => {
+    const gateway = degradedWeatherGateway();
+    const setup = await engineSetup(gateway, 5);
+    const repository = createRepository(setup.db);
+    await deactivateFamily(repository, "kimi-k2");
+    await saveProbes(repository, setup.now(), { "kimi-k2": false });
+
+    const weather = await setup.engine.weather();
+
+    expect(weather.requiredFamilies).toBe(3);
+    expect(weather.activeFamilies).toHaveLength(2);
+    expect(weather.clear).toBe(false);
+  });
+
+  it("still refuses when a family that holds active seats is down", async () => {
+    const gateway = degradedWeatherGateway();
+    gateway.diversity = { requiredModels: 2, maxSeatsPerModel: 3 };
+    const setup = await engineSetup(gateway, 5);
+    const repository = createRepository(setup.db);
+    await deactivateFamily(repository, "kimi-k2");
+    // MiniMax still holds a seat, so its outage stops the jury.
+    await saveProbes(repository, setup.now(), { "kimi-k2": false, "MiniMax-M2": false });
+
+    await expect(setup.engine.weather()).resolves.toMatchObject({
+      clear: false,
+      requiredFamilies: 2,
     });
   });
 
@@ -430,6 +487,51 @@ describe("weather-aware submissions", () => {
     setup.setNow(setup.now() + WEATHER_PROBE_INTERVAL_MS);
     await setup.engine.weatherTick();
     expect((await setup.engine.weather()).clear).toBe(true);
+  });
+});
+
+describe("jury diversity in the public record", () => {
+  it("reports three families and no degraded flag on a full committee", async () => {
+    const setup = await engineSetup(degradedWeatherGateway(), 5);
+    const { claimId } = await setup.engine.factCheckStart({
+      claim: "A full committee spans three model families.",
+      urls: [],
+    });
+    await setup.engine.selectCommittee(claimId);
+
+    await expect(setup.engine.inspect(claimId)).resolves.toMatchObject({
+      jury: { familyCount: 3, requiredFamilies: 3, degraded: false },
+    });
+  });
+
+  it("marks a two-family committee degraded in the inspection and the report", async () => {
+    const gateway = new FakeSuiGateway(
+      defaultFakeAgents().map((agent, index) => ({
+        ...agent,
+        modelId: ["provider/DeepSeek-R1", "MiniMax-M2"][index % 2]!,
+      })),
+    );
+    gateway.diversity = { requiredModels: 2, maxSeatsPerModel: 3 };
+    const setup = await engineSetup(gateway, 5);
+    const { claimId } = await setup.engine.factCheckStart({
+      claim: "A degraded committee spans two model families.",
+      urls: [],
+    });
+    await setup.engine.selectCommittee(claimId);
+
+    const degraded = { familyCount: 2, requiredFamilies: 2, degraded: true };
+    await expect(setup.engine.inspect(claimId)).resolves.toMatchObject({ jury: degraded });
+    await expect(setup.engine.report(claimId)).resolves.toMatchObject({ jury: degraded });
+  });
+
+  it("says nothing about diversity before the draw", async () => {
+    const setup = await engineSetup(degradedWeatherGateway(), 5);
+    const { claimId } = await setup.engine.factCheckStart({
+      claim: "A claim with no committee yet carries no jury block.",
+      urls: [],
+    });
+
+    expect((await setup.engine.inspect(claimId)).jury).toBeUndefined();
   });
 });
 
@@ -4170,6 +4272,47 @@ async function engineSetup(
       nowMs = value;
     },
   };
+}
+
+/** A roster running the three real families, so the gate has something to weigh. */
+function degradedWeatherGateway(): FakeSuiGateway {
+  return new FakeSuiGateway(
+    defaultFakeAgents().map((agent, index) => ({
+      ...agent,
+      modelId: ["provider/DeepSeek-R1", "MiniMax-M2", "kimi-k2"][index % 3]!,
+    })),
+  );
+}
+
+/** What `openverdict agents eligibility --active false` leaves behind locally. */
+async function deactivateFamily(
+  repository: ReturnType<typeof createRepository>,
+  modelId: string,
+): Promise<void> {
+  for (const record of await repository.listAgentManifests()) {
+    if (record.manifest.modelId !== modelId) continue;
+    await repository.saveAgentManifest({ ...record, active: false });
+  }
+}
+
+/** One probe row per family, ok unless the caller says otherwise. */
+async function saveProbes(
+  repository: ReturnType<typeof createRepository>,
+  nowMs: number,
+  down: Record<string, boolean> = {},
+): Promise<void> {
+  const probedAt = new Date(nowMs).toISOString();
+  await repository.saveGonkaWeather(
+    ["provider/DeepSeek-R1", "MiniMax-M2", "kimi-k2", "research:firecrawl"].map(
+      (modelId) => ({
+        modelId,
+        ok: down[modelId] ?? true,
+        latencyMs: 20,
+        status: (down[modelId] ?? true) ? "200" : "TIMEOUT",
+        probedAt,
+      }),
+    ),
+  );
 }
 
 async function roundTwoSetup(

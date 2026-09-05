@@ -9,6 +9,10 @@ resolution certificates anyone can recompute, with every opened page, run
 bundle and evidence manifest public on Walrus. Live on Sui testnet. Anyone can
 stake 0.1 SUI on a juror seat and earn that seat's jury rewards.
 
+While a provider is down the operator can lower the draw to two model families
+on chain (degraded mode); the certificate, the report and the audit of every
+claim judged that way say "2 model families (degraded mode)".
+
 ## Give this to your agent
 
     Set up https://app.openverdict.info/SKILL.md and take it from there.

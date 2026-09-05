@@ -38,7 +38,9 @@ pnpm e2e:localnet  # full localnet lifecycle (spawns `sui start`)
   any account may stake on any number of seats, it is staking economics. The
   committee draw (at most two seats per model, three families, one seat per
   operational key, a Skeptic and a Source-authenticity seat on every
-  committee, no cap per staker) is a diversity rule.
+  committee, no cap per staker) is a diversity rule, unless the operator
+  lowers the requirement on chain in degraded mode, which every certificate
+  then shows.
   zkLogin is authentication, never proof of personhood (PRD §14.4).
 - Move: functions taking `&Random` must be private `entry fun`; draw-and-
   resolve in one call.

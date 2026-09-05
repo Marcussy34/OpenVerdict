@@ -11,6 +11,7 @@ import type {
   RevealVoteTransactionInput,
   UpdateAgentManifestTransactionInput,
 } from "./builders";
+import type { JuryDiversity } from "./jury-diversity";
 
 export interface SuiAgentIdentity {
   agentProfileId: string;
@@ -186,6 +187,10 @@ export interface SuiGateway {
   health(): Promise<SuiGatewayHealth>;
   /** Current Sui epoch and its length; retention epochs sent on chain are Sui epochs. */
   epochInfo(): Promise<ChainEpochInfo>;
+  /** The registry's model-family rule the next draw will use. */
+  juryDiversity(): Promise<JuryDiversity>;
+  /** The rule one committee was drawn under, recorded on the committee itself. */
+  committeeDiversity(committeeId: string): Promise<JuryDiversity>;
 }
 
 export function outcomeLabel(outcome: VoteOutcome): "YES" | "NO" | "UNSURE" {

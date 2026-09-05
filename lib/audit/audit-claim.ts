@@ -2270,8 +2270,41 @@ function auditClaimChecks(world: World, score: AuditResult["score"], votes: Vote
     }
   }
 
+  checks.push(diversityRow(world));
+
   if (isTwoRound(world)) checks.push(...auditDebate(world, runs));
   return checks;
+}
+
+/**
+ * S5: how many model families sat, and how many the registry demanded when
+ * this committee was drawn. Informational only: a jury the chain accepted is
+ * a valid jury, degraded or not, so this row never fails. It is the audit's
+ * copy of the CommitteeDiversity event, recomputed from the seats.
+ */
+function diversityRow(world: World): AuditCheck {
+  // Move counts distinct model hashes, and the catalog runs one model per
+  // family, so distinct models is the family count the chain checked.
+  const models = new Set(
+    world.jurors
+      .map((juror) => juror.modelId)
+      .filter((modelId): modelId is string => modelId !== undefined),
+  );
+  const required = world.inspection.jury?.requiredFamilies;
+  if (models.size === 0) {
+    return check("S5", "chain", "Model families drawn", "UNAVAILABLE", {
+      detail: "no seat on this claim names its model",
+    });
+  }
+  const degraded = models.size < 3;
+  return check("S5", "chain", "Model families drawn", "PASS", {
+    actual: `families drawn: ${models.size}${
+      required === undefined ? "" : ` (registry required ${required} at the draw)`
+    }`,
+    detail: degraded
+      ? "degraded mode: fewer than three model families judged this claim"
+      : "the full three model families judged this claim",
+  });
 }
 
 /** "claim record, report, 5 juror runs, 5 RevealedVote objects on Sui" instead of 13 names. */
@@ -2877,6 +2910,13 @@ export function renderVerdictCard(result: AuditResult): string {
     );
   } else {
     lines.push(`- Result: ${verdict.label} (no certificate yet)`);
+  }
+  // Degraded mode belongs beside the verdict, not only in the check table.
+  const jury = result.sources.inspection.jury;
+  if (jury?.degraded) {
+    lines.push(
+      `- Jury: ${jury.familyCount} model families (degraded mode), registry required ${jury.requiredFamilies} at the draw`,
+    );
   }
   for (const line of claim.pending) lines.push(`- Status: ${line}`);
   if (claim.attempt) {

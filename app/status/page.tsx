@@ -7,7 +7,8 @@ import { Panel, FieldLabel } from "@/components/viz/panel";
 import { HashChip } from "@/components/viz/hash-chip";
 import { StatusPill, type DotTone } from "@/components/viz/live-dot";
 import { StatTile } from "@/components/viz/stat-tile";
-import type { EngineStatus } from "@/lib/engine/contract";
+import type { EngineStatus, WeatherReport } from "@/lib/engine/contract";
+import { juryRequirementSentence } from "@/lib/web/weather-copy";
 import {
   Activity,
   Link21,
@@ -32,13 +33,25 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
 
 export default function StatusPage() {
   const [status, setStatus] = useState<EngineStatus | null>(null);
+  const [weather, setWeather] = useState<WeatherReport | null>(null);
   const [loading, setLoading] = useState(true);
   const [engineOffline, setEngineOffline] = useState(false);
+
+  // The weather carries the live draw rule, so it is read alongside status.
+  const loadWeather = useCallback(async () => {
+    try {
+      const res = await fetch("/api/weather", { cache: "no-store" });
+      if (res.ok) setWeather(await res.json());
+    } catch {
+      // A missing weather report only means the Diversity row stays generic.
+    }
+  }, []);
 
   const loadStatus = useCallback(async () => {
     try {
       setLoading(true);
       setEngineOffline(false);
+      void loadWeather();
       const res = await fetch("/api/status", { cache: "no-store" });
       if (res.status === 503) {
         setEngineOffline(true);
@@ -50,12 +63,14 @@ export default function StatusPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [loadWeather]);
 
   useEffect(() => {
     let ignore = false;
     async function init() {
       try {
+        // The weather carries the live draw rule the Diversity row prints.
+        await loadWeather();
         const res = await fetch("/api/status", { cache: "no-store" });
         if (ignore) return;
         if (res.status === 503) {
@@ -76,7 +91,7 @@ export default function StatusPage() {
     return () => {
       ignore = true;
     };
-  }, []);
+  }, [loadWeather]);
 
   const allHealthy = Boolean(status?.suiHealthy && status?.dbHealthy && !status?.paused);
   const overallTone: DotTone = engineOffline ? "idle" : allHealthy ? "live" : "down";
@@ -143,7 +158,7 @@ export default function StatusPage() {
             </Panel>
             <Panel label="GonkaRouter inference" icon={Cpu} tone="primary">
               <Row label="Catalog models">DeepSeek-V4-Flash · Kimi-K2.6 · MiniMax-M2.7</Row>
-              <Row label="Diversity">≥3 model families required per jury</Row>
+              <Row label="Diversity">≥3 model families per jury, unless lowered on chain</Row>
               <Row label="Max output tokens">4096</Row>
             </Panel>
             <Panel label="Walrus decentralized storage" icon={DocumentText} tone="sealed">
@@ -225,6 +240,9 @@ export default function StatusPage() {
               action={<StatusPill tone="chain" label={`Mode ${status.gonkaMode}`} pulse={false} />}
             >
               <Row label="Catalog models">DeepSeek-V4-Flash · Kimi-K2.6 · MiniMax-M2.7</Row>
+              {/* The live rule, not a constant: the operator can lower it on
+                  chain in degraded mode, and every certificate then says so. */}
+              <Row label="Diversity">{juryRequirementSentence(weather)}</Row>
               <Row label="Jury parallelism">5 concurrent agents</Row>
               <Row label="Adapter">Temperature 0 · strict JSON schema</Row>
               <Row label="Fail mode">Closed — malformed output never becomes a vote</Row>
