@@ -473,7 +473,7 @@ function liveStage(claim: ClaimInspection, stranded: boolean): StageInfo {
     case CLAIM_STATE.REVEAL_1:
       return { key: "reveal1", label: "Round 1 · votes revealing", tone: "reveal" };
     case CLAIM_STATE.DISCUSSION:
-      return { key: "discussion", label: "Deliberation · jurors argue their case", tone: "discuss" };
+      return { key: "discussion", label: "Debate · jurors argue their case", tone: "discuss" };
     case CLAIM_STATE.COMMIT_2:
       return { key: "commit2", label: "Round 2 · research & sealed votes", tone: "research" };
     case CLAIM_STATE.REVEAL_2:
@@ -2132,6 +2132,9 @@ function ClaimCanvasContent({ params }: ClaimCanvasPageProps) {
               seats={debateSeats}
               live={claim.state === CLAIM_STATE.DISCUSSION}
               convergedAfterExchange={claim.debateConvergedAfterExchange ?? null}
+              // The desktop inspector overlays the stage's right edge while a
+              // node is selected; the dock recentres on the canvas beside it.
+              insetRight={selectedNode !== null ? inspectorWidth : 0}
             />
           </>
         )}

@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState, type CSSProperties } from "react";
 import { motion, useReducedMotion } from "motion/react";
 
 import {
@@ -25,12 +25,18 @@ export function DeliberationChat({
   seats,
   live,
   convergedAfterExchange,
+  insetRight = 0,
 }: {
   turns: DeliberationTurnPublic[];
   /** The debaters, numbered as the record numbers them. */
   seats: DebateSeatMeta[];
   live: boolean;
   convergedAfterExchange?: 1 | 2 | 3 | null;
+  /**
+   * Width of the desktop inspector overlaying the stage's right edge, zero
+   * while it is closed. The dock centres on the canvas left of it.
+   */
+  insetRight?: number;
 }) {
   const reduceMotion = useReducedMotion() ?? false;
   const [open, setOpen] = useState(true);
@@ -83,7 +89,18 @@ export function DeliberationChat({
     // the bottom strip, so the dock lifts above them.
     <div
       ref={wrapRef}
-      className="pointer-events-none absolute inset-x-0 bottom-5 z-20 flex justify-center px-4 max-lg:bottom-20"
+      // The desktop inspector overlays the right edge of the stage, so the
+      // dock centres on the canvas still visible left of it. The wrapper
+      // keeps spanning the whole stage (the canvas measures it to keep the
+      // courtroom clear of the dock); only its right padding grows by the
+      // inspector's rendered width, mirroring the inspector's own max-width.
+      style={
+        {
+          "--dock-inset":
+            insetRight > 0 ? `calc(1rem + min(${insetRight}px, 100vw - 28rem))` : "1rem",
+        } as CSSProperties
+      }
+      className="pointer-events-none absolute inset-x-0 bottom-5 z-20 flex justify-center px-4 transition-[padding-right] duration-300 ease-out max-lg:bottom-20 lg:pr-(--dock-inset)"
     >
       {open ? (
         <div
@@ -93,7 +110,7 @@ export function DeliberationChat({
         >
           <div className="flex shrink-0 items-center gap-2 border-b border-border px-4 py-2.5">
             <Judge size="14" variant="Bold" className="text-muted-foreground" />
-            <span className="ov-micro ov-micro-sm text-muted-foreground">Deliberation</span>
+            <span className="ov-micro ov-micro-sm text-muted-foreground">Debate</span>
             {live ? <LiveTell /> : null}
             <span className="font-mono text-[11px] text-muted-foreground tabular-nums">
               {turnCount} {turnCount === 1 ? "turn" : "turns"}
@@ -145,7 +162,7 @@ export function DeliberationChat({
           className="ov-micro ov-micro-sm pointer-events-auto inline-flex min-h-10 items-center gap-2 border border-border bg-card px-4 text-foreground shadow-lg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ov-accent)]"
         >
           <Judge size="14" variant="Bold" className="text-muted-foreground" />
-          Deliberation · {turnCount} {turnCount === 1 ? "turn" : "turns"}
+          Debate · {turnCount} {turnCount === 1 ? "turn" : "turns"}
           {live ? <LiveTell /> : null}
         </button>
       )}
