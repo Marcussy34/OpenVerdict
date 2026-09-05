@@ -3507,3 +3507,109 @@ checkpoint 3bc, memory, and the closing summary. Then stop: ship as is.
 WATCHERS: board watcher b64wjsym0 (board-watch.log). No e2e watcher
 running. Weather at 14:50: DeepSeek ok, MiniMax ok, Kimi down (503),
 gate clear with two families.
+
+## 3bc. RESUME MAP 2026-09-05 17:45 (pre-compaction: read 3ay, 3az, 3ba, 3bb, then THIS; continue as if nothing happened)
+
+OWNER DIRECTION (16:00 to 17:40): wrap up, then "completely redo
+everything: fresh new agents, fresh new history", then "run a few proper
+legit ones". Approved in full ("its fine, please do it, ill leave you to
+it"). Later asks, all in flight or done: All claims chevron centred
+(done, 8db8d05); wallet menu address row full width with the copy
+control on the balance's right edge (done, d2c4f52); Kimi seats visible
+as sitting out (worker agents-sitting-out); live page: a running
+duration timer, a next-deadline line that names the right deadline in
+plain words and ticks as "4m 12s", LIVE in red (explicit exception to
+the palette rule, LIVE chip only), the attempt-void alert laid out to
+fit with the raw error in a Details disclosure (worker live-page-final).
+Roles question answered: round one is role-blind, round two gives each
+seat its role instructions, the draw guarantees a SKEPTIC and a
+SOURCE_AUTHENTICITY; PRD item 19 corrected in 8db8d05.
+
+COMMITS TODAY AFTER 3bb: 67907db cosmetics (six closes plus my footer
+legal-links fix), 3b59d0a the three engine batches in one commit (gate
+from the registry, per-seat reveals, prompt spec v5 hash 0xa219ea18...,
+stake-weighted draw, localnet e2e on v5, PRD item 24, "drawn by stake"),
+9f55546 manifest packageId, 8db8d05 chevron + PRD roles, d2c4f52 walrus
+retry fix + wallet row. Pushed. Deploys: 512ba18d (3b59d0a + 9f55546),
+d3934a37 (restart), 3887e210 (d2c4f52, building at 17:40). Trailer only
+"Claude-Session: https://claude.ai/code/session_01GEddEYHqe1BZiUwuBSwxTG".
+
+CHAIN: package 0xee51ceb63c64d2f375b38af711701160e83e41b203debe9cc3f1bd8b3da90fcf
+(stake-weight upgrade, tx 2VJFrmqwAaLE5UR9xH8bhYAcxqNgfiuf4z8jBGUVFc3L,
+run from this Mac with the fallback RPC; the script wrote packageId
+itself). juryDiversityPackageId stays 0x437443b0; registry, caps, rule
+(2,3) unchanged. Railway var OPENVERDICT_AGENT_SLOTS=32 (set with
+--skip-deploys before 512ba18d).
+
+RESET DONE (16:20 to 16:45): database history wiped with
+scratchpad/wipe-history.cjs --go (every table except agent_manifests;
+run from /app so pg resolves). Fresh roster staked through the public
+flow from this Mac with scripts/stake-seat.ts (sponsored gas, one seat
+per 65 s because the public routes allow five hits a minute per client
+and a seat costs three; --no-sponsor fails on the fallback RPC's
+read-after-write lag). Ten active: DeepSeek 0x21b008d5 SKEPTIC,
+0x2499ded6 SOURCE, 0xd24c4540 INVESTIGATOR, 0xf79362dd SKEPTIC,
+0x69478d17 SOURCE; MiniMax 0xfcba5de7 SKEPTIC, 0x7c14599a SOURCE,
+0xf2191026 INVESTIGATOR, 0xca3949d7 SKEPTIC, 0x44e5bd02 SOURCE. Two
+Kimi seats registered then set inactive: 0xb518b3e6d67281aa1548aef6aa7d88108a513cbe877f722f6c5878c8985912ae
+(SKEPTIC) and 0xf9ea3de53a3f1422a2fb54be2b240fa737b117285acf1c9f6d5a291c91a3661c
+(SOURCE). All 26 old seats retired with `agents eligibility <id>
+--active false` from the container (scratchpad/old-active-seats.txt,
+retire-old-seats.log), then `registry sync-mirror`. Stakers are
+throwaway keys funded by the operator (keys not kept; about 1 SUI of
+testnet money, told to the owner). Agents page shows 10 active.
+
+GAS INCIDENT AND RULE: staking from this Mac merged the operator's four
+per-process gas coins into one and the running web process kept a stale
+coin view, so every POST /api/fact-checks failed with "Transaction
+resolution failed: MoveAbort in 5th command, abort code 0, in
+0x2::balance::destroy_zero". Also writer lane 0 had drained to 0.04 SUI.
+Fixed 17:02 with `scripts/fund-walrus-writers.ts --fund --split-gas 3`
+from the container (operator now 3 coins of at least 1 SUI, writer 0 at
+0.30 SUI) and `railway redeploy -s app -y`. Rule recorded in
+tasks/lessons.md: operator transactions only inside the container, one
+at a time, never while a claim is live; after any external one, re-split
+gas and restart.
+
+THE destroy_zero ABORT, real cause and fix (d2c4f52): the Walrus SDK
+sizes the WAL payment of the register transaction from cached system
+state; in every long-lived process the cache drifted and the split left
+a remainder the SDK then tried to destroy_zero. Fresh processes never
+failed (scratchpad/walrus-write-test.ts and repro-submit.ts proved it
+from the container). lib/walrus/real.ts STALE_WALRUS_WRITE_PATTERN now
+matches "Transaction resolution failed|destroy_zero", so the existing
+retry (which calls client.walrus.reset() before each retry) handles it.
+
+RUNS: claim "Sui mainnet launched on 3 May 2023." attempt 1
+0x408a7311b48a2e628d2d76589c615a6f7d877ac3fde35dfdf762b8f8170d9e33
+(created from repro-submit.ts in the container; 5 sealed, 4 revealed,
+voided MISSING_REVEAL at 17:01: the fifth seat's upload hit writer 0),
+attempt 2 0xdb74fd87 (voided at 17:30: seat 5 destroy_zero abort). The
+third attempt relaunches on the next clear probe (DeepSeek's probe flaps
+between ok and TIMEOUT every other minute). Then
+scratchpad/run-legit-claims.sh (Monitor bfc5bdsuo; board monitor
+bw3l8tmpn) submits, one at a time on an idle board and clear weather:
+"The Great Wall of China is visible to the naked eye from the Moon.",
+"Bitcoin's total supply is capped at 21 million coins.", "Raising the
+minimum wage reduces overall employment." (the contested one, may
+debate). It follows each claim (and a relaunch) to settlement.
+
+AFTER THE RUNS: audit each settled claim (`pnpm ov audit <link>`), rewrite
+docs/demo/demo-script-3min.md around the new claims (tab 4 = a settled
+new claim; the "three attempts" narrative now belongs to the Sui mainnet
+claim if it settles on attempt 3), land the two workers (review diff,
+gates, explicit-path commit, deploy only on an idle board: a deploy
+restarts the engine), final production screenshot pass, memory, closing
+summary, then stop the monitors and the run script. Optional note for
+the owner: Firecrawl at about 1140 credits (about 30 claims); operator
+SUI 23.8; WAL fine; GonkaRouter balance not visible.
+
+WORKERS IN FLIGHT (session-71f9564b): live-page-final (app/claims/[id]/
+page.tsx, live-dot.tsx if needed, the void alert component) and
+agents-sitting-out (app/agents/page.tsx, maybe lib/engine/contract.ts +
+agents route for manifestVersion). Neither commits.
+
+TREE: clean apart from owner folders, .codebase-memory/, tasks/
+(lessons.md, keep untracked), config/release.localnet.json (run
+artifact, never commit). Old Monitor b64wjsym0 died with the session
+restart; the local dev server and localnet were stopped.
