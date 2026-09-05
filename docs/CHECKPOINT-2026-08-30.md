@@ -3783,3 +3783,35 @@ transactions (20 to 25 FAIL rows). lib/audit/audit-claim.ts now lists
 https://sui-testnet-endpoint.blockvision.org as the third default RPC and
 retries a 429 twice; the restored claim audits 157 passed, 0 failed, 13
 skipped. Cost page live (b9037707). Everything committed and pushed.
+
+## 3bf. 2026-09-05 13:15Z: DEBATE DOCK RENAMED AND CENTRED (read 3be then this)
+
+Owner asked (13:00Z) for the round-two dock on the graph view to say
+Debate instead of Deliberation, and to centre on the canvas that stays
+visible when the side panels open. Commit 0f572f0, deployed 13:10Z
+(Railway 606434d6); seeder paused for the window and unpaused after.
+components/viz/deliberation-chat.tsx: the header and the collapsed button
+say Debate; a new prop insetRight (the desktop inspector width while a
+node is selected, else 0) sets --dock-inset on the wrapper, which keeps
+spanning the stage (the canvas measures it for the courtroom's room) and
+grows its right padding by min(inspector width, 100vw - 28rem) at lg and
+up, with a 300ms padding transition so it follows the resize handle.
+app/claims/[id]/page.tsx passes insetRight and the discussion stage pill
+says "Debate · jurors argue their case"; skills/openverdict/references/
+reference.md follows. The left rail already resizes the stage (it is a
+flex sibling of main), so it needed nothing.
+
+VERIFIED on production with scratchpad/shot-inspector.mjs (CDP: loads
+?view=graph, selects Juror 1 to open the inspector, optionally collapses
+the left rail, reports the stage, inspector and dock boxes). Before: at
+1440 the panel centre sat at 880 against a visible-canvas centre of 690
+(off by 190, half the inspector). After: off by 0 at 1440 with the rail
+open, at 1440 with the rail collapsed, and at 1920. Screenshots
+scratchpad/dock-after-1920.jpg and dock-after-collapsed.jpg. Gates in
+tree-check green (tsc, eslint, vitest 89 files, 1144 tests). Board
+unchanged apart from one public submission ("Apples are better for fat
+loss than oranges", UNRESOLVED, 12:25Z): ten records, none live.
+
+Words that stay "deliberation" on purpose: the In deliberation stat tile
+on /app, the landing copy and the Live view's "The deliberation graph"
+label. They mean the whole jury process; Debate is round two only.
