@@ -88,11 +88,14 @@ export function Hero({
               Copy shortened to ~22 words for above-the-fold scanning
               (owner request, 2026-09-04); the deeper mechanics stay in
               the FAQ and learn page. */}
-          <p className="max-w-[480px] text-[19px] leading-[25.65px] font-medium text-[#F3F3F3] lg:col-span-5">
-            Five AI jurors from three model families argue every claim.
-            Sealed votes, cited evidence, cross-examined deadlocks. Verified on
-            Gonka, settled on Sui.
-          </p>
+          <div className="max-w-[480px] text-[19px] leading-[25.65px] font-medium text-[#F3F3F3] lg:col-span-5">
+            <p>Decentralized adversarial AI jury for factual disputes</p>
+            <Eyebrow className="my-2 text-[#F3F3F3]/50">Where</Eyebrow>
+            <p>
+              Distinct models research, vote sealed, then debate to a
+              supermajority. Verified on Gonka, settled on Sui.
+            </p>
+          </div>
 
           <div className="lg:col-span-4">
             <LatestVerdictCard latest={latest} />
