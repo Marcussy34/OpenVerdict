@@ -3397,3 +3397,33 @@ record_json via DISTINCT ON agent_profile_id); the ov submit client
 timeout must cover a full launch (freeze + draw) or treat a timeout as
 "check the board before resubmitting"; the stake amount question (owner:
 free amount, proposal: draw weight proportional to stake, capped).
+
+## 3ba. 2026-09-05 14:20: LIVE CHIP AND GRAPH PENTAGON LIVE; ALL OWNER REQUESTS DONE (read 3az then this)
+
+5177f3e live (deploy 66bd2e2f): filled accent LIVE chip beside Chat |
+Graph and in the left panel while a claim runs (REPLAY quiet, nothing
+when settled; the stage pill only adds the attempt or the closed record);
+the draw note states the rule the claim was drawn under (degraded mode
+wording for 0x7ee9ee79 verified on production); Graph view seats on a
+compact ring (a fifth of the shorter side, 118 to 190px), trails fan
+outward, dragged nodes stay pinned across updates and Chat round trips,
+double-click releases, the fit stops once the reader takes the view.
+Verified on production on the settled EU AI Act claim (prod-graph-
+pentagon.jpg).
+
+Tree clean apart from owner folders and config/release.localnet.json (a
+run artifact). Watchers: board-watch b64wjsym0 only.
+
+OPEN (owner decisions / next worker window): stake amount free above
+0.1 SUI with draw weight proportional to the stake (needs a Move change
+and an upgrade); reveal-time Walrus upload moved to commit time (reveal
+in ~2 s instead of ~27 s) and the 32 s gap after the draw; a new prompt
+spec version with an explicit decisiveEvidence example (fewer repair
+turns); activeFamilies() scoped to the current registry and the
+eligibility mirror updating every version row and record_json; the ov
+submit client timeout; the earlier cosmetic list (two-line statements,
+double vote pill, "experimental" legal prose, docs-host footer link,
+landing "Set up SKILL.md" line, Full view frame width). Reversal of
+degraded mode when Kimi returns: agents eligibility --active true for
+0xb1131089 and 0x255a8f65, then registry diversity --required 3
+--per-model 2 (from the Railway container).
