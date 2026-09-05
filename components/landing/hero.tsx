@@ -38,9 +38,11 @@ export function Hero({
 
       <div className="relative z-30 flex min-h-[100svh] flex-col px-5 pt-[86px] pb-7 md:px-7 md:pb-8 lg:justify-between lg:pt-[104px]">
         {/* Headline — exits left as the shrink begins (data-hero-exit). */}
-        <div data-hero-exit="left" className="max-w-[760px]">
+        <div data-hero-exit="left" className="max-w-[520px]">
           <h1 className="ov-display text-[clamp(2.75rem,9vw,5.5rem)]">
-            OpenVerdict
+            Jury
+            <br />
+            Resolution
           </h1>
           {/* Stacked and flush: a fit-content grid column sizes to the wider
               button (the one carrying the arrow chip) and the other stretches
