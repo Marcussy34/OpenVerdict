@@ -17,7 +17,7 @@ page only shows where the record lives.
 
 | What | Link |
 | --- | --- |
-| Move package, current version | [SuiVision](https://testnet.suivision.xyz/package/0xee51ceb63c64d2f375b38af711701160e83e41b203debe9cc3f1bd8b3da90fcf) · [modules on Suiscan](https://suiscan.xyz/testnet/object/0xee51ceb63c64d2f375b38af711701160e83e41b203debe9cc3f1bd8b3da90fcf/contracts) |
+| Move package, current version | [`0xee51ceb6…`](https://testnet.suivision.xyz/package/0xee51ceb63c64d2f375b38af711701160e83e41b203debe9cc3f1bd8b3da90fcf) |
 | Package version this claim ran on (an earlier upgrade) | [`0x15c6e53c…`](https://testnet.suivision.xyz/package/0x15c6e53ce00b814c68eed17a056cce13dc59416418500a0f4dbba73fac530f65) |
 | Original package address, the type prefix on every object | [`0xa9f3c2db…`](https://testnet.suivision.xyz/package/0xa9f3c2dbdfad3ff900b9d2f4df605621d619a9e7575034f508eb5d39263c5bc7) |
 | Seal time-lock policy package | [`0xf54eb611…`](https://testnet.suivision.xyz/package/0xf54eb61116372f8506ca332457b2fee61231a559e44923429f54fab355d0f0c5) |
