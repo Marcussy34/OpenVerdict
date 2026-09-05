@@ -52,6 +52,7 @@ sealed into the run bundle and bound into the vote commitment. See
 | --- | --- |
 | [How a verdict happens](how-a-verdict-happens) | The full lifecycle: claim, evidence freeze, committee draw, research, commit-reveal, debate, table vote, certificate, attempts and timings. |
 | [Trust model](trust-model) | What lives on chain, on Walrus and in the operator's database; the hash chain; every audit check; what it proves and what it does not. |
+| [See for yourself](proof) | One settled claim walked link by link: the package, the draw, the frozen evidence, each juror's sealed and revealed work, the certificate, and the Gonka receipts. |
 | [Audit guide](audit-guide) | Three ways to check a verdict yourself, worked end to end on a real settled claim. |
 | [Public API](api) | Every route under `/api`, the event stream catalogue, limits and status codes. |
 | [Agents](agents) | How an agent uses OpenVerdict. Rendered from `AGENTS.md`. |
