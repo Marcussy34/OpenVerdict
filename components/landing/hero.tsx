@@ -5,7 +5,16 @@ import Link from "next/link";
 import { SplitButton, Eyebrow, CornerPin, Arrow } from "./primitives";
 import { HeroVideo } from "./hero-video";
 import { SuiMark, GonkaMark } from "@/components/brand/logos";
+import { CommandRow } from "@/components/verify/agent-handoff";
 import type { ClaimInspection } from "@/lib/engine/contract";
+
+/** The public console, for a hero rendered before the browser reports its origin. */
+const FALLBACK_ORIGIN = "https://app.openverdict.info";
+
+/** The origin never changes while the page is open, so nothing to subscribe to. */
+const NEVER_CHANGES = () => () => {};
+const readOrigin = () => window.location.origin;
+const readFallbackOrigin = () => FALLBACK_ORIGIN;
 
 /** Terminal states carry a settled outcome; anything lower is still running. */
 function outcomeOf(claim: ClaimInspection) {
@@ -27,6 +36,13 @@ export function Hero({
 }: {
   latest: ClaimInspection | null;
 }) {
+  // The deployment the reader is on, so a localhost visit hands over a
+  // localhost link, exactly as the Audit page's handoff does.
+  const origin = React.useSyncExternalStore(
+    NEVER_CHANGES,
+    readOrigin,
+    readFallbackOrigin,
+  );
   return (
     <section
       id="top"
@@ -55,6 +71,19 @@ export function Hero({
             <SplitButton href="/claims" tone="dark" chip={false} stretch>
               Watch live claims
             </SplitButton>
+          </div>
+
+          {/* The agent path: the same one setup line the Audit page hands
+              over, quiet under the buttons so it stays an aside rather than a
+              third call to action. */}
+          <div className="mt-7 lg:mt-8">
+            <Eyebrow className="mb-2 text-[#F3F3F3]/50">Give this to your agent</Eyebrow>
+            <CommandRow
+              text={`Set up ${origin}/SKILL.md and take it from there.`}
+              ready
+              label="the setup line"
+              tone="ink"
+            />
           </div>
         </div>
 

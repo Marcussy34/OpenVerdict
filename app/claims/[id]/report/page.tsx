@@ -295,10 +295,14 @@ function ReportTitle({ claim }: { claim: ClaimInspection }) {
           The display face balances its lines by default, which pinched a
           long statement into two short ones with a quarter of the column
           empty; `.ov-display` is unlayered CSS, so a utility class would
-          lose to it and the override has to be inline. */}
+          lose to it and the override has to be inline.
+          The size is fluid rather than stepped at md, because a statement is
+          as long as it is: 2.5rem is the largest size that still sets about
+          48 characters on one line in this 840px column, and the 2.25rem
+          floor keeps the phone exactly where it was. */}
       <h1
         style={{ textWrap: "pretty" }}
-        className="ov-display text-4xl text-ocean md:text-5xl"
+        className="ov-display text-[clamp(2.25rem,4.65vw,2.5rem)] text-ocean"
       >
         {claim.statement}
       </h1>
@@ -619,11 +623,13 @@ function ClaimReportContent({ params }: ClaimReportPageProps) {
   }));
 
   // The whole report, behind ?view=full: every panel, hash and id the record
-  // holds. It takes the console's wide frame, which the summary does not need,
-  // and the same title block and top controls, where the second one returns.
+  // holds, in the summary's own frame and with the same title block and top
+  // controls, where the second one returns. It used to widen to max-w-7xl,
+  // which slid the title left on every switch; the panels inside wrap to
+  // fewer columns instead, so only the body changes.
   if (full) {
     return (
-      <div className="mx-auto max-w-7xl space-y-8 px-5 py-10 md:px-7 lg:py-14">
+      <div className="mx-auto max-w-4xl space-y-8 px-5 py-10 md:px-7 lg:py-14">
         <ReportTitle claim={claim} />
         <Hairline />
         <div className="flex flex-wrap items-center justify-end gap-2">

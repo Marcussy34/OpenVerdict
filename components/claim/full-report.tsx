@@ -537,7 +537,9 @@ export function FullReport({
           </div>
         ) : (
           <>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
+            {/* Three up, then two: the report runs the summary's frame now,
+                so five across would leave each seal too narrow to read. */}
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {seats.map((seat) => (
                 <SeatSeal
                   key={seat.jurySeatId}

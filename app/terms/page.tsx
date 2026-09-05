@@ -49,10 +49,10 @@ export default function TermsPage() {
       <div className="flex items-start gap-3 rounded-2xl border border-destructive/35 bg-destructive/6 p-4">
         <Warning2 size="18" variant="Bold" className="mt-0.5 shrink-0 text-destructive" />
         <div className="space-y-1">
-          <p className="text-sm font-semibold text-ocean">Experimental research software</p>
+          <p className="text-sm font-semibold text-ocean">Pre-release research software</p>
           <p className="text-xs leading-relaxed text-muted-foreground">
-            OpenVerdict is experimental software developed for demonstration and hackathon
-            evaluation. Smart contracts and AI juror models are unaudited.
+            OpenVerdict is pre-release software on Sui testnet, built for demonstration
+            and hackathon evaluation. Smart contracts and AI juror models are unaudited.
           </p>
         </div>
       </div>

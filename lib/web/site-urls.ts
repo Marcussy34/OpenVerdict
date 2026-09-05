@@ -1,6 +1,14 @@
 // Canonical origin URLs for the landing page and the console app.
 export const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL || "https://openverdict.info").replace(/\/$/, "");
 export const APP_URL = (process.env.NEXT_PUBLIC_APP_URL || `${SITE_URL}/app`).replace(/\/$/, "");
+/**
+ * The console's own origin, or null when one host serves everything (locally,
+ * and wherever NEXT_PUBLIC_APP_URL is unset). On the documentation host every
+ * path is a documentation path, so a relative "/claims" is rewritten to
+ * "/docs/claims": the header and the footer both have to name the console
+ * outright there.
+ */
+export const CONSOLE_ORIGIN = process.env.NEXT_PUBLIC_APP_URL ? APP_URL : null;
 // Where the technical documentation lives. Its own host when
 // NEXT_PUBLIC_DOCS_URL names one, otherwise in-app at /docs; both forms work
 // as a link target, so nothing else has to know which deployment this is.

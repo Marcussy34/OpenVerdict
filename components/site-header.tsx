@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { WalletConnectButton } from "@/components/wallet/connect-button";
 import { Arrow } from "@/components/landing/primitives";
-import { APP_URL } from "@/lib/web/site-urls";
+import { CONSOLE_ORIGIN } from "@/lib/web/site-urls";
 import { cn } from "@/lib/utils";
 
 const NAV_ITEMS = [
@@ -58,14 +58,6 @@ export function BrandMark({ size = 30 }: { size?: number }) {
  * /app, and the same link works either way.
  */
 const APP_HOME = process.env.NEXT_PUBLIC_APP_URL || "/app";
-
-/**
- * The console's own origin, or null when one host serves everything (locally,
- * and wherever NEXT_PUBLIC_APP_URL is unset). On the documentation host every
- * path is a documentation path, so a relative "/claims" is rewritten to
- * "/docs/claims"; the nav links there have to name the console outright.
- */
-const CONSOLE_ORIGIN = process.env.NEXT_PUBLIC_APP_URL ? APP_URL : null;
 
 /**
  * One chip in the nav rail. It is a plain anchor when the destination is on

@@ -53,8 +53,8 @@ export default async function RootLayout({
   const requestHeaders = await headers();
   const host = requestHeaders.get("x-forwarded-host") ?? requestHeaders.get("host");
   const consoleHost = rewritePathForHost(host, "/") !== null;
-  // On the docs host every path is a documentation path, so the header's
-  // console links have to name the app origin outright.
+  // On the docs host every path is a documentation path, so the header and the
+  // footer both have to name the app origin outright in their console links.
   const docsHost = isDocsHost(host);
   return (
     // Light is the demo theme; every token lives in globals.css :root.
@@ -100,7 +100,7 @@ export default async function RootLayout({
                 and never scrolls. */}
             <ChromeVisibility>
               <div aria-hidden className="h-20 shrink-0" />
-              <LandingFooter />
+              <LandingFooter docsHost={docsHost} />
             </ChromeVisibility>
           </div>
         </WalletProviders>

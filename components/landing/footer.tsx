@@ -5,7 +5,8 @@ import Link from "next/link";
 import { useReducedMotion } from "motion/react";
 import { CornerPin, GridGuides, Hairline, ArrowUp, Eyebrow } from "./primitives";
 import { SuiMark, GonkaMark } from "@/components/brand/logos";
-import { DOCS_URL } from "@/lib/web/site-urls";
+import { CONSOLE_ORIGIN, DOCS_URL } from "@/lib/web/site-urls";
+import { isConsolePath } from "@/lib/web/host-routing";
 import { useScrollFrame, clamp01 } from "./scroll-driver";
 
 // Same labels as the site header, in the same order: "Verify" is claim
@@ -23,6 +24,9 @@ const NAVIGATION = [
 
 const REPO = "https://github.com/Marcussy34/OpenVerdict";
 
+/** Every link in the two lists wears the same quiet hover. */
+const LINK_CLASS = "transition-opacity hover:opacity-70";
+
 const LEGAL = [
   { href: "/terms", label: "Terms of use" },
   { href: "/privacy", label: "Privacy notice" },
@@ -35,8 +39,13 @@ const LEGAL = [
  * Carries the provenance statement, the site's own links, and the giant wordmark
  * that rises into place as the footer scrolls in (static under reduced motion,
  * since the ride is driven from the shared scroll loop).
+ *
+ * `docsHost` comes from the root layout, the same flag the header reads: on the
+ * documentation host a relative "/agents" is rewritten to the "Agents"
+ * documentation page, so the console entries have to name the console's origin.
  */
-export function LandingFooter() {
+export function LandingFooter({ docsHost = false }: { docsHost?: boolean }) {
+  const crossHost = docsHost && CONSOLE_ORIGIN !== null;
   const markRef = React.useRef<HTMLDivElement>(null);
   const bandRef = React.useRef<HTMLDivElement>(null);
   const reduce = useReducedMotion();
@@ -141,9 +150,15 @@ export function LandingFooter() {
             <FooterColumn heading="Navigation">
               {NAVIGATION.map((item) => (
                 <li key={item.href}>
-                  <Link href={item.href} className="transition-opacity hover:opacity-70">
-                    {item.label}
-                  </Link>
+                  {crossHost && isConsolePath(item.href) ? (
+                    <a href={`${CONSOLE_ORIGIN}${item.href}`} className={LINK_CLASS}>
+                      {item.label}
+                    </a>
+                  ) : (
+                    <Link href={item.href} className={LINK_CLASS}>
+                      {item.label}
+                    </Link>
+                  )}
                 </li>
               ))}
             </FooterColumn>
@@ -158,7 +173,7 @@ export function LandingFooter() {
                     {...(item.href.startsWith("http")
                       ? { target: "_blank", rel: "noreferrer" }
                       : {})}
-                    className="transition-opacity hover:opacity-70"
+                    className={LINK_CLASS}
                   >
                     {item.label}
                   </a>
@@ -187,12 +202,23 @@ export function LandingFooter() {
           <ul className="flex flex-wrap items-center gap-x-5 gap-y-2">
             {LEGAL.map((item) => (
               <li key={item.href}>
-                <Link
-                  href={item.href}
-                  className="ov-micro ov-micro-sm text-[#F3F3F3]/60 underline-offset-4 hover:underline"
-                >
-                  {item.label}
-                </Link>
+                {/* The legal pages live on the console too; on the docs host a
+                    relative "/terms" would be rewritten to a docs page. */}
+                {crossHost ? (
+                  <a
+                    href={`${CONSOLE_ORIGIN}${item.href}`}
+                    className="ov-micro ov-micro-sm text-[#F3F3F3]/60 underline-offset-4 hover:underline"
+                  >
+                    {item.label}
+                  </a>
+                ) : (
+                  <Link
+                    href={item.href}
+                    className="ov-micro ov-micro-sm text-[#F3F3F3]/60 underline-offset-4 hover:underline"
+                  >
+                    {item.label}
+                  </Link>
+                )}
               </li>
             ))}
           </ul>

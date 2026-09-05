@@ -223,18 +223,14 @@ function JurorContent({
   node,
   number,
   variant,
-  verdict,
   reduceMotion,
 }: {
   node: GraphNode;
   /** 1-based juror number, the same one the Live view and the dock print. */
   number: number;
   variant: number;
-  verdict?: GraphNode;
   reduceMotion: boolean;
 }) {
-  const outcome = node.outcome ?? verdict?.outcome;
-  const percent = confidencePercent(node.confidenceBps ?? verdict?.confidenceBps);
   const seatTag = shortSeatId(node.seatId);
 
   return (
@@ -278,24 +274,14 @@ function JurorContent({
           <CloseCircle size="13" variant="Bold" />
         </span>
       ) : null}
-      <span className="pointer-events-none absolute top-[calc(100%+6px)] left-1/2 flex w-36 -translate-x-1/2 flex-col items-center gap-1">
-        {node.state === "revealed" && outcome !== undefined ? (
-          <span
-            className={cn(
-              "px-2 py-0.5 text-[10px] font-semibold whitespace-nowrap tabular-nums",
-              OUTCOME_STYLE[outcome],
-            )}
-          >
-            {outcome}
-            {percent === undefined ? null : ` · ${percent}`}
-          </span>
-        ) : null}
-        {seatTag === undefined ? null : (
-          <span className="bg-card/85 px-2 py-0.5 font-mono text-[9px] font-medium tracking-tight text-muted-foreground ring-1 ring-border">
-            {seatTag}
-          </span>
-        )}
-      </span>
+      {/* The seat id, and only that: the seat's vote is the node beside the
+          disc, which is what the certificate is wired to. A pill here as well
+          printed every vote twice. */}
+      {seatTag === undefined ? null : (
+        <span className="pointer-events-none absolute top-[calc(100%+6px)] left-1/2 -translate-x-1/2 bg-card/85 px-2 py-0.5 font-mono text-[9px] font-medium tracking-tight whitespace-nowrap text-muted-foreground ring-1 ring-border">
+          {seatTag}
+        </span>
+      )}
     </>
   );
 }
@@ -306,7 +292,6 @@ function nodeContent(
     number: number;
     variant: number;
     cited: boolean;
-    jurorVerdict?: GraphNode;
     reduceMotion: boolean;
   },
 ): ReactNode {
@@ -320,9 +305,6 @@ function nodeContent(
           node={node}
           number={options.number}
           variant={options.variant}
-          {...(options.jurorVerdict === undefined
-            ? {}
-            : { verdict: options.jurorVerdict })}
           reduceMotion={options.reduceMotion}
         />
       );
@@ -396,7 +378,6 @@ function CanvasNode({
   number,
   variant,
   cited,
-  jurorVerdict,
   pinned,
   reduceMotion,
   viewScale,
@@ -415,7 +396,6 @@ function CanvasNode({
   number: number;
   variant: number;
   cited: boolean;
-  jurorVerdict?: GraphNode;
   /** Dropped here by the reader: it stays put until they release it. */
   pinned: boolean;
   reduceMotion: boolean;
@@ -545,7 +525,6 @@ function CanvasNode({
               number,
               variant,
               cited,
-              ...(jurorVerdict === undefined ? {} : { jurorVerdict }),
               reduceMotion,
             })}
           </motion.button>
@@ -694,8 +673,8 @@ export function DeliberationCanvas({
       if (point.y > maxY) maxY = point.y;
     }
     if (minX === Infinity) return { x: 0, y: 0, scale: 1 };
-    // Room for what hangs off a node: a juror's vote pill and seat tag, a
-    // search's query. Wider than tall, because that is how the labels hang.
+    // Room for what hangs off a node: a juror's seat tag, a search's query.
+    // Wider than tall, because that is how the labels hang.
     // A phone cannot spare a desktop's margin, so the room itself sets the
     // ceiling: better to clip the end of one truncated label at the edge than
     // to shrink the whole map to half size.
@@ -746,15 +725,6 @@ export function DeliberationCanvas({
   // Tints are stable per claim: the same seat keeps its tone across renders.
   const nodeVariants = useMemo(() => variantsByNode(graph), [graph]);
 
-  const verdictBySeat = useMemo(() => {
-    const verdicts = new Map<string, GraphNode>();
-    for (const node of graph.nodes) {
-      if (node.kind === "verdict" && node.seatId !== undefined) {
-        verdicts.set(node.seatId, node);
-      }
-    }
-    return verdicts;
-  }, [graph.nodes]);
   const citedPageIds = useMemo(
     () => new Set(
       graph.edges
@@ -945,9 +915,6 @@ export function DeliberationCanvas({
           if (position === undefined) return null;
           const nodeHighlighted = highlightedIds?.has(node.id) ?? false;
           const cited = node.detail?.cited === true || citedPageIds.has(node.id);
-          const jurorVerdict = node.seatId === undefined
-            ? undefined
-            : verdictBySeat.get(node.seatId);
           return (
             <CanvasNode
               key={node.id}
@@ -959,7 +926,6 @@ export function DeliberationCanvas({
               number={numberOf(node)}
               variant={nodeVariants.get(node.id) ?? 0}
               cited={cited}
-              {...(jurorVerdict === undefined ? {} : { jurorVerdict })}
               pinned={pinnedIds.has(node.id)}
               reduceMotion={shouldReduceMotion}
               viewScale={view.scale}

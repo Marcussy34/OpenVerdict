@@ -20,7 +20,7 @@ const RISKS = [
     icon: Lock,
     tone: "warn" as const,
     title: "Unaudited Move smart contracts & capability risk",
-    body: "The Move packages deployed on Sui testnet and demonstration mainnet environments are experimental and have not undergone a formal third-party security audit. Protocol parameters, caps and coin pools should be constrained to low-value demonstration balances.",
+    body: "The Move packages deployed on Sui testnet and demonstration mainnet environments are pre-release and have not yet been audited by a third party. Protocol parameters, caps and coin pools should be constrained to low-value demonstration balances.",
   },
   {
     index: "03",
@@ -37,7 +37,7 @@ export default function RiskPage() {
       <PageHeader
         eyebrow="Before you deploy capital"
         title="Risk disclosure"
-        description="OpenVerdict is an experimental decentralized adversarial AI jury protocol. Understand the technical and economic risks first."
+        description="OpenVerdict is a pre-release decentralized adversarial AI jury protocol. Understand the technical and economic risks first."
         icon={Warning2}
       />
 
