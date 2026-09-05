@@ -3613,3 +3613,52 @@ TREE: clean apart from owner folders, .codebase-memory/, tasks/
 (lessons.md, keep untracked), config/release.localnet.json (run
 artifact, never commit). Old Monitor b64wjsym0 died with the session
 restart; the local dev server and localnet were stopped.
+
+### 3bc-a. ADDENDUM 2026-09-05 09:25Z (read right after 3bc)
+
+CLOCK: my local "17:xx" stamps in 3bc were about eight hours ahead of
+the machine's UTC (`date -u`); use UTC from now on. Real times: deploy
+3887e210 (walrus fix) created 09:13:52Z, live by about 09:18Z; attempt 3
+0xea501fa84ba25e78ffb48fc5dfec8e2756c051dd1bcd5531200f9a4c89c4ae5e of
+the Sui mainnet claim created 09:16:49Z, voided 09:18:49Z with
+INVALID_SCHEMA ("expected array, received string at decisiveEvidence"),
+then GAVE_UP ATTEMPTS_EXHAUSTED. That is a legitimate fail-closed, not a
+restart casualty: DO NOT restore the row (scratchpad/attempt-restore.cjs
+was written but only its read path ran). Its seats kept sealing (4 of 5)
+because the inference worker resumed them, but the resolution worker
+ignores a GAVE_UP attempt; leave it.
+
+CRITICAL FINDING, unfixed: the ten fresh staked seats carry manifest
+document v3 with research prompt v2 and tool policy v2 (promptHash
+0xc62311da..., checked on 0x7c14599a and 0x21b008d5 via
+GET /api/agents/<id>/manifest). The stake flow builds a seat's manifest
+from the adapter's default research spec, which is
+`cfg.researchSpec ?? DEFAULT_PROMPT_SPEC_V2` (lib/gonka/adapter.ts:457),
+not v5, so the fresh roster runs the old v2 prompt; that is why attempt
+3 died on the exact answer-shape error v5 was written to prevent. The
+seven old operator seats had v6 documents (prompt v4) published by
+scripts/publish-agent-manifests.ts, which only knows those seven. TO DO
+FIRST after compaction: (1) find where server.ts builds the adapter
+(createGonkaAdapter options) and whether prepareStake takes the spec
+from this.#gonka.promptSpec()/toolPolicy(); make the default research
+spec DEFAULT_PROMPT_SPEC_V5 on DEFAULT_TOOL_POLICY_V4 for new manifests
+(bundle v5 path); (2) republish the ten fresh seats' manifests with v5
+(extend publish-agent-manifests.ts or the operator CLI to the roster's
+active staked seats; check who may call update_agent_manifest for a
+staked seat: the AgentCap holder, likely the engine-held operational
+key of that slot); (3) deploy and republish in the same idle window with
+no claim live; (4) confirm with GET /api/agents/<id>/manifest showing
+prompt v5 / policy v4. Until then every run uses prompt v2 and repairs
+fail more often.
+
+RUNS NOW: Great Wall claim 0x7842b5da07ead75bb95c9a0d2dc46b20f1edf7aafe6921f5e1e94ae87828d092
+attempt 1 running (created 09:19:06Z, seats sealing) on the v2-prompt
+seats; the run script (Monitor bfc5bdsuo) then submits Bitcoin 21M and
+minimum wage. Plan: after the manifest fix, resubmit "Sui mainnet
+launched on 3 May 2023." as a fresh verification so the demo has it.
+
+WORKERS: live-page-final is mid-edit on app/claims/[id]/page.tsx (the
+editor shows in-progress type errors: nextDeadlineLine, RunSpan,
+attemptFailureSentence; expected until it finishes); agents-sitting-out
+running. Railway CLI needs the cwd inside the repo or
+scratchpad/railway-tree (cd first; "No linked project" otherwise).
