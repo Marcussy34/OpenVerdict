@@ -343,7 +343,7 @@ export default function ClaimsPage() {
               return (
                 <li key={claim.claimId}>
                   <Link
-                    href={`/claims/${claim.attemptChain?.relaunchedAs ?? claim.claimId}`}
+                    href={`/claims/${claim.claimId}`}
                     className="flex items-center gap-3 px-4 py-3 transition-colors hover:bg-surface focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset focus-visible:outline-none"
                   >
                     <div className="min-w-0 flex-1">

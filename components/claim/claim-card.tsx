@@ -79,8 +79,11 @@ export function ClaimCard({ claim }: ClaimCardProps) {
     ).short.toUpperCase();
 
   return (
+    // Every card opens its own record. A voided attempt used to jump to the
+    // attempt that replaced it, which read as the wrong claim; its own page
+    // says it was voided and links the relaunch.
     <Link
-      href={`/claims/${claim.attemptChain?.relaunchedAs ?? claim.claimId}`}
+      href={`/claims/${claim.claimId}`}
       className="ov-edge ov-lift group flex aspect-square flex-col gap-3 overflow-hidden rounded-2xl border border-border bg-card p-4 transition-colors hover:border-sea/40 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
     >
       {/* Where it stands on the left, what it settled on to the right. */}
