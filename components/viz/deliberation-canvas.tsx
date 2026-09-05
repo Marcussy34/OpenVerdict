@@ -45,10 +45,12 @@ const HAIRLINE = "#0b1b28";
 // The same semantic chips the Live view uses: a tinted ground, a hairline and
 // the signal colour, all straight from the tokens. These three are the only
 // hues on the map, and they only ever say what the protocol decided.
+// Opaque grounds (the tint mixed into white, not laid over the paper), so
+// the wires never show through a vote or the certificate (owner, 2026-09-05).
 const OUTCOME_STYLE = {
-  YES: "border border-yes/35 bg-yes/10 text-yes",
-  NO: "border border-no/35 bg-no/10 text-no",
-  UNSURE: "border border-unsure/35 bg-unsure/12 text-unsure",
+  YES: "border border-yes/35 bg-[color-mix(in_srgb,var(--color-yes)_10%,white)] text-yes",
+  NO: "border border-no/35 bg-[color-mix(in_srgb,var(--color-no)_10%,white)] text-no",
+  UNSURE: "border border-unsure/35 bg-[color-mix(in_srgb,var(--color-unsure)_12%,white)] text-unsure",
 } as const;
 const NODE_ENTRY_DURATION_SECONDS = 0.24;
 const NODE_ENTRY_EASE: [number, number, number, number] = [0.33, 1, 0.68, 1];
@@ -165,7 +167,7 @@ function nodeClassName(node: GraphNode, selected: boolean): string {
     }
     case "failure":
       return cn(
-        "size-[30px] border border-no/35 bg-no/10 text-no",
+        "size-[30px] border border-no/35 bg-[color-mix(in_srgb,var(--color-no)_10%,white)] text-no",
         "after:absolute after:-inset-2.5 after:content-['']",
         selectedRing,
       );
