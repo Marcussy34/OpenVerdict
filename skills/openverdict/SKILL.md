@@ -33,16 +33,16 @@ Most questions map to one command. Run it before anything else, read its output,
 | --- | --- | --- |
 | Audit this claim, is it legit, verify it | `ov audit <id> --quiet --json <scratch>/audit.json --out <scratch>/audit.md` | Read audit.md, present the verdict card and the eight sentences |
 | What did juror N do, step by step | `ov trace <id> --juror N` | Present the trail in its own words, one turn per line |
-| Show the exact prompt, what the model received, the raw answer, prompt in and out | `ov trace <id> --juror N --full` | Print the system prompt, the input and every raw reply verbatim, in code blocks, without summarizing |
-| The audit and the trail together | `ov audit <id> --trace --juror N --full --quiet --json <scratch>/audit.json --out <scratch>/audit.md` | One fetch, both answers |
-| Why did juror N fail, why is a seat empty | `ov trace <id> --juror N --full` | The failed-closed header, the attempt log and the failure line say it; never invent the vote it would have cast |
+| Show the exact prompt, what the model received, the raw answer, prompt in and out | `ov trace <id> --juror N --full --out <scratch>/trace-jN.md` | Read the file (in parts if it is long), then print the system prompt, the input and every raw reply verbatim, in code blocks, without summarizing |
+| The audit and the trail together | `ov audit <id> --quiet --json <scratch>/audit.json --out <scratch>/audit.md`, then `ov trace --from <scratch>/audit.json --juror N --full --out <scratch>/trace-jN.md` | One fetch, both answers, both on disk; read the two files |
+| Why did juror N fail, why is a seat empty | `ov trace <id> --juror N --full --out <scratch>/trace-jN.md` | The failed-closed header, the attempt log and the failure line say it; never invent the vote it would have cast |
 | What happened in the debate, why UNRESOLVED | `ov trace <id>` (the debate turns follow the jurors), then `ov audit <id>` | The cascade, explained from the record |
 | Who is on the jury, is it diverse, who staked seat X | `ov agents`, then `ov agent <seat>` | |
 | Is the jury healthy, can I submit now | `ov weather` | |
 | Verify this statement or this article | `ov extract`, then `ov submit` after an explicit go, then `ov watch` | The section "Verify a new claim end to end" |
 | What is on the board, the newest claims | `ov board` | |
 
-Rules of the road. "Exact", "verbatim", "raw" and "show me the prompt" mean the text unchanged inside a code block, never a paraphrase; summarize only when asked to. A seat that failed closed still has a public record (its failure record), and `ov trace --juror N --full` prints it in full. The JSON dump is 2 to 3 MB per claim, so use the jq recipes below for a single fact and nothing more, and never read the app's source code to answer a judge. When the record does not hold something (the claim JSON of a failed seat, for example, which keeps only its hash), say so in one sentence and move on.
+Rules of the road. The flags in this table are complete, so there is no need to run `help` first. Tool output gets cut in most agent harnesses at about 8 KB, and what survives is the tail, so a full trail (25 KB and more) loses its head, the pinned prompt included; every command whose output can be long (`trace --full`, `audit` without `--quiet`) therefore writes to a file with `--out` and you read the file, in parts when it is long. "Exact", "verbatim", "raw" and "show me the prompt" mean the text unchanged inside a code block, never a paraphrase; summarize only when asked to. A seat that failed closed still has a public record (its failure record), and `ov trace --juror N --full` prints it in full. The JSON dump is 2 to 3 MB per claim, so use the jq recipes below for a single fact and nothing more, and never read the app's source code to answer a judge. When the record does not hold something (the claim JSON of a failed seat, for example, which keeps only its hash), say so in one sentence and move on.
 
 ## What this skill does
 
@@ -137,7 +137,7 @@ The commands, all reading the public API:
 | `ov status <id>` | One block: statement, state in plain words, seats committed and revealed, attempt, next deadline, result |
 | `ov watch <claim id> [--for <duration>] [--since <n>]` | Follows a verification live, one dated line per step |
 | `ov audit <id>` | Rebuilds and checks the whole public record (the same auditor as `scripts/run.sh`) |
-| `ov trace [<id>] [--from <audit.json>] [--juror n] [--round 1\|2] [--full]` | The research trail: every juror's searches, opened pages, quotes, answer and gateway receipt, and for a seat that failed closed its recorded trail, its attempt log and its failure line. `--from` reads a saved audit instead of refetching |
+| `ov trace [<id>] [--from <audit.json>] [--juror n] [--round 1\|2] [--full] [--out <file>]` | The research trail: every juror's searches, opened pages, quotes, answer and gateway receipt, and for a seat that failed closed its recorded trail, its attempt log and its failure line. `--from` reads a saved audit instead of refetching |
 | `ov help [command]` | The usage, the description and an example of every command |
 
 `ov agents` and `ov agent` answer "who is on the jury", "is the jury diverse", "who staked this seat", "what has this seat done" and "what prompt does this seat run under" without opening a page. Read the roster as: the committee draw takes at most two seats per model family, three families per jury, one seat per operational signing key, and a Skeptic and a Source-authenticity seat on every committee, so a family with too few active seats is what makes a submission be refused. Seats marked `operator` carry a bond the operator posted; the others name the staker and the amount. There is no cap per staker: any account may stake on as many seats as it likes, and the draw rule is about diversity, never about identity.
@@ -217,9 +217,11 @@ A seat that failed closed is not a dead end. Its failure record is public, so th
 For "show me the prompt", "what exactly did the model receive", "show me the raw answer":
 
 ```bash
-bash "<skill dir>/scripts/ov.sh" trace <id> --juror N --full
-bash "<skill dir>/scripts/ov.sh" trace --from "<scratch>/audit.json" --juror N --full
+bash "<skill dir>/scripts/ov.sh" trace <id> --juror N --full --out "<scratch>/trace-jN.md"
+bash "<skill dir>/scripts/ov.sh" trace --from "<scratch>/audit.json" --juror N --full --out "<scratch>/trace-jN.md"
 ```
+
+Always with `--out`: a full trail runs past 25 KB and a tool result keeps only its last 8 KB or so, which drops the pinned prompt at the top. The command prints one confirmation line; read the file it names, in parts if your reader caps a page.
 
 "Exact", "verbatim" and "raw" all mean the same thing here, the text unchanged inside a fenced code block, never a paraphrase and never a tidied version. When the user asks for the exact text, print it verbatim; summarize only when a summary is what they asked for.
 

@@ -50,6 +50,7 @@ type CliOptions = {
   forMs?: number;
   since?: number;
   verbose: boolean;
+  /** `--out <file>`: the audit dossier, or the trace trail. */
   out?: string;
   run?: string;
   quiet: boolean;
@@ -242,6 +243,7 @@ async function run(options: CliOptions, env: CommandEnv): Promise<number> {
       return traceCommand(env, {
         ...(named ? { target: one(options, "a claim id or link") } : {}),
         ...(options.from === undefined ? {} : { from: options.from }),
+        ...(options.out === undefined ? {} : { outPath: options.out }),
         full: options.full,
         ...(options.juror === undefined ? {} : { juror: options.juror }),
         ...(options.round === undefined ? {} : { round: options.round }),

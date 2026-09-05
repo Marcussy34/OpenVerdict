@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -646,6 +646,71 @@ describe("ov trace --from a saved audit", () => {
       const wrong = await failure(traceCommand(s.env, { from: notAnAudit, full: false }));
       expect(wrong.exitCode).toBe(2);
       expect(wrong.message).toBe(`${notAnAudit} is not an audit document; --from expects the file ov audit --json writes`);
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("ov trace --out a file", () => {
+  it("writes the trail to the file, creating the folder, and prints one line", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "ov-trace-out-"));
+    try {
+      const proofs = proofsForRound(FINALIZED, 1, RESEARCH_PROOF);
+      const printed = setup(FINALIZED, proofs);
+      expect(await traceCommand(printed.env, { target: FINALIZED.claimId, juror: 1, full: true })).toBe(0);
+
+      // A folder that does not exist yet, the way the audit writes its dossier.
+      const file = join(directory, "trails", "juror-1.md");
+      const written = setup(FINALIZED, proofs);
+      expect(await traceCommand(written.env, { target: FINALIZED.claimId, juror: 1, full: true, outPath: file })).toBe(0);
+
+      // The file holds exactly what stdout would have carried, and stdout only says so.
+      expect(readFileSync(file, "utf8")).toBe(`${printed.out.join("\n")}\n`);
+      expect(written.out).toEqual([`trace: written to ${file} (${printed.out.length} lines)`]);
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("writes the JSON document when --json is on", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "ov-trace-out-"));
+    try {
+      const file = join(directory, "trail.json");
+      const s = setup(FINALIZED, proofsForRound(FINALIZED, 1, RESEARCH_PROOF), { json: true });
+      expect(await traceCommand(s.env, { target: FINALIZED.claimId, juror: 1, full: false, outPath: file })).toBe(0);
+      const text = readFileSync(file, "utf8");
+      const document = JSON.parse(text) as { claimId: string; jurors: Array<{ jurorIndex: number }> };
+      expect(document.claimId).toBe(FINALIZED.claimId);
+      expect(document.jurors.map((juror) => juror.jurorIndex)).toEqual([1]);
+      // The count is the file's own, so the JSON block counts as its many lines.
+      expect(s.out).toEqual([`trace: written to ${file} (${text.trimEnd().split("\n").length} lines)`]);
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("writes the trail a saved audit holds, without one request", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "ov-trace-out-"));
+    try {
+      const audited = setup(FINALIZED, proofsForRound(FINALIZED, 1, RESEARCH_PROOF));
+      const auditJson = join(directory, "audit.json");
+      await auditCommand(audited.env, {
+        target: FINALIZED.claimId,
+        quiet: true,
+        outPath: join(directory, "audit.md"),
+        jsonPath: auditJson,
+      });
+
+      const printed = setup(FINALIZED, {});
+      expect(await traceCommand(printed.env, { from: auditJson, juror: 1, full: true })).toBe(0);
+
+      const file = join(directory, "trail.md");
+      const saved = setup(FINALIZED, {});
+      expect(await traceCommand(saved.env, { from: auditJson, juror: 1, full: true, outPath: file })).toBe(0);
+      expect(readFileSync(file, "utf8")).toBe(`${printed.out.join("\n")}\n`);
+      expect(saved.out).toEqual([`trace: written to ${file} (${printed.out.length} lines)`]);
+      expect(saved.net.calls).toEqual([]);
     } finally {
       rmSync(directory, { recursive: true, force: true });
     }

@@ -510,9 +510,37 @@ export async function auditCommand(env: CommandEnv, input: AuditInput): Promise<
 export type TraceFlags = { juror?: number; round?: 1 | 2; full: boolean };
 
 /** `--from` reads a saved audit instead of the record, so `target` is optional. */
-export type TraceCommandInput = TraceFlags & { target?: string; from?: string };
+export type TraceCommandInput = TraceFlags & {
+  target?: string;
+  from?: string;
+  /** `--out <file>`: the trail goes to that file instead of stdout. */
+  outPath?: string;
+};
 
 export async function traceCommand(env: CommandEnv, input: TraceCommandInput): Promise<number> {
+  // --out collects the trail instead of printing it, the way `ov audit --out`
+  // writes its dossier: a long trail is easier to read back from a file in parts.
+  const collected: string[] = [];
+  const out =
+    input.outPath === undefined
+      ? env.io.out
+      : (line: string) => {
+          collected.push(line);
+        };
+  const code = await renderTrail(env, input, out);
+  if (input.outPath === undefined) return code;
+  const body = collected.join("\n");
+  const path = writeFile(input.outPath, `${body}\n`);
+  env.io.out(`trace: written to ${path} (${body === "" ? 0 : body.split("\n").length} lines)`);
+  return code;
+}
+
+/** The trail itself, from the file `--from` names or from the public record. */
+async function renderTrail(
+  env: CommandEnv,
+  input: TraceCommandInput,
+  out: (line: string) => void,
+): Promise<number> {
   // --from answers from a file the audit already wrote, without a single fetch.
   if (input.from !== undefined) {
     const result = readAuditFile(input.from);
@@ -523,7 +551,7 @@ export async function traceCommand(env: CommandEnv, input: TraceCommandInput): P
       ...(input.juror === undefined ? {} : { juror: input.juror }),
       ...(input.round === undefined ? {} : { round: input.round }),
       ...(env.width === undefined ? {} : { width: env.width }),
-      out: env.io.out,
+      out,
     });
   }
   if (input.target === undefined) throw new OvError("trace needs a claim id or link, or --from <audit.json>");
@@ -538,7 +566,7 @@ export async function traceCommand(env: CommandEnv, input: TraceCommandInput): P
     ...(input.juror === undefined ? {} : { juror: input.juror }),
     ...(input.round === undefined ? {} : { round: input.round }),
     ...(env.width === undefined ? {} : { width: env.width }),
-    out: env.io.out,
+    out,
     err: env.io.err,
   });
 }
@@ -644,7 +672,7 @@ const COMMAND_HELP: Record<string, { usage: string; about: string; example: stri
     example: "ov audit 0x273220b56d87edea0a6db35f85c0fc8f36591461ee6be6962e86bb4586ee4ac6 --quiet",
   },
   trace: {
-    usage: "ov trace [<claim id or link>] [--from <audit.json>] [--juror <n>] [--round 1|2] [--full]",
+    usage: "ov trace [<claim id or link>] [--from <audit.json>] [--juror <n>] [--round 1|2] [--full] [--out <file>]",
     about: "The research trail: every juror's searches, opened pages, quotes, answer and gateway receipt, turn by turn.",
     example: "ov trace 0x273220b56d87edea0a6db35f85c0fc8f36591461ee6be6962e86bb4586ee4ac6 --juror 1",
   },
@@ -679,6 +707,7 @@ export function helpText(topic?: string): string {
         "--full adds the pinned system prompt once and every message verbatim, page texts included.",
         "A seat that failed closed prints its recorded trail, its attempt log and its failure line.",
         "--from <audit.json> reads the file ov audit --json wrote instead of refetching, so the trail lands in under a second.",
+        "--out <file> writes what stdout would have carried to that file and prints one confirmation line, so a long trail is read back in parts.",
         "--json prints the same trail as one JSON document. Exit codes: 0 success, 2 unknown claim or fetch error.",
       );
     }
