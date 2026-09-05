@@ -582,8 +582,8 @@ function LeftRail({
             onChange={(event) => replay.seek(Number(event.currentTarget.value))}
             className="w-full accent-[var(--ov-accent)]"
           />
-          <div className="grid grid-cols-3 gap-2">
-            {([1, 10, 30] as const).map((speed) => (
+          <div className="grid grid-cols-4 gap-2">
+            {([1, 5, 10, 30] as const).map((speed) => (
               <button
                 key={speed}
                 type="button"

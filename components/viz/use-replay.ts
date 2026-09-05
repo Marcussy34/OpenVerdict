@@ -6,7 +6,7 @@ import type { DeliberationGraph } from "@/lib/viz/deliberation-graph";
 import { graphSpan, visibleAt } from "@/lib/viz/replay";
 
 /** 20x is the live transcript's replay: a ten-minute verdict in thirty seconds. */
-type ReplaySpeed = 1 | 10 | 20 | 30;
+type ReplaySpeed = 1 | 5 | 10 | 20 | 30;
 
 function clampTime(value: number, startMs: number, endMs: number): number {
   return Math.min(endMs, Math.max(startMs, value));
