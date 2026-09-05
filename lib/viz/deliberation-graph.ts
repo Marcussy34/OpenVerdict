@@ -79,7 +79,7 @@ function finite(value: number, fallback: number): number {
   return Number.isFinite(value) ? value : fallback;
 }
 
-function eventTime(event: ResolutionEvent | undefined): number | undefined {
+export function eventTime(event: ResolutionEvent | undefined): number | undefined {
   if (event === undefined) return undefined;
   const parsed = Date.parse(event.occurredAt);
   return Number.isFinite(parsed) ? parsed : undefined;
@@ -97,7 +97,7 @@ function firstEventTime(
   return undefined;
 }
 
-function eventSeatId(event: ResolutionEvent): string | undefined {
+export function eventSeatId(event: ResolutionEvent): string | undefined {
   const payload = record(event.payload);
   return stringAt(payload, "jurySeatId") ?? stringAt(payload, "jury_seat_id");
 }

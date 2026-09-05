@@ -47,6 +47,7 @@ import { Hairline } from "@/components/landing/primitives";
 import { CanvasHighlightProvider } from "@/components/viz/canvas-highlight";
 import { DeliberationCanvas } from "@/components/viz/deliberation-canvas";
 import { DeliberationChat } from "@/components/viz/deliberation-chat";
+import { CopyClaimId } from "@/components/claim/copy-claim-id";
 import { debateSeatsOf } from "@/components/viz/debate-turn";
 import { HashChip } from "@/components/viz/hash-chip";
 import { LiveDot } from "@/components/viz/live-dot";
@@ -70,6 +71,7 @@ import {
   type DeliberationGraph,
   type GraphNode,
 } from "@/lib/viz/deliberation-graph";
+import { voteTally } from "@/lib/viz/vote-tally";
 import {
   researchFeed,
   researchStepWords,
@@ -871,14 +873,25 @@ function RailClocks({
   );
 }
 
+/** Under a tile of a two-round claim: which round the number belongs to. */
+function RoundInView({ round }: { round: 1 | 2 }) {
+  return (
+    <dd className="mt-1 ov-micro ov-micro-sm text-muted-foreground">
+      Round {round} of 2
+    </dd>
+  );
+}
+
 function LeftRail({
   claim,
+  events,
   now,
   replay,
   liveMode,
   span,
 }: {
   claim: ClaimInspection;
+  events: ResolutionEvent[];
   now: number | null;
   replay: ReplayControls;
   liveMode: LiveMode | null;
@@ -886,8 +899,12 @@ function LeftRail({
 }) {
   const stranded = now !== null && isStrandedDiscussion(claim, now);
   const terminal = claim.state >= 9;
-  const sealedCount = claim.commitments.filter((commitment) => commitment.committed).length;
-  const revealedCount = claim.commitments.filter((commitment) => commitment.revealed).length;
+  // One round at a time, and at the replay cursor while a replay runs, so the
+  // two tiles move with the graph instead of showing both rounds added up.
+  const tally = useMemo(
+    () => voteTally(claim, events, replay.active ? replay.t : undefined),
+    [claim, events, replay.active, replay.t],
+  );
 
   return (
     // Paper, like the rest of the page. The accent appears only where it acts:
@@ -902,7 +919,11 @@ function LeftRail({
           <ArrowLeft2 size="13" className="relative -top-px shrink-0" />
           All claims
         </Link>
-        <p className="ov-micro ov-micro-sm text-muted-foreground">Claim assertion</p>
+        <div className="flex items-center justify-between gap-2">
+          <p className="ov-micro ov-micro-sm text-muted-foreground">Claim assertion</p>
+          {/* The id is the handle the audit takes; one tap copies it. */}
+          <CopyClaimId claimId={claim.claimId} className="-my-2 -mr-1" />
+        </div>
         <p className="text-[17px] leading-snug font-medium tracking-[-0.01em] text-foreground">
           {claim.statement}
         </p>
@@ -924,11 +945,17 @@ function LeftRail({
       <dl className="grid grid-cols-2 gap-3">
         <div className="border border-border bg-card p-3">
           <dt className="ov-micro ov-micro-sm text-muted-foreground">Sealed</dt>
-          <dd className="mt-1 font-mono text-xl font-medium text-foreground">{sealedCount}/5</dd>
+          <dd className="mt-1 font-mono text-xl font-medium text-foreground">
+            {tally.sealed}/{tally.seats}
+          </dd>
+          {tally.rounds === 2 ? <RoundInView round={tally.round} /> : null}
         </div>
         <div className="border border-border bg-card p-3">
           <dt className="ov-micro ov-micro-sm text-muted-foreground">Revealed</dt>
-          <dd className="mt-1 font-mono text-xl font-medium text-foreground">{revealedCount}/5</dd>
+          <dd className="mt-1 font-mono text-xl font-medium text-foreground">
+            {tally.revealed}/{tally.seats}
+          </dd>
+          {tally.rounds === 2 ? <RoundInView round={tally.round} /> : null}
         </div>
       </dl>
 
@@ -2072,7 +2099,7 @@ function ClaimCanvasContent({ params }: ClaimCanvasPageProps) {
   return (
     <div className="relative flex h-dvh overflow-hidden bg-background text-foreground">
       <CollapsibleRail>
-        <LeftRail claim={claim} now={now} replay={replay} liveMode={liveMode} span={runSpan} />
+        <LeftRail claim={claim} events={events} now={now} replay={replay} liveMode={liveMode} span={runSpan} />
       </CollapsibleRail>
 
       <main className="relative flex h-dvh flex-1 flex-col overflow-hidden">
@@ -2241,7 +2268,7 @@ function ClaimCanvasContent({ params }: ClaimCanvasPageProps) {
 
       {leftOpen ? (
         <MobileSheet title="Claim details" onClose={() => setLeftOpen(false)}>
-          <LeftRail claim={claim} now={now} replay={replay} liveMode={liveMode} span={runSpan} />
+          <LeftRail claim={claim} events={events} now={now} replay={replay} liveMode={liveMode} span={runSpan} />
         </MobileSheet>
       ) : null}
 
