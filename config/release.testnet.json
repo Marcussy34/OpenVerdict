@@ -3,7 +3,7 @@
   "suiRpcUrl": "https://fullnode.testnet.sui.io:443",
   "suiRpcFallbackUrl": "https://sui-testnet-rpc.publicnode.com",
   "suiFaucetUrl": "https://faucet.testnet.sui.io/v2/gas",
-  "packageId": "0x38ecc9fa1deca5413376ca2cc82f099f468c6aa5f8311e6167e5268d582e04c8",
+  "packageId": "0x437443b02507fd895a374d810ca216bacca3cedfe277772b6233772950e8500b",
   "originalPackageId": "0xa9f3c2dbdfad3ff900b9d2f4df605621d619a9e7575034f508eb5d39263c5bc7",
   "registryObjectId": "0x4020f3cbe51c1cdf6d004696e7cdf0d19f67fde2572b72a5f39a51d119f8ebab",
   "demoPoolObjectId": "",
