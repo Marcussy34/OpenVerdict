@@ -130,7 +130,7 @@ export type OracleInferenceInput = {
   protocolVersion: "1.0";
   runId: string;
   agentRole: string;
-  promptVersion: "1" | "2" | "3" | "4";
+  promptVersion: "1" | "2" | "3" | "4" | "5";
   submission: {
     kind: "TEXT" | "URL" | "TEXT_AND_URL";
     submittedTextHash?: string;
@@ -383,6 +383,8 @@ export type PromptSpecV2 = {
 };
 export type PromptSpecV3 = Omit<PromptSpecV2, "version"> & { version: "3" };
 export type PromptSpecV4 = Omit<PromptSpecV3, "version"> & { version: "4" };
+/** V5 adds the worked answer example; the shape is identical to V4. */
+export type PromptSpecV5 = Omit<PromptSpecV4, "version"> & { version: "5" };
 export type DeliberationPromptSpecV1 = {
   version: "1";
   providerId: "gonkarouter";
@@ -421,7 +423,8 @@ export type PromptSpec =
   | PromptSpecV1
   | PromptSpecV2
   | PromptSpecV3
-  | PromptSpecV4;
+  | PromptSpecV4
+  | PromptSpecV5;
 
 export type ToolPolicyV1 = { version: "1"; tools: [] };
 /** Research budgets; every value is hashed into the manifest's toolPolicyHash. */
@@ -465,7 +468,13 @@ export type AgentManifestDocumentV4 = Omit<
 export type AgentManifestDocumentV5 = Omit<
   AgentManifestDocumentV4,
   "version" | "promptSpec" | "toolPolicy"
-> & { version: "5"; promptSpec: PromptSpecV4; toolPolicy: ToolPolicyV4 };
+> & {
+  version: "5";
+  /** Prompt v5 only appends instructions to v4 and pins the same tool
+   *  policy, so a seat on v5 still publishes a v5 manifest document. */
+  promptSpec: PromptSpecV4 | PromptSpecV5;
+  toolPolicy: ToolPolicyV4;
+};
 /** V6 also pins the no-tools table-vote prompt. */
 export type AgentManifestDocumentV6 = Omit<
   AgentManifestDocumentV5,
@@ -667,7 +676,9 @@ export type PublicRunBundleCoreV5 = Omit<
   "version" | "promptSpec" | "toolPolicy"
 > & {
   version: 5;
-  promptSpec: PromptSpecV4;
+  /** Prompt v5 changes no bundle field and no verifier check, so a v5
+   *  research run is still a v5 bundle. */
+  promptSpec: PromptSpecV4 | PromptSpecV5;
   toolPolicy: ToolPolicyV4;
 };
 export type PublicRunBundleV5 = PublicRunBundleCoreV5 & {

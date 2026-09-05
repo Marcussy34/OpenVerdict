@@ -46,6 +46,10 @@ module openverdict::agent_registry {
     /// Mirrors jury::COMMITTEE_SIZE: a lowered rule must still seat five.
     const COMMITTEE_SEATS: u8 = 5;
     const MAX_SELECTION_WEIGHT: u64 = 1_000_000;
+    /// One minimum stake, and every operator seat, carry this draw weight.
+    const BASE_SELECTION_WEIGHT: u64 = 10_000;
+    /// Ten times the base: the most a stake can buy in the draw.
+    const MAX_STAKE_SELECTION_WEIGHT: u64 = 100_000;
     const WITHDRAWAL_DELAY_MS: u64 = 86_400_000;
     const HASH_LENGTH: u64 = 32;
 
@@ -239,7 +243,8 @@ module openverdict::agent_registry {
             human_backing_hash: profile.human_backing_hash,
             model_hash: profile.model_hash,
             role_hash: profile.role_hash,
-            weight: 10_000,
+            // Operator seats post a token bond, so they carry the base weight.
+            weight: BASE_SELECTION_WEIGHT,
             active: true,
         });
 
@@ -299,7 +304,8 @@ module openverdict::agent_registry {
             human_backing_hash: profile.human_backing_hash,
             model_hash: profile.model_hash,
             role_hash: profile.role_hash,
-            weight: 10_000,
+            // A bigger stake is drawn more often, up to the cap.
+            weight: stake_selection_weight(amount),
             active: true,
         });
         // The seat's jury rewards belong to the staker, not to the key that runs it.
@@ -591,6 +597,20 @@ module openverdict::agent_registry {
     public fun agent_bond_value(profile: &AgentProfile): u64 { balance::value(&profile.bond) }
     public fun cap_agent_profile_id(cap: &AgentCap): ID { cap.agent_profile_id }
     public fun min_stake_mist(): u64 { MIN_STAKE_MIST }
+
+    /// The draw weight a stake buys: the base weight per minimum stake,
+    /// so ten times the minimum is drawn ten times as often, and nothing
+    /// above that. The product runs in u128 so a very large stake caps
+    /// instead of overflowing u64.
+    public fun stake_selection_weight(amount: u64): u64 {
+        let scaled = ((amount as u128) * (BASE_SELECTION_WEIGHT as u128))
+            / (MIN_STAKE_MIST as u128);
+        if (scaled >= (MAX_STAKE_SELECTION_WEIGHT as u128)) {
+            MAX_STAKE_SELECTION_WEIGHT
+        } else {
+            scaled as u64
+        }
+    }
     public fun stake_position_profile_id(position: &StakePosition): ID { position.agent_profile_id }
     public fun stake_position_staker(position: &StakePosition): address { position.staker }
     public fun stake_position_amount(position: &StakePosition): u64 { position.amount }

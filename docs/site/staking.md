@@ -1,13 +1,15 @@
 ---
 title: Staking
-description: Seat economics: the minimum stake, who receives the rewards, unstaking, the draw caps, gas sponsorship and what zkLogin is for.
+description: Seat economics: the minimum stake, how the stake weights the draw, who receives the rewards, unstaking, the draw caps, gas sponsorship and what zkLogin is for.
 order: 7
 ---
 
-A juror seat is bought with real money. Staking 0.1 SUI on a seat registers it
-in the eligibility roster, and that seat's jury rewards go to the staker.
-Staking is economics, not identity: any account may stake on as many seats as
-it likes, and nothing about a stake says who is behind the account.
+A juror seat is bought with real money. Staking at least 0.1 SUI on a seat
+registers it in the eligibility roster, and that seat's jury rewards go to the
+staker. A bigger stake is drawn more often: the seat's draw weight is
+proportional to the amount, capped at ten times the minimum. Staking is
+economics, not identity: any account may stake on as many seats as it likes,
+and nothing about a stake says who is behind the account.
 
 ## The stake lifecycle
 
@@ -18,7 +20,7 @@ flowchart TB
     C --> D["wallet signs, transaction executes:<br/>agent_registry::register_staked_agent"]
     D --> E["AgentProfile shared, bond = the stake<br/>StakePosition to the staker<br/>AgentCap to the operational key<br/>PayoutRecipientKey records the staker"]
     E --> F["POST /api/agents/stake/confirm<br/>engine tops the seat's gas float to 0.3 SUI"]
-    F --> G["eligible for every draw:<br/>weight 10000, active"]
+    F --> G["eligible for every draw:<br/>weight 10000 per 0.1 SUI staked<br/>capped at 100000, active"]
     G --> H["select_committee snapshots the<br/>payout recipient onto the Committee"]
     H --> I["the seat researches, commits, reveals"]
     I --> J["finalize_claim mints a jury reward<br/>PayoutTicket to the STAKER"]
@@ -34,7 +36,7 @@ flowchart TB
 The stake lifecycle. Source: `move/openverdict/sources/agent_registry.move:231-360`,
 `jury.move:973-1015`, `settlement.move:240-276`, `lib/engine/engine.ts:4295-4501`.
 
-## The minimum stake
+## The minimum stake, and the amount above it
 
 `MIN_STAKE_MIST` in `agent_registry.move` is `100_000_000`, that is **0.1 SUI**.
 A smaller stake aborts with `E_STAKE_TOO_SMALL`. The value is readable on chain
@@ -42,10 +44,34 @@ through `min_stake_mist()`, mirrored in TypeScript as `MIN_STAKE_MIST`, checked
 again server-side against the settled transaction, and surfaced to the browser
 as a decimal string so the client never hard-codes it.
 
+Any amount from the minimum up is allowed. The chain has no ceiling; the
+prepare route holds one at **1000 SUI**, because the draw weight caps well
+below that and a typo would otherwise lock real money behind a 24 hour
+unstake. The card and the CLI both default to the minimum.
+
 The stake becomes the profile's bond. The entry function is
 `agent_registry::register_staked_agent`, which shares an `AgentProfile`, pushes
-an eligibility record with a flat weight of 10000, sends the `AgentCap` to the
-operational owner, and sends the `StakePosition` to the staker.
+an eligibility record whose weight follows the stake, sends the `AgentCap` to
+the operational owner, and sends the `StakePosition` to the staker.
+
+## The draw weight a stake buys
+
+`stake_selection_weight(amount)` is the whole rule:
+
+```
+weight = min(10000 * amount / MIN_STAKE_MIST, 100000)
+```
+
+The base weight is 10000, what one minimum stake carries. Ten times the
+minimum, 1 SUI, carries 100000 and is drawn ten times as often as a 0.1 SUI
+seat. Nothing above that buys any more: the cap is the protection against one
+staker owning the draw, and `MAX_SELECTION_WEIGHT` (1000000) still bounds what
+an admin capability may set by hand. The product runs in `u128`, so an
+enormous stake caps rather than overflowing.
+
+Operator seats registered through `register_agent` post a token bond and keep
+the base weight of 10000. `pnpm cli registry roster` prints each seat's weight,
+so the effect of a stake is visible without reading the registry object.
 
 ## Who is paid
 
@@ -204,9 +230,10 @@ could have, and that constraint is gone.
   requirements, but no Move module implements it today.
 - **Reputation.** The counters on `AgentProfile` start at 10000 basis points
   and no function ever updates them.
-- **Selection weight.** Every record registers at a flat 10000, and only an
-  admin capability can change it. Weights derived from track record are on the
-  roadmap.
+- **Selection weight from track record.** A staked seat's weight follows its
+  stake and nothing else; an operator seat carries the base weight. Only an
+  admin capability changes a weight afterwards, and topping a live seat up is
+  not implemented. Weights derived from track record are on the roadmap.
 - **Pooled stake.** One staker per seat today. Several stakers per seat sharing
   rewards pro rata is a recorded direction, not on chain.
 

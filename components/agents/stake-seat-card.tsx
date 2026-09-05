@@ -23,12 +23,23 @@ import { MetaTag } from "@/components/viz/page-header";
 import { modelFamily } from "@/components/viz/model-badge";
 import { Input } from "@/components/ui/input";
 import { formatStakeSui } from "@/components/agents/stake-line";
-import { isBelowMinimumStake } from "@/lib/web/stake-balance";
+import {
+  MIN_STAKE_MIST,
+  isBelowMinimumStake,
+  isStakeAmountOutOfRange,
+  stakeAmountToMist,
+} from "@/lib/web/stake-balance";
 import { cn } from "@/lib/utils";
 
 /** The Move minimum bond (MIN_STAKE_MIST). Shown before the preparation
  * arrives; the transaction always posts the amount the server returned. */
 const MIN_STAKE_LABEL = "0.1 SUI";
+
+/** The prepare route's ceiling (MAX_STAKE_MIST): a typo must not lock a fortune. */
+const MAX_STAKE_LABEL = "1000 SUI";
+
+/** What the amount field starts at: the minimum, the old fixed behaviour. */
+const DEFAULT_STAKE_SUI = "0.1";
 
 /** Testnet SUI, for a connected wallet that cannot cover the bond yet. */
 const FAUCET_URL = "https://faucet.sui.io";
@@ -53,6 +64,8 @@ type StakePreparation = {
     operationalOwner: string;
   };
   minStakeMist: string;
+  /** The amount this transaction posts: what the seat's draw weight follows. */
+  stakeMist: string;
 };
 
 /** mirrors StakeConfirmation in lib/engine/contract.ts */
@@ -124,6 +137,7 @@ function StakeSeatForm({
   const dAppKit = useDAppKit();
   const [models, setModels] = useState<string[]>([]);
   const [modelId, setModelId] = useState("");
+  const [amount, setAmount] = useState(DEFAULT_STAKE_SUI);
   const [phase, setPhase] = useState<StakePhase>("idle");
   const [error, setError] = useState<string | null>(null);
   const [engineOffline, setEngineOffline] = useState(false);
@@ -142,7 +156,14 @@ function StakeSeatForm({
   const { mist: balanceMist, formatted: balanceLabel } = useSuiBalance(
     account?.address ?? null,
   );
-  const lowBalance = balanceLabel !== null && isBelowMinimumStake(balanceMist);
+  // The bond is whatever the staker chose, so the affordability question and
+  // every line of copy about it follow that amount rather than the minimum.
+  const amountMist = stakeAmountToMist(amount);
+  const amountUsable = amountMist !== null && !isStakeAmountOutOfRange(amountMist);
+  const amountLabel = amountUsable ? `${amount.trim()} SUI` : MIN_STAKE_LABEL;
+  const lowBalance =
+    balanceLabel !== null &&
+    isBelowMinimumStake(balanceMist, amountMist ?? MIN_STAKE_MIST);
 
   // The catalog the prepare route validates against: the same three families
   // the public weather probe reports, minus the web search row.
@@ -184,6 +205,11 @@ function StakeSeatForm({
       setError("Choose the model this seat will run.");
       return;
     }
+    const amountToPost = stakeAmountToMist(amount);
+    if (amountToPost === null || isStakeAmountOutOfRange(amountToPost)) {
+      setError(`Enter an amount between ${MIN_STAKE_LABEL} and ${MAX_STAKE_LABEL}.`);
+      return;
+    }
 
     setError(null);
     setEngineOffline(false);
@@ -193,7 +219,11 @@ function StakeSeatForm({
     try {
       setPhase("preparing");
       // No role travels with the request: the engine assigns the seat's role.
-      const preparation = await prepareStake(account.address, selectedModel);
+      const preparation = await prepareStake(
+        account.address,
+        selectedModel,
+        amountToPost,
+      );
 
       setPhase("sponsoring");
       const sender = account.address;
@@ -245,7 +275,7 @@ function StakeSeatForm({
       await onStaked();
     } catch (caught) {
       if (caught instanceof StakeError && caught.engineOffline) setEngineOffline(true);
-      setError(friendlyStakeError(caught, payer));
+      setError(friendlyStakeError(caught, payer, amountLabel));
       setPhase("idle");
     }
   }
@@ -262,13 +292,13 @@ function StakeSeatForm({
     >
       <div className="mb-4 space-y-1">
         <h2 className="text-base font-semibold text-ocean">
-          Stake {MIN_STAKE_LABEL} on a juror seat
+          Stake SUI on a juror seat
         </h2>
-        {/* The heading and the panel tag already carry the amount, and the
-            block below already says how to connect, so this paragraph says
-            only what nothing else on the card does. Gas is sponsored when the
-            gas station answers and paid by the wallet when it does not, so the
-            promise here is hedged the way submitStake actually behaves. */}
+        {/* The panel tag carries the minimum, the amount field carries the
+            choice, and the block below says how to connect, so this paragraph
+            says only what nothing else on the card does. Gas is sponsored when
+            the gas station answers and paid by the wallet when it does not, so
+            the promise here is hedged the way submitStake actually behaves. */}
         <p className="text-xs leading-relaxed text-muted-foreground">
           You earn this seat&apos;s jury rewards. Unstake any time; the stake
           returns 24 hours later. OpenVerdict pays the gas when it can.
@@ -289,8 +319,8 @@ function StakeSeatForm({
                   Connect an account to stake
                 </p>
                 <p className="text-sm leading-relaxed text-muted-foreground">
-                  Any Sui wallet works, and so does the Google option. You need{" "}
-                  {MIN_STAKE_LABEL} in that account for the bond.
+                  Any Sui wallet works, and so does the Google option. You need
+                  at least {MIN_STAKE_LABEL} in that account for the bond.
                 </p>
               </div>
             </div>
@@ -310,6 +340,36 @@ function StakeSeatForm({
         ) : (
           <form className="space-y-5" onSubmit={submitStake} noValidate>
             <div className="grid gap-4">
+              {/* The amount decides the seat's draw weight on chain, so it is
+                  the first thing asked and the copy says what it buys. */}
+              <div className="space-y-1.5">
+                <label
+                  htmlFor="stake-seat-amount"
+                  className="text-sm font-semibold text-ocean"
+                >
+                  Amount
+                </label>
+                <Input
+                  id="stake-seat-amount"
+                  type="number"
+                  inputMode="decimal"
+                  min="0.1"
+                  max="1000"
+                  step="0.1"
+                  value={amount}
+                  onChange={(event) => setAmount(event.target.value)}
+                  autoComplete="off"
+                  required
+                  aria-describedby="stake-seat-amount-help"
+                  className="h-11 font-mono tabular-nums"
+                />
+                <p id="stake-seat-amount-help" className="text-xs text-muted-foreground">
+                  More stake, more draws: a seat&apos;s chance in the draw grows
+                  with its stake, up to ten times the minimum. {MIN_STAKE_LABEL}{" "}
+                  minimum, {MAX_STAKE_LABEL} ceiling.
+                </p>
+              </div>
+
               {/* The live catalog when the weather answered, free text otherwise. */}
               {models.length > 0 ? (
                 <fieldset className="space-y-2">
@@ -402,7 +462,7 @@ function StakeSeatForm({
                         because sponsorship can fall back to wallet gas. On
                         mainnet there is no faucet, so the sentence stops. */}
                     This wallet holds {balanceLabel} SUI; the stake needs{" "}
-                    {MIN_STAKE_LABEL}.
+                    {amountLabel}.
                     {IS_MAINNET ? null : (
                       <>
                         {" "}
@@ -425,7 +485,7 @@ function StakeSeatForm({
               <Button
                 type="submit"
                 className="min-h-[44px] shrink-0 px-4"
-                disabled={busy || lowBalance}
+                disabled={busy || lowBalance || !amountUsable}
                 aria-busy={busy}
                 // A disabled button says nothing on its own: the low-balance
                 // line above is what explains why, so it names it.
@@ -441,7 +501,9 @@ function StakeSeatForm({
                 ) : (
                   <MoneyRecive size="17" variant="Bold" aria-hidden="true" />
                 )}
-                {busy ? "Staking…" : `Stake ${MIN_STAKE_LABEL}`}
+                {/* An unusable amount leaves the button bare rather than
+                    promising a number the field does not hold. */}
+                {busy ? "Staking…" : amountUsable ? `Stake ${amountLabel}` : "Stake"}
               </Button>
             </div>
           </form>
@@ -648,7 +710,8 @@ function buildStakeTransaction(
   if (options.sender) transaction.setSender(options.sender);
   const stake = transaction.coin({
     type: "0x2::sui::SUI",
-    balance: BigInt(preparation.minStakeMist),
+    // The prepared amount, not the minimum: the seat's draw weight follows it.
+    balance: BigInt(preparation.stakeMist),
     useGasCoin: options.useGasCoin,
   });
 
@@ -677,11 +740,12 @@ function buildStakeTransaction(
 async function prepareStake(
   address: string,
   modelId: string,
+  amountMist: string,
 ): Promise<StakePreparation> {
   const response = await fetch("/api/agents/stake/prepare", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ address, modelId }),
+    body: JSON.stringify({ address, modelId, amountMist }),
   });
   const body = await readJsonObject(response);
   if (!response.ok) {
@@ -808,6 +872,7 @@ function isPreparation(
   return (
     typeof value.reservationId === "string" &&
     typeof value.minStakeMist === "string" &&
+    typeof value.stakeMist === "string" &&
     !!target &&
     typeof target.packageId === "string" &&
     typeof target.registryObjectId === "string" &&
@@ -833,7 +898,11 @@ function isConfirmation(
   );
 }
 
-function friendlyStakeError(error: unknown, payer: GasPayer): string {
+function friendlyStakeError(
+  error: unknown,
+  payer: GasPayer,
+  amountLabel: string,
+): string {
   if (error instanceof StakeError) return error.message;
   const message = error instanceof Error ? error.message : "";
   if (/reject|cancel|denied/i.test(message)) {
@@ -841,8 +910,8 @@ function friendlyStakeError(error: unknown, payer: GasPayer): string {
   }
   if (/insufficient|balance/i.test(message)) {
     return payer === "wallet"
-      ? `You need ${MIN_STAKE_LABEL} for the stake and a little for gas.`
-      : `You need ${MIN_STAKE_LABEL} for the stake.`;
+      ? `You need ${amountLabel} for the stake and a little for gas.`
+      : `You need ${amountLabel} for the stake.`;
   }
   return message || "The seat could not be staked. Try again.";
 }

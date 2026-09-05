@@ -5,6 +5,7 @@ import {
   DEFAULT_PROMPT_SPEC_V2,
   DEFAULT_PROMPT_SPEC_V3,
   DEFAULT_PROMPT_SPEC_V4,
+  DEFAULT_PROMPT_SPEC_V5,
   DEFAULT_TOOL_POLICY_V2,
   DEFAULT_TOOL_POLICY_V3,
   DEFAULT_TOOL_POLICY_V4,
@@ -129,6 +130,53 @@ describe("buildAgentManifestDocument", () => {
         toolPolicy: DEFAULT_TOOL_POLICY_V4,
       }).manifestHash,
     ).toBe(built.manifestHash);
+  });
+
+  it("pins a v5 prompt spec in the same v5 and v6 documents", () => {
+    // Prompt v5 only appends instructions to v4, so the document shape and its
+    // tool policy are unchanged; only the pinned prompt hash moves.
+    const built = buildAgentManifestDocument({
+      ...base,
+      promptSpec: DEFAULT_PROMPT_SPEC_V5,
+      toolPolicy: DEFAULT_TOOL_POLICY_V4,
+    });
+
+    expect(built.document.version).toBe("5");
+    expect(built.promptHash).toBe(promptSpecHash(DEFAULT_PROMPT_SPEC_V5));
+    expect(built.promptHash).not.toBe(promptSpecHash(DEFAULT_PROMPT_SPEC_V4));
+    expect(built.toolPolicyHash).toBe(toolPolicyHash(DEFAULT_TOOL_POLICY_V4));
+    expect(parseAgentManifestDocument(built.bytes)).toEqual(built.document);
+
+    const withTableVote = buildAgentManifestDocument({
+      ...base,
+      promptSpec: DEFAULT_PROMPT_SPEC_V5,
+      toolPolicy: DEFAULT_TOOL_POLICY_V4,
+      tableVotePromptSpec: TABLE_VOTE_PROMPT_SPEC_V1,
+    });
+    expect(withTableVote.document.version).toBe("6");
+    expect(withTableVote.promptHash).toBe(
+      promptSpecHash(DEFAULT_PROMPT_SPEC_V5),
+    );
+    expect(withTableVote.tableVotePromptHash).toBe(tableVotePromptSpecHash());
+    expect(parseAgentManifestDocument(withTableVote.bytes)).toEqual(
+      withTableVote.document,
+    );
+    expect(withTableVote.manifestHash).not.toBe(
+      buildAgentManifestDocument({
+        ...v5Params,
+        tableVotePromptSpec: TABLE_VOTE_PROMPT_SPEC_V1,
+      }).manifestHash,
+    );
+  });
+
+  it("refuses a v5 prompt spec on an older tool policy", () => {
+    expect(() =>
+      buildAgentManifestDocument({
+        ...base,
+        promptSpec: DEFAULT_PROMPT_SPEC_V5,
+        toolPolicy: DEFAULT_TOOL_POLICY_V3,
+      }),
+    ).toThrow(/v4 or v5 prompt spec requires a v4 tool policy/);
   });
 
   it("builds and parses a v6 document that pins the table vote prompt", () => {

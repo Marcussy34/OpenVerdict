@@ -463,6 +463,13 @@ export type StakePreparationRequest = {
    * named, so the browser card sends nothing here.
    */
   role?: string;
+  /**
+   * Decimal MIST the staker wants to post. Optional: the minimum when absent,
+   * which is what every caller sent before the amount was a choice. At least
+   * MIN_STAKE_MIST and at most MAX_STAKE_MIST, because the seat's draw weight
+   * follows the amount and a typo must not lock a fortune on a seat.
+   */
+  amountMist?: string;
 };
 
 export type StakePreparation = {
@@ -486,6 +493,12 @@ export type StakePreparation = {
   };
   /** Decimal MIST the bond must reach; agent_registry MIN_STAKE_MIST. */
   minStakeMist: string;
+  /**
+   * Decimal MIST the transaction posts: the requested amount, or the minimum
+   * when the caller named none. The chain reads the seat's draw weight off
+   * this amount, so the wallet must fund exactly it.
+   */
+  stakeMist: string;
 };
 
 export type StakeConfirmationRequest = {

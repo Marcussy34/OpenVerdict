@@ -17,6 +17,7 @@ import type {
   PromptSpecV2,
   PromptSpecV3,
   PromptSpecV4,
+  PromptSpecV5,
   PublicRunBundleCore,
   PublicRunBundleCoreV3,
   PublicRunBundleCoreV4,
@@ -49,7 +50,7 @@ export type BuildRunBundleCoreParams = BuildRunBundleCoreCommonParams &
   (
     | { promptSpec: PromptSpecV2; toolPolicy: ToolPolicyV2 }
     | { promptSpec: PromptSpecV3; toolPolicy: ToolPolicyV3 }
-    | { promptSpec: PromptSpecV4; toolPolicy: ToolPolicyV4 }
+    | { promptSpec: PromptSpecV4 | PromptSpecV5; toolPolicy: ToolPolicyV4 }
   );
 
 export type SealRunBundleOptions = {
@@ -71,7 +72,7 @@ export function buildRunBundleCore(
 ): PublicRunBundleCoreV4;
 export function buildRunBundleCore(
   params: BuildRunBundleCoreCommonParams & {
-    promptSpec: PromptSpecV4;
+    promptSpec: PromptSpecV4 | PromptSpecV5;
     toolPolicy: ToolPolicyV4;
   },
 ): PublicRunBundleCoreV5;
@@ -111,9 +112,11 @@ export function buildRunBundleCore(
     runHash: params.runHash,
     verify,
   };
-  if (params.promptSpec.version === "4") {
+  // Prompt v5 only appends instructions to v4 and keeps the v4 budgets, so it
+  // produces the same v5 bundle with the same verifier checks.
+  if (params.promptSpec.version === "4" || params.promptSpec.version === "5") {
     if (params.toolPolicy.version !== "4") {
-      throw new Error("a v4 prompt spec requires a v4 tool policy");
+      throw new Error("a v4 or v5 prompt spec requires a v4 tool policy");
     }
     return {
       ...shared,

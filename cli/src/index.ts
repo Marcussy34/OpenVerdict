@@ -22,6 +22,7 @@ import { OUTCOME, type VoteOutcome } from "../../lib/protocol";
 import { SignerRegistry } from "../../lib/sui";
 import {
   createOperatorClient,
+  type MirrorSyncReport,
   type OperatorClient,
   type RegistryRosterReport,
 } from "./operator";
@@ -387,6 +388,13 @@ export function createCliProgram(dependencies: CliDependencies = {}): Command {
       writer.value(jsonMode(command) ? report : formatRoster(report), jsonMode(command));
     });
   registry
+    .command("sync-mirror")
+    .description("match the engine's agent mirror to the current registry")
+    .action(async (_options, command) => {
+      const report = await operator().syncMirror();
+      writer.value(jsonMode(command) ? report : formatMirrorSync(report), jsonMode(command));
+    });
+  registry
     .command("diversity")
     .description("set the model families a jury must span")
     .requiredOption("--required <count>", "distinct model families, 2 or 3", parseDiversityCount)
@@ -569,6 +577,29 @@ function formatRoster(report: RegistryRosterReport): string {
       `seat       ${seat.agentProfileId} ${seat.active ? "active  " : "inactive"} ${seat.modelId} ${seat.role} weight ${seat.weight}`,
     );
   }
+  return lines.join("\n");
+}
+
+/**
+ * What the mirror reconciliation moved, one line per kind of change and
+ * nothing at all when the mirror already agreed with the registry.
+ */
+function formatMirrorSync(report: MirrorSyncReport): string {
+  const lines = [
+    `network    ${report.network}`,
+    `registry   ${report.registryObjectId} (${report.registrySeats} seats)`,
+  ];
+  const changes: Array<readonly [string, string[]]> = [
+    ["activated ", report.activated],
+    ["deactivated", report.deactivated],
+    ["stale     ", report.stale],
+    ["missing   ", report.missing],
+  ];
+  for (const [label, ids] of changes) {
+    if (ids.length === 0) continue;
+    lines.push(`${label} ${ids.length}: ${ids.join(", ")}`);
+  }
+  if (lines.length === 2) lines.push("mirror     already matched the registry, nothing changed");
   return lines.join("\n");
 }
 

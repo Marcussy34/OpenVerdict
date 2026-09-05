@@ -60,6 +60,7 @@ import {
   type PromptSpecV2,
   type PromptSpecV3,
   type PromptSpecV4,
+  type PromptSpecV5,
   type PublicRunBundle,
   type PublicRunBundleCore,
   type ResearchTranscriptV1,
@@ -113,6 +114,7 @@ import {
   outcomeLabel,
   toChainRetentionEpoch,
   type JuryDiversity,
+  type RegistryRosterSeat,
   type ReleaseManifest,
   type StakeRegistrationRead,
   type SuiGateway,
@@ -212,6 +214,13 @@ const WALLET_STAKE_VERIFICATION_PROVIDER = "sui-wallet-stake";
 const DEMO_ALLOWLIST_VERIFICATION_PROVIDER = "demo-allowlist";
 /** agent_registry MIN_STAKE_MIST: 0.1 SUI. */
 export const MIN_STAKE_MIST = 100_000_000n;
+/**
+ * The largest stake a prepare accepts: 1000 SUI. The chain takes any amount,
+ * but a seat's draw weight already caps at ten times the minimum, so a bigger
+ * number buys nothing and would only lock the money behind a 24 hour unstake.
+ * The ceiling is the engine's, not the Move package's.
+ */
+export const MAX_STAKE_MIST = 1_000_000_000_000n;
 /** A prepared slot is held this long before it returns to the free pool. */
 export const STAKE_RESERVATION_TTL_MS = 15 * 60_000;
 /** A staked seat signs its own commits and reveals out of this float. */
@@ -244,6 +253,15 @@ export const RELAUNCH_GIVE_UP_MS = 6 * 60 * 60 * 1000;
 export const RELAUNCH_PROBE_TIMEOUT_MS = 60_000;
 /** Stored probes are refreshed at most once every two minutes. */
 export const WEATHER_PROBE_INTERVAL_MS = 120_000;
+/**
+ * The longest the gate reuses one read of the registry's eligibility
+ * records when nothing else says the registry moved. An eligibility command
+ * writes the chain and the engine's mirror together, and a change in that
+ * mirror throws the cached read away at once (see eligibilityRevision), so
+ * this only bounds a change made on chain alone. Shorter than the probe on
+ * purpose: ending degraded mode must not wait out a probe window.
+ */
+export const REGISTRY_ROSTER_CACHE_MS = 30_000;
 /** Unknown weather must not refuse a public submission. */
 export const WEATHER_STALE_MS = 300_000;
 /** The research provider's row in the weather table (not a Gonka model). */
@@ -495,8 +513,10 @@ type SeatResearchConfig =
       policy: ToolPolicyV3;
     }
   | {
+      // Prompt v5 appends instructions to v4 and keeps the v4 budgets, so it
+      // still produces a v5 bundle.
       bundleVersion: 5;
-      spec: PromptSpecV4;
+      spec: PromptSpecV4 | PromptSpecV5;
       policy: ToolPolicyV4;
     };
 
@@ -604,6 +624,12 @@ class OpenVerdictEngine implements Engine {
   } | null = null;
   /** The registry's draw rule, read once per weather probe and cached with it. */
   #juryDiversityCache: { diversity: JuryDiversity; readAtMs: number } | null = null;
+  /** The registry's eligibility records; see REGISTRY_ROSTER_CACHE_MS. */
+  #registrySeatsCache: {
+    seats: RegistryRosterSeat[];
+    readAtMs: number;
+    revision: string;
+  } | null = null;
   /** A committee's recorded pair never changes once drawn, so it is cached for good. */
   readonly #committeeDiversityCache = new Map<string, number>();
   readonly #retrieve: NonNullable<EngineConfig["retrieve"]>;
@@ -696,8 +722,11 @@ class OpenVerdictEngine implements Engine {
     );
     // Relaunches share this probe so the three families are never called twice.
     this.#weatherProbeCache = { probedAtMs, results };
-    // The draw rule is read with the probe: the gate and the probe age together.
+    // The draw rule is read with the probe, so the gate and the probe age
+    // together. The mirror is reconciled against the registry here too, so
+    // rows from an earlier package registry stop showing as active seats.
     await this.juryDiversity();
+    await this.syncEligibilityMirror();
   }
 
   /**
@@ -730,16 +759,120 @@ class OpenVerdictEngine implements Engine {
     return { requiredModels, maxSeatsPerModel };
   }
 
-  /** Families with at least one active eligible seat, in the roster's order. */
+  /**
+   * The eligibility records of the CURRENT registry, so neither the relaunch
+   * tick nor the public weather route reads the chain per call. The read is
+   * reused only while the caller's mirror still carries the eligibility it
+   * was taken under: an operator command writes the chain and the mirror in
+   * one step, from another process, so a change there means the registry
+   * moved and this read is thrown away at once. Null means the chain could
+   * not be read and there is no earlier answer: the caller falls back to the
+   * mirror rather than guessing, because a failed read must never loosen the
+   * gate.
+   */
+  private async registrySeats(
+    mirror: readonly AgentManifestRecord[],
+  ): Promise<RegistryRosterSeat[] | null> {
+    const now = this.#now();
+    const revision = eligibilityRevision(mirror);
+    if (
+      this.#registrySeatsCache !== null &&
+      this.#registrySeatsCache.revision === revision &&
+      now - this.#registrySeatsCache.readAtMs < REGISTRY_ROSTER_CACHE_MS
+    ) {
+      return this.#registrySeatsCache.seats;
+    }
+    try {
+      const seats = await this.#gateway.registryRoster();
+      this.#registrySeatsCache = { seats, readAtMs: now, revision };
+      return seats;
+    } catch (error) {
+      process.stderr.write(
+        `weather gate: registry roster unreadable, falling back to the engine mirror: ${
+          error instanceof Error ? error.message : String(error)
+        }\n`,
+      );
+      return this.#registrySeatsCache?.seats ?? null;
+    }
+  }
+
+  /**
+   * Families with at least one active seat the draw can actually see.
+   *
+   * The engine's agent mirror is wider than the registry: it keeps a row for
+   * every seat ever registered, including seats of earlier package versions
+   * whose registry `select_committee` no longer reads (25 active mirror rows
+   * against 12 active registry seats on 2026-09-05), and a family that only
+   * lives in those rows held the gate shut on an outage nobody could be
+   * drawn into. So eligibility comes from the registry; the mirror only
+   * supplies the seat's model id, which the registry carries as a hash.
+   *
+   * When the chain cannot be read the mirror answers alone, which is the
+   * stricter reading: it lists at least the registry's families and usually
+   * more, so every family that might still be drawn has to answer its probe.
+   */
   private async activeFamilies(): Promise<string[]> {
     const records = await this.#repository.listAgentManifests();
+    const seats = await this.registrySeats(records);
     const families: string[] = [];
-    for (const record of records) {
-      if (!record.active) continue;
-      const family = weatherFamily(record.manifest.modelId);
+    const add = (modelId: string): void => {
+      const family = weatherFamily(modelId);
       if (!families.includes(family)) families.push(family);
+    };
+    if (seats === null) {
+      for (const record of records) {
+        if (record.active) add(record.manifest.modelId);
+      }
+      return families;
+    }
+    const mirrored = new Map(
+      records.map((record) => [record.manifest.agentProfileId.toLowerCase(), record]),
+    );
+    for (const seat of seats) {
+      if (!seat.active) continue;
+      // The registry stores a blake2b hash of the model id and resolves it
+      // against the release catalog; the mirror holds the id itself, so it
+      // wins when both know the seat.
+      add(mirrored.get(seat.agentProfileId.toLowerCase())?.manifest.modelId ?? seat.modelId);
     }
     return families;
+  }
+
+  /**
+   * Take mirror rows the current registry does not hold out of the gate's
+   * count for good. The registry read above already ignores them, but the
+   * roster the console and the operator reports show reads the mirror, and
+   * an operator had to run an UPDATE by hand to clear the last set.
+   */
+  private async syncEligibilityMirror(): Promise<void> {
+    const seats = await this.registrySeats(await this.#repository.listAgentManifests());
+    if (seats === null || seats.length === 0) return;
+    // A record whose profile id did not decode reads as "unknown", and
+    // treating it as a registry member would mark every real row stale.
+    if (seats.some((seat) => !seat.agentProfileId.startsWith("0x"))) {
+      process.stderr.write(
+        "weather gate: the registry roster has unreadable profile ids, the mirror is left alone\n",
+      );
+      return;
+    }
+    try {
+      const stale = await this.#repository.deactivateAgentManifestsOutsideRegistry(
+        seats.map((seat) => seat.agentProfileId),
+        this.isoNow(),
+      );
+      if (stale.length > 0) {
+        process.stderr.write(
+          `weather gate: ${stale.length} agent mirror row(s) outside the current registry marked inactive: ${stale.join(", ")}\n`,
+        );
+      }
+    } catch (error) {
+      // Housekeeping: a write failure must never take the probe down.
+      process.stderr.write(
+        `weather gate: mirror sync failed: ${
+          error instanceof Error ? error.message : String(error)
+        }\n`,
+      );
+    }
   }
 
   async weather(): Promise<WeatherReport> {
@@ -1485,84 +1618,95 @@ class OpenVerdictEngine implements Engine {
     const tableVoteContext =
       phase === 2 ? await this.tableVoteDebate(claimId) : undefined;
     const researchConfigs = new Map<string, SeatResearchConfig>();
-    for (const seat of seats) {
-      const agent = await this.requiredAgent(seat.agentProfileId);
-      if (phase === 2) {
-        const document = await this.agentManifestDocument(seat.agentProfileId);
-        if (document === null) {
-          throw new EngineValidationError(
-            `agent ${seat.agentProfileId} table vote manifest document is missing; run pnpm tsx scripts/publish-agent-manifests.ts`,
-          );
+    // One Walrus read per seat for the published manifest document. Five of
+    // them in sequence spent seconds of the commit window before any juror
+    // started, so they run together; the seats are settled and the first
+    // seat's error is rethrown, so which failure surfaces does not change.
+    const preflightStartedAt = performance.now();
+    const validations = await Promise.allSettled(
+      seats.map(async (seat): Promise<void> => {
+        const agent = await this.requiredAgent(seat.agentProfileId);
+        if (phase === 2) {
+          const document = await this.agentManifestDocument(seat.agentProfileId);
+          if (document === null) {
+            throw new EngineValidationError(
+              `agent ${seat.agentProfileId} table vote manifest document is missing; run pnpm tsx scripts/publish-agent-manifests.ts`,
+            );
+          }
+          this.assertTableVoteManifestHashes(agent.manifest, document);
+          return;
         }
-        this.assertTableVoteManifestHashes(agent.manifest, document);
-        continue;
-      }
-      if (
-        agent.manifest.version === "3" ||
-        agent.manifest.version === "4" ||
-        agent.manifest.version === "5" ||
-        agent.manifest.version === "6"
-      ) {
-        const document = await this.agentManifestDocument(seat.agentProfileId);
         if (
-          document === null ||
-          document.version !== agent.manifest.version ||
-          (document.version !== "3" &&
-            document.version !== "4" &&
-            document.version !== "5" &&
-            document.version !== "6")
+          agent.manifest.version === "3" ||
+          agent.manifest.version === "4" ||
+          agent.manifest.version === "5" ||
+          agent.manifest.version === "6"
         ) {
+          const document = await this.agentManifestDocument(seat.agentProfileId);
+          if (
+            document === null ||
+            document.version !== agent.manifest.version ||
+            (document.version !== "3" &&
+              document.version !== "4" &&
+              document.version !== "5" &&
+              document.version !== "6")
+          ) {
+            throw new EngineValidationError(
+              `agent ${seat.agentProfileId} manifest document is missing or has the wrong version`,
+            );
+          }
+          this.assertResearchManifestHashes(agent.manifest, document);
+          let researchConfig: SeatResearchConfig;
+          if (document.version === "5" || document.version === "6") {
+            researchConfig = {
+              bundleVersion: 5,
+              spec: document.promptSpec,
+              policy: document.toolPolicy,
+            };
+          } else if (document.version === "4") {
+            researchConfig = {
+              bundleVersion: 4,
+              spec: document.promptSpec,
+              policy: document.toolPolicy,
+            };
+          } else {
+            researchConfig = {
+              bundleVersion: 3,
+              spec: document.promptSpec,
+              policy: document.toolPolicy,
+            };
+          }
+          researchConfigs.set(seat.agentProfileId, researchConfig);
+          return;
+        }
+
+        // Older synthetic manifests have no stored document. Keep their v2
+        // binding path unchanged for local fixtures and migration tooling.
+        const spec = this.#gonka.promptSpec();
+        const policy = this.#gonka.toolPolicy();
+        const liveHash = promptSpecHash(spec);
+        const liveToolPolicyHash = toolPolicyHash(policy);
+        if (agent.manifest.promptHash !== liveHash) {
           throw new EngineValidationError(
-            `agent ${seat.agentProfileId} manifest document is missing or has the wrong version`,
+            `agent ${seat.agentProfileId} manifest prompt hash ${agent.manifest.promptHash} does not match the engine prompt spec ${liveHash}; run pnpm tsx scripts/publish-agent-manifests.ts`,
           );
         }
-        this.assertResearchManifestHashes(agent.manifest, document);
-        let researchConfig: SeatResearchConfig;
-        if (document.version === "5" || document.version === "6") {
-          researchConfig = {
-            bundleVersion: 5,
-            spec: document.promptSpec,
-            policy: document.toolPolicy,
-          };
-        } else if (document.version === "4") {
-          researchConfig = {
-            bundleVersion: 4,
-            spec: document.promptSpec,
-            policy: document.toolPolicy,
-          };
-        } else {
-          researchConfig = {
-            bundleVersion: 3,
-            spec: document.promptSpec,
-            policy: document.toolPolicy,
-          };
+        if (agent.manifest.toolPolicyHash !== liveToolPolicyHash) {
+          throw new EngineValidationError(
+            `agent ${seat.agentProfileId} manifest tool policy hash ${agent.manifest.toolPolicyHash} does not match the engine tool policy ${liveToolPolicyHash}; run pnpm tsx scripts/publish-agent-manifests.ts`,
+          );
         }
-        researchConfigs.set(seat.agentProfileId, researchConfig);
-        continue;
-      }
-
-      // Older synthetic manifests have no stored document. Keep their v2
-      // binding path unchanged for local fixtures and migration tooling.
-      const spec = this.#gonka.promptSpec();
-      const policy = this.#gonka.toolPolicy();
-      const liveHash = promptSpecHash(spec);
-      const liveToolPolicyHash = toolPolicyHash(policy);
-      if (agent.manifest.promptHash !== liveHash) {
-        throw new EngineValidationError(
-          `agent ${seat.agentProfileId} manifest prompt hash ${agent.manifest.promptHash} does not match the engine prompt spec ${liveHash}; run pnpm tsx scripts/publish-agent-manifests.ts`,
-        );
-      }
-      if (agent.manifest.toolPolicyHash !== liveToolPolicyHash) {
-        throw new EngineValidationError(
-          `agent ${seat.agentProfileId} manifest tool policy hash ${agent.manifest.toolPolicyHash} does not match the engine tool policy ${liveToolPolicyHash}; run pnpm tsx scripts/publish-agent-manifests.ts`,
-        );
-      }
-      researchConfigs.set(seat.agentProfileId, {
-        bundleVersion: 3,
-        spec,
-        policy,
-      });
+        researchConfigs.set(seat.agentProfileId, {
+          bundleVersion: 3,
+          spec,
+          policy,
+        });
+      }),
+    );
+    for (const validation of validations) {
+      if (validation.status === "rejected") throw validation.reason;
     }
+    const manifestsMs = since(preflightStartedAt);
     const research = this.#research;
     if (phase === 1 && !research) {
       throw new EngineValidationError("research provider not configured");
@@ -1571,6 +1715,7 @@ class OpenVerdictEngine implements Engine {
     // (jury.move E_EVIDENCE_NOT_BOUND). Binds are agent-signed and can fail;
     // retry them here every tick and let an unbound seat wait for the next
     // tick instead of failing it closed.
+    const bindStartedAt = performance.now();
     if (evidence.evidenceBundleId) {
       const tally = await this.requiredTally(claimId, phase);
       await this.bindSeatsToEvidence(
@@ -1581,6 +1726,7 @@ class OpenVerdictEngine implements Engine {
         evidence.root,
       );
     }
+    const bindsMs = since(bindStartedAt);
     const boundSeats = (await this.#repository.listJurySeats(claimId, phase)).filter(
       (seat) => seat.evidenceBound,
     );
@@ -1590,6 +1736,14 @@ class OpenVerdictEngine implements Engine {
       );
     }
     const artifacts = await this.artifactsForPhase(claimId, phase);
+    // The gap between the frozen evidence and the first juror is all of this:
+    // it was 32 s on 2026-09-05 with the manifest reads and the binds in
+    // sequence, so every run prints what it cost.
+    process.stderr.write(
+      `jury run: claim ${claimId.slice(0, 10)}…: phase ${phase} preflight ${Math.round(
+        manifestsMs + bindsMs,
+      )} ms (manifests ${Math.round(manifestsMs)} ms, binds ${Math.round(bindsMs)} ms)\n`,
+    );
     const searchCache = createSearchCache();
     const storedPageCache = new Map<string, Promise<PageStorePage>>();
     // Background Walrus writes of discovered pages, keyed by evidence id.
@@ -1815,9 +1969,9 @@ class OpenVerdictEngine implements Engine {
     const results: TxResult[] = [];
     let updatedTally = tally;
 
-    // Publish every bundle first, in parallel (each Walrus write takes seconds
-    // and the reveal window is short), then reveal on chain one seat at a
-    // time because all reveals share the operator signer.
+    // Every bundle is published the moment the reveal phase opens, all of
+    // them at once on the Walrus writer lanes, and each seat reveals as soon
+    // as its own upload lands.
     const pending = packages.flatMap((votePackage) => {
       if (!votePackage.committed || votePackage.revealed) return [];
       const run = runById.get(votePackage.runId);
@@ -1848,24 +2002,24 @@ class OpenVerdictEngine implements Engine {
       };
       return [{ votePackage, run, output: run.output, bundle }];
     });
-    const uploads = await Promise.all(
-      pending.map(
-        async ({ run, bundle }): Promise<{
-          upload?: WalrusPutResult;
-          uploadMs: number;
-        }> => {
-          const startedAt = performance.now();
-          try {
-            const upload = await this.#walrus.put(canonicalJsonBytes(bundle), {
-              identifier: `${run.runId}-run-bundle.json`,
-            });
-            return { upload, uploadMs: since(startedAt) };
-          } catch {
-            // A failed publication must not consume the on-chain reveal opportunity.
-            return { uploadMs: since(startedAt) };
-          }
-        },
-      ),
+    // Started here, not awaited here: every upload runs from this instant,
+    // and each reveal below waits only for its own. Awaiting the whole batch
+    // made every seat pay the slowest write (12.9 s to 23.3 s on 2026-09-05,
+    // and all five reveals landed in the same second).
+    type SeatUpload = { upload?: WalrusPutResult; uploadMs: number };
+    const uploads: Array<Promise<SeatUpload>> = pending.map(
+      async ({ run, bundle }): Promise<SeatUpload> => {
+        const startedAt = performance.now();
+        try {
+          const upload = await this.#walrus.put(canonicalJsonBytes(bundle), {
+            identifier: `${run.runId}-run-bundle.json`,
+          });
+          return { upload, uploadMs: since(startedAt) };
+        } catch {
+          // A failed publication must not consume the on-chain reveal opportunity.
+          return { uploadMs: since(startedAt) };
+        }
+      },
     );
 
     // Reveal on chain in parallel: every seat transaction is signed and paid
@@ -1873,6 +2027,7 @@ class OpenVerdictEngine implements Engine {
     // agent stay sequential), and a failed reveal must not stop its
     // siblings; the shared bookkeeping below runs in order afterwards.
     type RevealWork = (typeof pending)[number] & {
+      uploading: Promise<SeatUpload>;
       upload: WalrusPutResult | undefined;
       uploadMs: number;
       revealMs: number;
@@ -1880,13 +2035,13 @@ class OpenVerdictEngine implements Engine {
     };
     const work: RevealWork[] = pending.map((entry, index) => ({
       ...entry,
-      upload: uploads[index]?.upload,
-      uploadMs: uploads[index]?.uploadMs ?? 0,
+      uploading: uploads[index] ?? Promise.resolve({ uploadMs: 0 }),
+      upload: undefined,
+      uploadMs: 0,
       revealMs: 0,
     }));
     const byAgent = new Map<string, RevealWork[]>();
     for (const item of work) {
-      if (!item.upload) continue;
       const list = byAgent.get(item.votePackage.agentProfileId) ?? [];
       list.push(item);
       byAgent.set(item.votePackage.agentProfileId, list);
@@ -1895,6 +2050,9 @@ class OpenVerdictEngine implements Engine {
     await Promise.all(
       [...byAgent.values()].map(async (items) => {
         for (const item of items) {
+          const published = await item.uploading;
+          item.upload = published.upload;
+          item.uploadMs = published.uploadMs;
           const { votePackage, upload } = item;
           if (!upload) continue;
           const revealStartedAt = performance.now();
@@ -4447,6 +4605,12 @@ class OpenVerdictEngine implements Engine {
    */
   async prepareStake(req: StakePreparationRequest): Promise<StakePreparation> {
     validateStakePreparationRequest(req, this.#manifest);
+    // Any amount from the minimum up: the chain sets the seat's draw weight
+    // from it. Re-serialized from BigInt so the wallet is handed a canonical
+    // number rather than whatever shape the caller sent.
+    const stakeMist = (
+      req.amountMist === undefined ? MIN_STAKE_MIST : BigInt(req.amountMist)
+    ).toString();
     // The staker hash is blake2b-256 of the staking address, exactly as the
     // signed-message path derives it, so the Move draw rule sees one shape.
     const stakerHash = toHex(blake2b256(fromHex(req.stakerAddress)));
@@ -4522,6 +4686,7 @@ class OpenVerdictEngine implements Engine {
           operationalOwner: slot.address as `0x${string}`,
         },
         minStakeMist: MIN_STAKE_MIST.toString(),
+        stakeMist,
       };
     });
   }
@@ -4584,6 +4749,9 @@ class OpenVerdictEngine implements Engine {
         "the stake transaction carries a different manifest hash than the reservation",
       );
     }
+    // The chain's own floor, re-checked here. There is no ceiling on this
+    // side: the money is already posted, so a stake above the prepare limit is
+    // recorded rather than stranded, and the draw weight caps it anyway.
     if (BigInt(registration.amountMist) < MIN_STAKE_MIST) {
       throw new EngineValidationError(
         `the stake of ${registration.amountMist} MIST is below the ${MIN_STAKE_MIST} MIST minimum`,
@@ -4828,50 +4996,66 @@ class OpenVerdictEngine implements Engine {
     // Idempotent and never fatal: each bind is signed by the seat's agent
     // (its own gas), so one failure must not take the whole round down. A
     // seat that stays unbound is retried by the next juryRun tick.
+    //
+    // Agents run side by side, seats of one agent stay in order: the binds
+    // are five separate signers, and running them in sequence cost the round
+    // one transaction round trip per seat before any juror could start.
     const seats = await this.#repository.listJurySeats(claimId, phase);
-    for (const seat of seats) {
-      if (seat.evidenceBound) continue;
-      try {
-        await this.#gateway.bindJurySeatEvidence({
-          jurySeatId: seat.jurySeatId,
-          agentProfileId: seat.agentProfileId,
-          roundTallyId,
-          evidenceBundleId,
-        });
-      } catch (error) {
-        process.stderr.write(
-          `bind seat: claim ${claimId.slice(0, 10)}… seat ${seat.jurySeatId.slice(0, 10)}…: ${
-            error instanceof Error ? error.message : String(error)
-          }\n`,
-        );
-        continue;
-      }
-      await this.#repository.saveJurySeat({
-        ...seat,
-        evidenceRoot: root,
-        evidenceBound: true,
-        updatedAt: this.isoNow(),
-      });
-    }
+    await Promise.all(
+      groupByAgent(seats.filter((seat) => !seat.evidenceBound)).map(async (agentSeats) => {
+        for (const seat of agentSeats) {
+          try {
+            await this.#gateway.bindJurySeatEvidence({
+              jurySeatId: seat.jurySeatId,
+              agentProfileId: seat.agentProfileId,
+              roundTallyId,
+              evidenceBundleId,
+            });
+          } catch (error) {
+            process.stderr.write(
+              `bind seat: claim ${claimId.slice(0, 10)}… seat ${seat.jurySeatId.slice(0, 10)}…: ${
+                error instanceof Error ? error.message : String(error)
+              }\n`,
+            );
+            continue;
+          }
+          await this.#repository.saveJurySeat({
+            ...seat,
+            evidenceRoot: root,
+            evidenceBound: true,
+            updatedAt: this.isoNow(),
+          });
+        }
+      }),
+    );
   }
 
   private async acceptOfferedSeats(
     claimId: string,
     phase: 1 | 2,
   ): Promise<void> {
+    // Agent-signed like the binds, so the same rule applies: agents in
+    // parallel, seats of one agent in order. The chain's twenty-second
+    // acceptance window is unchanged; only the engine stops queueing behind
+    // itself inside it.
     const seats = await this.#repository.listJurySeats(claimId, phase);
-    for (const seat of seats) {
-      if (seat.status !== "OFFERED") continue;
-      await this.#gateway.acceptJurySeat({
-        jurySeatId: seat.jurySeatId,
-        agentProfileId: seat.agentProfileId,
-      });
-      await this.#repository.saveJurySeat({
-        ...seat,
-        status: "ACCEPTED",
-        updatedAt: this.isoNow(),
-      });
-    }
+    await Promise.all(
+      groupByAgent(seats.filter((seat) => seat.status === "OFFERED")).map(
+        async (agentSeats) => {
+          for (const seat of agentSeats) {
+            await this.#gateway.acceptJurySeat({
+              jurySeatId: seat.jurySeatId,
+              agentProfileId: seat.agentProfileId,
+            });
+            await this.#repository.saveJurySeat({
+              ...seat,
+              status: "ACCEPTED",
+              updatedAt: this.isoNow(),
+            });
+          }
+        },
+      ),
+    );
   }
 
   private async updateSeat(
@@ -5801,6 +5985,31 @@ function validateStakePreparationRequest(
     );
   }
   assertOptionalRole(request.role);
+  assertOptionalStakeAmount(request.amountMist);
+}
+
+/**
+ * The optional stake amount: whole MIST, at least the minimum and at most the
+ * ceiling. Absent means the minimum, which is what every caller sent before
+ * the amount was a choice. The digit bound keeps a pasted essay out of BigInt
+ * before the range check runs.
+ */
+function assertOptionalStakeAmount(amountMist: string | undefined): void {
+  if (amountMist === undefined) return;
+  if (typeof amountMist !== "string" || !/^\d{1,20}$/.test(amountMist)) {
+    throw new EngineValidationError("amountMist must be a decimal amount of MIST");
+  }
+  const amount = BigInt(amountMist);
+  if (amount < MIN_STAKE_MIST) {
+    throw new EngineValidationError(
+      `the stake must be at least ${MIN_STAKE_MIST} MIST (0.1 SUI)`,
+    );
+  }
+  if (amount > MAX_STAKE_MIST) {
+    throw new EngineValidationError(
+      `the stake must be at most ${MAX_STAKE_MIST} MIST (1000 SUI)`,
+    );
+  }
 }
 
 /** Sui transaction digests are base58; the bound keeps a stray blob out of SQL. */
@@ -5970,6 +6179,40 @@ function sleep(milliseconds: number): Promise<void> {
  */
 function since(startedAtMs: number): number {
   return Math.max(0, Math.round(performance.now() - startedAtMs));
+}
+
+/**
+ * What the engine's own mirror says about eligibility right now: every seat
+ * it knows, with the flag it carries. `agents eligibility` and `registry
+ * sync-mirror` write the chain and this mirror together, so a change here is
+ * the engine's signal that the registry moved, and it crosses processes
+ * because the mirror is the shared database. Deployments hold tens of rows,
+ * so the string is small and built only when the gate is asked.
+ */
+function eligibilityRevision(records: readonly AgentManifestRecord[]): string {
+  return records
+    .map(
+      (record) =>
+        `${record.manifest.agentProfileId.toLowerCase()}:${record.active ? "1" : "0"}`,
+    )
+    .sort()
+    .join(",");
+}
+
+/**
+ * Seats grouped by the agent that signs for them. Every agent-signed
+ * transaction (accept, bind, commit, reveal) spends that agent's own gas
+ * coin, so two seats of one agent must go in order while different agents
+ * never contend: this is the shape every such step runs in.
+ */
+function groupByAgent<T extends { agentProfileId: string }>(seats: readonly T[]): T[][] {
+  const byAgent = new Map<string, T[]>();
+  for (const seat of seats) {
+    const list = byAgent.get(seat.agentProfileId) ?? [];
+    list.push(seat);
+    byAgent.set(seat.agentProfileId, list);
+  }
+  return [...byAgent.values()];
 }
 
 /** Whole-claim wall clock for claim_finalized; 0 when the row has no usable date. */
@@ -6854,7 +7097,7 @@ function oracleInput(
   priorRound: PriorRoundPublicRecord | undefined,
   role: string,
   runId: string,
-  promptVersion: "2" | "3" | "4",
+  promptVersion: "2" | "3" | "4" | "5",
 ): OracleInferenceInput {
   return {
     protocolVersion: "1.0",

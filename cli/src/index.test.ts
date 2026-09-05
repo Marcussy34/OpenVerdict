@@ -279,6 +279,28 @@ describe("operator registry commands", () => {
     );
   });
 
+  it("reconciles the agent mirror with the registry and names what changed", async () => {
+    const output: string[] = [];
+    const calls: unknown[] = [];
+
+    const code = await runCli(["registry", "sync-mirror"], {
+      engine: fakeEngine(),
+      operator: fakeOperator(calls),
+      stdout: (value) => output.push(value),
+      stderr: () => undefined,
+    });
+
+    expect(code).toBe(0);
+    expect(calls).toEqual([{ syncMirror: true }]);
+    const printed = output.join("\n");
+    expect(printed).toContain("registry   0xregistry (2 seats)");
+    expect(printed).toContain("activated  1: 0xseat1");
+    expect(printed).toContain("stale      1: 0xstale");
+    // Nothing is claimed about the two kinds that did not change.
+    expect(printed).not.toContain("deactivated");
+    expect(printed).not.toContain("missing");
+  });
+
   it("reports the weight the eligibility change preserved", async () => {
     const output: string[] = [];
 
@@ -332,6 +354,18 @@ function fakeOperator(calls: unknown[]): OperatorClient {
       calls.push(input);
       // The real client reads the seat's recorded weight and passes it back.
       return { ...result, weight: 10_000, rosterMirror: "updated" as const };
+    },
+    async syncMirror() {
+      calls.push({ syncMirror: true });
+      return {
+        network: "testnet",
+        registryObjectId: "0xregistry",
+        registrySeats: 2,
+        activated: ["0xseat1"],
+        deactivated: [],
+        stale: ["0xstale"],
+        missing: [],
+      };
     },
     async registryRoster() {
       calls.push({ registryRoster: true });

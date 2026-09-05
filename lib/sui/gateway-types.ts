@@ -12,6 +12,7 @@ import type {
   UpdateAgentManifestTransactionInput,
 } from "./builders";
 import type { JuryDiversity } from "./jury-diversity";
+import type { RegistryRosterSeat } from "./registry-roster";
 
 export interface SuiAgentIdentity {
   agentProfileId: string;
@@ -189,6 +190,13 @@ export interface SuiGateway {
   epochInfo(): Promise<ChainEpochInfo>;
   /** The registry's model-family rule the next draw will use. */
   juryDiversity(): Promise<JuryDiversity>;
+  /**
+   * Every eligibility record the current registry holds, which is the only
+   * set of seats `select_committee` can draw from. The engine's own agent
+   * mirror is wider: it keeps rows registered against earlier package
+   * versions, and those registries are not this one.
+   */
+  registryRoster(): Promise<RegistryRosterSeat[]>;
   /** The rule one committee was drawn under, recorded on the committee itself. */
   committeeDiversity(committeeId: string): Promise<JuryDiversity>;
 }

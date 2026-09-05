@@ -156,6 +156,52 @@ export async function resolutionWorkerTick(): Promise<boolean> {
   return claims.length > 0;
 }
 
+/**
+ * Reveal every sealed vote of an open reveal phase, then settle the round.
+ * Reached both from a claim already in REVEAL_n and straight after the
+ * transaction that opened it, so the reveal uploads never wait for a tick.
+ */
+async function revealRound(
+  engine: ResolutionEngine,
+  claim: ClaimInspection,
+  phase: 1 | 2,
+): Promise<void> {
+  // Reveals must land before the deadline. A reveal error (a seat past the
+  // deadline, a Walrus write)
+  // must not block that transition, so it is logged and the tick goes on.
+  try {
+    await engine.votesReveal(claim.claimId, phase);
+  } catch (error) {
+    process.stderr.write(
+      `resolution-worker: claim ${claim.claimId.slice(0, 10)}…: reveal: ${
+        error instanceof Error ? error.message : String(error)
+      }\n`,
+    );
+  }
+  const revealDeadlineMs =
+    phase === 1
+      ? claim.deadlines.firstRevealDeadlineMs
+      : claim.deadlines.secondRevealDeadlineMs;
+  const deadlineReached = reached(revealDeadlineMs);
+  const latest = await engine.inspect(claim.claimId);
+  if (!allExpectedSeatsRevealed(latest, phase)) {
+    if (!deadlineReached) return;
+    await engine.voidAttempt(claim.claimId, {
+      reason: "MISSING_REVEAL",
+      phase,
+    });
+    return;
+  }
+  try {
+    await engine.finalize(claim.claimId);
+  } catch (error) {
+    if (!(error instanceof EngineStateError)) throw error;
+    // A split first round opens the debate now: every seat has revealed
+    // (or the deadline passed), and the chain accepts either.
+    await engine.advance(claim.claimId);
+  }
+}
+
 export async function resolveClaim(
   engine: ResolutionEngine,
   claim: ClaimInspection,
@@ -191,44 +237,14 @@ export async function resolveClaim(
       return;
     }
     await engine.advance(claim.claimId);
+    // The reveal phase is open as of that transaction. Each seat's run
+    // bundle goes to Walrus before its reveal (13 to 23 s a write), so the
+    // publishing starts in this tick instead of waiting for the next poll.
+    await revealRound(engine, claim, phase);
     return;
   }
   if (claim.state === CLAIM_STATE.REVEAL_1 || claim.state === CLAIM_STATE.REVEAL_2) {
-    const phase = claim.state === CLAIM_STATE.REVEAL_1 ? 1 : 2;
-    // Reveals must land before the deadline. A reveal error (a seat past the
-    // deadline, a Walrus write)
-    // must not block that transition, so it is logged and the tick goes on.
-    try {
-      await engine.votesReveal(claim.claimId, phase);
-    } catch (error) {
-      process.stderr.write(
-        `resolution-worker: claim ${claim.claimId.slice(0, 10)}…: reveal: ${
-          error instanceof Error ? error.message : String(error)
-        }\n`,
-      );
-    }
-    const revealDeadlineMs =
-      phase === 1
-        ? claim.deadlines.firstRevealDeadlineMs
-        : claim.deadlines.secondRevealDeadlineMs;
-    const deadlineReached = reached(revealDeadlineMs);
-    const latest = await engine.inspect(claim.claimId);
-    if (!allExpectedSeatsRevealed(latest, phase)) {
-      if (!deadlineReached) return;
-      await engine.voidAttempt(claim.claimId, {
-        reason: "MISSING_REVEAL",
-        phase,
-      });
-      return;
-    }
-    try {
-      await engine.finalize(claim.claimId);
-    } catch (error) {
-      if (!(error instanceof EngineStateError)) throw error;
-      // A split first round opens the debate now: every seat has revealed
-      // (or the deadline passed), and the chain accepts either.
-      await engine.advance(claim.claimId);
-    }
+    await revealRound(engine, claim, claim.state === CLAIM_STATE.REVEAL_1 ? 1 : 2);
     return;
   }
   if (claim.state === CLAIM_STATE.DISCUSSION) {

@@ -45,7 +45,7 @@ export const oracleInferenceInputSchema: z.ZodType<OracleInferenceInput> = z
     protocolVersion: z.literal("1.0"),
     runId: z.string().min(1).max(256),
     agentRole: z.string().min(1).max(256),
-    promptVersion: z.enum(["1", "2", "3", "4"]),
+    promptVersion: z.enum(["1", "2", "3", "4", "5"]),
     submission: z
       .object({
         kind: z.enum(["TEXT", "URL", "TEXT_AND_URL"]),

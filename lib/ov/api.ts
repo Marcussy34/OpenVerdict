@@ -16,6 +16,14 @@ import type { AgentManifestDocument } from "../protocol/types";
 export const DEFAULT_BASE = "https://app.openverdict.info";
 /** Per request, unless a command passes its own. */
 export const DEFAULT_TIMEOUT_MS = 20_000;
+/**
+ * A submission answers only once the claim exists: the statement and the
+ * criteria go to Walrus, `create_claim` runs on Sui and the committee is
+ * drawn before the route replies. That took about 20 s on 2026-09-05 and the
+ * 20 s default fired first, so the CLI reported a failure for a claim that
+ * had launched. Ninety seconds covers a slow launch with room to spare.
+ */
+export const SUBMIT_TIMEOUT_MS = 90_000;
 /** The SSE server heartbeats every 15 s; silence this long means a dead link. */
 export const DEFAULT_STREAM_IDLE_MS = 90_000;
 const USER_AGENT = "OpenVerdict ov CLI";
@@ -53,6 +61,12 @@ export class OvError extends Error {
   constructor(
     message: string,
     readonly exitCode: 2 | 3 | 4 | 5 = 2,
+    /**
+     * No reply arrived before the client gave up. The server may well have
+     * finished the work, so a write that times out must be checked, never
+     * retried blind.
+     */
+    readonly timedOut = false,
   ) {
     super(message);
   }
@@ -175,7 +189,12 @@ export class Api {
       }
       return { status: response.status, body, text };
     } catch (error) {
-      throw new OvError(`${init.method ?? "GET"} ${url}: ${errorMessage(error)}`);
+      const message = errorMessage(error);
+      throw new OvError(
+        `${init.method ?? "GET"} ${url}: ${message}`,
+        2,
+        message === "request timed out",
+      );
     } finally {
       clearTimeout(timer);
     }

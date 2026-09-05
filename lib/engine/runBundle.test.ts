@@ -4,6 +4,7 @@ import {
   DEFAULT_PROMPT_SPEC_V2,
   DEFAULT_PROMPT_SPEC_V3,
   DEFAULT_PROMPT_SPEC_V4,
+  DEFAULT_PROMPT_SPEC_V5,
   DEFAULT_TOOL_POLICY_V2,
   DEFAULT_TOOL_POLICY_V3,
   DEFAULT_TOOL_POLICY_V4,
@@ -262,6 +263,56 @@ describe("run bundle sealing", () => {
     expect((core as PublicRunBundleCoreV5).promptSpec.version).toBe("4");
     expect((core as PublicRunBundleCoreV5).toolPolicy.version).toBe("4");
     expect((core as PublicRunBundleCoreV5).toolPolicy.maxOpensPerTurn).toBe(3);
+  });
+
+  it("keeps a v5 prompt on the v5 bundle and its v4 policy", () => {
+    // V5 only appends instructions, so the bundle shape and every verifier
+    // check stay exactly those of a v4-prompt run.
+    const expected = makeCore();
+    const runResult: GonkaRunResult = {
+      type: "gonka-run-result",
+      attempts: [],
+      response: expected.rawResponse,
+      request: {
+        ...expected.request,
+        messages: [
+          {
+            role: "system",
+            content: composeSystemPrompt(
+              DEFAULT_PROMPT_SPEC_V5,
+              DEFAULT_TOOL_POLICY_V4,
+            ),
+          },
+          ...expected.request.messages.slice(1),
+        ],
+      },
+      gateway: expected.gateway,
+    };
+    const core = buildRunBundleCore({
+      promptSpec: DEFAULT_PROMPT_SPEC_V5,
+      toolPolicy: DEFAULT_TOOL_POLICY_V4,
+      input: { ...expected.input, promptVersion: "5" },
+      runResult,
+      validatedOutput: expected.validatedOutput,
+      audit: {
+        ...expected.audit,
+        promptHash: promptSpecHash(DEFAULT_PROMPT_SPEC_V5),
+      },
+      runHash: expected.runHash,
+      transcript: {
+        ...expected.transcript,
+        policyHash: toolPolicyHash(DEFAULT_TOOL_POLICY_V4),
+        counts: {
+          ...expected.transcript.counts,
+          challengeSearches: 0,
+        },
+      },
+    });
+
+    expect(core.version).toBe(5);
+    expect((core as PublicRunBundleCoreV5).promptSpec.version).toBe("5");
+    expect((core as PublicRunBundleCoreV5).toolPolicy.version).toBe("4");
+    expect(core.promptHash).toBe(promptSpecHash(DEFAULT_PROMPT_SPEC_V5));
   });
 
   it("builds, seals and reopens a v6 table vote bundle with no transcript", () => {

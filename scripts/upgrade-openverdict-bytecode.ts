@@ -4,6 +4,12 @@
  * operator's UpgradeCap (the publish transferred it to the operator). Build:
  *   sui move build --dump-bytecode-as-base64 --no-tree-shaking --path move/openverdict > bytecode.json
  * Run: pnpm tsx scripts/upgrade-openverdict-bytecode.ts <bytecode.json>
+ * Check first: pnpm tsx scripts/upgrade-openverdict-bytecode.ts <bytecode.json> --dry-run
+ *
+ * --dry-run simulates the same transaction and prints its status without
+ * sending it or touching the config. Sui runs the layout-compatibility check
+ * inside the upgrade command itself, so an incompatible change fails the dry
+ * run with a package upgrade error and never reaches the cap.
  *
  * Sui keeps every object type at the address the package was first
  * published at, while Move calls must target the upgraded package. The script
@@ -71,8 +77,14 @@ async function findUpgradeCap(
 }
 
 async function main(): Promise<void> {
-  const bytecodePath = process.argv[2];
-  if (!bytecodePath) throw new Error("usage: upgrade-openverdict-bytecode.ts <bytecode.json>");
+  const args = process.argv.slice(2);
+  const dryRun = args.includes("--dry-run");
+  const bytecodePath = args.find((arg) => !arg.startsWith("--"));
+  if (!bytecodePath) {
+    throw new Error(
+      "usage: upgrade-openverdict-bytecode.ts <bytecode.json> [--dry-run]",
+    );
+  }
   const bytecode = JSON.parse(readFileSync(bytecodePath, "utf8")) as {
     modules: string[];
     dependencies: string[];
@@ -128,6 +140,22 @@ async function main(): Promise<void> {
     target: "0x2::package::commit_upgrade",
     arguments: [tx.object(upgradeCapId), receipt],
   });
+
+  // Simulate only: the upgrade command carries out the compatibility check, so
+  // a successful dry run is the proof that the new bytecode is compatible.
+  if (dryRun) {
+    const bytes = await tx.build({ client });
+    const dry = await client.dryRunTransactionBlock({ transactionBlock: bytes });
+    const dryStatus = dry.effects.status;
+    console.log(`dry run      ${dryStatus.status}`);
+    if (dryStatus.status !== "success") {
+      throw new Error(dryStatus.error ?? "dry run failed");
+    }
+    console.log("compatible   yes (the upgrade command raised no error)");
+    console.log("not sent     nothing was executed and no config was written");
+    return;
+  }
+
   const submitted = await client.signAndExecuteTransaction({
     signer: operator,
     transaction: tx,

@@ -11,6 +11,7 @@ import type {
   PromptSpecV2,
   PromptSpecV3,
   PromptSpecV4,
+  PromptSpecV5,
   ProviderRequestRecord,
   TableVoteInput,
   TableVotePromptSpecV1,
@@ -34,6 +35,7 @@ import {
   DEFAULT_PROMPT_SPEC_V2,
   DEFAULT_PROMPT_SPEC_V3,
   DEFAULT_PROMPT_SPEC_V4,
+  DEFAULT_PROMPT_SPEC_V5,
   DEFAULT_TOOL_POLICY_V2,
   TABLE_VOTE_PROMPT_SPEC_V1,
   buildFallbackMessages,
@@ -589,6 +591,7 @@ export function createGonkaAdapterWithDependencies(
       | PromptSpecV2
       | PromptSpecV3
       | PromptSpecV4
+      | PromptSpecV5
       | TableVotePromptSpecV1,
     options: {
       requestTimeoutMs?: number;
@@ -832,6 +835,7 @@ export function createGonkaAdapterWithDependencies(
       | PromptSpecV2
       | PromptSpecV3
       | PromptSpecV4
+      | PromptSpecV5
       | TableVotePromptSpecV1;
     if ("kind" in request.input && request.input.kind === "TABLE_VOTE") {
       input = request.input;
@@ -840,11 +844,13 @@ export function createGonkaAdapterWithDependencies(
       const researchInput = oracleInferenceInputSchema.parse(request.input);
       input = researchInput;
       completionSpec =
-        researchInput.promptVersion === "4"
-          ? DEFAULT_PROMPT_SPEC_V4
-          : researchInput.promptVersion === "3"
-            ? DEFAULT_PROMPT_SPEC_V3
-            : researchSpec;
+        researchInput.promptVersion === "5"
+          ? DEFAULT_PROMPT_SPEC_V5
+          : researchInput.promptVersion === "4"
+            ? DEFAULT_PROMPT_SPEC_V4
+            : researchInput.promptVersion === "3"
+              ? DEFAULT_PROMPT_SPEC_V3
+              : researchSpec;
     }
     assertManifest(request.manifest);
     // The table vote has its own pinned budget and never uses research settings.

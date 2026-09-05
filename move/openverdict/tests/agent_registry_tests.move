@@ -202,6 +202,46 @@ module openverdict::agent_registry_tests {
         scenario.end();
     }
 
+    #[test]
+    fun stake_weight_is_proportional_to_the_amount_and_capped() {
+        // The base weight per minimum stake, and nothing above ten times it.
+        assert!(agent_registry::stake_selection_weight(MIN_STAKE) == 10_000);
+        assert!(agent_registry::stake_selection_weight(MIN_STAKE / 2 * 5) == 25_000);
+        assert!(agent_registry::stake_selection_weight(MIN_STAKE * 5) == 50_000);
+        assert!(agent_registry::stake_selection_weight(MIN_STAKE * 10) == 100_000);
+        assert!(agent_registry::stake_selection_weight(MIN_STAKE * 50) == 100_000);
+        // A fortune must cap rather than overflow the u64 product.
+        assert!(agent_registry::stake_selection_weight(18_446_744_073_709_551_615) == 100_000);
+    }
+
+    #[test]
+    fun a_bigger_stake_buys_a_bigger_seat_weight() {
+        let mut scenario = test_scenario::begin(STAKER);
+        let mut registry = agent_registry::new_registry_for_testing(scenario.ctx());
+        let clock = clock::create_for_testing(scenario.ctx());
+        // The minimum, five times it, and past the ten-times cap.
+        stake_seat(&mut registry, &clock, MIN_STAKE, OPERATOR, &mut scenario);
+        stake_seat(&mut registry, &clock, MIN_STAKE * 5, OWNER, &mut scenario);
+        stake_seat(&mut registry, &clock, MIN_STAKE * 40, OPERATOR, &mut scenario);
+
+        let records = agent_registry::eligibility_records(&registry);
+        assert!(agent_registry::eligibility_weight(&records[0]) == 10_000);
+        assert!(agent_registry::eligibility_weight(&records[1]) == 50_000);
+        assert!(agent_registry::eligibility_weight(&records[2]) == 100_000);
+        let staked_ids = vector[
+            agent_registry::eligibility_profile_id(&records[0]),
+            agent_registry::eligibility_profile_id(&records[1]),
+            agent_registry::eligibility_profile_id(&records[2]),
+        ];
+
+        staked_ids.do!(|profile_id| {
+            agent_registry::remove_payout_recipient_for_testing(&mut registry, profile_id);
+        });
+        agent_registry::destroy_registry_for_testing(registry);
+        clock::destroy_for_testing(clock);
+        scenario.end();
+    }
+
     #[test, expected_failure(abort_code = openverdict::agent_registry::E_STAKE_TOO_SMALL)]
     fun stake_below_the_minimum_is_rejected() {
         let mut scenario = test_scenario::begin(STAKER);

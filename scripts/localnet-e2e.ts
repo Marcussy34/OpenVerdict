@@ -18,7 +18,7 @@ import {
 } from "../lib/engine";
 import { DEFAULT_DRAW_RULE, type DrawRule } from "../lib/engine/draw-feasibility";
 import {
-  DEFAULT_PROMPT_SPEC_V4,
+  DEFAULT_PROMPT_SPEC_V5,
   DEFAULT_TOOL_POLICY_V4,
   DELIBERATION_PROMPT_SPEC_V1,
   DELIBERATION_PROMPT_SPEC_V2,
@@ -98,6 +98,10 @@ const signerSlotCount = agentCount + 1 + degradedSpareCount;
 const stakedSeatSlot = agentCount;
 const degradedSpareFirstSlot = agentCount + 1;
 const minStakeMist = 100_000_000n;
+/** Five minimums, so the seat's on-chain draw weight must be five times the base. */
+const stakedSeatStakeMist = 500_000_000n;
+/** agent_registry BASE_SELECTION_WEIGHT, the weight one minimum stake buys. */
+const baseSelectionWeight = 10_000;
 const poolStake = 100_000_000n;
 const evidencePolicyId = "OPENVERDICT_EVIDENCE_POLICY_V1";
 
@@ -142,6 +146,8 @@ interface PoolProof {
 }
 
 interface StakedSeatProof {
+  /** The record's on-chain draw weight, proving the stake-weighted draw. */
+  weight: number;
   profileId: string;
   positionId: string;
   operationalOwner: string;
@@ -526,7 +532,7 @@ async function registerOneAgent(input: {
       operationalOwner: asHex(owner),
       role,
       modelId,
-      promptSpec: DEFAULT_PROMPT_SPEC_V4,
+      promptSpec: DEFAULT_PROMPT_SPEC_V5,
       toolPolicy: DEFAULT_TOOL_POLICY_V4,
       tableVotePromptSpec: TABLE_VOTE_PROMPT_SPEC_V1,
       evidencePolicyId,
@@ -880,9 +886,10 @@ async function runJuryAndCommit(
 }
 
 /**
- * One real staked seat: the user posts the 0.1 SUI bond and the operator pays
- * the gas, then the user unstakes. The seat is deactivated again here so the
- * lifecycles keep drawing from the seven demo profiles.
+ * One real staked seat: the user posts a 0.5 SUI bond and the operator pays
+ * the gas, then the user unstakes. Five times the minimum, so the record's
+ * draw weight proves the stake-weighted draw on chain. The seat is deactivated
+ * again here so the lifecycles keep drawing from the seven demo profiles.
  */
 async function runStakedSeatProof(input: {
   client: OpenVerdictSuiClient;
@@ -905,7 +912,7 @@ async function runStakedSeatProof(input: {
     operationalOwner: asHex(operationalOwner),
     role: "SKEPTIC",
     modelId,
-    promptSpec: DEFAULT_PROMPT_SPEC_V4,
+    promptSpec: DEFAULT_PROMPT_SPEC_V5,
     toolPolicy: DEFAULT_TOOL_POLICY_V4,
     tableVotePromptSpec: TABLE_VOTE_PROMPT_SPEC_V1,
     evidencePolicyId,
@@ -917,7 +924,7 @@ async function runStakedSeatProof(input: {
   const staking = await sponsorAndExecute({
     client: input.client,
     tx: buildRegisterStakedAgentTransaction(input.manifest, {
-      stakeMist: minStakeMist,
+      stakeMist: stakedSeatStakeMist,
       manifestHash: fromHex(built.manifestHash),
       manifestBlobId: upload.blobId,
       modelHash: blake2b256(encoder.encode(modelId)),
@@ -963,6 +970,12 @@ async function runStakedSeatProof(input: {
   assert.equal(staked.active, true, "the staked seat must start active");
   assert.equal(staked.owner, operationalOwner, "slot seven must own the staked record");
   assert.equal(staked.profileId, profileId);
+  // The draw is weighted by stake: five minimums buy five times the base.
+  assert.equal(
+    staked.weight,
+    baseSelectionWeight * Number(stakedSeatStakeMist / minStakeMist),
+    "a 0.5 SUI stake must carry five times the base draw weight",
+  );
 
   // Jury rewards for the seat must route to the staker, not to the slot.
   const payout = await input.client.core.getDynamicField({
@@ -973,7 +986,9 @@ async function runStakedSeatProof(input: {
     },
   });
   assert.equal(bcs.Address.parse(payout.dynamicField.value.bcs), staker);
-  logDetail(`staked seat: ${profileId} staked ${minStakeMist} MIST, payout to ${staker}`);
+  logDetail(
+    `staked seat: ${profileId} staked ${stakedSeatStakeMist} MIST at draw weight ${staked.weight}, payout to ${staker}`,
+  );
 
   const unstaking = await sponsorAndExecute({
     client: input.client,
@@ -1004,6 +1019,7 @@ async function runStakedSeatProof(input: {
     staker,
     stakeDigest: staking.digest,
     unstakeDigest: unstaking.digest,
+    weight: staked.weight,
   };
 }
 
@@ -1012,7 +1028,7 @@ async function readEligibilityRecord(
   client: OpenVerdictSuiClient,
   manifest: ReleaseManifest,
   index: number,
-): Promise<{ profileId: string; owner: string; active: boolean }> {
+): Promise<{ profileId: string; owner: string; active: boolean; weight: number }> {
   const { object } = await client.core.getObject({
     objectId: manifest.registryObjectId,
     include: { json: true },
@@ -1028,6 +1044,7 @@ async function readEligibilityRecord(
     profileId: required(moveObjectId(fields.agent_profile_id), "record.agent_profile_id"),
     owner: required(moveObjectId(fields.owner), "record.owner"),
     active: fields.active === true,
+    weight: moveNumber(fields.weight),
   };
 }
 
@@ -2340,7 +2357,7 @@ function printSummary(input: {
     ["Finalization digests", [input.direct.finalize.digest, input.split.finalize.digest, input.unresolved.finalize.digest].join(", ")],
     ["Truth Score #1", `${input.direct.truthScoreBps} bps (on-chain ${input.direct.onChainTruthScoreBps})`],
     ["Sponsored tx", input.pool.sponsoredDigest],
-    ["Staked seat", `${input.staked.profileId} (${minStakeMist} MIST by ${input.staked.staker})`],
+    ["Staked seat", `${input.staked.profileId} (${stakedSeatStakeMist} MIST at weight ${input.staked.weight} by ${input.staked.staker})`],
     ["Stake tx digests", `${input.staked.stakeDigest}, ${input.staked.unstakeDigest}`],
     ["Pool tx digests", `${input.pool.createDigest}, ${input.pool.settleDigest}, ${input.pool.redeemDigest}`],
     ["Pool conservation", `${poolStake} = ${input.pool.payout} payout + ${input.pool.fee} fees`],

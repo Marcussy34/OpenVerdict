@@ -10,6 +10,7 @@ import {
   DEFAULT_PROMPT_SPEC_V2,
   DEFAULT_PROMPT_SPEC_V3,
   DEFAULT_PROMPT_SPEC_V4,
+  DEFAULT_PROMPT_SPEC_V5,
   DEFAULT_PROMPT_SPEC_V1,
   DEFAULT_TOOL_POLICY_V2,
   DEFAULT_TOOL_POLICY_V3,
@@ -25,6 +26,8 @@ import { sampleTableVoteInput } from "../protocol/table-vote.fixture";
 import { sealIdentityHex, sealInnerId } from "../seal/identity";
 import type {
   InferenceRunAudit,
+  PromptSpecV4,
+  PromptSpecV5,
   PublicRunBundleCoreV2,
   PublicRunBundleCoreV3,
   PublicRunBundleCoreV4,
@@ -558,7 +561,11 @@ function makeProofV4() {
   return { proof: proofFromBundle(bundle, sealed), sealed };
 }
 
-function makeProofV5() {
+// The prompt spec is a parameter so the same v5 bundle can be rebuilt on the
+// v5 prompt: v5 appends instructions only, so every check must still pass.
+function makeProofV5(
+  spec: PromptSpecV4 | PromptSpecV5 = DEFAULT_PROMPT_SPEC_V4,
+) {
   const { proof: v4Proof } = makeProofV4();
   if (!v4Proof.bundle || !isV4Bundle(v4Proof.bundle)) {
     throw new Error("Expected a v4 bundle");
@@ -574,8 +581,8 @@ function makeProofV5() {
     step.batch = { size: openSteps.length, position: index + 1 };
   });
   transcript.policyHash = toolPolicyHash(DEFAULT_TOOL_POLICY_V4);
-  const input = { ...v4Bundle.input, promptVersion: "4" as const };
-  const promptHash = promptSpecHash(DEFAULT_PROMPT_SPEC_V4);
+  const input = { ...v4Bundle.input, promptVersion: spec.version };
+  const promptHash = promptSpecHash(spec);
   const inputHash = toHex(blake2b256(canonicalJsonBytes(input)));
   const outputHash = toHex(
     blake2b256(canonicalJsonBytes(v4Bundle.validatedOutput)),
@@ -595,7 +602,7 @@ function makeProofV5() {
     phase: v4Bundle.phase,
     agentProfileId: v4Bundle.agentProfileId,
     jurySeatId: v4Bundle.jurySeatId,
-    promptSpec: DEFAULT_PROMPT_SPEC_V4,
+    promptSpec: spec,
     promptHash,
     toolPolicy: DEFAULT_TOOL_POLICY_V4,
     toolPolicyHash: toolPolicyHash(DEFAULT_TOOL_POLICY_V4),
@@ -607,10 +614,7 @@ function makeProofV5() {
       messages: [
         {
           role: "system",
-          content: composeSystemPrompt(
-            DEFAULT_PROMPT_SPEC_V4,
-            DEFAULT_TOOL_POLICY_V4,
-          ),
+          content: composeSystemPrompt(spec, DEFAULT_TOOL_POLICY_V4),
         },
         ...v4Bundle.request.messages.slice(1),
       ],
@@ -808,6 +812,31 @@ describe("browser run proof", () => {
     const { proof } = makeProofV5();
     const checks = await recomputeRunProof(proof);
 
+    expect(checks.map((check) => check.key)).toEqual([
+      "promptHash",
+      "toolPolicyHash",
+      "systemPrompt",
+      "inputHash",
+      "outputHash",
+      "toolTranscriptHash",
+      "citations",
+      "challengeSearch",
+      "bothSidesOpened",
+      "citationSites",
+      "counterEvidenceSummary",
+      "opensPerTurn",
+      "runHash",
+      "sealedCore",
+    ]);
+    expect(checks.every((check) => check.ok)).toBe(true);
+  });
+
+  it("verifies a v5 bundle that ran the v5 prompt with the same checks", async () => {
+    const { proof } = makeProofV5(DEFAULT_PROMPT_SPEC_V5);
+    const checks = await recomputeRunProof(proof);
+
+    expect(proof.bundle?.version).toBe(5);
+    expect(proof.bundle?.promptSpec?.version).toBe("5");
     expect(checks.map((check) => check.key)).toEqual([
       "promptHash",
       "toolPolicyHash",

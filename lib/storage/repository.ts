@@ -739,6 +739,68 @@ export class Repository {
     );
   }
 
+  /**
+   * Flip one seat's eligibility in the engine's own mirror. The table keeps a
+   * row per manifest version and the engine reads the `record_json` copy of
+   * the flag (listAgentManifests takes DISTINCT ON agent_profile_id, newest
+   * checkpoint first), while the operator reports read the `active` column:
+   * a command that moved one row or one copy left the two disagreeing, and
+   * the weather gate kept counting a family nobody could draw. Returns the
+   * rows it actually changed.
+   */
+  async setAgentManifestActive(
+    agentProfileId: string,
+    active: boolean,
+    updatedAt: string = new Date().toISOString(),
+  ): Promise<number> {
+    const rows = await listRows<{ version: string }>(
+      this.db,
+      `UPDATE agent_manifests
+          SET active = $2,
+              updated_at = $3,
+              record_json = jsonb_set(
+                jsonb_set(record_json, '{active}', to_jsonb($2::boolean), true),
+                '{updatedAt}', to_jsonb($3::text), true)
+        WHERE lower(agent_profile_id) = lower($1)
+          AND (active IS DISTINCT FROM $2
+               OR record_json->'active' IS DISTINCT FROM to_jsonb($2::boolean))
+        RETURNING version`,
+      [agentProfileId, active, updatedAt],
+    );
+    return rows.length;
+  }
+
+  /**
+   * Take every mirrored seat the current registry does not hold out of the
+   * gate's count. Rows registered against an earlier package version are
+   * stale: `select_committee` cannot see them, so a gate that counts their
+   * model family waits on a family nobody can seat. Returns the profile ids
+   * it changed. An empty registry is refused: it would blank the mirror.
+   */
+  async deactivateAgentManifestsOutsideRegistry(
+    registryProfileIds: readonly string[],
+    updatedAt: string = new Date().toISOString(),
+  ): Promise<string[]> {
+    if (registryProfileIds.length === 0) {
+      throw new Error("refusing to deactivate the whole agent mirror on an empty registry");
+    }
+    const placeholders = registryProfileIds.map((_, index) => `lower($${index + 2})`);
+    const rows = await listRows<{ agent_profile_id: string }>(
+      this.db,
+      `UPDATE agent_manifests
+          SET active = FALSE,
+              updated_at = $1,
+              record_json = jsonb_set(
+                jsonb_set(record_json, '{active}', to_jsonb(FALSE), true),
+                '{updatedAt}', to_jsonb($1::text), true)
+        WHERE lower(agent_profile_id) NOT IN (${placeholders.join(", ")})
+          AND (active OR record_json->'active' = to_jsonb(TRUE))
+        RETURNING agent_profile_id`,
+      [updatedAt, ...registryProfileIds],
+    );
+    return [...new Set(rows.map((row) => row.agent_profile_id))];
+  }
+
   async getAgentManifest(agentProfileId: string): Promise<AgentManifestRecord | undefined> {
     const records = await listRecords<AgentManifestRecord>(
       this.db,

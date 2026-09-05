@@ -14,7 +14,7 @@ import {
   type RegistryRosterSeat,
   type ReleaseManifest,
 } from "../../lib/sui";
-import { closeDb, createDb, createRepository } from "../../lib/storage";
+import { closeDb, createDb, createRepository, type Repository } from "../../lib/storage";
 
 /**
  * Operator-only registry transactions.
@@ -34,7 +34,25 @@ export interface OperatorClient {
   }): Promise<OperatorTxResult>;
   /** Read-only: the seats the draw can actually see, grouped by model family. */
   registryRoster(): Promise<RegistryRosterReport>;
+  /** Bring the engine's agent mirror back in line with the current registry. */
+  syncMirror(): Promise<MirrorSyncReport>;
 }
+
+/** What `registry sync-mirror` changed in the engine's own agent mirror. */
+export type MirrorSyncReport = {
+  network: string;
+  registryObjectId: string;
+  /** Eligibility records the registry holds right now. */
+  registrySeats: number;
+  /** Profiles the registry lists as eligible whose mirror rows were not. */
+  activated: string[];
+  /** Profiles the registry lists as ineligible whose mirror rows were not. */
+  deactivated: string[];
+  /** Profiles absent from the registry whose mirror rows were still active. */
+  stale: string[];
+  /** Registry seats with no row in the mirror at all; nothing was written. */
+  missing: string[];
+};
 
 /** What the registry holds right now, which is not the app's agent directory. */
 export type RegistryRosterReport = {
@@ -77,6 +95,8 @@ export type OperatorTxResult = {
    * engine's own roster, so both have to move together.
    */
   rosterMirror?: "updated" | "not found" | "skipped (no DATABASE_URL)";
+  /** Eligibility only: manifest version rows the mirror update moved. */
+  rosterMirrorRows?: number;
   /** Eligibility only: the weight the seat carried, passed back unchanged. */
   weight?: number;
 };
@@ -124,27 +144,84 @@ async function loadOperatorManifest(
  * the registry on chain, but the weather gate counts the families that still
  * hold an active seat in the engine's roster, so a deactivation that only
  * lands on chain would keep the gate shut on a family nobody can draw.
+ *
+ * Every manifest version row of that profile moves, and both copies of the
+ * flag with it: the table keeps one row per version and the engine reads the
+ * `record_json` copy, so flipping the newest row's column alone (what this
+ * did until 2026-09-05) left the gate reading the old answer.
  */
 async function mirrorEligibility(
   env: Record<string, string | undefined>,
   agentProfileId: string,
   active: boolean,
-): Promise<NonNullable<OperatorTxResult["rosterMirror"]>> {
-  if (!env.DATABASE_URL?.trim()) return "skipped (no DATABASE_URL)";
+): Promise<{
+  status: NonNullable<OperatorTxResult["rosterMirror"]>;
+  rows?: number;
+}> {
+  if (!env.DATABASE_URL?.trim()) return { status: "skipped (no DATABASE_URL)" };
   const db = createDb({ url: env.DATABASE_URL });
   try {
     const repository = createRepository(db);
-    const record = await repository.getAgentManifest(agentProfileId);
-    if (record === undefined) return "not found";
-    await repository.saveAgentManifest({
-      ...record,
-      active,
-      updatedAt: new Date().toISOString(),
-    });
-    return "updated";
+    if ((await repository.getAgentManifest(agentProfileId)) === undefined) {
+      return { status: "not found" };
+    }
+    return {
+      status: "updated",
+      rows: await repository.setAgentManifestActive(agentProfileId, active),
+    };
   } finally {
     await closeDb(db);
   }
+}
+
+/**
+ * Bring the engine's agent mirror in line with a set of registry records:
+ * eligible seats become active, ineligible seats inactive, and every row
+ * whose profile the registry does not hold at all is taken out of the gate's
+ * count. Exported so the reconciliation can be tested without a chain.
+ */
+export async function reconcileAgentMirror(
+  repository: Repository,
+  seats: readonly RegistryRosterSeat[],
+  nowIso: string = new Date().toISOString(),
+): Promise<Pick<MirrorSyncReport, "activated" | "deactivated" | "stale" | "missing">> {
+  // A record whose profile id did not decode reads as "unknown"; treating it
+  // as a registry member would mark every real mirror row stale.
+  const unreadable = seats.filter((seat) => !seat.agentProfileId.startsWith("0x"));
+  if (unreadable.length > 0) {
+    throw Object.assign(
+      new Error(`${unreadable.length} registry record(s) have no readable agent profile id`),
+      { code: "REGISTRY_RECORD_UNREADABLE" },
+    );
+  }
+  const mirrored = new Set(
+    (await repository.listAgentManifests()).map((record) =>
+      record.manifest.agentProfileId.toLowerCase(),
+    ),
+  );
+  const activated: string[] = [];
+  const deactivated: string[] = [];
+  const missing: string[] = [];
+  for (const seat of seats) {
+    if (!mirrored.has(seat.agentProfileId.toLowerCase())) {
+      // A seat the engine never registered locally: say so rather than
+      // inventing a manifest row the engine could not use anyway.
+      missing.push(seat.agentProfileId);
+      continue;
+    }
+    const rows = await repository.setAgentManifestActive(
+      seat.agentProfileId,
+      seat.active,
+      nowIso,
+    );
+    if (rows === 0) continue;
+    (seat.active ? activated : deactivated).push(seat.agentProfileId);
+  }
+  const stale = await repository.deactivateAgentManifestsOutsideRegistry(
+    seats.map((seat) => seat.agentProfileId),
+    nowIso,
+  );
+  return { activated, deactivated, stale, missing };
 }
 
 /** Group the registry's seats by model family, active roles first. */
@@ -242,10 +319,12 @@ export function createOperatorClient(
           }),
         connected,
       );
+      const mirror = await mirrorEligibility(env, input.agentProfileId, input.active);
       return {
         ...result,
         weight: seat.weight,
-        rosterMirror: await mirrorEligibility(env, input.agentProfileId, input.active),
+        rosterMirror: mirror.status,
+        ...(mirror.rows === undefined ? {} : { rosterMirrorRows: mirror.rows }),
       };
     },
     async registryRoster() {
@@ -269,6 +348,29 @@ export function createOperatorClient(
         families,
         seats,
       };
+    },
+    async syncMirror() {
+      if (!env.DATABASE_URL?.trim()) {
+        throw Object.assign(
+          new Error("DATABASE_URL is not set; the agent mirror lives in the engine's database"),
+          { code: "DATABASE_URL_NOT_CONFIGURED" },
+        );
+      }
+      const { manifest, client } = await connect();
+      // The chain is read before the database is opened: an unreadable
+      // registry must leave the mirror exactly as it was.
+      const seats = await readRegistryRoster(client, manifest);
+      const db = createDb({ url: env.DATABASE_URL });
+      try {
+        return {
+          network: manifest.network,
+          registryObjectId: manifest.registryObjectId,
+          registrySeats: seats.length,
+          ...(await reconcileAgentMirror(createRepository(db), seats)),
+        };
+      } finally {
+        await closeDb(db);
+      }
     },
   };
 }

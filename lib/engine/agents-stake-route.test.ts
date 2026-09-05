@@ -44,6 +44,7 @@ function preparation() {
       operationalOwner: OPERATIONAL_OWNER,
     },
     minStakeMist: "100000000",
+    stakeMist: "100000000",
   };
 }
 
@@ -114,6 +115,43 @@ describe("stake prepare route", () => {
       modelId: "model-a",
       role: "SKEPTIC",
     });
+  });
+
+  it("forwards a named stake amount and omits it when none is named", async () => {
+    const engine = engineFixture();
+    serverMocks.getServerEngine.mockResolvedValue(engine);
+
+    await postPrepare({
+      address: STAKER_ADDRESS,
+      modelId: "model-a",
+      amountMist: "500000000",
+    });
+    expect(engine.prepareStake).toHaveBeenCalledWith({
+      stakerAddress: STAKER_ADDRESS,
+      modelId: "model-a",
+      amountMist: "500000000",
+    });
+
+    // Nothing named still means the minimum, so the field stays absent.
+    await postPrepare({ address: STAKER_ADDRESS, modelId: "model-a" });
+    expect(engine.prepareStake).toHaveBeenLastCalledWith({
+      stakerAddress: STAKER_ADDRESS,
+      modelId: "model-a",
+    });
+  });
+
+  it("refuses an amount longer than the field allows before the engine sees it", async () => {
+    const engine = engineFixture();
+    serverMocks.getServerEngine.mockResolvedValue(engine);
+
+    const response = await postPrepare({
+      address: STAKER_ADDRESS,
+      modelId: "model-a",
+      amountMist: "1".repeat(21),
+    });
+
+    expect(response.status).toBe(400);
+    expect(engine.prepareStake).not.toHaveBeenCalled();
   });
 
   it("sends no role when the caller names none: the engine assigns it", async () => {

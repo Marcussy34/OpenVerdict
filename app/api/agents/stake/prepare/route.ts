@@ -8,6 +8,8 @@ const FIELD_LIMITS = {
   address: 66,
   modelId: 128,
   role: 32,
+  /** A decimal MIST amount; 20 digits is past the whole u64 range. */
+  amountMist: 20,
 } as const;
 
 /**
@@ -19,7 +21,9 @@ const FIELD_LIMITS = {
  * the reservation expires so an abandoned prepare frees its slot again.
  *
  * `role` is optional: with none named the engine assigns the least represented
- * debate role on that model and returns it as `role`.
+ * debate role on that model and returns it as `role`. `amountMist` is optional
+ * too: with none named the seat posts the 0.1 SUI minimum. The engine holds the
+ * range, and the preparation says the amount back as `stakeMist`.
  */
 export async function POST(req: Request) {
   try {
@@ -52,12 +56,22 @@ export async function POST(req: Request) {
     if (role === INVALID_FIELD) {
       return validationResponse("role must be at most 32 characters");
     }
+    // No amount means the minimum; the engine checks the range and the digits.
+    const amountMist = optionalBoundedField(
+      payload,
+      "amountMist",
+      FIELD_LIMITS.amountMist,
+    );
+    if (amountMist === INVALID_FIELD) {
+      return validationResponse("amountMist must be at most 20 characters");
+    }
 
     // Pick only the public stake fields; ignore all caller extras.
     const request: StakePreparationRequest = {
       stakerAddress: address,
       modelId,
       ...(role === undefined ? {} : { role }),
+      ...(amountMist === undefined ? {} : { amountMist }),
     };
     const engine = await getServerEngine();
     const preparation = await engine.prepareStake(request);

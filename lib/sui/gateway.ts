@@ -60,6 +60,7 @@ import {
   type JuryDiversity,
 } from "./jury-diversity";
 import { runOnOperatorLane } from "./operator-lane";
+import { readRegistryRoster, type RegistryRosterSeat } from "./registry-roster";
 import type { ReleaseManifest } from "./manifest";
 import { SignerRegistry, SignerRegistryError } from "./signers";
 
@@ -507,6 +508,10 @@ export class RealSuiGateway implements SuiGateway {
 
   async juryDiversity(): Promise<JuryDiversity> {
     return readJuryDiversity(this.#client, this.#manifest);
+  }
+
+  async registryRoster(): Promise<RegistryRosterSeat[]> {
+    return readRegistryRoster(this.#client, this.#manifest);
   }
 
   async committeeDiversity(committeeId: string): Promise<JuryDiversity> {

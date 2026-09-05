@@ -6,11 +6,13 @@ import type {
   DeliberationPromptSpecV4,
   HexString,
   OracleInferenceInput,
+  OracleInferenceOutput,
   PromptSpec,
   PromptSpecV1,
   PromptSpecV2,
   PromptSpecV3,
   PromptSpecV4,
+  PromptSpecV5,
   ProviderRequestRecord,
   TableVoteInput,
   TableVotePromptSpecV1,
@@ -166,6 +168,82 @@ export const DEFAULT_TOOL_POLICY_V4: ToolPolicyV4 = {
   maxOpensPerTurn: 3,
 };
 
+// The two sentences v5 adds to the immutable v4 text. Live turns kept writing a
+// sentence into decisiveEvidence, which the strict output schema rejects
+// ("expected array, received string") and which costs one repair call a turn.
+export const PROMPT_SPEC_V5_IDS_ONLY_RULE =
+  "evidenceFor, evidenceAgainst, unsupportedClaims and decisiveEvidence hold evidence ids only, never prose: never put a sentence, a page title or a URL in them, never send a bare string where an array is required, and put your explanation in reasoning.";
+
+/** The worked example the v5 output instructions show. It is typed as a real
+ *  output so the compiler keeps it valid, and promptSpec.test.ts parses it back
+ *  out of the rendered prompt and runs it through the engine's own validator. */
+const PROMPT_SPEC_V5_EXAMPLE_OUTPUT: OracleInferenceOutput = {
+  outcome: "YES",
+  confidenceBps: 8200,
+  evidenceFor: ["p1", "p3"],
+  evidenceAgainst: ["p2"],
+  unsupportedClaims: [],
+  decisiveEvidence: ["p1"],
+  reasoning:
+    "The official announcement and the regulator filing both state the figure the claim gives, and the one report against it predates both.",
+  publicReasoningTrace: [
+    {
+      check: "Does a primary source state the figure?",
+      evidenceIds: ["p1"],
+      assessment: "SUPPORTS",
+      finding: "The announcement gives the same figure as the claim.",
+    },
+    {
+      check: "Does any credible source dispute it?",
+      evidenceIds: ["p2"],
+      assessment: "CONTRADICTS",
+      finding: "An older report gives a lower figure and was never updated.",
+    },
+  ],
+  citations: [
+    {
+      evidenceId: "p1",
+      url: "https://example.org/announcement",
+      quote: "The board approved the figure of 1,200 units on 3 March 2026.",
+    },
+    {
+      evidenceId: "p3",
+      url: "https://example.net/filing",
+      quote:
+        "The regulator recorded the same figure of 1,200 units in its March filing.",
+    },
+  ],
+  counterEvidenceSummary:
+    "The strongest evidence against the claim is p2, an older report with a lower figure that was never updated after the announcement.",
+};
+
+export const PROMPT_SPEC_V5_EXAMPLE_LINE = `This is exactly the shape of a valid answer action; copy the shape, never its ids, urls or quotes: ${JSON.stringify(
+  { action: "answer", output: PROMPT_SPEC_V5_EXAMPLE_OUTPUT },
+)}`;
+
+// Short unique anchors inside the v4 text; v5 appends after each of them.
+const PROMPT_SPEC_V4_EVIDENCE_SIDES =
+  "Put every page that supports the claim in evidenceFor and every page that disputes or weakens it in evidenceAgainst.";
+const PROMPT_SPEC_V4_CITATION_RULE =
+  "Cite at least two pages from two different sites.";
+
+/** V5 adds only the ids-only rule and the worked example to the immutable v4
+ *  text. No existing sentence is reworded, and the tool policy stays v4. */
+export const DEFAULT_PROMPT_SPEC_V5: PromptSpecV5 = {
+  ...DEFAULT_PROMPT_SPEC_V4,
+  version: "5",
+  systemPrompt: DEFAULT_PROMPT_SPEC_V4.systemPrompt
+    .replace(
+      PROMPT_SPEC_V4_EVIDENCE_SIDES,
+      `${PROMPT_SPEC_V4_EVIDENCE_SIDES} ${PROMPT_SPEC_V5_IDS_ONLY_RULE}`,
+    )
+    .replace(
+      PROMPT_SPEC_V4_CITATION_RULE,
+      `${PROMPT_SPEC_V4_CITATION_RULE} ${PROMPT_SPEC_V5_EXAMPLE_LINE}`,
+    ),
+  repairSystemPrompt: `${DEFAULT_PROMPT_SPEC_V4.repairSystemPrompt} evidenceFor, evidenceAgainst, unsupportedClaims and decisiveEvidence are arrays of evidence ids, never sentences.`,
+};
+
 export const DELIBERATION_PROMPT_SPEC_V1: DeliberationPromptSpecV1 = {
   version: "1",
   providerId: "gonkarouter",
@@ -316,14 +394,14 @@ export function toolPolicyHash(policy: ToolPolicy): HexString {
 
 /** The literal system message: both halves are separately hashed documents. */
 export function composeSystemPrompt(
-  spec: PromptSpecV2 | PromptSpecV3 | PromptSpecV4,
+  spec: PromptSpecV2 | PromptSpecV3 | PromptSpecV4 | PromptSpecV5,
   policy: ToolPolicyV2 | ToolPolicyV3 | ToolPolicyV4,
 ): string {
   return `${spec.systemPrompt}\n${canonicalJsonString({ budgets: policy })}`;
 }
 
 export function buildResearchMessages(
-  spec: PromptSpecV2 | PromptSpecV3 | PromptSpecV4,
+  spec: PromptSpecV2 | PromptSpecV3 | PromptSpecV4 | PromptSpecV5,
   policy: ToolPolicyV2 | ToolPolicyV3 | ToolPolicyV4,
   input: OracleInferenceInput,
 ): PromptMessages {

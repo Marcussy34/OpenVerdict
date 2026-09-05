@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { AgentDirectoryEntry, ClaimInspection, WeatherReport } from "../engine/contract";
 import type { AgentManifestDocument } from "../protocol/types";
-import { Api, OvError } from "./api";
+import { Api, OvError, SUBMIT_TIMEOUT_MS } from "./api";
 import {
   EXIT_CODES,
   agentCommand,
@@ -21,7 +21,7 @@ import {
   weatherCommand,
   type CommandEnv,
 } from "./commands";
-import { captured, clone, createClock, eventSteps, fakeFetch, fixture, json, sseResponse, type FakeFetch } from "./fixtures.test-utils";
+import { captured, clone, createClock, eventSteps, fakeFetch, fixture, json, sseResponse, type FakeFetch, type Route } from "./fixtures.test-utils";
 
 const BASE = "https://ov.test";
 const NOW = Date.parse("2026-09-03T10:00:00Z");
@@ -229,6 +229,13 @@ describe("extract", () => {
   });
 });
 
+/** What the client's own timeout looks like to fetch: an aborted request. */
+const timesOut: Route = () => {
+  const error = new Error("This operation was aborted");
+  error.name = "AbortError";
+  throw error;
+};
+
 describe("submit", () => {
   const claim = "The Eiffel Tower was completed in 1889.";
 
@@ -295,6 +302,88 @@ describe("submit", () => {
       expect(error.exitCode).toBe(entry.exitCode);
       expect(error.message).toMatch(entry.message);
     }
+  });
+
+  it("gives the submission a launch-sized timeout, and lets --timeout override it", async () => {
+    // 20 s was a page-load timeout on a call that freezes evidence and draws
+    // a committee before it answers.
+    expect(SUBMIT_TIMEOUT_MS).toBe(90_000);
+    const seen: Array<number | undefined> = [];
+    const watch = (env: CommandEnv): void => {
+      const request = env.api.request.bind(env.api);
+      env.api.request = async (path, init = {}) => {
+        seen.push(init.timeoutMs);
+        return request(path, init);
+      };
+    };
+
+    const s = setup({ "POST /api/fact-checks": () => json({ claimId: "0xabc" }) });
+    watch(s.env);
+    expect(await submitCommand(s.env, { claim, urls: [] })).toBe(0);
+
+    const custom = setup({ "POST /api/fact-checks": () => json({ claimId: "0xabc" }) });
+    custom.env.timeoutMs = 5_000;
+    watch(custom.env);
+    expect(await submitCommand(custom.env, { claim, urls: [] })).toBe(0);
+
+    expect(seen).toEqual([SUBMIT_TIMEOUT_MS, 5_000]);
+  });
+
+  it("checks the board when the submission times out and reports the claim that launched", async () => {
+    // 2026-09-05: the client gave up while the server was still drawing the
+    // committee; the claim had launched and a retry would have duplicated it.
+    const launched = clone(FINALIZED);
+    launched.statement = claim;
+    launched.deadlines.evidenceCutoffMs = NOW + 40_000;
+    const s = setup({
+      "POST /api/fact-checks": timesOut,
+      "GET /api/claims?limit=10": () => json({ claims: [launched] }),
+    });
+
+    expect(await submitCommand(s.env, { claim, urls: [] })).toBe(0);
+    expect(s.out).toEqual([
+      `claim submitted: ${launched.claimId}`,
+      `link: ${BASE}/claims/${launched.claimId}`,
+      "the jury is forming; a one-round verdict lands about 11 to 12 minutes after launch, a two-round verdict about 32 minutes",
+      `watch it: ov watch ${launched.claimId}`,
+    ]);
+    expect(s.err.join("\n")).toContain("already launched");
+
+    const j = setup(
+      {
+        "POST /api/fact-checks": timesOut,
+        "GET /api/claims?limit=10": () => json({ claims: [launched] }),
+      },
+      { json: true },
+    );
+    expect(await submitCommand(j.env, { claim, urls: [] })).toBe(0);
+    expect(JSON.parse(j.out.join("\n"))).toEqual({
+      claimId: launched.claimId,
+      link: `${BASE}/claims/${launched.claimId}`,
+      kind: "claim",
+      timedOut: true,
+    });
+  });
+
+  it("still fails when a timed-out submission left nothing on the board", async () => {
+    // A fresh claim with another statement, and this statement from an hour
+    // ago: neither is the launch that just timed out.
+    const other = clone(FINALIZED);
+    other.deadlines.evidenceCutoffMs = NOW + 40_000;
+    const old = clone(FINALIZED);
+    old.statement = claim;
+    old.deadlines.evidenceCutoffMs = NOW - 3_600_000;
+    const s = setup({
+      "POST /api/fact-checks": timesOut,
+      "GET /api/claims?limit=10": () => json({ claims: [other, old] }),
+    });
+
+    const error = await failure(submitCommand(s.env, { claim, urls: [] }));
+
+    expect(error.exitCode).toBe(2);
+    expect(error.timedOut).toBe(true);
+    expect(error.message).toMatch(/request timed out/);
+    expect(error.message).toMatch(/not among the ten newest claims on the board/);
   });
 
   it("validates the claim and urls locally", async () => {

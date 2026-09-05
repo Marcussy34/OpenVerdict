@@ -64,6 +64,33 @@ hash, and the run hash binds the prompt, the input, the output, the tool
 transcript and the frozen evidence. Break any link and the recomputation fails
 in public.
 
+### The published prompt and policy versions
+
+A published version is never edited. New wording is a new version with a new
+hash, and the older runs keep the hash they ran, so an old bundle still
+verifies. The seat manifests pin one of these hashes; the engine refuses to run
+a seat whose manifest hash differs from the spec it would send.
+
+| Version | Hash | What it is |
+| --- | --- | --- |
+| Research prompt v1 | `0x157de5c1a1ebff1f69151959e3a8fdb418f964ded1e73709f57f0d0e971707d5` | no-tools answer contract |
+| Research prompt v2 | `0xc62311da85a2f1ba570db7f703768fb6751953d5e633798bc908f33f1c8f3f77` | search, open and answer |
+| Research prompt v3 | `0x07cdea1d5b6bbbca7d2d2a11c6a18d6d009ccb8ab2bdd88239ee92ba4404998b` | support and challenge, corroboration |
+| Research prompt v4 | `0x7257117d5b4d02b8c8de5e70d62f6856143d7f20225084a111645f3557a40b14` | batched opens |
+| Research prompt v5 | `0xa219ea182db1c8e3c30a86df9d4bb75d18e8e0244c995cbfe516acfb16662238` | adds the ids-only rule and a worked answer example |
+| Tool policy v2 | `0x698443ab5e85912c061fdc1b4f78514bd1266e6a431f8ab785f61fe95dd59e60` | first search and open budgets |
+| Tool policy v3 | `0xeba334fdf0b1ca19d3ce7961ff6f1bb100f2e3e798df4def5edb33a37e60d40d` | challenge search and corroboration budgets |
+| Tool policy v4 | `0x8da9ec666479f784378c079cef16246ff0d29e8b789be66fc64853c1365c2e7c` | adds `maxOpensPerTurn`, used by prompt v4 and v5 |
+| Deliberation prompt v1 | `0x1a62061fc3848089121346a027435d3c9e9e8b4f9f687f2471933cb96294fadb` | one public statement per seat |
+| Deliberation prompt v2 | `0x1605a64e58c95cceab4d166850476dde76fc52ba525866a63ae993450198406f` | per-turn debate instructions |
+| Deliberation prompt v3 | `0xccee9e24fa55176cd0463cb1833ff4836821c6cf299e294668cf3431908d3906` | public stances |
+| Deliberation prompt v4 | `0xe6d2b47d3c63255da2b5815c4e056d160b85aa46053c5031311b1fe5a86d9270` | the conversation format |
+| Table vote prompt v1 | `0x0fde6e8cd3989a8a33c5ae72c81cc2314965e53b7b41da0e5be2618a339d0333` | the no-tools round-two vote |
+
+The research prompt in the seat manifests today is v5 on tool policy v4. Every
+hash above is pinned in `lib/gonka/promptSpec.test.ts`, so a changed byte in a
+published version fails the test suite before it can reach a manifest.
+
 ## Where each fact lives
 
 ### On Sui

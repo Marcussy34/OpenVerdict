@@ -9,9 +9,12 @@ import {
   DEFAULT_PROMPT_SPEC_V2,
   DEFAULT_PROMPT_SPEC_V3,
   DEFAULT_PROMPT_SPEC_V4,
+  DEFAULT_PROMPT_SPEC_V5,
   DEFAULT_TOOL_POLICY_V2,
   DEFAULT_TOOL_POLICY_V3,
   DEFAULT_TOOL_POLICY_V4,
+  PROMPT_SPEC_V5_EXAMPLE_LINE,
+  PROMPT_SPEC_V5_IDS_ONLY_RULE,
   TABLE_VOTE_PROMPT_SPEC_V1,
   buildPrimaryMessages,
   buildRepairMessages,
@@ -24,7 +27,35 @@ import {
 } from "./promptSpec";
 import { canonicalJsonString } from "./canonical";
 import { makeInput } from "./fixtures.test-utils";
+import {
+  oracleInferenceOutputSchema,
+  validateOutputAgainstManifest,
+} from "./schemas";
 import { sampleTableVoteInput } from "../protocol/table-vote.fixture";
+
+/** Read the first balanced JSON object at or after `from`, quotes respected. */
+function jsonObjectAt(text: string, from: number): string {
+  const start = text.indexOf("{", from);
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  for (let index = start; index < text.length; index += 1) {
+    const character = text[index];
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (character === "\\") escaped = true;
+      else if (character === '"') inString = false;
+      continue;
+    }
+    if (character === '"') inString = true;
+    else if (character === "{") depth += 1;
+    else if (character === "}") {
+      depth -= 1;
+      if (depth === 0) return text.slice(start, index + 1);
+    }
+  }
+  throw new Error("no balanced JSON object found in the prompt text");
+}
 
 describe("promptSpec", () => {
   it("hashes canonically and stably", () => {
@@ -392,6 +423,160 @@ describe("prompt spec v4 and tool policy v4", () => {
         DEFAULT_PROMPT_SPEC_V4,
         DEFAULT_TOOL_POLICY_V4,
         makeInput({ promptVersion: "4" }),
+      )[0]?.content,
+    ).toBe(composed);
+  });
+});
+
+// Every published prompt spec and tool policy is hashed into an on-chain
+// manifest. A changed byte is a changed hash, so these pins are the drift
+// alarm: a published version is never edited, only superseded by a new one.
+describe("published prompt and policy hashes", () => {
+  it("pins every published version", () => {
+    expect(promptSpecHash(DEFAULT_PROMPT_SPEC_V1)).toBe(
+      "0x157de5c1a1ebff1f69151959e3a8fdb418f964ded1e73709f57f0d0e971707d5",
+    );
+    expect(promptSpecHash(DEFAULT_PROMPT_SPEC_V2)).toBe(
+      "0xc62311da85a2f1ba570db7f703768fb6751953d5e633798bc908f33f1c8f3f77",
+    );
+    expect(promptSpecHash(DEFAULT_PROMPT_SPEC_V3)).toBe(
+      "0x07cdea1d5b6bbbca7d2d2a11c6a18d6d009ccb8ab2bdd88239ee92ba4404998b",
+    );
+    expect(promptSpecHash(DEFAULT_PROMPT_SPEC_V4)).toBe(
+      "0x7257117d5b4d02b8c8de5e70d62f6856143d7f20225084a111645f3557a40b14",
+    );
+    expect(promptSpecHash(DEFAULT_PROMPT_SPEC_V5)).toBe(
+      "0xa219ea182db1c8e3c30a86df9d4bb75d18e8e0244c995cbfe516acfb16662238",
+    );
+    expect(toolPolicyHash(DEFAULT_TOOL_POLICY_V2)).toBe(
+      "0x698443ab5e85912c061fdc1b4f78514bd1266e6a431f8ab785f61fe95dd59e60",
+    );
+    expect(toolPolicyHash(DEFAULT_TOOL_POLICY_V3)).toBe(
+      "0xeba334fdf0b1ca19d3ce7961ff6f1bb100f2e3e798df4def5edb33a37e60d40d",
+    );
+    expect(toolPolicyHash(DEFAULT_TOOL_POLICY_V4)).toBe(
+      "0x8da9ec666479f784378c079cef16246ff0d29e8b789be66fc64853c1365c2e7c",
+    );
+    expect(promptSpecHash(DELIBERATION_PROMPT_SPEC_V1)).toBe(
+      "0x1a62061fc3848089121346a027435d3c9e9e8b4f9f687f2471933cb96294fadb",
+    );
+    expect(promptSpecHash(DELIBERATION_PROMPT_SPEC_V2)).toBe(
+      "0x1605a64e58c95cceab4d166850476dde76fc52ba525866a63ae993450198406f",
+    );
+    expect(promptSpecHash(DELIBERATION_PROMPT_SPEC_V3)).toBe(
+      "0xccee9e24fa55176cd0463cb1833ff4836821c6cf299e294668cf3431908d3906",
+    );
+    expect(promptSpecHash(DELIBERATION_PROMPT_SPEC_V4)).toBe(
+      "0xe6d2b47d3c63255da2b5815c4e056d160b85aa46053c5031311b1fe5a86d9270",
+    );
+    expect(promptSpecHash(TABLE_VOTE_PROMPT_SPEC_V1)).toBe(
+      "0x0fde6e8cd3989a8a33c5ae72c81cc2314965e53b7b41da0e5be2618a339d0333",
+    );
+  });
+
+  it("gives every published version a distinct hash", () => {
+    const hashes = [
+      DEFAULT_PROMPT_SPEC_V1,
+      DEFAULT_PROMPT_SPEC_V2,
+      DEFAULT_PROMPT_SPEC_V3,
+      DEFAULT_PROMPT_SPEC_V4,
+      DEFAULT_PROMPT_SPEC_V5,
+      DELIBERATION_PROMPT_SPEC_V1,
+      DELIBERATION_PROMPT_SPEC_V2,
+      DELIBERATION_PROMPT_SPEC_V3,
+      DELIBERATION_PROMPT_SPEC_V4,
+      TABLE_VOTE_PROMPT_SPEC_V1,
+    ].map(promptSpecHash);
+    expect(new Set(hashes).size).toBe(hashes.length);
+  });
+});
+
+describe("prompt spec v5", () => {
+  it("adds only the ids-only rule and the example to the v4 text", () => {
+    const stripped = DEFAULT_PROMPT_SPEC_V5.systemPrompt
+      .replace(` ${PROMPT_SPEC_V5_IDS_ONLY_RULE}`, "")
+      .replace(` ${PROMPT_SPEC_V5_EXAMPLE_LINE}`, "");
+    expect(stripped).toBe(DEFAULT_PROMPT_SPEC_V4.systemPrompt);
+    expect(DEFAULT_PROMPT_SPEC_V5.systemPrompt).toContain(
+      PROMPT_SPEC_V5_IDS_ONLY_RULE,
+    );
+    expect(DEFAULT_PROMPT_SPEC_V5.systemPrompt).toContain(
+      PROMPT_SPEC_V5_EXAMPLE_LINE,
+    );
+    expect(DEFAULT_PROMPT_SPEC_V5.repairSystemPrompt).toBe(
+      `${DEFAULT_PROMPT_SPEC_V4.repairSystemPrompt} evidenceFor, evidenceAgainst, unsupportedClaims and decisiveEvidence are arrays of evidence ids, never sentences.`,
+    );
+    expect(DEFAULT_PROMPT_SPEC_V5).toMatchObject({
+      version: "5",
+      providerId: "gonkarouter",
+      temperature: 0,
+      maxOutputTokens: 4096,
+      responseFormat: "json_object",
+    });
+    expect(DEFAULT_PROMPT_SPEC_V5.jsonFallbackSuffix).toBe(
+      DEFAULT_PROMPT_SPEC_V4.jsonFallbackSuffix,
+    );
+    expect(DEFAULT_PROMPT_SPEC_V5.systemPrompt).not.toContain("\u2014");
+  });
+
+  it("shows an example the engine's own validator accepts", () => {
+    // The live INVALID_SCHEMA repair came from a sentence in decisiveEvidence,
+    // so the example must survive the exact validator that refused it.
+    const example = JSON.parse(
+      jsonObjectAt(
+        DEFAULT_PROMPT_SPEC_V5.systemPrompt,
+        DEFAULT_PROMPT_SPEC_V5.systemPrompt.indexOf(
+          "copy the shape, never its ids, urls or quotes:",
+        ),
+      ),
+    ) as { action: string; output: unknown };
+    expect(example.action).toBe("answer");
+    const output = oracleInferenceOutputSchema.parse(example.output);
+    for (const field of [
+      "evidenceFor",
+      "evidenceAgainst",
+      "unsupportedClaims",
+      "decisiveEvidence",
+    ] as const) {
+      expect(Array.isArray(output[field])).toBe(true);
+    }
+    expect(output.decisiveEvidence).toEqual(["p1"]);
+    // The live failure the example prevents: a sentence where the schema wants
+    // an array of ids.
+    expect(() =>
+      oracleInferenceOutputSchema.parse({
+        ...output,
+        decisiveEvidence: "The announcement is decisive.",
+      }),
+    ).toThrow();
+    expect(output.citations?.length).toBe(2);
+    expect(
+      new Set(output.citations?.map((citation) => new URL(citation.url).host))
+        .size,
+    ).toBe(2);
+    // Opened pages are cited by ref, so they are the extra allowed ids here.
+    expect(() =>
+      validateOutputAgainstManifest(
+        output,
+        { root: "0x00", items: [] },
+        new Set(["p1", "p2", "p3"]),
+      ),
+    ).not.toThrow();
+  });
+
+  it("runs on the unchanged v4 tool policy", () => {
+    const composed = composeSystemPrompt(
+      DEFAULT_PROMPT_SPEC_V5,
+      DEFAULT_TOOL_POLICY_V4,
+    );
+    expect(composed).toBe(
+      `${DEFAULT_PROMPT_SPEC_V5.systemPrompt}\n${canonicalJsonString({ budgets: DEFAULT_TOOL_POLICY_V4 })}`,
+    );
+    expect(
+      buildResearchMessages(
+        DEFAULT_PROMPT_SPEC_V5,
+        DEFAULT_TOOL_POLICY_V4,
+        makeInput({ promptVersion: "5" }),
       )[0]?.content,
     ).toBe(composed);
   });

@@ -17,6 +17,7 @@ import type {
   PromptSpecV2,
   PromptSpecV3,
   PromptSpecV4,
+  PromptSpecV5,
   TableVotePromptSpecV1,
   ToolPolicyV2,
   ToolPolicyV3,
@@ -71,6 +72,10 @@ const promptSpecV3Schema = promptSpecV2Schema
 const promptSpecV4Schema = promptSpecV2Schema
   .extend({ version: z.literal("4") })
   .strict() satisfies z.ZodType<PromptSpecV4>;
+
+const promptSpecV5Schema = promptSpecV2Schema
+  .extend({ version: z.literal("5") })
+  .strict() satisfies z.ZodType<PromptSpecV5>;
 
 /** V6 validates the fixed shape of the no-tools table-vote prompt. */
 const tableVotePromptSpecV1Schema = z
@@ -177,10 +182,13 @@ const agentManifestDocumentV4Schema = agentManifestDocumentV3Schema
   })
   .strict() satisfies z.ZodType<AgentManifestDocumentV4>;
 
+// A v5 document pins research prompt v4 or v5. Prompt v5 only appends
+// instructions and runs the same v4 tool policy, so the document keeps every
+// field and every check it had.
 const agentManifestDocumentV5Schema = agentManifestDocumentV4Schema
   .extend({
     version: z.literal("5"),
-    promptSpec: promptSpecV4Schema,
+    promptSpec: z.union([promptSpecV4Schema, promptSpecV5Schema]),
     toolPolicy: toolPolicyV4Schema,
   })
   .strict() satisfies z.ZodType<AgentManifestDocumentV5>;
@@ -236,9 +244,9 @@ export function buildAgentManifestDocument(
   let policyHash: HexString;
   let tableVotePromptHash: HexString | undefined;
 
-  if (params.promptSpec.version === "4") {
+  if (params.promptSpec.version === "4" || params.promptSpec.version === "5") {
     if (params.toolPolicy?.version !== "4") {
-      throw new Error("a v4 prompt spec requires a v4 tool policy");
+      throw new Error("a v4 or v5 prompt spec requires a v4 tool policy");
     }
     policyHash = toolPolicyHash(params.toolPolicy);
     const v5Document: AgentManifestDocumentV5 = {

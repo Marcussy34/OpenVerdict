@@ -19,7 +19,19 @@ import {
 } from "../audit/audit-claim";
 import type { WeatherReport } from "../engine/contract";
 import { weatherRefusalMessage } from "../web/weather-copy";
-import { Api, OvError, asString, isRecord, replyMessage, type ApiReply, type Sleep } from "./api";
+import {
+  Api,
+  OvError,
+  SUBMIT_TIMEOUT_MS,
+  asArray,
+  asNumber,
+  asString,
+  isRecord,
+  replyMessage,
+  type ApiReply,
+  type Json,
+  type Sleep,
+} from "./api";
 import {
   NOT_CLEAR_NOTE,
   claimLink,
@@ -234,6 +246,58 @@ function writeError(reply: ApiReply, what: string): OvError {
 
 export type SubmitInput = { claim: string; text?: string; urls: string[]; criteria?: string };
 
+/**
+ * How far back a launch counts as "just now". The board carries no creation
+ * time, but every deadline ladder sets the evidence cutoff first and closest
+ * to creation (60 s after it on the hosted ladder), so a claim whose cutoff
+ * is still within this of now was created in the last couple of minutes.
+ */
+const RECENT_LAUNCH_MS = 120_000;
+
+/**
+ * The newest claim on the board carrying this exact statement and a fresh
+ * ladder, or undefined. Used only after a submission timed out, to tell a
+ * launch that answered too late from one that never happened.
+ */
+async function recentClaimOnBoard(
+  env: CommandEnv,
+  statement: string,
+): Promise<{ claimId: string } | undefined> {
+  let reply: ApiReply;
+  try {
+    reply = await env.api.request("/api/claims?limit=10");
+  } catch {
+    // The board is a second opinion; its own failure must not replace the
+    // timeout the caller is reporting.
+    return undefined;
+  }
+  const nowMs = env.now();
+  // The board is newest first, so the first match is the claim just launched.
+  for (const entry of (isRecord(reply.body) ? asArray(reply.body.claims) : []).slice(0, 10)) {
+    if (!isRecord(entry)) continue;
+    if (asString(entry.statement)?.trim() !== statement) continue;
+    const deadlines = isRecord(entry.deadlines) ? entry.deadlines : undefined;
+    const cutoffMs = deadlines === undefined ? undefined : asNumber(deadlines.evidenceCutoffMs);
+    if (cutoffMs === undefined || Math.abs(cutoffMs - nowMs) > RECENT_LAUNCH_MS) continue;
+    const claimId = asString(entry.claimId);
+    if (claimId) return { claimId };
+  }
+  return undefined;
+}
+
+/** The result of a launch, however it was learned: the id, the link, the wait. */
+function printSubmitted(env: CommandEnv, claimId: string, body: Json): void {
+  const link = claimLink(env.api.base, claimId);
+  if (env.json) {
+    printJson(env, { ...body, claimId, link, kind: "claim" });
+    return;
+  }
+  env.io.out(`claim submitted: ${claimId}`);
+  env.io.out(`link: ${link}`);
+  env.io.out("the jury is forming; a one-round verdict lands about 11 to 12 minutes after launch, a two-round verdict about 32 minutes");
+  env.io.out(`watch it: ov watch ${claimId}`);
+}
+
 export async function submitCommand(env: CommandEnv, input: SubmitInput): Promise<number> {
   const claim = input.claim.trim();
   if (claim.length < MIN_CLAIM || claim.length > MAX_CLAIM) {
@@ -249,28 +313,42 @@ export async function submitCommand(env: CommandEnv, input: SubmitInput): Promis
   if (criteria !== undefined && criteria.length > MAX_CRITERIA) {
     throw new OvError(`--criteria is longer than ${MAX_CRITERIA} characters`);
   }
-  const reply = await env.api.request("/api/fact-checks", {
-    method: "POST",
-    body: {
-      claim,
-      ...(text ? { text } : {}),
-      ...(input.urls.length > 0 ? { urls: input.urls.map((url) => url.trim()) } : {}),
-      ...(criteria ? { resolutionCriteria: criteria } : {}),
-    },
-    ...(env.timeoutMs === undefined ? {} : { timeoutMs: env.timeoutMs }),
-  });
+  let reply: ApiReply;
+  try {
+    reply = await env.api.request("/api/fact-checks", {
+      method: "POST",
+      body: {
+        claim,
+        ...(text ? { text } : {}),
+        ...(input.urls.length > 0 ? { urls: input.urls.map((url) => url.trim()) } : {}),
+        ...(criteria ? { resolutionCriteria: criteria } : {}),
+      },
+      // The launch, not a page load: see SUBMIT_TIMEOUT_MS.
+      timeoutMs: env.timeoutMs ?? SUBMIT_TIMEOUT_MS,
+    });
+  } catch (error) {
+    if (!(error instanceof OvError) || !error.timedOut) throw error;
+    // A timed-out write is not a failed write. On 2026-09-05 the server was
+    // still freezing evidence and drawing the committee when the client gave
+    // up, the claim launched, and a retry would have submitted it twice.
+    const launched = await recentClaimOnBoard(env, claim);
+    if (launched === undefined) {
+      throw new OvError(
+        `${error.message}. The statement is not among the ten newest claims on the board, so nothing launched; check ov board before submitting again.`,
+        2,
+        true,
+      );
+    }
+    env.io.err(
+      dim(env, "the submission timed out, but the claim had already launched; found it on the board"),
+    );
+    printSubmitted(env, launched.claimId, { timedOut: true });
+    return 0;
+  }
   const body = isRecord(reply.body) ? reply.body : {};
   const claimId = asString(body.claimId);
   if (reply.status === 200 && claimId) {
-    const link = claimLink(env.api.base, claimId);
-    if (env.json) {
-      printJson(env, { ...body, link, kind: "claim" });
-      return 0;
-    }
-    env.io.out(`claim submitted: ${claimId}`);
-    env.io.out(`link: ${link}`);
-    env.io.out("the jury is forming; a one-round verdict lands about 11 to 12 minutes after launch, a two-round verdict about 32 minutes");
-    env.io.out(`watch it: ov watch ${claimId}`);
+    printSubmitted(env, claimId, body);
     return 0;
   }
   // There is no queue: the jury either sits now or the submission is refused

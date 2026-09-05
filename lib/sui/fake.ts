@@ -29,6 +29,7 @@ import type {
   UpdateAgentManifestTransactionInput,
 } from "./builders";
 import { DEFAULT_JURY_DIVERSITY, type JuryDiversity } from "./jury-diversity";
+import type { RegistryRosterSeat } from "./registry-roster";
 import type { TxResult } from "../engine/contract";
 
 export interface FakeSuiAgent extends SuiAgentIdentity {
@@ -45,6 +46,13 @@ export interface FakeSuiAgent extends SuiAgentIdentity {
 /** Deterministic chain seam for lifecycle unit tests. */
 export class FakeSuiGateway implements SuiGateway {
   readonly agents: FakeSuiAgent[];
+  /**
+   * Seats the registry holds, keyed by profile id. Every fake agent starts
+   * eligible; `setRegistryEligibility` models the operator taking one out of
+   * the draw on chain, and deleting an entry models a seat that survives only
+   * in an earlier registry the current one cannot see.
+   */
+  readonly registrySeats: Map<string, RegistryRosterSeat>;
   #counter = 0;
   #claimCounter = 0;
   #phaseByClaim = new Map<string, 1 | 2>();
@@ -55,6 +63,19 @@ export class FakeSuiGateway implements SuiGateway {
 
   constructor(agents: FakeSuiAgent[] = defaultFakeAgents()) {
     this.agents = agents;
+    this.registrySeats = new Map(
+      agents.map((agent) => [
+        agent.agentProfileId.toLowerCase(),
+        {
+          agentProfileId: agent.agentProfileId.toLowerCase(),
+          owner: agent.owner.toLowerCase(),
+          modelId: agent.modelId,
+          role: agent.role,
+          active: true,
+          weight: 10_000,
+        },
+      ]),
+    );
   }
 
   async registerAgent(
@@ -282,6 +303,20 @@ export class FakeSuiGateway implements SuiGateway {
 
   async juryDiversity(): Promise<JuryDiversity> {
     return { ...this.diversity };
+  }
+
+  /** Set to make the registry read fail, the way an unreachable node would. */
+  registryRosterError: Error | undefined;
+
+  /** What `agents eligibility` does on chain, without the transaction. */
+  setRegistryEligibility(agentProfileId: string, active: boolean): void {
+    const seat = this.registrySeats.get(agentProfileId.toLowerCase());
+    if (seat) seat.active = active;
+  }
+
+  async registryRoster(): Promise<RegistryRosterSeat[]> {
+    if (this.registryRosterError) throw this.registryRosterError;
+    return [...this.registrySeats.values()].map((seat) => ({ ...seat }));
   }
 
   async committeeDiversity(): Promise<JuryDiversity> {

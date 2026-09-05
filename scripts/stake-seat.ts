@@ -1,17 +1,22 @@
 #!/usr/bin/env node
 /**
- * Stake 0.1 SUI on a juror seat through the public API, end to end.
+ * Stake SUI on a juror seat through the public API, end to end.
  *
  *   pnpm stake:seat --base http://127.0.0.1:3000 --model <id>
  *   pnpm stake:seat --base https://app.openverdict.info --key suiprivkey1...
+ *   pnpm stake:seat --amount 0.5            0.1 SUI minimum, 1000 SUI ceiling
  *   pnpm stake:seat --no-sponsor            the staking key pays its own gas
  *   pnpm stake:seat --role SKEPTIC          pin the role the engine would pick
+ *
+ * A bigger stake buys a bigger share of the draw, capped at ten times the
+ * minimum; without --amount the seat posts the 0.1 SUI minimum as before.
  *
  * Exactly the flow the stake card runs in the browser: POST /api/agents/stake/
  * prepare, build the one register_staked_agent transaction from what came back,
  * ask POST /api/sponsor to attach gas, sign, execute, then POST /api/agents/
  * stake/confirm. Without --key on testnet it derives a throwaway staking key
- * and funds it with 0.2 SUI from the operator. No secret is ever printed.
+ * and funds it with the stake plus a 0.1 SUI gas float from the operator. No
+ * secret is ever printed.
  */
 import { readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
@@ -30,12 +35,16 @@ import {
   type ReleaseManifest,
 } from "../lib/sui";
 import type { StakeConfirmation, StakePreparation } from "../lib/engine/contract";
+import {
+  isStakeAmountOutOfRange,
+  stakeAmountToMist,
+} from "../lib/web/stake-balance";
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const DEFAULT_MANIFEST = "config/release.testnet.json";
 const DEFAULT_BASE = "http://127.0.0.1:3000";
-/** Enough for the stake plus a few transactions when the key pays its own gas. */
-const THROWAWAY_FUNDING_MIST = 200_000_000n;
+/** On top of the stake, enough for a few transactions when the key pays gas. */
+const THROWAWAY_GAS_MIST = 100_000_000n;
 
 /** process.env first, then .env, the way the other operator scripts read it. */
 function env(name: string): string | undefined {
@@ -107,7 +116,8 @@ function buildStakeTransaction(
   preparation: StakePreparation,
 ): Transaction {
   return buildRegisterStakedAgentTransaction(manifest, {
-    stakeMist: preparation.minStakeMist,
+    // The prepared amount, which is what the engine told the chain to expect.
+    stakeMist: preparation.stakeMist,
     manifestHash: hexBytes(preparation.args.manifestHash),
     manifestBlobId: preparation.args.manifestBlobId,
     modelHash: hexBytes(preparation.args.modelHash),
@@ -148,10 +158,11 @@ async function stakePositionId(
 }
 
 /**
- * Move 0.2 SUI from the operator so a derived key can stake and pay gas.
+ * Move the stake plus a gas float from the operator so a derived key can stake
+ * and pay for itself.
  *
- * Sent as two coins of exactly the stake: the coin resolver stops at the first
- * coin that covers the stake, so the second one is always free to pay gas.
+ * Sent as two coins, one of exactly the stake: the coin resolver stops at the
+ * first coin that covers the stake, so the second one is always free for gas.
  */
 async function fundThrowawayKey(
   client: OpenVerdictSuiClient,
@@ -169,13 +180,13 @@ async function fundThrowawayKey(
     const tx = new Transaction();
     const coins = tx.splitCoins(tx.gas, [
       tx.pure.u64(stakeMist),
-      tx.pure.u64(THROWAWAY_FUNDING_MIST - stakeMist),
+      tx.pure.u64(THROWAWAY_GAS_MIST),
     ]);
     tx.transferObjects([coins[0]!, coins[1]!], tx.pure.address(address));
     return tx;
   });
   console.log(
-    `funded    ${address} with ${sui(THROWAWAY_FUNDING_MIST)} SUI (${result.digest})`,
+    `funded    ${address} with ${sui(stakeMist + THROWAWAY_GAS_MIST)} SUI (${result.digest})`,
   );
 }
 
@@ -183,6 +194,7 @@ async function fundThrowawayKey(
 async function assertCanPayOwnGas(
   client: OpenVerdictSuiClient,
   owner: string,
+  stakeMist: string,
 ): Promise<void> {
   const { objects } = await client.core.listCoins({
     owner,
@@ -191,7 +203,7 @@ async function assertCanPayOwnGas(
   });
   if (objects.length < 2) {
     throw new Error(
-      `${owner} owns ${objects.length} SUI coin object(s); paying its own gas needs two (one for the 0.1 SUI stake, one for gas). Split one with "sui client split-coin", or drop --no-sponsor.`,
+      `${owner} owns ${objects.length} SUI coin object(s); paying its own gas needs two (one for the ${sui(stakeMist)} SUI stake, one for gas). Split one with "sui client split-coin", or drop --no-sponsor.`,
     );
   }
 }
@@ -200,6 +212,15 @@ async function main(): Promise<void> {
   const base = (flag("base") ?? DEFAULT_BASE).replace(/\/+$/, "");
   // No --role means the engine assigns the seat's debate role, as the card does.
   const role = flag("role");
+  // No --amount means the minimum, exactly what this script posted before.
+  const requestedAmount = flag("amount");
+  const amountMist =
+    requestedAmount === undefined ? undefined : stakeAmountToMist(requestedAmount);
+  if (requestedAmount !== undefined && isStakeAmountOutOfRange(amountMist ?? null)) {
+    throw new Error(
+      `--amount ${requestedAmount} is not a stake between 0.1 and 1000 SUI`,
+    );
+  }
   const noSponsor = process.argv.includes("--no-sponsor");
   const manifestPath = join(
     repositoryRoot,
@@ -224,6 +245,7 @@ async function main(): Promise<void> {
     address: stakerAddress,
     modelId,
     ...(role === undefined ? {} : { role }),
+    ...(amountMist === undefined || amountMist === null ? {} : { amountMist }),
   });
   if (prepared.status !== 200) {
     throw new Error(`prepare failed (${prepared.status}): ${describe(prepared.json)}`);
@@ -232,10 +254,12 @@ async function main(): Promise<void> {
   console.log(`role      ${preparation.role}`);
   console.log(`prepared  slot ${preparation.args.operationalOwner}`);
   console.log(`manifest  ${preparation.args.manifestBlobId} on Walrus`);
-  console.log(`stake     ${sui(preparation.minStakeMist)} SUI minimum`);
+  console.log(
+    `stake     ${sui(preparation.stakeMist)} SUI (${sui(preparation.minStakeMist)} SUI minimum)`,
+  );
   // Funded only once the seat is reserved, so a rejected prepare costs nothing.
   if (!providedKey) {
-    await fundThrowawayKey(client, stakerAddress, BigInt(preparation.minStakeMist));
+    await fundThrowawayKey(client, stakerAddress, BigInt(preparation.stakeMist));
   }
 
   // Ask the app to pay the gas first; a fund that is off, throttled or broken
@@ -279,7 +303,7 @@ async function main(): Promise<void> {
     digest = executed.Transaction.digest;
     console.log("gas       paid by OpenVerdict");
   } else {
-    await assertCanPayOwnGas(client, stakerAddress);
+    await assertCanPayOwnGas(client, stakerAddress, preparation.stakeMist);
     const result = await executeAndWait(client, staker, () =>
       buildStakeTransaction(manifest, preparation),
     );

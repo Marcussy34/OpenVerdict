@@ -43,7 +43,7 @@ Any juror error at a binding step voids the whole attempt (see attempts).
 
 ## The research rules a juror follows
 
-Fixed in the prompt spec and tool policy (version 4, hashed into the juror's on-chain manifest, document version 6):
+Fixed in the prompt spec (version 5, hash `0xa219ea182db1c8e3c30a86df9d4bb75d18e8e0244c995cbfe516acfb16662238`) and the tool policy (version 4), both hashed into the juror's on-chain manifest, document version 6:
 
 - Two search intents: `support` looks for evidence that the claim is true as stated; `challenge` looks for evidence that it is false, disputed, outdated or misstated. At least one search of each is required before a YES or NO.
 - Pages are opened by the engine, never by the model; up to three pages in one turn; every page is archived on Walrus (raw and canonical copies) and hashed into the transcript.
@@ -51,6 +51,7 @@ Fixed in the prompt spec and tool policy (version 4, hashed into the juror's on-
 - The two-site rule: a YES or NO needs citations from at least two different sites, at least one of them a page the juror found through its own search, and a completed challenge search whose most credible result was opened. Otherwise the juror must answer UNSURE.
 - A citation is an exact sentence of 20 to 300 characters copied from the page text the juror received. Quotes are checked against the archived page.
 - The answer must name the strongest evidence against the verdict (the counter-evidence summary).
+- The four evidence-id fields (`evidenceFor`, `evidenceAgainst`, `unsupportedClaims`, `decisiveEvidence`) hold evidence ids only, never prose. Prompt spec v5 states that rule and shows a worked example of a valid answer, so a juror that would have written a sentence there no longer costs the engine a repair turn.
 - Temperature 0, JSON only, strict schema.
 
 ## The research trail
@@ -66,7 +67,7 @@ What one juror's run looks like from the inside, as the public run proof records
 
    Pages are opened by the engine, never by the model, and each opened page is archived on Walrus and hashed into the transcript (`bundle.transcript`), whose hash is bound by the run hash.
 
-Budgets, from the pinned tool policy v4 (`DEFAULT_TOOL_POLICY_V4` in `lib/gonka/promptSpec.ts`, copied into every bundle as `bundle.toolPolicy` and hashed as `toolPolicyHash`):
+Budgets, from the pinned tool policy v4 (`DEFAULT_TOOL_POLICY_V4` in `lib/gonka/promptSpec.ts`, unchanged by prompt spec v5, copied into every bundle as `bundle.toolPolicy` and hashed as `toolPolicyHash`):
 
 | Budget | Value |
 | --- | --- |
@@ -144,7 +145,7 @@ Formula (as printed by the report API): confidence is read as the juror's probab
 - Only the final valid round counts: round one when it settled, round two when the table voted.
 - "Valid" means the reveal matched its commitment. A mismatched reveal cannot land on chain at all (`reveal_vote` aborts), so every recorded reveal enters the mean; the flag exists so the report can print exactly the terms the score used.
 - Half-up integer arithmetic: `(sum + count / 2) / count`, identical in `truthScore.ts` and in `jury::truth_score_bps` on chain.
-- Equal weights in v1 (every juror at selection weight 10000), on purpose, because no juror has a track record yet. A Brier-score weight is the recorded roadmap.
+- Votes are unweighted in the score: every valid reveal counts once, whatever the seat staked. Stake weights only the draw (10000 per 0.1 SUI, capped at 100000), never the arithmetic. A Brier-score weight for both is the recorded roadmap, because no juror has a track record yet.
 - How to read it: 95 means very confident the claim is true, 5 very confident it is false, around 50 genuinely uncertain. An UNRESOLVED claim still carries the score as the average belief.
 
 Worked example (the settled claim "Humans use only ten percent of their brains.", 2026-09-03): five NO votes at 9500, 10000, 10000, 9500 and 10000 map to 500, 0, 0, 500 and 0. Sum 1000, count 5, mean 200 bps, score 2.00. The certificate's `truth_score_bps` is 200.
@@ -163,6 +164,7 @@ Payment is not tied to the score: seats are paid for valid work, never for agree
 ## Stake: what stands behind a seat
 
 - A seat is opened by its staker in one transaction that posts the bond: at least 0.1 SUI (`MIN_STAKE_MIST` 100,000,000 in `agent_registry`), real money, not a signature. The transaction also names the operational signing key that runs the seat.
+- Any amount from the minimum up is allowed, and the amount sets the seat's draw weight: `stake_selection_weight(amount) = min(10000 * amount / MIN_STAKE_MIST, 100000)`. One minimum stake is the base weight 10000; 1 SUI reaches the cap of 100000 and is drawn ten times as often; nothing above 1 SUI buys more. The prepare route refuses anything under 0.1 SUI or over 1000 SUI, a guard against a typo rather than a protocol rule. Topping a live seat up is not implemented. Operator seats from `register_agent` carry the base weight.
 - The staker is recorded as the seat's payout recipient, so that seat's jury reward tickets (`REASON_JURY_REWARD`) are minted to the staker. The bond stays locked while the seat is active; slashing it for proven protocol violations is specified in the PRD and not yet enforced on chain.
 - Only the staker can unstake. `request_unstake` deactivates the seat at once, `complete_unstake` returns the whole bond after the 24 hour delay, and a pause never blocks that exit.
 - Anyone can stake, on as many seats as they like: a browser wallet, an operator key, or a Google sign-in through Sui zkLogin (Enoki). The gas is sponsored through Shinami, so 0.1 SUI is the whole cost, and zkLogin only makes staking possible for people without a wallet.
@@ -196,7 +198,7 @@ The weather strip (the fact-check page, the voided panel on a claim page) shows 
 - What it is: the AdminCap holder lowers the model families a committee must span from three to two, for as long as a provider is down, and every record drawn under it says so. It exists because GonkaRouter stopped serving Kimi K2.6 on 2026-09-05 at 01:39 and no claim could launch at all.
 - The two numbers live in a dynamic field on the registry under `agent_registry::JuryDiversityKey`, never in a struct field: Sui's compatible upgrade policy forbids changing an existing layout. With the field absent, `jury_diversity` answers the defaults `(3, 2)`, so an untouched registry behaves exactly as before.
 - Setting it: `agent_registry::set_jury_diversity(registry, admin_cap, required_models, max_seats_per_model, clock)`. Both counts are 2 or 3, and two families are accepted only with three seats per family, because five seats cannot otherwise be filled. It emits `JuryDiversityChanged { required_models, max_seats_per_model, at_ms }`.
-- Taking a down family out of the draw: `agent_registry::set_agent_eligibility(registry, admin_cap, profile, active, weight)` per seat, which already existed. It overwrites the stored weight, so the operator CLI reads the seat's current weight and passes it back unchanged; live seats carry 10000. The operator CLI does all three: `pnpm cli registry roster` to read the seats the draw can see, `pnpm cli registry diversity --required 2 --per-model 3`, and `pnpm cli agents eligibility <profileId> --active false`. The roster command reads the registry object itself, not `/api/agents`, which also lists rows from earlier package versions that the draw cannot see.
+- Taking a down family out of the draw: `agent_registry::set_agent_eligibility(registry, admin_cap, profile, active, weight)` per seat, which already existed. It overwrites the stored weight, so the operator CLI reads the seat's current weight and passes it back unchanged; a staked seat's weight follows its stake (10000 per 0.1 SUI, capped at 100000) and an operator seat carries 10000. The operator CLI does all three: `pnpm cli registry roster` to read the seats the draw can see, `pnpm cli registry diversity --required 2 --per-model 3`, and `pnpm cli agents eligibility <profileId> --active false`. The roster command reads the registry object itself, not `/api/agents`, which also lists rows from earlier package versions that the draw cannot see.
 - The draw: `select_committee` reads the pair from the registry, records it on the committee it produces (so a replacement seat is judged by the draw's numbers, never the registry's current ones), and emits `jury::CommitteeDiversity { claim_id, committee_id, distinct_models, required_models, max_seats_per_model, degraded }` where `degraded` is `distinct_models < 3`. Nothing else about the draw changes: five seats, one per operational signing key, a Skeptic seat, a Source-authenticity seat, Sui's randomness.
 - What a reader sees: `ov weather` prints a rule line with the requirement and the active families, `ov status` prints a jury line, `ov trace` opens with a note naming the degraded jury, and `ov audit` carries it on the verdict card; the claim page's certificate card, the report's verdict block and the Full view say "2 model families (degraded mode)"; the audit's chain group carries the informational row `S5 Model families drawn`, reading `families drawn: 2 (registry required 2 at the draw)`, which never fails; the weather says how many families a jury needs today. Never present a degraded verdict as a full one: it is a real verdict from a smaller and more correlated jury.
 - Reversal: set the pair back to `(3, 2)` and reactivate the seats. Claims already settled keep their record exactly as it was.

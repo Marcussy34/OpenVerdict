@@ -26,6 +26,7 @@ import type {
   PromptSpecV2,
   PromptSpecV3,
   PromptSpecV4,
+  PromptSpecV5,
   ProviderRequestRecord,
   ResearchAction,
   ResearchPageOrigin,
@@ -83,7 +84,7 @@ export interface PageStore {
 }
 
 type ResearchPolicy = ToolPolicyV2 | ToolPolicyV3 | ToolPolicyV4;
-type ResearchSpec = PromptSpecV2 | PromptSpecV3 | PromptSpecV4;
+type ResearchSpec = PromptSpecV2 | PromptSpecV3 | PromptSpecV4 | PromptSpecV5;
 
 type BatchOpenTarget = {
   requestedUrl: string;

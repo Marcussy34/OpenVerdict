@@ -31,8 +31,10 @@ or `docs/STATUS.md` and reproduced rather than softened.
 - **No appeal mechanism.** UNRESOLVED is the only escape hatch.
 - **Reputation counters are dead weight.** They initialise at 10000 basis
   points and nothing ever updates them.
-- **Selection weight is a flat constant.** Every record registers at 10000 and
-  only an admin capability can change it.
+- **Selection weight comes from stake and nothing else.** A staked record
+  registers at 10000 per 0.1 SUI, capped at 100000; an operator record carries
+  the base 10000. Nothing recomputes a weight afterwards: only an admin
+  capability can change it, and topping a live seat up is not implemented.
 - **Roles have no behavioural effect** beyond the debate instructions and the
   committee diversity requirement.
 - **Pooled and delegated stake is not on chain.** One staker per seat today.
@@ -105,7 +107,6 @@ or `docs/STATUS.md` and reproduced rather than softened.
 - A paid tier in SUI replacing the free demo tier, with the requester's payment
   funding the round's jury pool.
 - Pooled stake: several stakers per seat sharing rewards pro rata after fees.
-- Stake-weighted draws under a cap.
 - Seat weights derived from on-chain track record, Brier-score based and
   recomputed after every settlement. This needs a registry update path that
   does not exist yet.

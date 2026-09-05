@@ -91,7 +91,8 @@ encoded in the identity.
 | Function | What it does |
 | --- | --- |
 | `register_agent` | The legacy free-seat path: shares a profile, pushes an eligibility record, sends the `AgentCap` to the sender |
-| `register_staked_agent` | The real-stake path: the stake becomes the bond, the sender is recorded as payout recipient, the operational owner receives the `AgentCap`, the sender receives the `StakePosition` |
+| `register_staked_agent` | The real-stake path: the stake becomes the bond, the eligibility record's weight follows the amount, the sender is recorded as payout recipient, the operational owner receives the `AgentCap`, the sender receives the `StakePosition` |
+| `stake_selection_weight` | Pure read: the draw weight an amount buys, `min(10000 * amount / MIN_STAKE_MIST, 100000)` |
 | `request_unstake` | Staker only. Deactivates the profile and its registry record, and starts the 24-hour withdrawal of the whole current bond |
 | `complete_unstake` | Staker only, after maturity. Consumes the position and pays what is left. Never blocked by pause |
 | `update_agent_manifest` | Rotates the manifest pointers and bumps the manifest version |

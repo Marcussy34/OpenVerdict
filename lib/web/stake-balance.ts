@@ -1,5 +1,6 @@
 /**
- * The one rule that decides whether a connected wallet can post a seat bond.
+ * The rules that decide what a connected wallet may post as a seat bond: the
+ * amount it is allowed to choose, and whether it can afford the one it chose.
  *
  * Kept pure and free of any client import so the stake card can ask the
  * question without pulling the engine into the browser bundle, and so the
@@ -16,6 +17,37 @@
  * exists only to answer "can this wallet afford a seat" before that call.
  */
 export const MIN_STAKE_MIST = "100000000";
+
+/**
+ * The ceiling the prepare route enforces (MAX_STAKE_MIST in lib/engine/
+ * engine.ts): 1000 SUI. A seat's draw weight caps at ten times the minimum, so
+ * a bigger number buys nothing and a typo would lock real money on a seat.
+ */
+export const MAX_STAKE_MIST = "1000000000000";
+
+/** MIST in one SUI, for the amount field's own conversion. */
+const MIST_PER_SUI = 1_000_000_000n;
+
+/**
+ * A decimal SUI amount from the stake card's amount field, as whole MIST.
+ *
+ * Returns null for anything that is not a plain non-negative decimal with at
+ * most nine places, so the card refuses the value rather than sending a guess.
+ * Integer throughout, like everything else here: no float ever touches a stake.
+ */
+export function stakeAmountToMist(sui: string): string | null {
+  const trimmed = sui.trim();
+  if (!/^\d{1,12}(\.\d{1,9})?$/.test(trimmed)) return null;
+  const [whole = "0", fraction = ""] = trimmed.split(".");
+  return (BigInt(whole) * MIST_PER_SUI + BigInt(fraction.padEnd(9, "0"))).toString();
+}
+
+/** True when the amount is outside the range a prepare will accept. */
+export function isStakeAmountOutOfRange(amountMist: string | null): boolean {
+  if (!isMist(amountMist)) return true;
+  const amount = BigInt(amountMist);
+  return amount < BigInt(MIN_STAKE_MIST) || amount > BigInt(MAX_STAKE_MIST);
+}
 
 /** A decimal MIST string as the RPC returns it, and nothing else. */
 function isMist(value: unknown): value is string {

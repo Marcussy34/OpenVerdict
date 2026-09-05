@@ -11,6 +11,7 @@ import {
   DEFAULT_PROMPT_SPEC_V2,
   DEFAULT_PROMPT_SPEC_V3,
   DEFAULT_PROMPT_SPEC_V4,
+  DEFAULT_PROMPT_SPEC_V5,
   DEFAULT_TOOL_POLICY_V2,
   DEFAULT_TOOL_POLICY_V3,
   DEFAULT_TOOL_POLICY_V4,
@@ -77,8 +78,10 @@ import {
   RELAUNCH_SPACING_MS,
   RESEARCH_WEATHER_ID,
   RELAUNCH_GIVE_UP_MS,
+  REGISTRY_ROSTER_CACHE_MS,
   WEATHER_PROBE_INTERVAL_MS,
   WEATHER_STALE_MS,
+  MAX_STAKE_MIST,
   MIN_STAKE_MIST,
   SEAT_GAS_FLOAT_MIST,
   SEAT_GAS_FLOAT_MIN_MIST,
@@ -379,7 +382,7 @@ describe("weather-aware submissions", () => {
     gateway.diversity = { requiredModels: 2, maxSeatsPerModel: 3 };
     const setup = await engineSetup(gateway, 5);
     const repository = createRepository(setup.db);
-    await deactivateFamily(repository, "kimi-k2");
+    await deactivateFamily(repository, gateway, "kimi-k2");
     await saveProbes(repository, setup.now(), { "kimi-k2": false });
 
     const weather = await setup.engine.weather();
@@ -393,7 +396,7 @@ describe("weather-aware submissions", () => {
     const gateway = degradedWeatherGateway();
     const setup = await engineSetup(gateway, 5);
     const repository = createRepository(setup.db);
-    await deactivateFamily(repository, "kimi-k2");
+    await deactivateFamily(repository, gateway, "kimi-k2");
     await saveProbes(repository, setup.now(), { "kimi-k2": false });
 
     const weather = await setup.engine.weather();
@@ -408,7 +411,7 @@ describe("weather-aware submissions", () => {
     gateway.diversity = { requiredModels: 2, maxSeatsPerModel: 3 };
     const setup = await engineSetup(gateway, 5);
     const repository = createRepository(setup.db);
-    await deactivateFamily(repository, "kimi-k2");
+    await deactivateFamily(repository, gateway, "kimi-k2");
     // MiniMax still holds a seat, so its outage stops the jury.
     await saveProbes(repository, setup.now(), { "kimi-k2": false, "MiniMax-M2": false });
 
@@ -416,6 +419,131 @@ describe("weather-aware submissions", () => {
       clear: false,
       requiredFamilies: 2,
     });
+  });
+
+  it("counts only families the current registry still holds a seat for", async () => {
+    // The 2026-09-05 shape exactly: the operator took the Kimi seats out of
+    // the registry on chain, and the mirror still carried active rows for
+    // seats of an earlier package registry the draw cannot see.
+    const gateway = degradedWeatherGateway();
+    gateway.diversity = { requiredModels: 2, maxSeatsPerModel: 3 };
+    const setup = await engineSetup(gateway, 5);
+    const repository = createRepository(setup.db);
+    for (const record of await repository.listAgentManifests()) {
+      if (record.manifest.modelId !== "kimi-k2") continue;
+      gateway.registrySeats.delete(record.manifest.agentProfileId.toLowerCase());
+    }
+    await saveProbes(repository, setup.now(), { "kimi-k2": false });
+
+    const weather = await setup.engine.weather();
+
+    expect(weather.activeFamilies.sort()).toEqual(["deepseek", "minimax"]);
+    expect(weather.clear).toBe(true);
+  });
+
+  it("falls back to the engine mirror, which is the stricter answer, when the registry cannot be read", async () => {
+    const gateway = degradedWeatherGateway();
+    gateway.diversity = { requiredModels: 2, maxSeatsPerModel: 3 };
+    const setup = await engineSetup(gateway, 5);
+    const repository = createRepository(setup.db);
+    for (const record of await repository.listAgentManifests()) {
+      if (record.manifest.modelId !== "kimi-k2") continue;
+      gateway.registrySeats.delete(record.manifest.agentProfileId.toLowerCase());
+    }
+    gateway.registryRosterError = new Error("fullnode unreachable");
+    await saveProbes(repository, setup.now(), { "kimi-k2": false });
+
+    const weather = await setup.engine.weather();
+
+    // The mirror still lists Kimi seats, so Kimi still has to answer.
+    expect(weather.activeFamilies).toContain("kimi");
+    expect(weather.clear).toBe(false);
+  });
+
+  it("re-reads the registry the moment an eligibility command touches the mirror", async () => {
+    // The reversal that ends degraded mode: `agents eligibility --active
+    // true` writes the chain and the engine's mirror in one step, and the
+    // gate must not serve the roster it read a moment earlier. The localnet
+    // degraded-mode step asserts exactly this, with no clock to move.
+    const gateway = degradedWeatherGateway();
+    gateway.diversity = { requiredModels: 2, maxSeatsPerModel: 3 };
+    const setup = await engineSetup(gateway, 5);
+    const repository = createRepository(setup.db);
+    await deactivateFamily(repository, gateway, "kimi-k2");
+    await saveProbes(repository, setup.now());
+    expect((await setup.engine.weather()).activeFamilies.sort()).toEqual([
+      "deepseek",
+      "minimax",
+    ]);
+
+    for (const record of await repository.listAgentManifests()) {
+      if (record.manifest.modelId !== "kimi-k2") continue;
+      gateway.setRegistryEligibility(record.manifest.agentProfileId, true);
+      await repository.setAgentManifestActive(record.manifest.agentProfileId, true);
+    }
+
+    // Same instant, no probe, no cache expiry: the mirror write is the signal.
+    expect((await setup.engine.weather()).activeFamilies.sort()).toEqual([
+      "deepseek",
+      "kimi",
+      "minimax",
+    ]);
+  });
+
+  it("follows an eligibility reversal made on chain alone once the read expires", async () => {
+    // Ending degraded mode is two operator transactions on chain. The gate
+    // has to reopen on the first of them, not wait for the mirror or for
+    // the next probe: the localnet degraded-mode step asserts exactly this.
+    const gateway = degradedWeatherGateway();
+    gateway.diversity = { requiredModels: 2, maxSeatsPerModel: 3 };
+    const setup = await engineSetup(gateway, 5);
+    const repository = createRepository(setup.db);
+    await deactivateFamily(repository, gateway, "kimi-k2");
+    await saveProbes(repository, setup.now());
+    expect((await setup.engine.weather()).activeFamilies.sort()).toEqual([
+      "deepseek",
+      "minimax",
+    ]);
+
+    for (const record of await repository.listAgentManifests()) {
+      if (record.manifest.modelId !== "kimi-k2") continue;
+      gateway.setRegistryEligibility(record.manifest.agentProfileId, true);
+    }
+    setup.setNow(setup.now() + REGISTRY_ROSTER_CACHE_MS + 1);
+
+    // The mirror still says inactive; the registry is what the draw reads.
+    expect((await setup.engine.weather()).activeFamilies.sort()).toEqual([
+      "deepseek",
+      "kimi",
+      "minimax",
+    ]);
+  });
+
+  it("marks mirror rows outside the current registry inactive on the probe", async () => {
+    const gateway = degradedWeatherGateway();
+    const setup = await engineSetup(gateway, 5);
+    const repository = createRepository(setup.db);
+    const stale = (await repository.listAgentManifests()).filter(
+      (record) => record.manifest.modelId === "kimi-k2",
+    );
+    for (const record of stale) {
+      gateway.registrySeats.delete(record.manifest.agentProfileId.toLowerCase());
+    }
+
+    await setup.engine.weatherTick();
+
+    const mirrored = await repository.listAgentManifests();
+    for (const record of stale) {
+      expect(
+        mirrored.find(
+          (row) => row.manifest.agentProfileId === record.manifest.agentProfileId,
+        )?.active,
+      ).toBe(false);
+    }
+    // Seats the registry still holds keep their eligibility.
+    expect(mirrored.filter((record) => record.active).length).toBe(
+      mirrored.length - stale.length,
+    );
   });
 
   it("refuses a submission while a family is down and stores nothing", async () => {
@@ -1258,6 +1386,74 @@ describe("headless engine", () => {
     ).toBe(true);
   });
 
+  it("selects v5 research from v5 documents and still seals bundle core v5", async () => {
+    // A seat whose manifest pins prompt v5 runs promptVersion "5" end to end.
+    // The bundle and the policy are unchanged: v5 only appends instructions.
+    const gateway = new FakeSuiGateway();
+    const outcomes = Array.from({ length: 5 }, () => "UNSURE" as const);
+    const setup = await engineSetup(gateway, [outcomes], {
+      actions: [],
+      decisiveEvidence: [],
+    });
+    const { claimId } = await setup.engine.factCheckStart({
+      claim: "A v5 prompt keeps the v4 tool policy and the v5 bundle.",
+      text: "Local evidence.",
+      urls: [],
+    });
+    await setup.engine.selectCommittee(claimId);
+    await setup.engine.evidenceFreeze(claimId, 1);
+    const repository = createRepository(setup.db);
+    const agents = await repository.listAgentManifests();
+
+    for (const [index, agent] of agents.entries()) {
+      const built = buildAgentManifestDocument({
+        network: "localnet",
+        backingKind: "TESTNET_DEMO_ALLOWLIST",
+        humanBackingHash: agent.manifest.humanAttestationHash,
+        humanVerificationProvider: agent.manifest.humanVerificationProvider,
+        operationalOwner: agent.manifest.owner,
+        role: agent.role,
+        modelId: agent.manifest.modelId,
+        promptSpec: DEFAULT_PROMPT_SPEC_V5,
+        toolPolicy: DEFAULT_TOOL_POLICY_V4,
+        evidencePolicyId: EVIDENCE_POLICY_V1_LABEL,
+      });
+      const upload = await setup.walrus.put(built.bytes, {
+        identifier: `agent-${index}-manifest-v5-prompt-v5.json`,
+      });
+      await repository.saveAgentManifest({
+        ...agent,
+        manifest: {
+          ...agent.manifest,
+          version: built.document.version,
+          manifestBlobId: upload.blobId,
+          manifestHash: built.manifestHash,
+          promptHash: built.promptHash,
+          toolPolicyHash: built.toolPolicyHash,
+          evidencePolicyHash: built.document.evidencePolicyHash,
+          registeredCheckpoint: agent.manifest.registeredCheckpoint + 1,
+        },
+      });
+    }
+
+    const jury = await setup.engine.juryRun(claimId, 1);
+    expect(jury.runs).toHaveLength(5);
+    expect(jury.runs.every((run) => run.status === "SCHEMA_VALID")).toBe(true);
+    const records = await repository.listInferenceRuns(claimId, 1);
+    const cores = records.map((record) =>
+      JSON.parse(record.audit.bundleCore ?? "null") as PublicRunBundleCoreV5,
+    );
+    expect(cores.every((core) => core.version === 5)).toBe(true);
+    expect(cores.every((core) => core.promptSpec.version === "5")).toBe(true);
+    expect(cores.every((core) => core.toolPolicy.version === "4")).toBe(true);
+    expect(
+      setup.gonkaComplete.mock.calls.every(
+        ([request]) =>
+          !("kind" in request.input) && request.input.promptVersion === "5",
+      ),
+    ).toBe(true);
+  });
+
   it("fails closed when a manifest tool policy hash differs", async () => {
     const setup = await engineSetup(new FakeSuiGateway(), 5, {
       toolPolicyHash: `0x${"cd".repeat(32)}`,
@@ -1331,6 +1527,127 @@ describe("headless engine", () => {
     // The database keeps the Walrus epoch for renewals.
     expect(record?.walrusEndEpoch).toBe(250);
     expect((await repository.getEvidenceManifest(claimId, 1))?.walrusEndEpoch).toBe(250);
+  });
+
+  it("reveals each seat as its own bundle upload lands, not after the slowest", async () => {
+    // 2026-09-05: the five bundle writes took 12.9 s to 23.3 s and all five
+    // reveals landed in the same second, because the batch waited for the
+    // slowest write. Each seat now goes out on its own upload.
+    const directory = await mkdtemp(join(tmpdir(), "openverdict-reveal-"));
+    const base = createLocalWalrusStore(join(directory, "walrus"));
+    let releaseSlowUpload: () => void = () => undefined;
+    const slowUpload = new Promise<void>((resolve) => {
+      releaseSlowUpload = resolve;
+    });
+    let gateReveals = false;
+    let heldUploads = 0;
+    const walrus: WalrusStore = {
+      put: async (bytes, opts) => {
+        const isRunBundle =
+          opts?.identifier?.endsWith("-run-bundle.json") === true &&
+          !opts.identifier.endsWith("-sealed-run-bundle.json");
+        // One seat's plaintext bundle is held; the other four land at once.
+        if (gateReveals && isRunBundle && (heldUploads += 1) === 1) await slowUpload;
+        return base.put(bytes, opts);
+      },
+      get: (blobId) => base.get(blobId),
+    };
+    const gateway = new FakeSuiGateway();
+    const revealed: string[] = [];
+    const revealVote = gateway.revealVote.bind(gateway);
+    gateway.revealVote = async (input) => {
+      revealed.push(input.agentProfileId);
+      return revealVote(input);
+    };
+    const setup = await engineSetup(gateway, 5, { walrus });
+    const { claimId } = await setup.engine.factCheckStart({
+      claim: "A seat reveals as soon as its own bundle is published.",
+      text: "Local evidence.",
+      urls: [],
+    });
+    await setup.engine.selectCommittee(claimId);
+    await setup.engine.evidenceFreeze(claimId, 1);
+    await setup.engine.juryRun(claimId, 1);
+    await setup.engine.votesCommit(claimId, 1);
+    await setup.engine.advance(claimId);
+
+    gateReveals = true;
+    const reveals = setup.engine.votesReveal(claimId, 1);
+    try {
+      for (let attempt = 0; revealed.length < 4 && attempt < 300; attempt += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      }
+      expect(revealed).toHaveLength(4);
+    } finally {
+      releaseSlowUpload();
+    }
+
+    await expect(reveals).resolves.toHaveLength(5);
+    expect(revealed).toHaveLength(5);
+    expect(new Set(revealed).size).toBe(5);
+  });
+
+  it("accepts seats, binds their evidence and reads their manifests side by side", async () => {
+    // The gap between the frozen evidence and the first juror was 32 s in
+    // production, spent on five agent-signed transactions and five Walrus
+    // reads taken one at a time. Agents never contend (each signs with its
+    // own key), so all five must be in flight at once.
+    const peak = { accept: 0, bind: 0, manifest: 0 };
+    const live = { accept: 0, bind: 0, manifest: 0 };
+    const track = async <T>(key: keyof typeof peak, run: () => Promise<T>): Promise<T> => {
+      live[key] += 1;
+      peak[key] = Math.max(peak[key], live[key]);
+      try {
+        // One turn of the event loop, so a caller that awaits each call in
+        // turn can never look concurrent.
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        return await run();
+      } finally {
+        live[key] -= 1;
+      }
+    };
+    const gateway = new FakeSuiGateway();
+    const acceptJurySeat = gateway.acceptJurySeat.bind(gateway);
+    gateway.acceptJurySeat = (input) => track("accept", () => acceptJurySeat(input));
+    const bindJurySeatEvidence = gateway.bindJurySeatEvidence.bind(gateway);
+    gateway.bindJurySeatEvidence = (input) => track("bind", () => bindJurySeatEvidence(input));
+    const directory = await mkdtemp(join(tmpdir(), "openverdict-preflight-"));
+    const base = createLocalWalrusStore(join(directory, "walrus"));
+    // Only the seats' published manifest documents are counted; every other
+    // read (evidence artifacts, pages) goes straight through.
+    const manifestBlobIds = new Set<string>();
+    const walrus: WalrusStore = {
+      put: (bytes, opts) => base.put(bytes, opts),
+      get: (blobId) =>
+        manifestBlobIds.has(blobId)
+          ? track("manifest", () => base.get(blobId))
+          : base.get(blobId),
+    };
+    const setup = await engineSetup(gateway, [Array.from({ length: 5 }, () => "UNSURE" as const)], {
+      walrus,
+      actions: [],
+      decisiveEvidence: [],
+    });
+    // Published manifests, the shape live seats have: juryRun reads each
+    // seat's document from Walrus before it can run that seat.
+    await publishAgentManifestDocuments(setup, "6");
+    const repository = createRepository(setup.db);
+    for (const record of await repository.listAgentManifests()) {
+      manifestBlobIds.add(record.manifest.manifestBlobId);
+    }
+    const { claimId } = await setup.engine.factCheckStart({
+      claim: "Five seats prepare together, not one after another.",
+      text: "Local evidence.",
+      urls: [],
+    });
+
+    await setup.engine.selectCommittee(claimId);
+    await setup.engine.evidenceFreeze(claimId, 1);
+    await setup.engine.juryRun(claimId, 1);
+
+    expect(peak.accept).toBe(5);
+    expect(peak.bind).toBe(5);
+    expect(peak.manifest).toBe(5);
   });
 
   it("hands a research page to the model before its Walrus upload finishes and seals only after it lands", async () => {
@@ -3576,6 +3893,8 @@ describe("real stake on a juror seat", () => {
     });
 
     expect(preparation.minStakeMist).toBe("100000000");
+    // No amount named, so the seat posts the minimum, as it always did.
+    expect(preparation.stakeMist).toBe("100000000");
     expect(preparation.target).toEqual({
       packageId: `0x${"11".repeat(32)}`,
       registryObjectId: `0x${"22".repeat(32)}`,
@@ -3672,6 +3991,64 @@ describe("real stake on a juror seat", () => {
         role: "SKEPTIC",
       }),
     ).rejects.toThrow("canonical lowercase 32-byte Sui address");
+  });
+
+  it("posts the amount the staker named, inside the allowed range", async () => {
+    const setup = await registrationSetup({ verifierResult: true });
+
+    // Half a SUI: five minimums, which the Move draw weights five times over.
+    const preparation = await setup.engine.prepareStake({
+      stakerAddress,
+      modelId: "model-a",
+      amountMist: "500000000",
+    });
+
+    expect(preparation.stakeMist).toBe("500000000");
+    // The floor is unchanged and still reported, whatever the amount is.
+    expect(preparation.minStakeMist).toBe(MIN_STAKE_MIST.toString());
+  });
+
+  it("refuses an amount below the minimum, above the ceiling, or malformed", async () => {
+    const setup = await registrationSetup({ verifierResult: true });
+    const request = { stakerAddress, modelId: "model-a" };
+
+    await expect(
+      setup.engine.prepareStake({
+        ...request,
+        amountMist: (MIN_STAKE_MIST - 1n).toString(),
+      }),
+    ).rejects.toThrow("the stake must be at least 100000000 MIST");
+    await expect(
+      setup.engine.prepareStake({
+        ...request,
+        amountMist: (MAX_STAKE_MIST + 1n).toString(),
+      }),
+    ).rejects.toThrow("the stake must be at most 1000000000000 MIST");
+    for (const amountMist of ["", "0.5", "-1", "1e9", "abc", "1".repeat(21)]) {
+      await expect(
+        setup.engine.prepareStake({ ...request, amountMist }),
+      ).rejects.toThrow("amountMist must be a decimal amount of MIST");
+    }
+    expect(setup.gateway.registrations).toHaveLength(0);
+  });
+
+  it("takes the ceiling itself and re-serializes a padded amount", async () => {
+    const setup = await registrationSetup({ verifierResult: true });
+
+    const atCeiling = await setup.engine.prepareStake({
+      stakerAddress,
+      modelId: "model-a",
+      amountMist: MAX_STAKE_MIST.toString(),
+    });
+    // Leading zeros are a valid decimal; the wallet gets the canonical number.
+    const padded = await setup.engine.prepareStake({
+      stakerAddress,
+      modelId: "model-a",
+      amountMist: "0000000500000000",
+    });
+
+    expect(atCeiling.stakeMist).toBe("1000000000000");
+    expect(padded.stakeMist).toBe("500000000");
   });
 
   it("assigns the least represented role on the model when none is named", async () => {
@@ -4284,14 +4661,19 @@ function degradedWeatherGateway(): FakeSuiGateway {
   );
 }
 
-/** What `openverdict agents eligibility --active false` leaves behind locally. */
+/**
+ * What `openverdict agents eligibility --active false` leaves behind: the
+ * registry record flipped on chain and the engine's mirror flipped with it.
+ */
 async function deactivateFamily(
   repository: ReturnType<typeof createRepository>,
+  gateway: FakeSuiGateway,
   modelId: string,
 ): Promise<void> {
   for (const record of await repository.listAgentManifests()) {
     if (record.manifest.modelId !== modelId) continue;
-    await repository.saveAgentManifest({ ...record, active: false });
+    gateway.setRegistryEligibility(record.manifest.agentProfileId, false);
+    await repository.setAgentManifestActive(record.manifest.agentProfileId, false);
   }
 }
 

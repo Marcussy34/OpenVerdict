@@ -260,6 +260,15 @@ describe("oracle schemas with research fields", () => {
     ).not.toThrow();
   });
 
+  it("accepts promptVersion 5 and still rejects an unknown version", () => {
+    expect(() =>
+      oracleInferenceInputSchema.parse({ ...makeInput(), promptVersion: "5" }),
+    ).not.toThrow();
+    expect(() =>
+      oracleInferenceInputSchema.parse({ ...makeInput(), promptVersion: "6" }),
+    ).toThrow();
+  });
+
   it("accepts optional search intent and rejects unknown intent values", () => {
     expect(
       researchActionSchema.parse({

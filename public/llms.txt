@@ -7,7 +7,8 @@ casts a commit-reveal secret ballot, and a deadlock goes to a bounded
 cross-examination over frozen evidence. Verdicts settle on Sui as immutable
 resolution certificates anyone can recompute, with every opened page, run
 bundle and evidence manifest public on Walrus. Live on Sui testnet. Anyone can
-stake 0.1 SUI on a juror seat and earn that seat's jury rewards.
+stake on a juror seat from 0.1 SUI up and earn that seat's jury rewards; a
+bigger stake is drawn more often, capped at ten times the minimum.
 
 While a provider is down the operator can lower the draw to two model families
 on chain (degraded mode); the certificate, the report and the audit of every

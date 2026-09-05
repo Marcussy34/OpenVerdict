@@ -4,6 +4,7 @@ import {
   createDb,
   createRepository,
   migrate,
+  type AgentManifestRecord,
   type ClaimRecord,
   type DeliberationTurnRecord,
   type GonkaWeatherRecord,
@@ -477,7 +478,114 @@ describe("weather probes", () => {
       repository.listPendingStakeReservations("2026-09-04T00:05:00.000Z"),
     ).resolves.toEqual([older, live]);
   });
+
+  it("flips a seat's eligibility on every manifest version row and both copies of the flag", async () => {
+    const repository = await testRepository();
+    for (const version of ["3", "5", "6"]) {
+      await repository.saveAgentManifest(agentManifestRecord("0xseat1", version));
+    }
+    await repository.saveAgentManifest(agentManifestRecord("0xseat2", "6"));
+
+    // Mixed case in, because operators paste ids from the explorer.
+    const rows = await repository.setAgentManifestActive(
+      "0xSEAT1",
+      false,
+      "2026-09-05T14:00:00.000Z",
+    );
+
+    expect(rows).toBe(3);
+    const stored = await allAgentRows(repository);
+    expect(stored.filter((row) => row.agent_profile_id === "0xseat1")).toEqual([
+      { agent_profile_id: "0xseat1", version: "3", active: false, json_active: "false" },
+      { agent_profile_id: "0xseat1", version: "5", active: false, json_active: "false" },
+      { agent_profile_id: "0xseat1", version: "6", active: false, json_active: "false" },
+    ]);
+    // The engine reads the record_json copy through listAgentManifests.
+    const mirrored = await repository.listAgentManifests();
+    expect(mirrored.find((record) => record.manifest.agentProfileId === "0xseat1")?.active).toBe(
+      false,
+    );
+    expect(mirrored.find((record) => record.manifest.agentProfileId === "0xseat2")?.active).toBe(
+      true,
+    );
+    // Idempotent: a second run has nothing left to change.
+    await expect(repository.setAgentManifestActive("0xseat1", false)).resolves.toBe(0);
+  });
+
+  it("marks mirror rows the current registry does not hold inactive, and refuses an empty registry", async () => {
+    const repository = await testRepository();
+    await repository.saveAgentManifest(agentManifestRecord("0xinregistry", "6"));
+    await repository.saveAgentManifest(agentManifestRecord("0xstale", "3"));
+    await repository.saveAgentManifest(agentManifestRecord("0xstale", "4"));
+
+    await expect(
+      repository.deactivateAgentManifestsOutsideRegistry(["0xINREGISTRY"]),
+    ).resolves.toEqual(["0xstale"]);
+
+    const mirrored = await repository.listAgentManifests();
+    expect(
+      mirrored.map((record) => [record.manifest.agentProfileId, record.active]),
+    ).toEqual([
+      ["0xinregistry", true],
+      ["0xstale", false],
+    ]);
+    // Both version rows of the stale seat moved, columns and JSON alike.
+    expect(
+      (await allAgentRows(repository)).filter((row) => row.agent_profile_id === "0xstale"),
+    ).toEqual([
+      { agent_profile_id: "0xstale", version: "3", active: false, json_active: "false" },
+      { agent_profile_id: "0xstale", version: "4", active: false, json_active: "false" },
+    ]);
+    // An unreadable registry must never blank the whole mirror.
+    await expect(repository.deactivateAgentManifestsOutsideRegistry([])).rejects.toThrow(
+      /empty registry/,
+    );
+  });
 });
+
+/** The raw rows, so a test can see both copies of the eligibility flag. */
+async function allAgentRows(repository: Awaited<ReturnType<typeof testRepository>>) {
+  const db = repository.db;
+  if (!(db instanceof PGlite)) throw new Error("expected an embedded pglite database");
+  const result = await db.query<{
+    agent_profile_id: string;
+    version: string;
+    active: boolean;
+    json_active: string;
+  }>(
+    `SELECT agent_profile_id, version, active, record_json->>'active' AS json_active
+       FROM agent_manifests ORDER BY agent_profile_id, version`,
+  );
+  return result.rows;
+}
+
+/** One mirrored seat, at the manifest version the row records. */
+function agentManifestRecord(agentProfileId: string, version: string): AgentManifestRecord {
+  return {
+    manifest: {
+      agentProfileId: agentProfileId as `0x${string}`,
+      owner: `0x${"ab".repeat(32)}` as `0x${string}`,
+      humanAttestationHash: `0x${"cd".repeat(32)}` as `0x${string}`,
+      humanVerificationProvider: "demo-allowlist",
+      version,
+      manifestBlobId: `blob-${version}`,
+      manifestHash: `0x${"11".repeat(32)}` as `0x${string}`,
+      promptHash: `0x${"22".repeat(32)}` as `0x${string}`,
+      modelId: "model-a",
+      providerId: "gonkarouter",
+      toolPolicyHash: `0x${"44".repeat(32)}` as `0x${string}`,
+      evidencePolicyHash: `0x${"55".repeat(32)}` as `0x${string}`,
+      publicKey: `0x${"66".repeat(32)}` as `0x${string}`,
+      registeredAtMs: 1,
+      registeredCheckpoint: Number(version),
+    },
+    role: "SKEPTIC",
+    active: true,
+    reputation: {},
+    createdAt: "2026-09-04T00:00:00.000Z",
+    updatedAt: "2026-09-04T00:00:00.000Z",
+  };
+}
 
 function stakeReservation(
   overrides: Partial<StakeReservationRecord> = {},

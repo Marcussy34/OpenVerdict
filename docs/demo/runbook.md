@@ -223,7 +223,9 @@ against the recorded model, or opened through Seal after the deadline.
    models (`GET /v1/models`), and the committee rules (at most two seats
    per model, three families per committee, seven active agents for the
    draw) put at least one Kimi seat on every committee. Every juror has
-   the same selection weight (10000) by the owner's decision; a
+   the same selection weight (10000) because every demo seat holds the
+   minimum stake or an operator bond (since 2026-09-05 a staked seat's
+   weight grows with its stake, capped at 100000; see docs/site/staking.md); a
    five-minute trial of 3000 for the Kimi profiles on 2026-08-30 was
    reverted (txs `91ir2QVb…` and `A7BEYRdu…`); the simulation showed 3000
    would cut two-Kimi committees from about 57% to 16% if that lever is

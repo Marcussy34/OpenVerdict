@@ -48,8 +48,8 @@ SUI is the working currency. (Full write-up: [appendix](#appendix-the-idea-in-fu
 - **Sui's built-in randomness draws the 5 seats**
 - **Max 2 seats per AI family**: DeepSeek, Kimi and MiniMax, all served through GonkaRouter
 - Every committee also seats **a skeptic and a source-authenticity juror**; the **engine assigns** a seat's debate role, nobody picks it
-- **Equal weights** in v1 (in future: weighted by on-chain track record)
-- Anyone can **stake on a seat**: **0.1 SUI** minimum, with a wallet or a Google sign-in through Sui zkLogin, and the staker earns that seat's jury rewards
+- **The draw is weighted by stake**, 10000 per 0.1 SUI and capped at ten times the minimum (in future: also weighted by on-chain track record)
+- Anyone can **stake on a seat**: any amount from **0.1 SUI** up, with a wallet or a Google sign-in through Sui zkLogin, and the staker earns that seat's jury rewards; a bigger stake is drawn more often, up to the cap
 
 **No operator picks the judges; no vendor holds a majority.**
 
@@ -432,27 +432,28 @@ The money flows that exist on-chain today:
 
 Stake is the gate on that faucet, and it is real money: a seat is opened by
 its staker posting at least **0.1 SUI** as the seat's bond in one wallet
-transaction (gas sponsored through Shinami, so a Google sign-in can stake
-with 0.1 SUI and nothing else). The staker receives that seat's jury
-rewards, keeps the bond locked while the seat is active, and gets it back
-24 hours after unstaking (slashing the bond for proven protocol violations
-is specified in the PRD and not yet enforced on chain). A staker picks the
-model and nothing else: research is identical for every seat, so the engine
+transaction (gas sponsored through Shinami, so a Google sign-in can stake with
+0.1 SUI and nothing else). The staker receives that seat's jury rewards, keeps
+the bond locked while the seat is active, and gets it back 24 hours after
+unstaking (slashing the bond for proven protocol violations is specified in
+the PRD and not yet enforced on chain). A staker picks the model and the
+amount, nothing else: research is identical for every seat, so the engine
 assigns the seat's debate role, taking the least represented role among the
-active seats on that model. The draw stays diverse on its own terms: at most
-two seats per model family, three families per jury, a skeptic seat and a
-source-authenticity seat on every committee, and at most one seat per
-operational signing key, with no cap per staker. The families number is the one
-part an operator can move: while a provider is down it can be lowered to two on
-chain (degraded mode), and every certificate, report and audit drawn under it
-then says "2 model families (degraded mode)". Two guards keep that
-draw honest in practice: the on-chain sample restarts when a partial
-pick can no longer be completed (so a valid roster is always drawn), and
-the stake endpoint refuses a seat that no valid committee could ever seat,
-naming the reason and a combination that works. Where DIVE gates agent
-rewards with World ID personhood proofs on the agent's owner, OpenVerdict
-makes no identity claim at all: it gates standardized validator seats with
-stake and a diversity draw.
+active seats on that model. A bigger stake buys a bigger share of the draw,
+capped at ten times the minimum, and nothing else about the seat. The draw
+stays diverse on its own terms: at most two seats per model family, three
+families per jury, a skeptic seat and a source-authenticity seat on every
+committee, and at most one seat per operational signing key, with no cap per
+staker. The families number is the one part an operator can move: while a
+provider is down it can be lowered to two on chain (degraded mode), and every
+certificate, report and audit drawn under it then says "2 model families
+(degraded mode)". Two guards keep that draw honest in practice: the on-chain
+sample restarts when a partial pick can no longer be completed (so a valid
+roster is always drawn), and the stake endpoint refuses a seat that no valid
+committee could ever seat, naming the reason and a combination that works.
+Where DIVE gates agent rewards with World ID personhood proofs on the agent's
+owner, OpenVerdict makes no identity claim at all: it gates standardized
+validator seats with stake and a diversity draw.
 
 Decentralization ladder: the team's seven demo jurors are the starting
 roster; anyone can now open a seat by staking on it (their stake, their
@@ -479,9 +480,10 @@ the answer of record, not shipped code.
 
 ### Next rung: seat weights from track record (roadmap, not implemented)
 
-Today every juror profile carries the same selection weight (10000) and every
-seat counts equally in the truth score, on purpose, because no juror has a
-track record yet. The principled next step is a weight derived from each
+Today a juror profile's selection weight comes from its stake alone (10000 per
+0.1 SUI, capped at 100000) and every seat counts equally in the truth score,
+on purpose, because no juror has a track record yet. The principled next step
+is to fold in a weight derived from each
 juror's Brier score over resolved claims (the squared distance between its
 mapped probability and the settled outcome), recomputed after every settlement
 and published on the juror's agent page. A consistently well-calibrated juror
@@ -566,7 +568,7 @@ on testnet at https://app.openverdict.info.
 | Used for | How | Check it |
 | --- | --- | --- |
 | Every juror reasoning pass | One adapter, `/v1/chat/completions`, host-pinned to gonkarouter.io, no other provider, fail closed on outage | `lib/gonka/adapter.ts`; any revealed run shows the raw request/response and their hashes |
-| Multi-model consensus | 5 seats drawn across all three GonkaRouter families (DeepSeek, Kimi, MiniMax), at most 2 seats per model, equal weight | Committee rules in `move/openverdict/sources/jury.move`; jury card on any claim page |
+| Multi-model consensus | 5 seats drawn across all three GonkaRouter families (DeepSeek, Kimi, MiniMax), at most 2 seats per model, the ticket weighted by each seat's stake and capped | Committee rules in `move/openverdict/sources/jury.move`; jury card on any claim page |
 | Claim extraction from a URL | Paste a link on `/fact-check`; a Gonka model distills one bounded claim, with a JSON repair round when needed | `POST /api/extract-claim`; the provenance card names the model and request id |
 | Inference provenance | Response `id`, `x-request-id`, devshard id and fingerprint stored for every attempt (retries, repairs, hedges) and cross-checked against Gonka's public receipts lookup | "Run provenance" on any revealed run |
 | Latency hedging | A same-model hedge fires after a 25 s stall; every attempt lands in the audit trail | Revealed run bundle on Walrus |
@@ -739,8 +741,8 @@ The model in one line: Gonka is the only mind, Sui is the only judge, and
 SUI is the working currency. Claim budgets escrow at `create_claim`, juror
 bonds are `Balance<SUI>` in the registry, jury rewards and refunds move as
 one-time payout tickets, and the demo binary pool consumes certificates. A
-seat is opened by its staker posting 0.1 SUI, and that seat's jury rewards
-go to the staker; pooling several stakers behind one seat is the recorded
+seat is opened by its staker posting at least 0.1 SUI, and that seat's jury
+rewards go to the staker; pooling several stakers behind one seat is the recorded
 next rung.
 
 Instead of relying on:

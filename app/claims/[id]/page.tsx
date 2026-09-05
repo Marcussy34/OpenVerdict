@@ -1180,7 +1180,7 @@ function NodeInspector({
             </p>
             <p className="text-[10px] text-muted-foreground">
               {revealedCount}/{claim.commitments.length} jurors revealed
-              {familiesLabel ? ` · ${familiesLabel}` : ""} · equal weight
+              {familiesLabel ? ` · ${familiesLabel}` : ""} · drawn by stake
             </p>
             <p className="text-[10px] text-muted-foreground tabular-nums">
               Finalized {new Date(node.atMs).toLocaleString()} · Sui testnet
@@ -1315,7 +1315,7 @@ function NodeInspector({
               {claim.mode === CLAIM_MODE.DIRECT_REVIEW ? "Direct review" : "Optimistic"}
             </dd>
             <dd className="mt-0.5 text-[11px] text-muted-foreground">
-              {juryFamiliesLabel(claim.jury) || "3 model families"}, equal weight
+              {juryFamiliesLabel(claim.jury) || "3 model families"}, drawn by stake
             </dd>
           </div>
         </dl>

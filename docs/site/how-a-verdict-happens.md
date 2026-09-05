@@ -307,8 +307,11 @@ created inside that one call, so nobody ever sees a partial jury.
 
 The registry must hold at least seven active records (five seats plus two
 reserves) and at most thirty-two, otherwise the draw aborts with
-`E_INSUFFICIENT_DIVERSE_AGENTS`. Every record registers with a flat weight of
-10000, so selection weight is equal in v1.
+`E_INSUFFICIENT_DIVERSE_AGENTS`. The ticket is weighted by stake: a staked
+record registers at 10000 per 0.1 SUI posted, capped at 100000, so a 1 SUI seat
+is drawn ten times as often as a 0.1 SUI one and nothing above that buys more.
+Operator seats registered with `register_agent` carry the base weight of 10000.
+See [Staking](staking) for the formula.
 
 ```mermaid
 flowchart TB
@@ -412,7 +415,11 @@ The three actions are `search`, `open` and `answer`. Since prompt spec v3 a
 search must carry an intent of `"support"` or `"challenge"`; a search without
 one is refused with the message `search needs "intent": "support" or "challenge"`.
 Since v4 an open may name several URLs in one turn, fetched in parallel and
-returned as a single tool result.
+returned as a single tool result. Since v5 the output instructions carry a
+worked example of a valid `answer` action and one line saying that
+`evidenceFor`, `evidenceAgainst`, `unsupportedClaims` and `decisiveEvidence`
+hold evidence ids only, never prose, so a juror stops sending a sentence where
+the schema wants an array and the engine stops paying for the repair turn.
 
 Tool error codes returned to the model: `BUDGET_SEARCHES`, `BUDGET_OPENS`,
 `BUDGET_TURNS`, `URL_NOT_SEEN`, `OPEN_FAILED`, `SEARCH_FAILED`,
@@ -438,7 +445,8 @@ run obeyed are part of the record and cannot be changed after the fact.
 | `minOpensPerSide` | absent | 1 | 1 |
 | `maxOpensPerTurn` | absent | absent | 3 |
 
-Source: `lib/gonka/promptSpec.ts:82-93` (v2), `:132-147` (v3), `:163-167` (v4).
+Source: `lib/gonka/promptSpec.ts:84-95` (v2), `:134-149` (v3), `:165-169` (v4).
+Prompt spec v5 runs on the same v4 policy, so the table stops at v4.
 Every spec runs at temperature 0 with a 4096-token output cap and a
 `json_object` response format. The engine refuses to run a seat whose stored
 manifest hashes differ from its published document.
@@ -503,7 +511,7 @@ formula literally.
 | below 3 | legacy runs | no tool policy hash, no system prompt check |
 | 3 | prompt spec v2 | full research bundle |
 | 4 | prompt spec v3 | adds the challenge and corroboration fields |
-| 5 | prompt spec v4 | adds `maxOpensPerTurn` |
+| 5 | prompt spec v4 or v5 | adds `maxOpensPerTurn` |
 | 6 | table vote v1 | **no** `toolPolicy`, no `toolPolicyHash`, no `transcript` |
 
 Sealing uses **AES-256-GCM** with a fresh 32-byte key and a 12-byte
@@ -702,7 +710,7 @@ deadline.
 ### The V4 conversation format
 
 The output contract is exactly eight keys and no others
-(`lib/gonka/promptSpec.ts:232-260`).
+(`lib/gonka/promptSpec.ts:310-338`).
 
 | Field | Rule | Bound |
 | --- | --- | --- |
@@ -953,7 +961,7 @@ three concurrent juries drew a rate-limit storm from the shared gateway on
 | `RELAUNCH_SPACING_MS` | 600000 ms (10 minutes) | `lib/engine/engine.ts:253` |
 | `RESEARCH_PROBE_TIMEOUT_MS` | 15000 ms | `lib/engine/engine.ts:245` |
 | `STAKE_RESERVATION_TTL_MS` | 900000 ms (15 minutes) | `lib/engine/engine.ts:209` |
-| `maxLoopMs` | 600000 ms | `lib/gonka/promptSpec.ts:93`, `:143` |
+| `maxLoopMs` | 600000 ms | `lib/gonka/promptSpec.ts:95`, `:145` |
 | `MIN_RETRY_CALL_MS` | 20000 ms | `lib/research/loop.ts:249` |
 | `NO_EVIDENCE_GRACE_MS` | 60000 ms | `workers/evidence-worker.ts:13` |
 | Worker polling | 2 s busy, 15 s idle, plus a wake file | `workers/runtime.ts` |

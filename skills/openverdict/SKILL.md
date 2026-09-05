@@ -76,7 +76,7 @@ Four public writes, all rate limited (five per minute per client, sixty per minu
 | `POST /claims/{id}/runs/{runId}/reexecute` | Resends one revealed run's exact conversation to corroborate it | Real model spend; the run page offers it, this skill does not run it |
 | `POST /agents/stake/prepare` then `/confirm` | Reserves a seat, then records the stake after the staker's wallet signs the transaction | Needs a wallet signature, so it stays out of the CLI: stake on the `/agents` page |
 
-Staking is the one journey the CLI cannot drive. `prepare` returns a reservation with the `register_staked_agent` arguments and the 0.1 SUI minimum; the staker's own wallet signs the transaction; `confirm` reads the digest back and records the seat. Send the user to `<base>/agents` for it. Everything else in this skill is a read or one of the two public writes above.
+Staking is the one journey the CLI cannot drive. `prepare` takes an optional `amountMist` (0.1 SUI minimum, 1000 SUI ceiling) and returns a reservation with the `register_staked_agent` arguments, the minimum as `minStakeMist` and the amount the transaction posts as `stakeMist`; the staker's own wallet signs the transaction; `confirm` reads the digest back and records the seat. A bigger stake is drawn more often: the seat's weight is 10000 per 0.1 SUI, capped at 100000. Send the user to `<base>/agents` for it. Everything else in this skill is a read or one of the two public writes above.
 
 ## How to run
 
@@ -308,6 +308,7 @@ Only after the explicit go. The call returns once the claim exists (the statemen
 - 503 `WEATHER_NOT_CLEAR`, exit 5: the jury cannot sit right now. The CLI relays the route's own sentence, which names the families that are down, and prints the four rows above it. Repeat that, say plainly that nothing was stored and nothing is waiting, and offer to check `ov weather` and submit again in a few minutes (the next probe is at most two minutes away). The other 503 on this route is `engine_not_wired`, a different problem.
 - 400: relay the validation message (claim 5 to 1000 characters, text up to 20000, up to five https urls of at most 2048 characters each, criteria up to 2000).
 - Exit 5: say whether it was the rate limit (five submissions per minute per client, plus a global ceiling; wait a minute) or writes disabled (the deployment takes no public submissions; stop).
+- "request timed out": the request waits ninety seconds for the launch, and on a timeout the CLI reads the board itself before it reports anything, so a claim it prints after a timeout really did launch (say so and go to step d) and an error naming the board means nothing launched and a fresh submission is safe. Never resubmit on a timeout without that line.
 
 Never resubmit the same statement in a row; if the user asks again, point at the claim link that already exists.
 
